@@ -3,120 +3,186 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
 use App\Services\Horoshop\ProductService;
+use App\Services\Horoshop\OrderService;
+use App\Services\Ai\AiRecommender;
+use App\Services\Ai\AiRouter;
 use Illuminate\Http\Request;
+use Throwable;
 
 class ChatController extends Controller
 {
     public function __construct(
         protected FaqService $faqService,
         protected ProductService $productService,
+        protected OrderService $orderService,
         protected AiRecommender $aiRecommender,
+        protected AiRouter $aiRouter,
     ) {}
 
     public function handle(Request $request)
     {
         $data = $request->validate([
-            'message'      => ['required', 'string'],
-            'page_url'     => ['nullable', 'string'],
-            'product_id'   => ['nullable', 'integer'],
-            'category_id'  => ['nullable', 'integer'],
-            'language'     => ['nullable', 'string', 'max:5'],
+            'message' => ['required', 'string', 'max:2000'],
         ]);
 
-        $message  = $data['message'];
-        $language = $data['language'] ?? 'uk';
+        $message      = trim($data['message']);
+        $messageLower = mb_strtolower($message, 'UTF-8');
 
-        // 1️⃣ FAQ
-        if ($faqAnswer = $this->faqService->findAnswer($message)) {
+        // 0) питаємо AI: що це за намір?
+        $routing = $this->aiRouter->classify($message);
+
+        $intent           = $routing['intent']           ?? 'UNKNOWN';
+        $normalizedQuery  = $routing['normalized_query'] ?? $message;
+        $orderId          = $routing['order_id']         ?? null;
+
+        if ($intent === 'FALLBACK') {
+            return $this->fallbackPipeline($message, $messageLower);
+        }
+
+        if ($intent === 'ORDER_STATUS') {
+            if ($orderId) {
+                return $this->handleOrderStatusFlow($orderId);
+            }
+
             return response()->json([
-                'type'    => 'faq',
-                'message' => $faqAnswer,
+                'type'    => 'order_need_id',
+                'message' => 'Вкажи, будь ласка, номер замовлення (наприклад: "замовлення 123").',
             ]);
         }
 
-        // 2️⃣ Пошук товарів через Horoshop
-        $filters = [];
+        if ($intent === 'FAQ') {
+            if ($answer = $this->faqService->match($messageLower)) {
+                return response()->json([
+                    'type'    => 'faq',
+                    'message' => $answer,
+                ]);
+            }
 
-        if (! empty($data['category_id'])) {
-            $filters['category_id'] = $data['category_id'];
+            return $this->fallbackPipeline($message, $messageLower);
         }
 
-        $products = $this->productService->search($message, $filters);
+        if ($intent === 'PRODUCT_SEARCH') {
+            $products = $this->productService->searchByText($normalizedQuery);
 
-        if (empty($products)) {
+            if (!empty($products)) {
+                return response()->json([
+                    'type'     => 'products',
+                    'query'    => $normalizedQuery,
+                    'products' => $products,
+                ]);
+            }
+
+            try {
+                $aiResult = $this->aiRecommender->recommend($normalizedQuery);
+
+                if ($aiResult) {
+                    return response()->json([
+                        'type' => 'ai_recommendation',
+                        'data' => $aiResult,
+                    ]);
+                }
+            } catch (Throwable $e) {
+                report($e);
+            }
+
             return response()->json([
                 'type'    => 'no_results',
-                'message' => "Я не знайшов товарів за запитом: «{$message}». Спробуй змінити формулювання або вкажи категорію/бренд.",
+                'message' => sprintf(
+                    'Я не знайшов товарів за запитом: «%s». Спробуй змінити формулювання або вкажи категорію/бренд.',
+                    $normalizedQuery
+                ),
             ]);
         }
 
-        // 3️⃣ AI обирає найкращі варіанти
-        $aiResult = $this->aiRecommender->pickProducts($message, $products, $language);
-
-        $selectedArticles = $aiResult['articles'] ?? [];
-        $replyMessage     = $aiResult['message'] ?? "Ось що я можу запропонувати:";
-
-        // Fallback, якщо AI не повернув артикулів
-        if (empty($selectedArticles)) {
-            $selectedProducts = array_slice($products, 0, 5);
-        } else {
-            $indexByArticle = [];
-            foreach ($products as $product) {
-                $article = $product['article'] ?? ($product['parent_article'] ?? null);
-                if ($article) {
-                    $indexByArticle[$article] = $product;
-                }
-            }
-
-            $selectedProducts = [];
-            foreach ($selectedArticles as $article) {
-                if (isset($indexByArticle[$article])) {
-                    $selectedProducts[] = $indexByArticle[$article];
-                }
-            }
-
-            if (empty($selectedProducts)) {
-                $selectedProducts = array_slice($products, 0, 5);
-            }
+        if ($intent === 'SMALL_TALK') {
+            return response()->json([
+                'type'    => 'small_talk',
+                'message' => 'Я тут, щоб допомогти з товарами і замовленнями 😊 Запитай про товар або замовлення.',
+            ]);
         }
 
-        // 4️⃣ Формуємо відповідь для фронту
-        $normalizedProducts = collect($selectedProducts)
-            ->take(5)
-            ->map(function (array $product) {
-                $titleUa = $product['title']['ua'] ?? null;
-                $titleRu = $product['title']['ru'] ?? null;
-                $name    = $titleUa ?: ($titleRu ?: ($product['title'] ?? ''));
+        return $this->fallbackPipeline($message, $messageLower);
+    }
 
-                $short = $product['short_description'] ?? null;
-                if (is_array($short)) {
-                    $short = $short['ua'] ?? ($short['ru'] ?? null);
-                }
+    protected function fallbackPipeline(string $message, string $messageLower)
+    {
+        if ($answer = $this->faqService->match($messageLower)) {
+            return response()->json([
+                'type'    => 'faq',
+                'message' => $answer,
+            ]);
+        }
 
-                $image = null;
-                if (!empty($product['images']) && is_array($product['images'])) {
-                    $image = $product['images'][0] ?? null;
-                }
+        $products = $this->productService->searchByText($message);
 
-                return [
-                    'id'          => $product['article'] ?? $product['parent_article'] ?? null,
-                    'name'        => $name,
-                    'price'       => $product['price'] ?? null,
-                    'image'       => $image,
-                    'url'         => $product['link'] ?? null,
-                    'description' => $short,
-                ];
-            })
-            ->values()
-            ->all();
+        if (!empty($products)) {
+            return response()->json([
+                'type'     => 'products',
+                'query'    => $message,
+                'products' => $products,
+            ]);
+        }
+
+        try {
+            $aiResult = $this->aiRecommender->recommend($message);
+
+            if ($aiResult) {
+                return response()->json([
+                    'type' => 'ai_recommendation',
+                    'data' => $aiResult,
+                ]);
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return response()->json([
-            'type'     => 'products',
-            'message'  => $replyMessage,
-            'products' => $normalizedProducts,
+            'type'    => 'no_results',
+            'message' => sprintf(
+                'Я не знайшов товарів за запитом: «%s». Спробуй змінити формулювання або вкажи категорію/бренд.',
+                $message
+            ),
         ]);
+    }
+
+    protected function handleOrderStatusFlow(int $orderId)
+    {
+        try {
+            $rawOrder = $this->orderService->getById($orderId);
+
+            if (! $rawOrder) {
+                return response()->json([
+                    'type'    => 'order_not_found',
+                    'message' => "Замовлення №{$orderId} не знайдено. Перевір номер або дату оформлення.",
+                ], 404);
+            }
+
+            $order = $this->orderService->normalize($rawOrder);
+
+            $statusText = sprintf(
+                "Замовлення №%d зараз у статусі: «%s».\nСума: %s %s.\nОформлено: %s.",
+                $order['order_id'],
+                $order['status_label'],
+                $order['total']['total_sum'] ?? '—',
+                $order['currency'] ?? '',
+                $order['created_at'] ?? 'невідомо'
+            );
+
+            return response()->json([
+                'type'     => 'order_status',
+                'message'  => $statusText,
+                'order_id' => $orderId,
+                'order'    => $order,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'type'    => 'order_error',
+                'message' => "Не вдалося отримати інформацію про замовлення №{$orderId}. Спробуй пізніше або звернись до оператора.",
+            ], 500);
+        }
     }
 }

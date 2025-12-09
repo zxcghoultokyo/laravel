@@ -29,7 +29,7 @@ class ChatController extends Controller
         $message  = $data['message'];
         $language = $data['language'] ?? 'uk';
 
-        // 1️⃣ Спробуємо знайти відповідь у FAQ
+        // 1️⃣ FAQ
         if ($faqAnswer = $this->faqService->findAnswer($message)) {
             return response()->json([
                 'type'    => 'faq',
@@ -37,7 +37,7 @@ class ChatController extends Controller
             ]);
         }
 
-        // 2️⃣ Якщо не FAQ — шукаємо товари через Horoshop
+        // 2️⃣ Пошук товарів через Horoshop
         $filters = [];
 
         if (! empty($data['category_id'])) {
@@ -53,17 +53,16 @@ class ChatController extends Controller
             ]);
         }
 
-        // 3️⃣ Доручаємо AI обрати найкращі товари
+        // 3️⃣ AI обирає найкращі варіанти
         $aiResult = $this->aiRecommender->pickProducts($message, $products, $language);
 
         $selectedArticles = $aiResult['articles'] ?? [];
         $replyMessage     = $aiResult['message'] ?? "Ось що я можу запропонувати:";
 
-        // Якщо AI з якоїсь причини не повернув артикулів — fallback: перші 5 товарів
+        // Fallback, якщо AI не повернув артикулів
         if (empty($selectedArticles)) {
             $selectedProducts = array_slice($products, 0, 5);
         } else {
-            // Створюємо індекс: article → product
             $indexByArticle = [];
             foreach ($products as $product) {
                 $article = $product['article'] ?? ($product['parent_article'] ?? null);
@@ -79,13 +78,12 @@ class ChatController extends Controller
                 }
             }
 
-            // Якщо раптом нічого не змогли знайти по артикулу — теж fallback
             if (empty($selectedProducts)) {
                 $selectedProducts = array_slice($products, 0, 5);
             }
         }
 
-        // 4️⃣ Нормалізуємо товари під фронт
+        // 4️⃣ Формуємо відповідь для фронту
         $normalizedProducts = collect($selectedProducts)
             ->take(5)
             ->map(function (array $product) {

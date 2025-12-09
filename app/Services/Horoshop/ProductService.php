@@ -2,100 +2,96 @@
 
 namespace App\Services\Horoshop;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
-use RuntimeException;
-
-class HoroshopClient
+/**
+ * Сервіс для роботи з товарами Хорошопа через catalog/export.
+ */
+class ProductService
 {
     public function __construct(
-        protected string $domain,
-        protected string $login,
-        protected string $password,
+        protected HoroshopClient $client
     ) {}
 
     /**
-     * Загальний виклик будь-якої функції API Хорошоп.
-     *
-     * - автоматично додає token (крім auth)
-     * - використовує JSON POST
+     * Пошук товарів через catalog/export з простим фільтром по тексту.
      */
-    public function call(string $function, array $payload = []): array
+    public function search(?string $query = null, array $filters = []): array
     {
-        // 1. якщо це НЕ auth — додаємо token
-        if ($function !== 'auth') {
-            $token = $this->getToken();
-            // token має бути в payload разом з іншими параметрами
-            $payload = array_merge(['token' => $token], $payload);
+        $expr = [];
+
+        // фільтр по категорії, якщо передали
+        if (!empty($filters['category_id'])) {
+            $expr['parent.id'] = (int) $filters['category_id'];
         }
 
-        $url = "https://{$this->domain}/api/{$function}/";
+        $payload = [
+            'expr'           => $expr ?: new \stdClass(), // порожній об'єкт, якщо немає умов
+            'limit'          => $filters['limit'] ?? 50,
+            'offset'         => $filters['offset'] ?? 0,
+            'includedParams' => [
+                'price',
+                'price_old',
+                'title',
+                'short_description',
+                'description',
+                'article',
+                'parent_article',
+                'images',
+                'link',
+            ],
+        ];
 
-        $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-            ])
-            ->post($url, $payload);
+        $response = $this->client->call('catalog/export', $payload);
 
-        $data = $response->json();
+        $products = $response['products'] ?? [];
 
-        if (! $response->successful()) {
-            throw new RuntimeException(
-                'HTTP error from Horoshop: '.$response->status().' '.json_encode($data)
-            );
+        if ($query === null || trim($query) === '') {
+            return $products;
         }
 
-        $status = $data['status'] ?? null;
+        $q = mb_strtolower(trim($query));
 
-        if ($status !== 'OK') {
-            $message = $data['response']['message'] ?? 'Unknown error';
-            throw new RuntimeException("Horoshop API error [{$status}]: {$message}");
-        }
+        $filtered = array_filter($products, function (array $product) use ($q) {
+            $titleUa = $product['title']['ua'] ?? ($product['title']['ru'] ?? '');
+            $titleRu = $product['title']['ru'] ?? '';
+            $article = $product['article'] ?? '';
 
-        return $data['response'] ?? [];
+            $haystack = mb_strtolower($titleUa.' '.$titleRu.' '.$article);
+
+            return str_contains($haystack, $q);
+        });
+
+        return array_values($filtered);
     }
 
     /**
-     * Отримати (або оновити) token для API.
-     *
-     * Token живе 600 секунд — кешуємо десь на 550.
+     * Отримати конкретний товар по артикулу.
      */
-    protected function getToken(): string
+    public function getByArticle(string $article): ?array
     {
-        // 1. пробуємо взяти з кешу
-        $cached = Cache::get('horoshop_api_token');
-        if ($cached) {
-            return $cached;
-        }
+        $payload = [
+            'expr' => [
+                'article' => [$article],
+            ],
+            'limit'          => 10,
+            'includedParams' => [
+                'price',
+                'price_old',
+                'title',
+                'short_description',
+                'description',
+                'article',
+                'parent_article',
+                'images',
+                'link',
+            ],
+        ];
 
-        // 2. якщо немає — авторизуємось
-        $url = "https://{$this->domain}/api/auth/";
+        $response = $this->client->call('catalog/export', $payload);
 
-        $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                'Accept'       => 'application/json',
-            ])
-            ->post($url, [
-                'login'    => $this->login,
-                'password' => $this->password,
-            ]);
+        $products = $response['products'] ?? [];
 
-        $data = $response->json();
-
-        if (! $response->successful() || ($data['status'] ?? null) !== 'OK') {
-            $message = $data['response']['message'] ?? 'Auth failed';
-            throw new RuntimeException("Horoshop auth error: {$message}");
-        }
-
-        $token = $data['response']['token'] ?? null;
-
-        if (! $token) {
-            throw new RuntimeException('Horoshop auth error: token not returned');
-        }
-
-        // 3. зберігаємо в кеш приблизно на 550 секунд
-        Cache::put('horoshop_api_token', $token, now()->addSeconds(550));
-
-        return $token;
+        return $products[0] ?? null;
     }
-}
+
+    /**
+     * На ма*

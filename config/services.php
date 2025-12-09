@@ -34,5 +34,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'horoshop' => [
+        'domain'   => env('contractor.kiev.ua'),
+        'login'    => env('owner'),
+        'password' => env('welcome25201'),
+    ],
 
 ];
+

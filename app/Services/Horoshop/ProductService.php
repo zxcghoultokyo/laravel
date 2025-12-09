@@ -2,29 +2,25 @@
 
 namespace App\Services\Horoshop;
 
-/**
- * Сервіс для роботи з товарами Хорошопа через catalog/export.
- */
 class ProductService
 {
     public function __construct(
         protected HoroshopClient $client
     ) {}
 
-    /**
-     * Пошук товарів через catalog/export з простим фільтром по тексту.
-     */
+    // Пошук товарів через catalog/export з простим фільтром по тексту
     public function search(?string $query = null, array $filters = []): array
     {
         $expr = [];
 
-        // фільтр по категорії, якщо передали
-        if (!empty($filters['category_id'])) {
+        // Якщо передали category_id — фільтруємо по parent.id
+        if (! empty($filters['category_id'])) {
             $expr['parent.id'] = (int) $filters['category_id'];
         }
 
         $payload = [
-            'expr'           => $expr ?: new \stdClass(), // порожній об'єкт, якщо немає умов
+            // Якщо немає умов — передаємо порожній об'єкт {}
+            'expr'           => $expr ?: new \stdClass(),
             'limit'          => $filters['limit'] ?? 50,
             'offset'         => $filters['offset'] ?? 0,
             'includedParams' => [
@@ -44,18 +40,20 @@ class ProductService
 
         $products = $response['products'] ?? [];
 
+        // Якщо немає текстового запиту — повертаємо все як є
         if ($query === null || trim($query) === '') {
             return $products;
         }
 
         $q = mb_strtolower(trim($query));
 
+        // Локальний фільтр по назві та артикулу
         $filtered = array_filter($products, function (array $product) use ($q) {
             $titleUa = $product['title']['ua'] ?? ($product['title']['ru'] ?? '');
             $titleRu = $product['title']['ru'] ?? '';
             $article = $product['article'] ?? '';
 
-            $haystack = mb_strtolower($titleUa.' '.$titleRu.' '.$article);
+            $haystack = mb_strtolower($titleUa . ' ' . $titleRu . ' ' . $article);
 
             return str_contains($haystack, $q);
         });
@@ -63,9 +61,7 @@ class ProductService
         return array_values($filtered);
     }
 
-    /**
-     * Отримати конкретний товар по артикулу.
-     */
+    // Отримати один товар по артикулу
     public function getByArticle(string $article): ?array
     {
         $payload = [
@@ -93,5 +89,30 @@ class ProductService
         return $products[0] ?? null;
     }
 
-    /**
-     * На ма*
+    // Батчевий експорт (щоб потім синкати в свою БД)
+    public function exportBatch(int $offset = 0, int $limit = 500): array
+    {
+        $payload = [
+            'expr'           => new \stdClass(),
+            'limit'          => $limit,
+            'offset'         => $offset,
+            'includedParams' => [
+                'price',
+                'price_old',
+                'title',
+                'short_description',
+                'description',
+                'article',
+                'parent_article',
+                'images',
+                'link',
+                'parent',
+                'brand',
+            ],
+        ];
+
+        $response = $this->client->call('catalog/export', $payload);
+
+        return $response['products'] ?? [];
+    }
+}

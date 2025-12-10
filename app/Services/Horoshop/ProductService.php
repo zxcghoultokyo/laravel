@@ -39,16 +39,17 @@ class ProductService
             return [];
         }
 
-        // 1) Робимо базову нормалізацію запиту без доменних синонімів.
+        // 1) Базова нормалізація запиту (поки без доменних синонімів).
         $expandedQuery = $normalized;
 
-        // 2) Дістаємо цінові фільтри з тексту ("до 5 тис", "від 3 до 7 тис" тощо)
+        // 2) Витягуємо цінові фільтри з тексту ("до 5 тис", "від 3 до 7 тис" тощо)
         $priceFilters = $this->extractPriceFiltersFromQuery($normalized);
 
-        // 3) Шукаймо кандидатів у локальній БД з урахуванням:
+        // 3) Шукаймо кандидатів у локальній БД:
         //    - display_in_showcase = 1
         //    - in_stock = 1
-        //    - min_price / max_price (якщо витягнулись з запиту)
+        //    - [опційно] price між min_price / max_price
+        //    - + AI-індекс product_ai_index
         $candidates = $this->findCandidates($expandedQuery, $categoryId, $priceFilters);
 
         if ($candidates->isEmpty()) {
@@ -60,9 +61,8 @@ class ProductService
             return [];
         }
 
-        // 4) Рахуємо скор для кожного товару
-        // ВАЖЛИВО: спочатку Collection $candidates, потім string $expandedQuery
-        $scored = $this->scoreProducts($candidates, $expandedQuery);
+        // 4) Рахуємо скор для кожного товару (AI intent + хард-правила)
+        $scored = $this->scoreProducts($expandedQuery, $candidates);
 
         if ($scored->isEmpty()) {
             Log::info('ProductService::searchByText all candidates filtered out by score');
@@ -111,13 +111,15 @@ class ProductService
     }
 
     /**
-     * Пошук кандидатів у локальній БД (БЕЗ доменних хардкодів).
+     * Пошук кандидатів у локальній БД.
      *
      * Тут застосовуються жорсткі бізнес-правила:
      *  - показуємо тільки те, що:
      *      display_in_showcase = 1
      *      in_stock = 1
      *      [опційно] price між min_price / max_price
+     *
+     * + додано використання AI-індексу (product_ai_index) через звʼязок aiIndex.
      */
     protected function findCandidates(string $expandedQuery, ?int $categoryId = null, array $priceFilters = []): Collection
     {
@@ -127,7 +129,8 @@ class ProductService
         }));
 
         /** @var Builder $q */
-        $q = Product::query();
+        $q = Product::query()
+            ->with('aiIndex'); // підтягуємо AI-індекс одразу
 
         // ЖОРСТКІ БІЗНЕС-ПРАВИЛА:
         $q->where('display_in_showcase', true)
@@ -149,7 +152,17 @@ class ProductService
 
                     $q->orWhere('search_index', 'LIKE', $like)
                       ->orWhere('title', 'LIKE', $like)
-                      ->orWhere('category_path', 'LIKE', $like);
+                      ->orWhere('category_path', 'LIKE', $like)
+                      // додаємо пошук по AI-індексу
+                      ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
+                          $ai->where('product_type', 'LIKE', $like)
+                             ->orWhere('ai_category', 'LIKE', $like)
+                             ->orWhere('materials', 'LIKE', $like)
+                             ->orWhere('standards', 'LIKE', $like)
+                             ->orWhere('slang', 'LIKE', $like)
+                             ->orWhere('keywords', 'LIKE', $like)
+                             ->orWhere('usage', 'LIKE', $like);
+                      });
                 }
             });
         }
@@ -259,14 +272,13 @@ class ProductService
      *
      * Поєднуємо:
      *  - текстову релевантність (токени + точна фраза)
-     *  - популярність (orders/views/added_to_cart + popularity з Horoshop)
-     *  - "ми рекомендуємо" (we_recommended)
-     *  - БОНУС за збіг кольору (але БЕЗ доменного словника)
+     *  - AI intent (product_types + must_have_keywords)
+     *  - популярність / "ми рекомендуємо" (можна додати пізніше)
+     *  - БОНУС за збіг кольору
      *
-     * ВАЖЛИВО: параметри у порядку (Collection $products, string $query),
-     * бо searchByText викликає $this->scoreProducts($candidates, $expandedQuery)
+     * + використовуємо AI-індекс (product_ai_index) у haystack.
      */
-    protected function scoreProducts(Collection $products, string $query): Collection
+    protected function scoreProducts(string $query, Collection $products): Collection
     {
         $query = mb_strtolower(trim($query));
         $queryTokens = $this->tokenize($query);
@@ -286,10 +298,26 @@ class ProductService
 
         // 2. Рахуємо базовий скоринг + додаємо наші хард-правила
         $scored = $products->map(function (Product $product) use ($query, $queryTokens, $productTypeTokens, $mustHaveKeywords) {
-            $title    = mb_strtolower($product->title ?? '');
-            $index    = mb_strtolower($product->search_index ?? '');
-            $cats     = mb_strtolower($product->category_path ?? '');
-            $haystack = $title . ' ' . $index . ' ' . $cats;
+            $title = mb_strtolower($product->title ?? '');
+            $index = mb_strtolower($product->search_index ?? '');
+            $cats  = mb_strtolower($product->category_path ?? '');
+
+            // додаємо дані з AI-індексу в текстовий "haystack"
+            $aiChunk = '';
+            if ($product->relationLoaded('aiIndex') && $product->aiIndex) {
+                $aiChunkParts = [
+                    $product->aiIndex->product_type ?? '',
+                    $product->aiIndex->ai_category ?? '',
+                    $product->aiIndex->materials ?? '',
+                    $product->aiIndex->standards ?? '',
+                    $product->aiIndex->slang ?? '',
+                    $product->aiIndex->keywords ?? '',
+                    $product->aiIndex->usage ?? '',
+                ];
+                $aiChunk = mb_strtolower(implode(' ', $aiChunkParts));
+            }
+
+            $haystack = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
 
             $baseScore    = 0.0;
             $termMatches  = 0;
@@ -318,7 +346,7 @@ class ProductService
             }
 
             // --- бонус за колір, якщо є match ---
-            $colorBonus = $this->getColorMatchBonus($query, $product->color ?? null);
+            $colorBonus = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
 
             // --- штраф за дуже довгу назву без чітких збігів (анти «сміття») ---
             $titlePenalty = 0.0;
@@ -422,7 +450,7 @@ class ProductService
      * Додаємо бонус, якщо слово з запиту схоже на значення кольору з каталогу.
      * Працює для будь-якого домену (іграшки, одяг, тактичка і т.д.).
      */
-    protected function getColorMatchBonus(string $query, ?string $productColor): float
+    protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
     {
         if (!$productColor) {
             return 0.0;
@@ -433,10 +461,9 @@ class ProductService
             return 0.0;
         }
 
-        $tokens = $this->tokenize($query);
         $bonus = 0.0;
 
-        foreach ($tokens as $token) {
+        foreach ($queryTokens as $token) {
             $tokenNorm = $this->normalizeWord($token);
 
             if (mb_strlen($tokenNorm) < 3) {
@@ -518,8 +545,6 @@ class ProductService
     /**
      * Дуже проста "лематизація": прибираємо типові закінчення,
      * щоб "чорний" і "чорна" зводились до "чорн".
-     * Це не ідеально, але працює для UA/RU кольорів/прикметників
-     * і не прив'язане до конкретного домену.
      */
     protected function normalizeWord(string $word): string
     {

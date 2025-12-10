@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Models\Product;
 
 class AiRouter
 {
@@ -136,6 +137,36 @@ class AiRouter
             return $fallback;
         }
     }
+    public function buildProductIndexData(Product $product): array
+    {
+        $title    = mb_strtolower($product->title ?? '');
+        $category = mb_strtolower($product->category_path ?? '');
+        $index    = mb_strtolower($product->search_index ?? '');
+        $haystack = $title . ' ' . $index . ' ' . $category;
+    
+        $productType = null;
+    
+        if (str_contains($category, 'шолом')) {
+            $productType = 'helmet';
+        } elseif (str_contains($category, 'плитоноски')) {
+            $productType = 'plate_carrier';
+        } elseif (str_contains($category, 'бронезахист')) {
+            $productType = 'armor_plate';
+        } elseif (str_contains($category, 'футболк')) {
+            $productType = 'tshirt';
+        }
+    
+        return [
+            'product_type' => $productType,
+            'ai_category'  => $productType ? 'tactical_gear' : null,
+            'materials'    => null,
+            'standards'    => null,
+            'slang'        => null,
+            'keywords'     => null,
+            'usage'        => null,
+            'embedding'    => null,
+        ];
+    }    
      /**
      * Розбір запиту користувача в структурований intent для пошуку товарів.
      *

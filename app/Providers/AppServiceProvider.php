@@ -25,21 +25,21 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        // Products
+        // Products — тепер передаємо AiRouter
         $this->app->singleton(ProductService::class, function ($app) {
             return new ProductService(
-                $app->make(HoroshopClient::class)
+                $app->make(AiRouter::class),
             );
         });
 
         // Orders
         $this->app->singleton(OrderService::class, function ($app) {
             return new OrderService(
-                $app->make(HoroshopClient::class)
+                $app->make(HoroshopClient::class),
             );
         });
 
-        // FAQ (якщо він у тебе сервісом)
+        // FAQ
         $this->app->singleton(FaqService::class, function ($app) {
             return new FaqService();
         });
@@ -49,7 +49,7 @@ class AppServiceProvider extends ServiceProvider
             return new AiRouter();
         });
 
-        // AI Recommender (припускаю, що він уже є)
+        // AI Recommender (якщо він є)
         $this->app->singleton(AiRecommender::class, function ($app) {
             return new AiRecommender();
         });

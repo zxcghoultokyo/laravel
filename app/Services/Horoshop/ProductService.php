@@ -99,18 +99,11 @@ class ProductService
             ->limit(10)
             ->get();
 
-        if ($products->isEmpty()) {
-            Log::info('ProductService::searchByText no local results, fallback to Horoshop', [
-                'query' => $query,
-            ]);
-
-            // 5. Fallback: Horoshop API (як було раніше).
-            $remoteProducts = $this->client->get('catalog/search', [
-                'q'        => $query,
-                'language' => $language,
-            ]);
-
-            if (!is_array($remoteProducts) || empty($remoteProducts)) {
+            if ($products->isEmpty()) {
+                Log::info('ProductService::searchByText no local results, return empty list', [
+                    'query' => $rawQuery ?? $query,
+                ]);
+            
                 return [];
             }
 

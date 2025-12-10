@@ -23,103 +23,101 @@ class SyncHoroshopProducts extends Command
 
     public function handle(): int
     {
-        $limit = (int) $this->option('limit') ?: 500;
+        $this->info('Починаю синк товарів з Horoshop...');
 
-        if ($limit > 500) {
+        $limit = (int) $this->option('limit');
+        if ($limit <= 0 || $limit > 500) {
             $limit = 500;
-        }
-
-        if ($limit < 1) {
-            $limit = 100;
         }
 
         $offset     = 0;
         $totalSaved = 0;
 
-        $this->info("Старт синхронізації товарів із Horoshop (limit={$limit})");
-
         while (true) {
             try {
-                $this->info("→ Отримуємо товари: offset={$offset}, limit={$limit}");
+                $this->line("Запит catalog/export offset={$offset}, limit={$limit}...");
 
-                // Викликаємо Хорошоп через наш клієнт (з login/password + token)
                 $response = $this->client->request('catalog/export', [
-                    'limit'  => $limit,
-                    'offset' => $offset,
+                    'limit'          => $limit,
+                    'offset'         => $offset,
+                    'includedParams' => [
+                        'title',
+                        'price',
+                        'price_old',
+                        'article',
+                        'slug',
+                        'link',
+                        'images',
+                        'gallery_common',
+                        'gallery_360',
+                        'parent',
+                    ],
                 ]);
 
-                /**
-                 * Horoshop зазвичай повертає просто масив товарів.
-                 * Якщо раптом відповідь буде формату ['items' => [...]],
-                 * ми це теж врахуємо.
-                 */
-                $items = is_array($response) ? $response : [];
-                $items = Arr::isAssoc($items)
-                    ? Arr::get($items, 'items', [])
-                    : $items;
+                // ВАЖЛИВО: Хорошоп повертає products, а не items
+                $products = $response['products'] ?? [];
 
-                if (empty($items)) {
-                    $this->info('Отримано порожній список товарів, зупиняємось.');
+                if (empty($products)) {
+                    $this->info('Більше товарів немає, синк завершено.');
                     break;
                 }
 
-                $batchSaved = 0;
+                foreach ($products as $raw) {
+                    $article = (string) ($raw['article'] ?? '');
 
-                foreach ($items as $row) {
-                    // Підлаштовуємося під типовий формат catalog/export
-                    $article = $row['article'] ?? $row['sku'] ?? null;
-                    if (! $article) {
+                    if ($article === '') {
                         continue;
                     }
 
-                    $titleUa = $row['title_uk'] ?? $row['title'] ?? null;
+                    $titleRaw = $raw['title'] ?? '';
+                    $titleUa  = '';
+                    $titleRu  = '';
 
-                    $titleJson = [
-                        'uk' => $row['title_uk'] ?? null,
-                        'ru' => $row['title_ru'] ?? null,
-                        'en' => $row['title_en'] ?? null,
-                    ];
-
-                    $categoryPath = $row['category_path'] ?? null;
-                    $slug         = $row['slug'] ?? null;
-                    $link         = $row['url'] ?? null;
-
-                    $images = $row['images'] ?? [];
-                    if (! is_array($images)) {
-                        $images = [$images];
+                    if (is_array($titleRaw)) {
+                        $titleUa = (string) Arr::get($titleRaw, 'ua', '');
+                        $titleRu = (string) Arr::get($titleRaw, 'ru', '');
+                    } else {
+                        $titleUa = (string) $titleRaw;
                     }
 
-                    $searchIndex = $this->buildSearchIndex($titleUa, $categoryPath, $article);
+                    $categoryPath = (string) Arr::get($raw, 'parent.value', '');
+
+                    $images = $raw['images']
+                        ?? $raw['gallery_common']
+                        ?? $raw['gallery_360']
+                        ?? [];
+
+                    $searchIndex = mb_strtolower(
+                        trim($titleUa . ' ' . $titleRu . ' ' . $categoryPath),
+                        'UTF-8'
+                    );
 
                     Product::updateOrCreate(
                         ['article' => $article],
                         [
-                            'title'         => $titleUa,
-                            'title_json'    => $titleJson,
-                            'price'         => $row['price'] ?? null,
-                            'price_old'     => $row['old_price'] ?? null,
+                            'title'         => $titleUa !== '' ? $titleUa : ($titleRu ?: $titleRaw),
+                            'title_json'    => is_array($titleRaw) ? $titleRaw : null,
+                            'price'         => $raw['price'] ?? null,
+                            'price_old'     => $raw['price_old'] ?? null,
                             'category_path' => $categoryPath,
-                            'slug'          => $slug,
-                            'link'          => $link,
+                            'slug'          => $raw['slug'] ?? null,
+                            'link'          => $raw['link'] ?? null,
                             'images'        => $images,
-                            'raw'           => $row,
+                            'raw'           => $raw,
                             'search_index'  => $searchIndex,
                         ]
                     );
 
-                    $batchSaved++;
                     $totalSaved++;
                 }
 
-                $this->info("Збережено/оновлено в цьому пакеті: {$batchSaved}");
+                $offset += $limit;
 
-                // Якщо повернуло менше товарів, ніж limit — це остання сторінка
-                if ($batchSaved < $limit) {
-                    $this->info('Отримано менше товарів, ніж limit — вважаємо це останнім пакетом.');
+                // Якщо повернулось менше, ніж limit – це був останній пакет
+                if (count($products) < $limit) {
+                    $this->info('Останній пакет отримано, синк завершено.');
                     break;
                 }
-
-                $offset += $limit;
             } catch (Throwable $e) {
                 $this->error('Помилка під час синку: ' . $e->getMessage());
                 report($e);
@@ -131,17 +129,5 @@ class SyncHoroshopProducts extends Command
         $this->info("Синхронізація завершена. Оновлено/створено товарів: {$totalSaved}");
 
         return self::SUCCESS;
-    }
-
-    protected function buildSearchIndex(?string $title, ?string $categoryPath, ?string $article): string
-    {
-        $parts = array_filter([$title, $categoryPath, $article]);
-        $str   = mb_strtolower(implode(' ', $parts), 'UTF-8');
-
-        // Мінімальна нормалізація
-        $str = str_replace(['-', '_', '/', '\\'], ' ', $str);
-        $str = preg_replace('/\s+/', ' ', $str);
-
-        return trim($str);
     }
 }

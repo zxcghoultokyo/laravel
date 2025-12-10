@@ -3,182 +3,277 @@
 namespace App\Services\Horoshop;
 
 use App\Models\Product;
-use App\Services\Ai\AiRouter;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductService
 {
-    public function __construct(
-        private HoroshopClient $client,
-        private AiRouter $router,
-    ) {}
+    protected HoroshopClient $client;
 
-    /**
-     * Пошук товарів спочатку по локальній БД, а при необхідності — по Horoshop API.
-     */
-    public function searchByText(string $query, ?string $language = 'uk'): array
+    public function __construct(HoroshopClient $client)
     {
-        // 1. Нормалізуємо запит через AiRouter (прибираємо сміття, додаємо синоніми).
-        $normalizedQuery = $this->router->normalizeSearchQuery($query, $language);
-
-        $originalLower   = mb_strtolower($query);
-        $normalizedLower = mb_strtolower($normalizedQuery);
-        // ВАЖЛИВО: контекст = оригінал + нормалізований текст
-        $context         = $originalLower . ' ' . $normalizedLower;
-
-        Log::info('ProductService::searchByText', [
-            'raw_query'        => $query,
-            'normalized_query' => $normalizedQuery,
-        ]);
-
-        // 2. Базовий запит по БД.
-        // Для простоти поки що шукаємо цілою фразою + "перевернутою" фразою.
-        $like         = '%' . $normalizedQuery . '%';
-        $words        = preg_split('/\s+/u', $normalizedQuery, -1, PREG_SPLIT_NO_EMPTY);
-        $reversed     = implode(' ', array_reverse($words));
-        $likeReversed = '%' . $reversed . '%';
-
-        $baseQuery = Product::query()
-            ->where(function ($q) use ($like, $likeReversed) {
-                $q->where('search_index', 'LIKE', $like)
-                  ->orWhere('search_index', 'LIKE', $likeReversed);
-            });
-
-        /**
-         * 3. Категорійні хінти.
-         *
-         * Тепер дивимось і на оригінальний текст користувача, і на нормалізований текст
-         * через змінну $context. Це дозволяє НЕ втратити ключові слова типу "турнікет",
-         * навіть якщо LLM їх випадково викинув з normalizedQuery.
-         */
-        $categoryFilter = null;
-
-        // Плитоноски
-        if (
-            str_contains($context, 'плитоноска') ||
-            str_contains($context, 'plytonoska') ||
-            str_contains($context, 'plate carrier') ||
-            str_contains($context, 'platecarrier')
-        ) {
-            $categoryFilter = 'плитоноски';
-        }
-        // Турнікетні підсумки
-        elseif (
-            str_contains($context, 'турнікет') ||
-            str_contains($context, 'turniket') ||
-            str_contains($context, 'tq')
-        ) {
-            $categoryFilter = 'турнікет';
-        }
-        // Пістолетні підсумки / Glock
-        elseif (
-            str_contains($context, 'глок') ||
-            str_contains($context, 'glock')
-        ) {
-            $categoryFilter = 'glock';
-        }
-
-        if ($categoryFilter) {
-            $baseQuery->where(function ($q) use ($categoryFilter) {
-                $q->where('search_index', 'LIKE', '%' . $categoryFilter . '%');
-            });
-        }
-
-        // 4. Сортування: спочатку більш "правильні" категорії.
-        $products = $baseQuery
-            ->select('*')
-            ->orderByRaw("
-                CASE
-                    WHEN category_path LIKE '%Тактичне спорядження/Плитоноски%' THEN 3
-                    WHEN category_path LIKE '%Медичні підсумки/Турнікету%' THEN 2
-                    WHEN category_path LIKE '%Тактичне спорядження/Підсумки/%' THEN 1
-                    ELSE 0
-                END DESC
-            ")
-            ->orderBy('price')
-            ->limit(10)
-            ->get();
-
-            if ($products->isEmpty()) {
-                Log::info('ProductService::searchByText no local results, return empty list', [
-                    'query' => $rawQuery ?? $query,
-                ]);
-            
-                return [];
-            }
-
-            return array_map(function ($row) {
-                return [
-                    'title'     => $row['title']['ua'] ?? $row['title']['ru'] ?? '',
-                    'article'   => $row['article'] ?? null,
-                    'price'     => $row['price'] ?? 0,
-                    'price_old' => $row['price_old'] ?? 0,
-                    'slug'      => $row['slug'] ?? null,
-                    'link'      => $row['link'] ?? null,
-                    'category'  => $row['parent']['value'] ?? null,
-                    'images'    => $row['images'] ?? [],
-                    '_raw'      => $row,
-                ];
-            }, $remoteProducts);
-        }
-
-        // 6. Мапимо локальні товари у формат для фронтенду.
-        return $products->map(function (Product $product) {
-            return [
-                'id'                   => $product->id,
-                'article'              => $product->article,
-                'title'                => $product->title,
-                'title_json'           => $product->title_json,
-                'price'                => $product->price,
-                'price_old'            => $product->price_old,
-                'category_path'        => $product->category_path,
-                'slug'                 => $product->slug,
-                'link'                 => $product->link,
-                'images'               => $product->images,
-                'raw'                  => $product->raw,
-                'search_index'         => $product->search_index,
-                'orders_count'         => $product->orders_count,
-                'views_count'          => $product->views_count,
-                'added_to_cart_count'  => $product->added_to_cart_count,
-                'created_at'           => $product->created_at,
-                'updated_at'           => $product->updated_at,
-            ];
-        })->all();
+        $this->client = $client;
     }
 
     /**
-     * Допоміжний метод для отримання товарів за артикулом (для AI-рекомендацій, тощо).
+     * Головний метод пошуку товарів, який використовує ChatController.
      */
-    public function getByArticles(array $articles): array
+    public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
     {
-        if (empty($articles)) {
+        Log::info('ProductService::searchByText', [
+            'raw_query'   => $rawQuery,
+            'category_id' => $categoryId,
+            'language'    => $language,
+        ]);
+
+        $normalized = mb_strtolower(trim($rawQuery));
+        if ($normalized === '') {
             return [];
         }
 
-        return Product::query()
-            ->whereIn('article', $articles)
-            ->get()
-            ->map(function (Product $product) {
-                return [
-                    'id'                   => $product->id,
-                    'article'              => $product->article,
-                    'title'                => $product->title,
-                    'title_json'           => $product->title_json,
-                    'price'                => $product->price,
-                'price_old'            => $product->price_old,
-                    'category_path'        => $product->category_path,
-                    'slug'                 => $product->slug,
-                    'link'                 => $product->link,
-                    'images'               => $product->images,
-                    'raw'                  => $product->raw,
-                    'search_index'         => $product->search_index,
-                    'orders_count'         => $product->orders_count,
-                    'views_count'          => $product->views_count,
-                    'added_to_cart_count'  => $product->added_to_cart_count,
-                    'created_at'           => $product->created_at,
-                    'updated_at'           => $product->updated_at,
-                ];
+        // 1) додаємо доменні синоніми, щоб ловити "бронік", "турнікет", "глок" і т.д.
+        $expandedQuery = $this->expandQueryWithDomainSynonyms($normalized, $language);
+
+        // 2) шукаємо кандидатів у локальній БД
+        $candidates = $this->findCandidates($expandedQuery, $categoryId);
+
+        if ($candidates->isEmpty()) {
+            Log::info('ProductService::searchByText no local results');
+            return [];
+        }
+
+        // 3) рахуємо скоринг для кожного товару
+        $scored = $this->scoreProducts($candidates, $expandedQuery);
+
+        if ($scored->isEmpty()) {
+            Log::info('ProductService::searchByText all candidates filtered out by score');
+            return [];
+        }
+
+        // 4) фільтруємо за відносним порогом релевантності
+        $maxScore = $scored->max('score') ?? 0.0;
+
+        // якщо навіть найкращий товар має дуже малий скор – краще сказати, що немає результатів
+        if ($maxScore < 1.0) {
+            Log::info('ProductService::searchByText max score too low', ['max_score' => $maxScore]);
+            return [];
+        }
+
+        // залишаємо товари, які набрали >= 50% від максимального скору
+        $filtered = $scored->filter(function (array $row) use ($maxScore) {
+            return $row['score'] >= $maxScore * 0.5;
+        });
+
+        if ($filtered->isEmpty()) {
+            Log::info('ProductService::searchByText filtered collection empty after threshold', [
+                'max_score' => $maxScore,
+            ]);
+            return [];
+        }
+
+        // 5) сортуємо та обрізаємо до топ-N
+        $top = $filtered
+            ->sortByDesc('score')
+            ->values()
+            ->take(20);
+
+        // 6) нормалізуємо під API відповіді
+        return $top
+            ->map(function (array $row) {
+                /** @var Product $product */
+                $product = $row['product'];
+                return $this->normalizeProductForApi($product);
             })
             ->all();
+    }
+
+    /**
+     * Пошук кандидатів у таблиці products по search_index/title/category_path.
+     */
+    protected function findCandidates(string $expandedQuery, ?int $categoryId = null): Collection
+    {
+        $tokens = preg_split('/\s+/u', $expandedQuery) ?: [];
+        $tokens = array_values(array_filter($tokens, function ($t) {
+            return mb_strlen($t) >= 3;
+        }));
+
+        /** @var Builder $q */
+        $q = Product::query();
+
+        if ($tokens) {
+            $q->where(function (Builder $q) use ($tokens) {
+                foreach ($tokens as $token) {
+                    $like = '%' . $token . '%';
+                    $q->orWhere('search_index', 'LIKE', $like)
+                      ->orWhere('title', 'LIKE', $like)
+                      ->orWhere('category_path', 'LIKE', $like);
+                }
+            });
+        }
+
+        // TODO: якщо додамо category_id в БД — тут можна фільтрувати по ній.
+        // if ($categoryId) {
+        //     $q->where('category_id', $categoryId);
+        // }
+
+        // Зараз беремо максимум 100 кандидатів для скорингу
+        return $q->limit(100)->get();
+    }
+
+    /**
+     * Рахуємо скоринг для кожного товару.
+     */
+    protected function scoreProducts(Collection $products, string $query): Collection
+    {
+        $queryTokens = $this->tokenize($query);
+
+        return $products->map(function (Product $product) use ($queryTokens) {
+            $haystack = mb_strtolower(trim(
+                ($product->title ?? '') . ' ' .
+                ($product->category_path ?? '') . ' ' .
+                ($product->search_index ?? '')
+            ));
+
+            $productTokens = $this->tokenize($haystack);
+
+            // 1) базовий скор за перетин токенів
+            $intersect = array_intersect($queryTokens, $productTokens);
+            $tokenMatchScore = count($intersect);
+
+            // невеликий бонус за кількість збігів
+            $tokenMatchScore += count($intersect) * 0.1;
+
+            // 2) бонус за точну фразу
+            $exactBonus = 0.0;
+            if ($queryTokens) {
+                $phrase = implode(' ', $queryTokens);
+                if (str_contains($haystack, $phrase)) {
+                    $exactBonus = 2.0;
+                }
+            }
+
+            // 3) категорійні бонуси
+            $categoryBonus = 0.0;
+            $category = mb_strtolower($product->category_path ?? '');
+
+            // плитоноски
+            if (
+                str_contains($category, 'плитоноски') &&
+                $this->containsOneOf($queryTokens, ['плитоноска', 'plate', 'carrier', 'бронік', 'бронежилет'])
+            ) {
+                $categoryBonus += 3.0;
+            }
+
+            // медичні підсумки / турнікет
+            if (
+                str_contains($category, 'медичні підсумки') &&
+                $this->containsOneOf($queryTokens, ['турнікет', 'турнікета', 'джгут'])
+            ) {
+                $categoryBonus += 3.0;
+            }
+
+            // пістолетні підсумки (глок)
+            if (
+                str_contains($category, 'пістолетні') &&
+                $this->containsOneOf($queryTokens, ['glock', 'глок', 'пістолет'])
+            ) {
+                $categoryBonus += 2.0;
+            }
+
+            // 4) бонус за популярність (коли буде аналітика замовлень)
+            $popularityScore = 0.0;
+            $popularityScore += (float)($product->orders_count ?? 0) * 0.5;
+            $popularityScore += (float)($product->views_count ?? 0) * 0.05;
+            $popularityScore += (float)($product->added_to_cart_count ?? 0) * 0.2;
+
+            $score = $tokenMatchScore + $exactBonus + $categoryBonus + $popularityScore;
+
+            return [
+                'product' => $product,
+                'score'   => $score,
+            ];
+        });
+    }
+
+    /**
+     * Проста токенізація строки.
+     */
+    protected function tokenize(string $text): array
+    {
+        $text = mb_strtolower($text);
+        $text = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
+        $tokens = preg_split('/\s+/u', $text) ?: [];
+
+        return array_values(array_filter($tokens));
+    }
+
+    /**
+     * Перевіряє, чи масив токенів містить хоча б один з needle.
+     */
+    protected function containsOneOf(array $tokens, array $needles): bool
+    {
+        $set = array_flip($tokens);
+
+        foreach ($needles as $needle) {
+            if (isset($set[mb_strtolower($needle)])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Додаємо доменні синоніми тактичного спорядження до запиту.
+     */
+    protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk'): string
+    {
+        $q = mb_strtolower($query);
+
+        $synonyms = [
+            'плитоноска' => ['plate carrier', 'бронік', 'бронежилет', 'розвантажувальний жилет'],
+            'бронік'     => ['плитоноска', 'plate carrier', 'бронежилет'],
+            'турнікет'   => ['джгут', 'cat', 'tq'],
+            'глок'       => ['glock', 'пістолетний підсумок'],
+        ];
+
+        $extra = [];
+
+        foreach ($synonyms as $key => $list) {
+            if (str_contains($q, $key)) {
+                $extra = array_merge($extra, $list);
+            }
+        }
+
+        if (empty($extra)) {
+            return $q;
+        }
+
+        return trim($q . ' ' . implode(' ', $extra));
+    }
+
+    /**
+     * Формат повернення під /api/chat.
+     */
+    public function normalizeProductForApi(Product $product): array
+    {
+        return [
+            'id'                   => $product->id,
+            'article'              => $product->article,
+            'title'                => $product->title,
+            'title_json'           => $product->title_json,
+            'price'                => $product->price,
+            'price_old'            => $product->price_old,
+            'category_path'        => $product->category_path,
+            'slug'                 => $product->slug,
+            'link'                 => $product->link,
+            'images'               => $product->images,
+            'raw'                  => $product->raw,
+            'search_index'         => $product->search_index,
+            'orders_count'         => $product->orders_count,
+            'views_count'          => $product->views_count,
+            'added_to_cart_count'  => $product->added_to_cart_count,
+        ];
     }
 }

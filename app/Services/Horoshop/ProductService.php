@@ -297,9 +297,9 @@ class ProductService
             }
 
             // бонуси / штрафи
-            $colorBonus    = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
-            $categoryBonus = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
-            $popularityVal = (int) ($product->popularity ?? 0);
+            $colorBonus      = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
+            $categoryBonus   = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
+            $popularityVal   = (int) ($product->popularity ?? 0);
             $popularityBonus = $this->getPopularityBonus($popularityVal);
 
             // штраф за “стіну тексту” без збігів
@@ -490,7 +490,7 @@ class ProductService
         $path  = mb_strtolower($categoryPath);
         $bonus = 0.0;
 
-        // футботлка / t-shirt → категорії з "футболки"
+        // футболка / t-shirt → категорії з "футболки"
         if ($this->containsOneOf($queryTokens, ['футболка', 'футболки', 't-shirt', 'tshirt'])) {
             if (str_contains($path, 'футболки')) {
                 $bonus += 8.0;
@@ -627,7 +627,7 @@ class ProductService
      */
     public function normalizeProductForApi(Product $product): array
     {
-        return [
+        $data = [
             'id'                   => $product->id,
             'article'              => $product->article,
             'title'                => $product->title,
@@ -651,5 +651,90 @@ class ProductService
             'we_recommended'       => (bool) $product->we_recommended,
             'color'                => $product->color,
         ];
+
+        // Готова HTML-картка товару для прев’ю (Postman / фронт)
+        $data['html_card'] = $this->buildHtmlCard($product);
+
+        return $data;
+    }
+
+    /**
+     * Форматування ціни "12 345 грн".
+     */
+    protected function formatPrice($price): string
+    {
+        if ($price === null || $price === '' || (float) $price <= 0) {
+            return '';
+        }
+
+        $value = (float) $price;
+
+        return number_format($value, 0, '.', ' ') . ' грн';
+    }
+
+    /**
+     * Побудова HTML картки товару (спрощений варіант,
+     * схожий на сітку з GoodShop/Хорошоп).
+     */
+    protected function buildHtmlCard(Product $product): string
+    {
+        $title    = e($product->title ?? '');
+        $link     = e($product->link ?? '#');
+        $category = e($product->category_path ?? '');
+        $article  = e($product->article ?? '');
+        $presence = e($product->presence ?? '');
+        $color    = e($product->color ?? '');
+
+        $images = $product->images;
+        $image  = '';
+
+        if (is_array($images) && count($images) > 0) {
+            $image = e($images[0]);
+        }
+
+        $price    = $this->formatPrice($product->price);
+        $priceOld = $this->formatPrice($product->price_old);
+        $hasOld   = $priceOld !== '' && (float) $product->price_old > (float) $product->price;
+
+        $html  = '<div class="product-card" data-product-id="' . (int) $product->id . '">';
+
+        if ($image !== '') {
+            $html .= '<a href="' . $link . '" class="product-card__image-wrapper">';
+            $html .= '<img src="' . $image . '" alt="' . $title . '" class="product-card__image" loading="lazy">';
+            $html .= '</a>';
+        }
+
+        $html .= '<div class="product-card__body">';
+
+        $html .= '<a href="' . $link . '" class="product-card__title">' . $title . '</a>';
+
+        $html .= '<div class="product-card__prices">';
+        if ($price !== '') {
+            $html .= '<span class="product-card__price">' . $price . '</span>';
+        }
+        if ($hasOld) {
+            $html .= '<span class="product-card__price-old">' . $priceOld . '</span>';
+        }
+        $html .= '</div>';
+
+        $html .= '<div class="product-card__meta">';
+        if ($presence !== '') {
+            $html .= '<span class="product-card__presence">' . $presence . '</span>';
+        }
+        if ($color !== '') {
+            $html .= '<span class="product-card__color">Колір: ' . $color . '</span>';
+        }
+        if ($article !== '') {
+            $html .= '<span class="product-card__sku">Артикул: ' . $article . '</span>';
+        }
+        if ($category !== '') {
+            $html .= '<span class="product-card__category">' . $category . '</span>';
+        }
+        $html .= '</div>'; // meta
+
+        $html .= '</div>'; // body
+        $html .= '</div>'; // card
+
+        return $html;
     }
 }

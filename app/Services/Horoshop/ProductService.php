@@ -17,7 +17,14 @@ class ProductService
     }
 
     /**
-     * Головний метод пошуку товарів, який використовує ChatController.
+     * Головний метод пошуку товарів по текстовому запиту.
+     *
+     * Використовується ChatController'ом та DebugProductsController'ом.
+     *
+     * @param  string      $rawQuery
+     * @param  int|null    $categoryId   (поки не використовується, залишено для майбутнього)
+     * @param  string      $language
+     * @return array       Масив нормалізованих товарів для API
      */
     public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
     {
@@ -32,18 +39,21 @@ class ProductService
             return [];
         }
 
-        // 1) додаємо доменні синоніми, щоб ловити "бронік", "турнікет", "глок" і т.д.
+        // 1) додаємо доменні синоніми, щоб ловити "бронік", "турнікет", "глок" тощо
         $expandedQuery = $this->expandQueryWithDomainSynonyms($normalized, $language);
 
         // 2) шукаємо кандидатів у локальній БД
         $candidates = $this->findCandidates($expandedQuery, $categoryId);
 
         if ($candidates->isEmpty()) {
-            Log::info('ProductService::searchByText no local results');
+            Log::info('ProductService::searchByText no candidates found', [
+                'expanded_query' => $expandedQuery,
+            ]);
+
             return [];
         }
 
-        // 3) рахуємо скоринг для кожного товару
+        // 3) рахуємо скор для кожного товару
         $scored = $this->scoreProducts($candidates, $expandedQuery);
 
         if ($scored->isEmpty()) {
@@ -73,23 +83,29 @@ class ProductService
         }
 
         // 5) сортуємо та обрізаємо до топ-N
-        $top = $filtered
+        $sorted = $filtered
             ->sortByDesc('score')
             ->values()
-            ->take(20);
+            ->take(30); // 30 кандидатів більш ніж достатньо для AiRecommender
 
-        // 6) нормалізуємо під API відповіді
-        return $top
+        // 6) нормалізуємо до формату для API
+        return $sorted
             ->map(function (array $row) {
                 /** @var Product $product */
                 $product = $row['product'];
+
                 return $this->normalizeProductForApi($product);
             })
             ->all();
     }
 
     /**
-     * Пошук кандидатів у таблиці products по search_index/title/category_path.
+     * Пошук кандидатів у локальній БД (БЕЗ хардкоду по категоріях).
+     *
+     * Тут застосовуються жорсткі бізнес-правила:
+     *  - показуємо тільки те, що:
+     *      display_in_showcase = 1
+     *      in_stock = 1
      */
     protected function findCandidates(string $expandedQuery, ?int $categoryId = null): Collection
     {
@@ -101,10 +117,16 @@ class ProductService
         /** @var Builder $q */
         $q = Product::query();
 
+        // ЖОРСТКІ БІЗНЕС-ПРАВИЛА:
+        // - показуємо тільки те, що реально продається на сайті
+        $q->where('display_in_showcase', true)
+          ->where('in_stock', true);
+
         if ($tokens) {
             $q->where(function (Builder $q) use ($tokens) {
                 foreach ($tokens as $token) {
                     $like = '%' . $token . '%';
+
                     $q->orWhere('search_index', 'LIKE', $like)
                       ->orWhere('title', 'LIKE', $like)
                       ->orWhere('category_path', 'LIKE', $like);
@@ -123,85 +145,61 @@ class ProductService
 
     /**
      * Рахуємо скоринг для кожного товару.
-     */
-        /**
-     * Рахуємо скоринг для кожного товару.
+     *
      * Тут поєднуємо:
-     * - текстову релевантність (токени + точна фраза)
-     * - доменні категорійні бонуси
-     * - популярність за продажами / переглядами / додаванням у кошик
+     *  - текстову релевантність (токени + точна фраза)
+     *  - популярність (orders/views/added_to_cart + popularity з Horoshop)
+     *  - "ми рекомендуємо" (we_recommended)
+     *
+     * БЕЗ жорсткого if по категоріях — менше хардкоду, більше місця для AI.
      */
     protected function scoreProducts(Collection $products, string $query): Collection
     {
         $queryTokens = $this->tokenize($query);
+        $queryPhrase = implode(' ', $queryTokens);
 
-        return $products->map(function (Product $product) use ($queryTokens) {
+        return $products->map(function (Product $product) use ($queryTokens, $queryPhrase) {
             $haystack = mb_strtolower(trim(
                 ($product->title ?? '') . ' ' .
                 ($product->category_path ?? '') . ' ' .
-                ($product->search_index ?? '')
+                ($product->search_index ?? '') . ' ' .
+                ($product->color ?? '')
             ));
 
             $productTokens = $this->tokenize($haystack);
 
             // 1) базовий скор за перетин токенів
-            $intersect        = array_intersect($queryTokens, $productTokens);
-            $tokenMatchScore  = count($intersect);
-            // невеликий бонус за кількість збігів
-            $tokenMatchScore += count($intersect) * 0.1;
+            $intersect       = array_intersect($queryTokens, $productTokens);
+            $tokenMatchScore = count($intersect);
+
+            // невеликий додатковий бонус за кількість збігів
+            $tokenMatchScore += count($intersect) * 0.15;
 
             // 2) бонус за точну фразу
             $exactBonus = 0.0;
-            if ($queryTokens) {
-                $phrase = implode(' ', $queryTokens);
-                if (str_contains($haystack, $phrase)) {
-                    $exactBonus = 2.0;
-                }
+            if ($queryPhrase !== '' && str_contains($haystack, $queryPhrase)) {
+                $exactBonus = 2.0;
             }
 
-            // 3) категорійні бонуси
-            $categoryBonus = 0.0;
-            $category      = mb_strtolower($product->category_path ?? '');
-
-            // плитоноски
-            if (
-                str_contains($category, 'плитоноски') &&
-                $this->containsOneOf($queryTokens, ['плитоноска', 'plate', 'carrier', 'бронік', 'бронежилет'])
-            ) {
-                $categoryBonus += 3.0;
-            }
-
-            // медичні підсумки / турнікет
-            if (
-                (str_contains($category, 'медичні підсумки') || str_contains($category, 'турнікети')) &&
-                $this->containsOneOf($queryTokens, ['турнікет', 'турнікета', 'джгут'])
-            ) {
-                $categoryBonus += 3.0;
-            }
-
-            // пістолетні підсумки (глок)
-            if (
-                str_contains($category, 'пістолетні') &&
-                $this->containsOneOf($queryTokens, ['glock', 'глок', 'пістолет'])
-            ) {
-                $categoryBonus += 2.0;
-            }
-
-            // 4) популярність (замовлення, додавання в кошик, перегляди)
+            // 3) популярність (замовлення, додавання в кошик, перегляди, popularity з Horoshop)
             $ordersCount      = (int)($product->orders_count ?? 0);
             $viewsCount       = (int)($product->views_count ?? 0);
             $addedToCartCount = (int)($product->added_to_cart_count ?? 0);
+            $hsPopularity     = (int)($product->popularity ?? 0);
 
-            // даємо найбільшу вагу реальним замовленням
             $popularityRaw =
                   $ordersCount      * 3.0   // замовлення — найцінніше
-                + $addedToCartCount * 1.0   // додали в кошик — сильний сигнал
-                + $viewsCount       * 0.05; // перегляди — слабший сигнал
+                + $addedToCartCount * 1.2   // додали в кошик — сильний сигнал
+                + $hsPopularity     * 0.7   // popularність з Horoshop
+                + $viewsCount       * 0.03; // перегляди — слабший сигнал
 
             // щоб популярність не перебивала повністю текст, трохи обрізаємо зверху
-            $popularityScore = min($popularityRaw, 10.0);
+            $popularityScore = min($popularityRaw, 12.0);
 
-            $score = $tokenMatchScore + $exactBonus + $categoryBonus + $popularityScore;
+            // 4) "ми рекомендуємо"
+            $recommendedBonus = $product->we_recommended ? 2.5 : 0.0;
+
+            $score = $tokenMatchScore + $exactBonus + $popularityScore + $recommendedBonus;
 
             return [
                 'product' => $product,
@@ -209,7 +207,6 @@ class ProductService
             ];
         });
     }
-
 
     /**
      * Проста токенізація строки.
@@ -225,6 +222,7 @@ class ProductService
 
     /**
      * Перевіряє, чи масив токенів містить хоча б один з needle.
+     * (Зараз майже не використовується, але залишаємо на майбутнє.)
      */
     protected function containsOneOf(array $tokens, array $needles): bool
     {
@@ -289,6 +287,15 @@ class ProductService
             'orders_count'         => $product->orders_count,
             'views_count'          => $product->views_count,
             'added_to_cart_count'  => $product->added_to_cart_count,
+
+            // НОВЕ: поля наявності / пріоритизації
+            'display_in_showcase'  => (bool) $product->display_in_showcase,
+            'in_stock'             => (bool) $product->in_stock,
+            'presence'             => $product->presence,
+            'quantity'             => $product->quantity,
+            'popularity'           => $product->popularity,
+            'we_recommended'       => (bool) $product->we_recommended,
+            'color'                => $product->color,
         ];
     }
 }

@@ -18,13 +18,6 @@ class ProductService
 
     /**
      * Головний метод пошуку товарів по текстовому запиту.
-     *
-     * Використовується ChatController'ом та DebugProductsController'ом.
-     *
-     * @param  string      $rawQuery
-     * @param  int|null    $categoryId   (поки не використовується, залишено для майбутнього)
-     * @param  string      $language
-     * @return array       Масив нормалізованих товарів для API
      */
     public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
     {
@@ -39,17 +32,13 @@ class ProductService
             return [];
         }
 
-        // 1) Базова нормалізація запиту (поки без доменних синонімів).
+        // 1) Базова нормалізація запиту
         $expandedQuery = $normalized;
 
-        // 2) Витягуємо цінові фільтри з тексту ("до 5 тис", "від 3 до 7 тис" тощо)
+        // 2) Цінові фільтри з тексту
         $priceFilters = $this->extractPriceFiltersFromQuery($normalized);
 
-        // 3) Шукаймо кандидатів у локальній БД:
-        //    - display_in_showcase = 1
-        //    - in_stock = 1
-        //    - [опційно] price між min_price / max_price
-        //    - + AI-індекс product_ai_index
+        // 3) Шукаймо кандидатів у локальній БД
         $candidates = $this->findCandidates($expandedQuery, $categoryId, $priceFilters);
 
         if ($candidates->isEmpty()) {
@@ -57,11 +46,10 @@ class ProductService
                 'expanded_query' => $expandedQuery,
                 'price_filters'  => $priceFilters,
             ]);
-
             return [];
         }
 
-        // 4) Рахуємо скор для кожного товару (AI intent + хард-правила)
+        // 4) Скоримо (AI intent + хард-правила + primary token)
         $scored = $this->scoreProducts($expandedQuery, $candidates);
 
         if ($scored->isEmpty()) {
@@ -69,7 +57,7 @@ class ProductService
             return [];
         }
 
-        // 5) Фільтруємо за відносним порогом релевантності
+        // 5) Відносний поріг релевантності
         $maxScore = $scored->max('score') ?? 0.0;
 
         if ($maxScore < 1.0) {
@@ -80,7 +68,6 @@ class ProductService
             return [];
         }
 
-        // залишаємо товари, які набрали >= 50% від максимального скору
         $filtered = $scored->filter(function (array $row) use ($maxScore) {
             return $row['score'] >= $maxScore * 0.5;
         });
@@ -93,18 +80,23 @@ class ProductService
             return [];
         }
 
-        // 6) Сортуємо та обрізаємо до топ-N
+        // 6) Сортуємо
         $sorted = $filtered
             ->sortByDesc('score')
             ->values()
-            ->take(30); // 30 кандидатів більш ніж достатньо для AiRecommender
+            ->take(50); // беремо трохи з запасом до дедупу
 
-        // 7) Нормалізуємо до формату для API
-        return $sorted
+        // 7) ДЕДУПЛІКАЦІЯ по parent_article / title (розміри → один товар)
+        $deduped = $this->deduplicateProducts($sorted);
+
+        // 8) Обрізаємо до топ-N для API
+        $top = $deduped->take(30);
+
+        // 9) Нормалізуємо для API
+        return $top
             ->map(function (array $row) {
                 /** @var Product $product */
                 $product = $row['product'];
-
                 return $this->normalizeProductForApi($product);
             })
             ->all();
@@ -112,14 +104,6 @@ class ProductService
 
     /**
      * Пошук кандидатів у локальній БД.
-     *
-     * Тут застосовуються жорсткі бізнес-правила:
-     *  - показуємо тільки те, що:
-     *      display_in_showcase = 1
-     *      in_stock = 1
-     *      [опційно] price між min_price / max_price
-     *
-     * + додано використання AI-індексу (product_ai_index) через звʼязок aiIndex.
      */
     protected function findCandidates(string $expandedQuery, ?int $categoryId = null, array $priceFilters = []): Collection
     {
@@ -130,13 +114,13 @@ class ProductService
 
         /** @var Builder $q */
         $q = Product::query()
-            ->with('aiIndex'); // підтягуємо AI-індекс одразу
+            ->with('aiIndex');
 
         // ЖОРСТКІ БІЗНЕС-ПРАВИЛА:
         $q->where('display_in_showcase', true)
           ->where('in_stock', true);
 
-        // Цінові фільтри (запит типу "бронік до 5 тис", "рюкзак від 3к", "від 3000 до 8000" тощо)
+        // Цінові фільтри
         if (isset($priceFilters['min_price'])) {
             $q->where('price', '>=', (int) $priceFilters['min_price']);
         }
@@ -153,7 +137,6 @@ class ProductService
                     $q->orWhere('search_index', 'LIKE', $like)
                       ->orWhere('title', 'LIKE', $like)
                       ->orWhere('category_path', 'LIKE', $like)
-                      // додаємо пошук по AI-індексу
                       ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
                           $ai->where('product_type', 'LIKE', $like)
                              ->orWhere('ai_category', 'LIKE', $like)
@@ -167,31 +150,20 @@ class ProductService
             });
         }
 
-        // TODO: якщо додамо category_id в БД — тут можна фільтрувати по ній.
-        // if ($categoryId) {
-        //     $q->where('category_id', $categoryId);
-        // }
+        // if ($categoryId) { ... } // залишаємо на майбутнє
 
-        return $q->limit(100)->get();
+        return $q->limit(150)->get();
     }
 
     /**
-     * Розбираємо з тексту бюджети:
-     *   - "до 5тис", "до 5 тис", "до 5000", "до 5к" → max_price = 5000
-     *   - "від 3 тис" / "від 3000"                 → min_price = 3000
-     *   - "від 3 до 7 тис"                        → min_price = 3000, max_price = 7000
+     * Парсимо цінові фільтри з тексту.
      */
     protected function extractPriceFiltersFromQuery(string $query): array
     {
         $q = mb_strtolower($query);
 
-        $result = [
-            // 'min_price' => int
-            // 'max_price' => int
-        ];
+        $result = [];
 
-        // Шукаємо всі числа з можливими суфіксами "тис", "k", "к"
-        // приклади: "5тис", "5 тис", "5k", "5к", "5000"
         $pattern = '/(\d+)\s*(тис|тыс|k|к)?/u';
         preg_match_all($pattern, $q, $matches, PREG_OFFSET_CAPTURE);
 
@@ -202,24 +174,17 @@ class ProductService
         $numbers = [];
 
         foreach ($matches[0] as $index => $match) {
-            $fullMatch = $match[0];
-            $pos       = $match[1];
-
-            $numStr  = $matches[1][$index][0] ?? '';
-            $suffix  = $matches[2][$index][0] ?? '';
-            $number  = (int) $numStr;
+            $pos    = $match[1];
+            $numStr = $matches[1][$index][0] ?? '';
+            $suffix = $matches[2][$index][0] ?? '';
+            $number = (int) $numStr;
 
             if ($number <= 0) {
                 continue;
             }
 
-            $multiplier = 1;
-
-            if (in_array($suffix, ['тис', 'тыс', 'k', 'к'], true)) {
-                $multiplier = 1000;
-            }
-
-            $value = $number * $multiplier;
+            $multiplier = in_array($suffix, ['тис', 'тыс', 'k', 'к'], true) ? 1000 : 1;
+            $value      = $number * $multiplier;
 
             $numbers[] = [
                 'value' => $value,
@@ -231,34 +196,29 @@ class ProductService
             return $result;
         }
 
-        // допоміжка: знайти ключове слово ("до", "від") перед числом
         $findWordBefore = function (string $needle, int $pos) use ($q): bool {
-            // дивимось у вікні ~20 символів перед числом
             $start = max(0, $pos - 20);
             $chunk = mb_substr($q, $start, $pos - $start);
-
             return str_contains($chunk, $needle);
         };
 
-        // ВАРІАНТ 1: "від X до Y ..."
+        // "від X до Y"
         if (count($numbers) >= 2) {
-            $first = $numbers[0];
+            $first  = $numbers[0];
             $second = $numbers[1];
 
             if ($findWordBefore('від', $first['pos']) && $findWordBefore('до', $second['pos'])) {
                 $result['min_price'] = $first['value'];
                 $result['max_price'] = $second['value'];
-
                 return $result;
             }
         }
 
-        // ВАРІАНТ 2: один діапазон "до X ..." або "від X ..."
+        // окремо "до X" / "від X"
         foreach ($numbers as $n) {
             if ($findWordBefore('до', $n['pos'])) {
                 $result['max_price'] = $n['value'];
             }
-
             if ($findWordBefore('від', $n['pos'])) {
                 $result['min_price'] = $n['value'];
             }
@@ -268,22 +228,16 @@ class ProductService
     }
 
     /**
-     * Рахуємо скоринг для кожного товару.
-     *
-     * Поєднуємо:
-     *  - текстову релевантність (токени + точна фраза)
-     *  - AI intent (product_types + must_have_keywords)
-     *  - популярність / "ми рекомендуємо" (можна додати пізніше)
-     *  - БОНУС за збіг кольору
-     *
-     * + використовуємо AI-індекс (product_ai_index) у haystack.
+     * Скоринг для кожного товару.
      */
     protected function scoreProducts(string $query, Collection $products): Collection
     {
-        $query = mb_strtolower(trim($query));
+        $query       = mb_strtolower(trim($query));
         $queryTokens = $this->tokenize($query);
+        $primaryToken = $queryTokens[0] ?? null;
+        $primaryNorm  = $primaryToken ? $this->normalizeWord($primaryToken) : null;
 
-        // 1. Викликаємо AI-розбір intent-у пошуку
+        // 1. AI intent
         $intent = [];
         try {
             /** @var \App\Services\Ai\AiRouter $aiRouter */
@@ -296,13 +250,18 @@ class ProductService
         $productTypeTokens = $this->extractProductTypeTokensFromIntent($intent);
         $mustHaveKeywords  = $this->extractMustHaveKeywordsFromIntent($intent);
 
-        // 2. Рахуємо базовий скоринг + додаємо наші хард-правила
-        $scored = $products->map(function (Product $product) use ($query, $queryTokens, $productTypeTokens, $mustHaveKeywords) {
+        $scored = $products->map(function (Product $product) use (
+            $query,
+            $queryTokens,
+            $productTypeTokens,
+            $mustHaveKeywords,
+            $primaryNorm
+        ) {
             $title = mb_strtolower($product->title ?? '');
             $index = mb_strtolower($product->search_index ?? '');
             $cats  = mb_strtolower($product->category_path ?? '');
 
-            // додаємо дані з AI-індексу в текстовий "haystack"
+            // AI-індекс → haystack
             $aiChunk = '';
             if ($product->relationLoaded('aiIndex') && $product->aiIndex) {
                 $aiChunkParts = [
@@ -317,12 +276,13 @@ class ProductService
                 $aiChunk = mb_strtolower(implode(' ', $aiChunkParts));
             }
 
-            $haystack = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
+            $haystack     = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
+            $haystackNorm = $this->normalizeTextForMatching($haystack);
 
-            $baseScore    = 0.0;
-            $termMatches  = 0;
+            $baseScore   = 0.0;
+            $termMatches = 0;
 
-            // --- базовий лексичний скорінг по токенах запиту ---
+            // базовий лексичний скорінг
             foreach ($queryTokens as $token) {
                 if ($token === '') {
                     continue;
@@ -331,7 +291,6 @@ class ProductService
                 if (mb_strpos($haystack, $token) !== false) {
                     $termMatches++;
 
-                    // Трошки буста в title
                     if (mb_strpos($title, $token) !== false) {
                         $baseScore += 5;
                     } else {
@@ -340,15 +299,14 @@ class ProductService
                 }
             }
 
-            // Якщо взагалі нічого не співпало по тексту – дуже слабкий кандидат
             if ($termMatches === 0) {
                 $baseScore -= 10;
             }
 
-            // --- бонус за колір, якщо є match ---
+            // бонус за колір
             $colorBonus = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
 
-            // --- штраф за дуже довгу назву без чітких збігів (анти «сміття») ---
+            // штраф за “стіну тексту” без збігів
             $titlePenalty = 0.0;
             if (mb_strlen($title) > 120 && $termMatches <= 1) {
                 $titlePenalty = 5.0;
@@ -356,14 +314,13 @@ class ProductService
 
             $score = $baseScore - $titlePenalty + $colorBonus;
 
-            // ---------------- ХАРД-ПРАВИЛА ПО ТИПУ ТОВАРУ ----------------
-
             $flags = [
-                'missing_product_type'  => false,
-                'missing_must_keywords' => false,
+                'missing_product_type'   => false,
+                'missing_must_keywords'  => false,
+                'missing_primary_token'  => false,
             ];
 
-            // a) Якщо AI вирішив, що шукаємо конкретний тип (каска/плита/футболка тощо)
+            // a) product_types з intent-а
             if (! empty($productTypeTokens)) {
                 $hasAnyTypeToken = false;
 
@@ -371,21 +328,19 @@ class ProductService
                     if ($token === '') {
                         continue;
                     }
-
-                    if (mb_strpos($haystack, $token) !== false) {
+                    if (mb_strpos($haystackNorm, $this->normalizeWord($token)) !== false) {
                         $hasAnyTypeToken = true;
                         break;
                     }
                 }
 
                 if (! $hasAnyTypeToken) {
-                    // ставимо флаг – потім, якщо будуть товари з match-ем, цей вилетить
                     $flags['missing_product_type'] = true;
-                    $score -= 20; // помірний штраф, щоб не вбивати, якщо інших немає
+                    $score -= 20;
                 }
             }
 
-            // b) must_have_keywords (UHMWPE, FR, NIJ III+ і т.д.)
+            // b) must_have_keywords
             if (! empty($mustHaveKeywords)) {
                 $missing = false;
 
@@ -394,7 +349,9 @@ class ProductService
                         continue;
                     }
 
-                    if (mb_strpos($haystack, $kw) === false) {
+                    $kwNorm = $this->normalizeWord($kw);
+
+                    if ($kwNorm && mb_strpos($haystackNorm, $kwNorm) === false) {
                         $missing = true;
                         break;
                     }
@@ -402,7 +359,15 @@ class ProductService
 
                 if ($missing) {
                     $flags['missing_must_keywords'] = true;
-                    $score -= 50; // суворий штраф — скоріше за все вилетить
+                    $score -= 50;
+                }
+            }
+
+            // c) PRIMARY TOKEN (типу "плитоноска", "футболка", "каска")
+            if ($primaryNorm && mb_strlen($primaryNorm) >= 4) {
+                if (mb_strpos($haystackNorm, $primaryNorm) === false) {
+                    $flags['missing_primary_token'] = true;
+                    $score -= 25;
                 }
             }
 
@@ -413,7 +378,7 @@ class ProductService
             ];
         });
 
-        // 3. Якщо є хоч один товар, який задовольняє product_type — викидуємо всі, що без типу
+        // Якщо є товари, що проходять по product_type – ріжемо всі, де його нема
         $hasStrictTypeMatches = $scored->first(function ($row) {
             return empty($row['flags']['missing_product_type']) && $row['score'] > 0;
         });
@@ -424,7 +389,7 @@ class ProductService
             });
         }
 
-        // 4. Якщо є хоч один товар, який задовольняє must_have_keywords — викидуємо всі, де вони відсутні
+        // Якщо є товари з must_have_keywords – ріжемо ті, де вони відсутні
         $hasStrictKeywordMatches = $scored->first(function ($row) {
             return empty($row['flags']['missing_must_keywords']) && $row['score'] > 0;
         });
@@ -435,7 +400,18 @@ class ProductService
             });
         }
 
-        // 5. Фінальні фільтри: мінус усе, що дуже нижче нуля
+        // Якщо є товари з primary token – ріжемо ті, де його немає
+        $hasPrimaryMatches = $scored->first(function ($row) {
+            return empty($row['flags']['missing_primary_token']) && $row['score'] > 0;
+        });
+
+        if ($hasPrimaryMatches) {
+            $scored = $scored->filter(function ($row) {
+                return empty($row['flags']['missing_primary_token']);
+            });
+        }
+
+        // Фінальний фільтр
         $scored = $scored
             ->filter(function ($row) {
                 return $row['score'] > -30;
@@ -447,9 +423,60 @@ class ProductService
     }
 
     /**
-     * Додаємо бонус, якщо слово з запиту схоже на значення кольору з каталогу.
-     * Працює для будь-якого домену (іграшки, одяг, тактичка і т.д.).
+     * Дедуплікація: групуємо товари по parent_article / title.
+     * Якщо в групі кілька варіантів (розміри) — залишаємо з найбільшим score.
      */
+    protected function deduplicateProducts(Collection $scored): Collection
+    {
+        $groups = [];
+
+        foreach ($scored as $row) {
+            /** @var Product $product */
+            $product = $row['product'];
+
+            $parentArticle = null;
+            try {
+                $parentArticle = data_get($product->raw ?? [], 'parent_article');
+            } catch (\Throwable $e) {
+                $parentArticle = null;
+            }
+
+            if ($parentArticle) {
+                $groupKey = 'parent:' . $parentArticle;
+            } else {
+                $titleKey = mb_strtolower(preg_replace('/\s+/u', ' ', trim($product->title ?? '')));
+                $groupKey = 'title:' . $titleKey;
+            }
+
+            if (! isset($groups[$groupKey])) {
+                $groups[$groupKey] = $row;
+            } else {
+                if ($row['score'] > $groups[$groupKey]['score']) {
+                    $groups[$groupKey] = $row;
+                }
+            }
+        }
+
+        return collect(array_values($groups))
+            ->sortByDesc('score')
+            ->values();
+    }
+
+    /**
+     * Нормалізація тексту для пошуку (прибираємо сміття, лематизуємо слова).
+     */
+    protected function normalizeTextForMatching(string $text): string
+    {
+        $text = mb_strtolower($text);
+        $text = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
+        $parts = preg_split('/\s+/u', $text) ?: [];
+        $parts = array_map(function ($w) {
+            return $this->normalizeWord($w);
+        }, $parts);
+
+        return trim(implode(' ', array_filter($parts)));
+    }
+
     protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
     {
         if (!$productColor) {
@@ -470,7 +497,6 @@ class ProductService
                 continue;
             }
 
-            // простий збіг: "чорний" vs "чорна", "black" vs "black", "pink" vs "pink"
             if (
                 str_contains($productColorNorm, $tokenNorm) ||
                 str_contains($tokenNorm, $productColorNorm)
@@ -483,13 +509,9 @@ class ProductService
         return $bonus;
     }
 
-    /**
-     * З intent-а витягуємо "сирі" токени типів товарів.
-     * Тут НЕ хардкодимо "футболка/каска/плита" — просто нормалізуємо те, що повернув AI.
-     */
     protected function extractProductTypeTokensFromIntent(array $intent): array
     {
-        $types = $intent['product_types'] ?? [];
+        $types  = $intent['product_types'] ?? [];
         $result = [];
 
         foreach ($types as $type) {
@@ -500,7 +522,6 @@ class ProductService
 
             $result[] = $type;
 
-            // Якщо тип у стилі "plate carrier" → додаємо варіант без пробілів
             if (str_contains($type, ' ')) {
                 $result[] = str_replace(' ', '', $type);
             }
@@ -509,14 +530,10 @@ class ProductService
         return array_values(array_unique($result));
     }
 
-    /**
-     * З intent-а забираємо must_have_keywords (UHMWPE, FR, NIJ III+ тощо)
-     * і нормалізуємо до нижнього регістру.
-     */
     protected function extractMustHaveKeywordsFromIntent(array $intent): array
     {
         $keywords = $intent['must_have_keywords'] ?? [];
-        $result = [];
+        $result   = [];
 
         foreach ($keywords as $kw) {
             $kw = mb_strtolower(trim($kw));
@@ -530,39 +547,27 @@ class ProductService
         return array_values(array_unique($result));
     }
 
-    /**
-     * Проста токенізація строки.
-     */
     protected function tokenize(string $text): array
     {
-        $text = mb_strtolower($text);
-        $text = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
+        $text   = mb_strtolower($text);
+        $text   = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
         $tokens = preg_split('/\s+/u', $text) ?: [];
 
         return array_values(array_filter($tokens));
     }
 
     /**
-     * Дуже проста "лематизація": прибираємо типові закінчення,
-     * щоб "чорний" і "чорна" зводились до "чорн".
+     * Дуже проста нормалізація слова.
      */
     protected function normalizeWord(string $word): string
     {
         $w = mb_strtolower(trim($word));
-
-        // прибираємо всі символи, крім букв/цифр
         $w = preg_replace('/[^\p{L}\p{N}]+/u', '', $w);
-
-        // типові прикметникові закінчення (дуже грубо)
         $w = preg_replace('/(ий|ій|ый|ой|ая|ое|ого|ому|им|их|ої|ою|а|я|е|і)$/u', '', $w);
 
         return $w;
     }
 
-    /**
-     * Перевіряє, чи масив токенів містить хоча б один з needle.
-     * (Зараз майже не використовується, але залишаємо на майбутнє.)
-     */
     protected function containsOneOf(array $tokens, array $needles): bool
     {
         $set = array_flip($tokens);
@@ -597,8 +602,6 @@ class ProductService
             'orders_count'         => $product->orders_count,
             'views_count'          => $product->views_count,
             'added_to_cart_count'  => $product->added_to_cart_count,
-
-            // Поля наявності / пріоритизації
             'display_in_showcase'  => (bool) $product->display_in_showcase,
             'in_stock'             => (bool) $product->in_stock,
             'presence'             => $product->presence,

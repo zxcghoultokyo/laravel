@@ -3,131 +3,145 @@
 namespace App\Console\Commands;
 
 use App\Models\Product;
+use App\Services\Horoshop\HoroshopClient;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
+use Illuminate\Support\Arr;
+use Throwable;
 
 class SyncHoroshopProducts extends Command
 {
-    protected $signature = 'sync:horoshop-products {--chunk=100}';
-    protected $description = 'Sync products from Horoshop catalog/export into local DB';
+    protected $signature = 'sync:horoshop-products 
+                            {--limit=500 : Скільки товарів тягнути за один запит (максимум 500)}';
+
+    protected $description = 'Синхронізація товарів з Хорошопом у локальну БД';
+
+    public function __construct(
+        protected HoroshopClient $client,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
-        $chunk = (int) $this->option('chunk') ?: 100;
+        $limit = (int) $this->option('limit') ?: 500;
 
-        $baseUrl = config('services.horoshop.base_url'); // додамо в config/services.php
-        $apiKey  = config('services.horoshop.api_key');
-
-        if (! $baseUrl || ! $apiKey) {
-            $this->error('Horoshop base_url or api_key is not configured.');
-            return self::FAILURE;
+        if ($limit > 500) {
+            $limit = 500;
         }
 
-        $offset = 0;
-        $totalImported = 0;
+        if ($limit < 1) {
+            $limit = 100;
+        }
 
-        $this->info("Starting Horoshop sync with chunk size: {$chunk}");
+        $offset     = 0;
+        $totalSaved = 0;
+
+        $this->info("Старт синхронізації товарів із Horoshop (limit={$limit})");
 
         while (true) {
-            $this->info("Fetching products: offset={$offset}, limit={$chunk}");
+            try {
+                $this->info("→ Отримуємо товари: offset={$offset}, limit={$limit}");
 
-            $response = Http::get("{$baseUrl}/catalog/export", [
-                'offset' => $offset,
-                'limit'  => $chunk,
-                'key'    => $apiKey,
-            ]);
+                // Викликаємо Хорошоп через наш клієнт (з login/password + token)
+                $response = $this->client->request('catalog/export', [
+                    'limit'  => $limit,
+                    'offset' => $offset,
+                ]);
 
-            if ($response->failed()) {
-                $this->error('Request to Horoshop failed: ' . $response->status());
+                /**
+                 * Horoshop зазвичай повертає просто масив товарів.
+                 * Якщо раптом відповідь буде формату ['items' => [...]],
+                 * ми це теж врахуємо.
+                 */
+                $items = is_array($response) ? $response : [];
+                $items = Arr::isAssoc($items)
+                    ? Arr::get($items, 'items', [])
+                    : $items;
+
+                if (empty($items)) {
+                    $this->info('Отримано порожній список товарів, зупиняємось.');
+                    break;
+                }
+
+                $batchSaved = 0;
+
+                foreach ($items as $row) {
+                    // Підлаштовуємося під типовий формат catalog/export
+                    $article = $row['article'] ?? $row['sku'] ?? null;
+                    if (! $article) {
+                        continue;
+                    }
+
+                    $titleUa = $row['title_uk'] ?? $row['title'] ?? null;
+
+                    $titleJson = [
+                        'uk' => $row['title_uk'] ?? null,
+                        'ru' => $row['title_ru'] ?? null,
+                        'en' => $row['title_en'] ?? null,
+                    ];
+
+                    $categoryPath = $row['category_path'] ?? null;
+                    $slug         = $row['slug'] ?? null;
+                    $link         = $row['url'] ?? null;
+
+                    $images = $row['images'] ?? [];
+                    if (! is_array($images)) {
+                        $images = [$images];
+                    }
+
+                    $searchIndex = $this->buildSearchIndex($titleUa, $categoryPath, $article);
+
+                    Product::updateOrCreate(
+                        ['article' => $article],
+                        [
+                            'title'         => $titleUa,
+                            'title_json'    => $titleJson,
+                            'price'         => $row['price'] ?? null,
+                            'price_old'     => $row['old_price'] ?? null,
+                            'category_path' => $categoryPath,
+                            'slug'          => $slug,
+                            'link'          => $link,
+                            'images'        => $images,
+                            'raw'           => $row,
+                            'search_index'  => $searchIndex,
+                        ]
+                    );
+
+                    $batchSaved++;
+                    $totalSaved++;
+                }
+
+                $this->info("Збережено/оновлено в цьому пакеті: {$batchSaved}");
+
+                // Якщо повернуло менше товарів, ніж limit — це остання сторінка
+                if ($batchSaved < $limit) {
+                    $this->info('Отримано менше товарів, ніж limit — вважаємо це останнім пакетом.');
+                    break;
+                }
+
+                $offset += $limit;
+            } catch (Throwable $e) {
+                $this->error('Помилка під час синку: ' . $e->getMessage());
+                report($e);
+
                 return self::FAILURE;
             }
-
-            $data = $response->json();
-
-            if (empty($data) || ! is_array($data)) {
-                $this->warn('Empty response or invalid format, stopping.');
-                break;
-            }
-
-            $batchCount = 0;
-
-            foreach ($data as $item) {
-                // Тут потрібно підлаштуватись під реальний формат Horoshop export
-                $article   = $item['article'] ?? $item['sku'] ?? null;
-                $titleUa   = $item['title_uk'] ?? $item['title'] ?? null;
-                $titleJson = [
-                    'uk' => $item['title_uk'] ?? null,
-                    'ru' => $item['title_ru'] ?? null,
-                    'en' => $item['title_en'] ?? null,
-                ];
-
-                $categoryPath = $item['category_path'] ?? null;
-                $slug         = $item['slug'] ?? null;
-                $link         = $item['url'] ?? null;
-
-                $images = $item['images'] ?? [];
-                if (! is_array($images)) {
-                    $images = [$images];
-                }
-
-                $raw = $item;
-
-                if (! $article) {
-                    // якщо немає артикулу — пропускаємо
-                    continue;
-                }
-
-                $searchIndex = $this->buildSearchIndex($titleUa, $categoryPath, $article);
-
-                Product::updateOrCreate(
-                    ['article' => $article],
-                    [
-                        'title'                 => $titleUa,
-                        'title_json'            => $titleJson,
-                        'price'                 => $item['price'] ?? null,
-                        'price_old'             => $item['old_price'] ?? null,
-                        'category_path'         => $categoryPath,
-                        'slug'                  => $slug,
-                        'link'                  => $link,
-                        'images'                => $images,
-                        'raw'                   => $raw,
-                        'search_index'          => $searchIndex,
-                    ]
-                );
-
-                $batchCount++;
-                $totalImported++;
-            }
-
-            $this->info("Imported/updated in this batch: {$batchCount}");
-
-            if ($batchCount < $chunk) {
-                // менше ніж limit → значить, це був останній пакет
-                break;
-            }
-
-            $offset += $chunk;
         }
 
-        $this->info("Done. Total imported/updated products: {$totalImported}");
+        $this->info("Синхронізація завершена. Оновлено/створено товарів: {$totalSaved}");
 
         return self::SUCCESS;
     }
 
     protected function buildSearchIndex(?string $title, ?string $categoryPath, ?string $article): string
     {
-        $pieces = array_filter([
-            $title,
-            $categoryPath,
-            $article,
-        ]);
+        $parts = array_filter([$title, $categoryPath, $article]);
+        $str   = mb_strtolower(implode(' ', $parts), 'UTF-8');
 
-        $string = Str::lower(implode(' ', $pieces));
+        // Мінімальна нормалізація
+        $str = str_replace(['-', '_', '/', '\\'], ' ', $str);
+        $str = preg_replace('/\s+/', ' ', $str);
 
-        // мінімальна нормалізація
-        $string = str_replace(['-', '_', '/', '\\'], ' ', $string);
-
-        return trim($string);
+        return trim($str);
     }
 }

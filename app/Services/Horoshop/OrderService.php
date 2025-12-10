@@ -10,15 +10,11 @@ class OrderService
         protected HoroshopClient $client,
     ) {}
 
-    /**
-     * Отримати одне замовлення по ID з Horoshop.
-     */
     public function getById(int $orderId): ?array
     {
-        // Викликаємо orders/get з параметром ids
         $response = $this->client->request('orders/get', [
-            'ids'           => [$orderId],
-            'additionalData'=> true, // щоб отримати delivery_data тощо
+            'ids'            => [$orderId],
+            'additionalData' => true,
         ]);
 
         $orders = $response['orders'] ?? [];
@@ -27,13 +23,9 @@ class OrderService
             return null;
         }
 
-        // Беремо перше (по ідеї там лише одне)
         return $orders[0];
     }
 
-    /**
-     * Нормалізуємо "сирі" дані замовлення під формат, з яким працює ChatController.
-     */
     public function normalize(array $raw): array
     {
         $statusCode = (int) ($raw['stat_status'] ?? 0);
@@ -52,39 +44,39 @@ class OrderService
 
         foreach ($raw['products'] ?? [] as $p) {
             $items[] = [
-                'title'          => $p['title'] ?? '',
-                'article'        => $p['article'] ?? '',
-                'price'          => $p['price'] ?? 0,
-                'quantity'       => $p['quantity'] ?? 0,
-                'total_price'    => $p['total_price'] ?? ($p['price'] ?? 0) * ($p['quantity'] ?? 0),
-                'discount_marker'=> $p['discount_marker'] ?? null,
-                'type'           => $p['type'] ?? 'product',
-                'storage_id'     => $p['storage_id'] ?? null,
+                'title'             => $p['title'] ?? '',
+                'article'           => $p['article'] ?? '',
+                'price'             => $p['price'] ?? 0,
+                'quantity'          => $p['quantity'] ?? 0,
+                'total_price'       => $p['total_price'] ?? ($p['price'] ?? 0) * ($p['quantity'] ?? 0),
+                'discount_marker'   => $p['discount_marker'] ?? null,
+                'type'              => $p['type'] ?? 'product',
+                'storage_id'        => $p['storage_id'] ?? null,
                 'parent_storage_id' => $p['parent_storage_id'] ?? null,
             ];
         }
 
         return [
-            'order_id'  => (int) ($raw['order_id'] ?? 0),
+            'order_id'     => (int) ($raw['order_id'] ?? 0),
             'status_code'  => $statusCode,
             'status_label' => $statusLabel,
             'created_at'   => $raw['stat_created'] ?? null,
             'currency'     => $raw['currency'] ?? null,
 
             'total' => [
-                'total_default'      => $raw['total_default'] ?? 0,
-                'total_sum'          => $raw['total_sum'] ?? 0,
-                'total_quantity'     => $raw['total_quantity'] ?? 0,
-                'discount_value'     => $raw['discount_value'] ?? 0,
-                'coupon_code'        => $raw['coupon_code'] ?? '',
-                'coupon_discount_value' => $raw['coupon_discount_value'] ?? 0,
+                'total_default'          => $raw['total_default'] ?? 0,
+                'total_sum'              => $raw['total_sum'] ?? 0,
+                'total_quantity'         => $raw['total_quantity'] ?? 0,
+                'discount_value'         => $raw['discount_value'] ?? 0,
+                'coupon_code'            => $raw['coupon_code'] ?? '',
+                'coupon_discount_value'  => $raw['coupon_discount_value'] ?? 0,
             ],
 
             'customer' => [
-                'name'    => $raw['delivery_name']  ?? '',
+                'name'    => $raw['delivery_name'] ?? '',
                 'email'   => $raw['delivery_email'] ?? '',
                 'phone'   => $raw['delivery_phone'] ?? '',
-                'city'    => $raw['delivery_city']  ?? ($raw['delivery_city_stable'] ?? ''),
+                'city'    => $raw['delivery_city'] ?? ($raw['delivery_city_stable'] ?? ''),
                 'address' => $raw['delivery_address'] ?? '',
             ],
 
@@ -105,7 +97,6 @@ class OrderService
 
             'items' => $items,
 
-            // залишаємо "сирі" дані, якщо раптом потім треба буде щось ще
             '_raw'  => $raw,
         ];
     }

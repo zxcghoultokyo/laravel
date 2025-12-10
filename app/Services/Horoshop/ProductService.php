@@ -115,4 +115,26 @@ class ProductService
 
         return $response['products'] ?? [];
     }
+     /**
+     * Пошук товарів по тексту (для ChatController).
+     *
+     * @param string $query   Текст запиту користувача
+     * @param int    $limit   Макс. кількість товарів
+     * @param int|null $categoryId Необов'язкова категорія (якщо потім захочемо фільтрувати по категорії)
+     * @return array
+     */
+    public function searchByText(string $query, int $limit = 10, ?int $categoryId = null): array
+    {
+        // Формуємо фільтри для існуючого методу search()
+        $filters = [
+            'limit' => $limit,
+        ];
+
+        if ($categoryId !== null) {
+            $filters['category_id'] = $categoryId;
+        }
+
+        // Використовуємо вже реалізований розумний пошук
+        return $this->search($query, $filters);
+    }
 }

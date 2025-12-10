@@ -2,19 +2,20 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\ServiceProvider;
 use App\Services\Horoshop\HoroshopClient;
 use App\Services\Horoshop\ProductService;
 use App\Services\Horoshop\OrderService;
+use App\Services\Horoshop\HoroshopService;
 use App\Services\Ai\AiRouter;
 use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
-use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Horoshop client
+        // Horoshop HTTP client
         $this->app->singleton(HoroshopClient::class, function ($app) {
             $config = config('services.horoshop');
 
@@ -25,14 +26,21 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        // Products — тепер передаємо AiRouter
+        // HoroshopService (обгортка над клієнтом, якщо він у тебе є)
+        $this->app->singleton(HoroshopService::class, function ($app) {
+            return new HoroshopService(
+                $app->make(HoroshopClient::class),
+            );
+        });
+
+        // 🔥 ProductService — тепер приймає AiRouter, а НЕ HoroshopClient
         $this->app->singleton(ProductService::class, function ($app) {
             return new ProductService(
                 $app->make(AiRouter::class),
             );
         });
 
-        // Orders
+        // OrderService
         $this->app->singleton(OrderService::class, function ($app) {
             return new OrderService(
                 $app->make(HoroshopClient::class),
@@ -49,7 +57,7 @@ class AppServiceProvider extends ServiceProvider
             return new AiRouter();
         });
 
-        // AI Recommender (якщо він є)
+        // AI Recommender (якщо використовується)
         $this->app->singleton(AiRecommender::class, function ($app) {
             return new AiRecommender();
         });

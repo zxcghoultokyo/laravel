@@ -124,6 +124,13 @@ class ProductService
     /**
      * Рахуємо скоринг для кожного товару.
      */
+        /**
+     * Рахуємо скоринг для кожного товару.
+     * Тут поєднуємо:
+     * - текстову релевантність (токени + точна фраза)
+     * - доменні категорійні бонуси
+     * - популярність за продажами / переглядами / додаванням у кошик
+     */
     protected function scoreProducts(Collection $products, string $query): Collection
     {
         $queryTokens = $this->tokenize($query);
@@ -138,9 +145,8 @@ class ProductService
             $productTokens = $this->tokenize($haystack);
 
             // 1) базовий скор за перетин токенів
-            $intersect = array_intersect($queryTokens, $productTokens);
-            $tokenMatchScore = count($intersect);
-
+            $intersect        = array_intersect($queryTokens, $productTokens);
+            $tokenMatchScore  = count($intersect);
             // невеликий бонус за кількість збігів
             $tokenMatchScore += count($intersect) * 0.1;
 
@@ -155,7 +161,7 @@ class ProductService
 
             // 3) категорійні бонуси
             $categoryBonus = 0.0;
-            $category = mb_strtolower($product->category_path ?? '');
+            $category      = mb_strtolower($product->category_path ?? '');
 
             // плитоноски
             if (
@@ -167,7 +173,7 @@ class ProductService
 
             // медичні підсумки / турнікет
             if (
-                str_contains($category, 'медичні підсумки') &&
+                (str_contains($category, 'медичні підсумки') || str_contains($category, 'турнікети')) &&
                 $this->containsOneOf($queryTokens, ['турнікет', 'турнікета', 'джгут'])
             ) {
                 $categoryBonus += 3.0;
@@ -181,11 +187,19 @@ class ProductService
                 $categoryBonus += 2.0;
             }
 
-            // 4) бонус за популярність (коли буде аналітика замовлень)
-            $popularityScore = 0.0;
-            $popularityScore += (float)($product->orders_count ?? 0) * 0.5;
-            $popularityScore += (float)($product->views_count ?? 0) * 0.05;
-            $popularityScore += (float)($product->added_to_cart_count ?? 0) * 0.2;
+            // 4) популярність (замовлення, додавання в кошик, перегляди)
+            $ordersCount      = (int)($product->orders_count ?? 0);
+            $viewsCount       = (int)($product->views_count ?? 0);
+            $addedToCartCount = (int)($product->added_to_cart_count ?? 0);
+
+            // даємо найбільшу вагу реальним замовленням
+            $popularityRaw =
+                  $ordersCount      * 3.0   // замовлення — найцінніше
+                + $addedToCartCount * 1.0   // додали в кошик — сильний сигнал
+                + $viewsCount       * 0.05; // перегляди — слабший сигнал
+
+            // щоб популярність не перебивала повністю текст, трохи обрізаємо зверху
+            $popularityScore = min($popularityRaw, 10.0);
 
             $score = $tokenMatchScore + $exactBonus + $categoryBonus + $popularityScore;
 
@@ -195,6 +209,7 @@ class ProductService
             ];
         });
     }
+
 
     /**
      * Проста токенізація строки.

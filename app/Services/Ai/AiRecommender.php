@@ -2,153 +2,140 @@
 
 namespace App\Services\Ai;
 
-use Illuminate\Support\Facades\Http;
-use RuntimeException;
-
+/**
+ * Простий "розумний" рекоммендер товарів.
+ *
+ * Задача на зараз:
+ * - прийняти текст запиту користувача
+ * - прийняти масив товарів з Horoshop
+ * - повернути ті ж товари, але відсортовані за "релевантністю"
+ *
+ * Логіка дуже базова, але вже дає щось адекватне:
+ * - в пріоритеті товари "в наявності"
+ * - плюс за знижку
+ * - плюс за популярність
+ * - плюс, якщо текст запиту зустрічається в назві/описі
+ */
 class AiRecommender
 {
-    protected string $apiKey;
-    protected string $model;
-    protected string $baseUrl;
-
-    public function __construct()
-    {
-        $this->apiKey  = config('services.openai.api_key');
-        $this->model   = config('services.openai.model', 'gpt-4.1-mini');
-        $this->baseUrl = rtrim(config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-
-        if (empty($this->apiKey)) {
-            throw new RuntimeException('OPENAI_API_KEY is not set.');
-        }
-    }
-
     /**
-     * Обирає найрелевантніші товари через OpenAI.
-     *
-     * @param  string $userMessage  — запит користувача ("чорна сукня S")
-     * @param  array  $products     — "сирі" товари з Horoshop (catalog/export)
-     * @param  string $language     — 'uk' або 'en' (для тексту відповіді)
-     *
-     * @return array [
-     *   'message'  => текст відповіді для юзера,
-     *   'articles' => [ 'SKU1', 'SKU2', ... ],
-     * ]
+     * @param string $query    Текст запиту користувача
+     * @param array  $products Масив товарів з Horoshop (catalog/export або search)
+     * @param int    $limit    Максимальна кількість товарів у відповіді
+     * @return array           Ті ж товари, але відсортовані й обрізані до $limit
      */
-    public function pickProducts(string $userMessage, array $products, string $language = 'uk'): array
+    public function recommend(string $query, array $products, int $limit = 5): array
     {
         if (empty($products)) {
-            return [
-                'message'  => 'Я не знайшов жодного товару за цим запитом.',
-                'articles' => [],
+            return [];
+        }
+
+        $queryLower = mb_strtolower($query);
+
+        $scored = [];
+
+        foreach ($products as $product) {
+            $score = 0;
+
+            // 1) Популярність
+            if (isset($product['popularity'])) {
+                $score += (int) $product['popularity'];
+            }
+
+            // 2) Знижка
+            if (isset($product['discount']) && (int) $product['discount'] > 0) {
+                $score += 10;
+            }
+
+            // 3) Наявність (presence.value.ua / presence.value.ru)
+            $presenceBoost = 0;
+            if (isset($product['presence']['value']) && is_array($product['presence']['value'])) {
+                $presenceUa = isset($product['presence']['value']['ua'])
+                    ? mb_strtolower($product['presence']['value']['ua'])
+                    : null;
+                $presenceRu = isset($product['presence']['value']['ru'])
+                    ? mb_strtolower($product['presence']['value']['ru'])
+                    : null;
+
+                $presenceText = $presenceUa ?: $presenceRu;
+
+                if ($presenceText !== null) {
+                    if (mb_strpos($presenceText, 'в наявності') !== false
+                        || mb_strpos($presenceText, 'у наявності') !== false
+                        || mb_strpos($presenceText, 'в наличии') !== false
+                    ) {
+                        $presenceBoost = 20;
+                    }
+                }
+            }
+            $score += $presenceBoost;
+
+            // 4) Матч по тексту запиту в назві / описі
+            $textBlob = '';
+
+            // Назва
+            if (isset($product['title'])) {
+                if (is_array($product['title'])) {
+                    $textBlob .= ' ' . ($product['title']['ua'] ?? '');
+                    $textBlob .= ' ' . ($product['title']['ru'] ?? '');
+                } else {
+                    $textBlob .= ' ' . (string) $product['title'];
+                }
+            }
+
+            // Опис
+            if (isset($product['description'])) {
+                if (is_array($product['description'])) {
+                    $textBlob .= ' ' . ($product['description']['ua'] ?? '');
+                    $textBlob .= ' ' . ($product['description']['ru'] ?? '');
+                } else {
+                    $textBlob .= ' ' . (string) $product['description'];
+                }
+            }
+
+            $textLower = mb_strtolower($textBlob);
+
+            if ($queryLower !== '' && $textLower !== '') {
+                if (mb_strpos($textLower, $queryLower) !== false) {
+                    // Якщо весь запит є підрядком – гарний матч
+                    $score += 30;
+                } else {
+                    // Проста перевірка по словам
+                    $words = preg_split('/\s+/u', $queryLower, -1, PREG_SPLIT_NO_EMPTY);
+                    $matchedWords = 0;
+
+                    foreach ($words as $word) {
+                        if (mb_strlen($word) < 3) {
+                            continue; // дрібні слова типу "і", "в", "на" пропускаємо
+                        }
+                        if (mb_strpos($textLower, $word) !== false) {
+                            $matchedWords++;
+                        }
+                    }
+
+                    if ($matchedWords > 0) {
+                        // +5 балів за кожне співпадіння, максимум +25
+                        $score += min($matchedWords * 5, 25);
+                    }
+                }
+            }
+
+            $scored[] = [
+                'score'   => $score,
+                'product' => $product,
             ];
         }
 
-        // 1. Беремо максимум 30 товарів, щоб не заливати в модель тисячі рядків
-        $candidates = array_slice($products, 0, 30);
+        // Сортуємо за score по спаданню
+        usort($scored, static function (array $a, array $b) {
+            return $b['score'] <=> $a['score'];
+        });
 
-        // 2. Готуємо текстовий список товарів для моделі
-        $lines = [];
+        // Обрізаємо до $limit і повертаємо тільки самі товари
+        $result = array_slice($scored, 0, $limit);
 
-        foreach ($candidates as $index => $product) {
-            $idx    = $index + 1;
-            $article = $product['article'] ?? ($product['parent_article'] ?? ('p'.$idx));
-
-            $titleUa = $product['title']['ua'] ?? null;
-            $titleRu = $product['title']['ru'] ?? null;
-            $name    = $titleUa ?: ($titleRu ?: ($product['title'] ?? ''));
-
-            $short = $product['short_description'] ?? null;
-            if (is_array($short)) {
-                $short = $short['ua'] ?? ($short['ru'] ?? null);
-            }
-
-            $price = $product['price'] ?? null;
-
-            $lines[] = sprintf(
-                "[%d] article=%s; name=\"%s\"; price=%s; short=\"%s\"",
-                $idx,
-                $article,
-                $name,
-                $price !== null ? $price : 'N/A',
-                $short !== null ? mb_substr($short, 0, 120) : ''
-            );
-        }
-
-        $productsText = implode("\n", $lines);
-
-        // 3. Промпт для моделі
-        $system = $language === 'uk'
-            ? "Ти — AI-консультант інтернет-магазину. Твоє завдання — допомогти користувачу обрати найкращі товари з запропонованого списку. Враховуй запит, контекст, логіку покупок. Поверни СТРОГО JSON без пояснень у форматі: {\"message\": \"текст для користувача\", \"articles\": [\"ART1\", \"ART2\", ...]}."
-            : "You are an AI assistant for an online store. Your task is to choose the best products from the list, based on the user's request. Return STRICT JSON only: {\"message\": \"assistant reply\", \"articles\": [\"ART1\", \"ART2\", ...]}.";
-
-        $userPrompt = ($language === 'uk'
-                ? "Запит користувача: "
-                : "User message: ")
-            . $userMessage
-            . "\n\n"
-            . ($language === 'uk'
-                ? "Список товарів-кандидатів:\n"
-                : "List of candidate products:\n")
-            . $productsText
-            . "\n\n"
-            . ($language === 'uk'
-                ? "Обери до 3 найкращих товарів (article) і склади дружню, але лаконічну відповідь. Не придумуй артикулів, використовуй тільки ті, що вказані в списку."
-                : "Choose up to 3 best products (by article) and generate a friendly but concise reply. Do not invent articles, use only those from the list.");
-
-        // 4. Виклик OpenAI Chat Completions
-        $response = Http::withHeaders([
-                'Authorization' => 'Bearer '.$this->apiKey,
-                'Content-Type'  => 'application/json',
-            ])
-            ->post($this->baseUrl.'/chat/completions', [
-                'model' => $this->model,
-                'messages' => [
-                    [
-                        'role'    => 'system',
-                        'content' => $system,
-                    ],
-                    [
-                        'role'    => 'user',
-                        'content' => $userPrompt,
-                    ],
-                ],
-                // Просимо JSON-об’єкт у відповіді
-                'response_format' => ['type' => 'json_object'],
-                'temperature'     => 0.5,
-            ]);
-
-        if (! $response->successful()) {
-            throw new RuntimeException(
-                'OpenAI API error: '.$response->status().' '.$response->body()
-            );
-        }
-
-        $data = $response->json();
-        $content = $data['choices'][0]['message']['content'] ?? null;
-
-        if (! $content) {
-            throw new RuntimeException('OpenAI API returned empty content.');
-        }
-
-        $decoded = json_decode($content, true);
-
-        if (! is_array($decoded)) {
-            throw new RuntimeException('OpenAI response is not valid JSON: '.$content);
-        }
-
-        $message  = $decoded['message']  ?? 'Ось товари, які я можу запропонувати:';
-        $articles = $decoded['articles'] ?? [];
-
-        if (! is_array($articles)) {
-            $articles = [];
-        }
-
-        // Обрізаємо до максимум 5 артикулів на всякий випадок
-        $articles = array_values(array_unique(array_slice($articles, 0, 5)));
-
-        return [
-            'message'  => $message,
-            'articles' => $articles,
-        ];
+        return array_map(static function (array $row) {
+            return $row['product'];
+        }, $result);
     }
 }

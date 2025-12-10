@@ -136,4 +136,105 @@ class AiRouter
             return $fallback;
         }
     }
+     /**
+     * Розбір запиту користувача в структурований intent для пошуку товарів.
+     *
+     * Повертає масив:
+     *  - product_types        => []   // типи товарів, як їх бачить AI (футболка, каска, плита...)
+     *  - must_have_keywords   => []   // обов'язкові абревіатури/матеріали/стандарти (UHMWPE, FR...)
+     *  - fallback_types       => []   // ширші категорії на випадок, якщо нічого не знайшли
+     */
+    public function parseProductSearchIntent(string $message): array
+    {
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::parseProductSearchIntent called without OPENAI_API_KEY');
+            return [];
+        }
+
+        $systemPrompt = <<<PROMPT
+Ти — AI-модуль, який розбирає пошукові запити по тактичному спорядженню / одягу.
+Твоє завдання — повернути ЧИСТИЙ JSON з полями:
+
+- "product_types": масив коротких назв типів товарів так, як їх написав користувач.
+  Приклади: ["каска", "плита", "футболка", "розгрузка", "plate carrier"].
+- "must_have_keywords": масив важливих слів/скорочень/позначень, які ОБОВ'ЯЗКОВО мають бути в товарі,
+  якщо користувач явно це просить.
+  Приклади: ["uhmwpe", "fr", "niii", "level 4", "molle"].
+- "fallback_types": масив ширших категорій, які можна показати, якщо точних товарів немає.
+  Приклади: ["шоломи", "бронеплити", "одяг"].
+
+Важливе:
+- НЕ вигадуй нові абревіатури.
+- Якщо не впевнений у чомусь — краще залиш масив порожнім.
+- Використовуй і українські/російські слова, і англійські абревіатури так, як у запиті.
+PROMPT;
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type'  => 'application/json',
+            ])->post($this->baseUrl . '/chat/completions', [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $message],
+                ],
+                'temperature' => 0.1,
+                'response_format' => [
+                    'type' => 'json_schema',
+                    'json_schema' => [
+                        'name'   => 'product_search_intent',
+                        'strict' => true,
+                        'schema' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'product_types' => [
+                                    'type'  => 'array',
+                                    'items' => ['type' => 'string'],
+                                ],
+                                'must_have_keywords' => [
+                                    'type'  => 'array',
+                                    'items' => ['type' => 'string'],
+                                ],
+                                'fallback_types' => [
+                                    'type'  => 'array',
+                                    'items' => ['type' => 'string'],
+                                ],
+                            ],
+                            'required' => ['product_types', 'must_have_keywords', 'fallback_types'],
+                        ],
+                    ],
+                ],
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('AiRouter::parseProductSearchIntent HTTP error', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+                return [];
+            }
+
+            $content = $response->json('choices.0.message.content');
+            $decoded = json_decode($content, true);
+
+            if (! is_array($decoded)) {
+                Log::warning('AiRouter::parseProductSearchIntent got non-JSON content', [
+                    'content' => $content,
+                ]);
+                return [];
+            }
+
+            return [
+                'product_types'      => $decoded['product_types']      ?? [],
+                'must_have_keywords' => $decoded['must_have_keywords'] ?? [],
+                'fallback_types'     => $decoded['fallback_types']     ?? [],
+            ];
+        } catch (\Throwable $e) {
+            Log::error('AiRouter::parseProductSearchIntent exception: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+            return [];
+        }
+    }
 }

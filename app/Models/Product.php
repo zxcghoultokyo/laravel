@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\ProductAiIndex;
 
 class Product extends Model
 {
@@ -36,13 +37,9 @@ class Product extends Model
         'title_json'           => 'array',
         'images'               => 'array',
         'raw'                  => 'array',
-        'price'                => 'float',
-        'price_old'            => 'float',
         'orders_count'         => 'integer',
         'views_count'          => 'integer',
         'added_to_cart_count'  => 'integer',
-
-        // НОВЕ
         'display_in_showcase'  => 'boolean',
         'we_recommended'       => 'boolean',
         'in_stock'             => 'boolean',
@@ -51,8 +48,9 @@ class Product extends Model
         'presence'             => 'string',
         'color'                => 'string',
     ];
-}
-public function aiIndex()
-{
-    return $this->hasOne(ProductAiIndex::class, 'product_id');
+
+    // ЗВ’ЯЗОК З ІНДЕКСОМ ДЛЯ AI
+    public function aiIndex()
+    {
+        return $this->hasOne(ProductAiIndex::class, 'product_id');
 }

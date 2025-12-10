@@ -61,6 +61,7 @@ class ProductService
         }
 
         // 4) Рахуємо скор для кожного товару
+        // ВАЖЛИВО: спочатку Collection $candidates, потім string $expandedQuery
         $scored = $this->scoreProducts($candidates, $expandedQuery);
 
         if ($scored->isEmpty()) {
@@ -261,8 +262,11 @@ class ProductService
      *  - популярність (orders/views/added_to_cart + popularity з Horoshop)
      *  - "ми рекомендуємо" (we_recommended)
      *  - БОНУС за збіг кольору (але БЕЗ доменного словника)
+     *
+     * ВАЖЛИВО: параметри у порядку (Collection $products, string $query),
+     * бо searchByText викликає $this->scoreProducts($candidates, $expandedQuery)
      */
-       protected function scoreProducts(string $query, Collection $products): Collection
+    protected function scoreProducts(Collection $products, string $query): Collection
     {
         $query = mb_strtolower(trim($query));
         $queryTokens = $this->tokenize($query);
@@ -281,12 +285,10 @@ class ProductService
         $mustHaveKeywords  = $this->extractMustHaveKeywordsFromIntent($intent);
 
         // 2. Рахуємо базовий скоринг + додаємо наші хард-правила
-        $scored = $products->map(function (array $item) use ($query, $queryTokens, $productTypeTokens, $mustHaveKeywords) {
-            $product = $item['product'];
-
-            $title   = mb_strtolower($product['title'] ?? '');
-            $index   = mb_strtolower($product['search_index'] ?? '');
-            $cats    = mb_strtolower(implode(' ', $product['categories'] ?? []));
+        $scored = $products->map(function (Product $product) use ($query, $queryTokens, $productTypeTokens, $mustHaveKeywords) {
+            $title    = mb_strtolower($product->title ?? '');
+            $index    = mb_strtolower($product->search_index ?? '');
+            $cats     = mb_strtolower($product->category_path ?? '');
             $haystack = $title . ' ' . $index . ' ' . $cats;
 
             $baseScore    = 0.0;
@@ -315,8 +317,8 @@ class ProductService
                 $baseScore -= 10;
             }
 
-            // --- бонус за колір, якщо є match (в тебе вже був цей хелпер) ---
-            $colorBonus = $this->getColorMatchBonus($query, $product['title'] ?? '');
+            // --- бонус за колір, якщо є match ---
+            $colorBonus = $this->getColorMatchBonus($query, $product->color ?? null);
 
             // --- штраф за дуже довгу назву без чітких збігів (анти «сміття») ---
             $titlePenalty = 0.0;
@@ -416,12 +418,11 @@ class ProductService
         return $scored;
     }
 
-
     /**
      * Додаємо бонус, якщо слово з запиту схоже на значення кольору з каталогу.
      * Працює для будь-якого домену (іграшки, одяг, тактичка і т.д.).
      */
-    protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
+    protected function getColorMatchBonus(string $query, ?string $productColor): float
     {
         if (!$productColor) {
             return 0.0;
@@ -432,9 +433,10 @@ class ProductService
             return 0.0;
         }
 
+        $tokens = $this->tokenize($query);
         $bonus = 0.0;
 
-        foreach ($queryTokens as $token) {
+        foreach ($tokens as $token) {
             $tokenNorm = $this->normalizeWord($token);
 
             if (mb_strlen($tokenNorm) < 3) {
@@ -453,6 +455,7 @@ class ProductService
 
         return $bonus;
     }
+
     /**
      * З intent-а витягуємо "сирі" токени типів товарів.
      * Тут НЕ хардкодимо "футболка/каска/плита" — просто нормалізуємо те, що повернув AI.

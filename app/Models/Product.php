@@ -52,3 +52,7 @@ class Product extends Model
         'color'                => 'string',
     ];
 }
+public function aiIndex()
+{
+    return $this->hasOne(ProductAiIndex::class, 'product_id');
+}

@@ -22,15 +22,13 @@ class Product extends Model
         'orders_count',
         'views_count',
         'added_to_cart_count',
-
-        // НОВЕ
         'display_in_showcase',
+        'in_stock',
         'presence',
         'quantity',
         'popularity',
         'we_recommended',
         'color',
-        'in_stock',
     ];
 
     protected $casts = [
@@ -49,8 +47,8 @@ class Product extends Model
         'color'                => 'string',
     ];
 
-    // ЗВ’ЯЗОК З ІНДЕКСОМ ДЛЯ AI
     public function aiIndex()
     {
         return $this->hasOne(ProductAiIndex::class, 'product_id');
+    }
 }

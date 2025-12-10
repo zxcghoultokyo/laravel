@@ -12,27 +12,20 @@ class ProductAiIndex extends Model
         'product_id',
         'product_type',
         'ai_category',
-        'usage',
         'materials',
         'standards',
         'slang',
         'keywords',
+        'usage',
         'embedding',
-        'raw_ai_json',
     ];
 
     protected $casts = [
-        'usage'     => 'array',
-        'materials' => 'array',
-        'standards' => 'array',
-        'slang'     => 'array',
-        'keywords'  => 'array',
         'embedding' => 'array',
-        'raw_ai_json' => 'array',
     ];
 
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class, 'product_id');
     }
 }

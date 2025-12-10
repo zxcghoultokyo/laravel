@@ -35,8 +35,9 @@ class AppServiceProvider extends ServiceProvider
 
         // 🔥 ProductService — тепер приймає AiRouter, а НЕ HoroshopClient
         $this->app->singleton(ProductService::class, function ($app) {
-            return new ProductService(
-                $app->make(AiRouter::class),
+        return new ProductService(
+            $app->make(HoroshopClient::class), // 1) client
+            $app->make(AiRouter::class),       // 2) router
             );
         });
 

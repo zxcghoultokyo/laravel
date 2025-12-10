@@ -21,6 +21,15 @@ class Product extends Model
         'orders_count',
         'views_count',
         'added_to_cart_count',
+
+        // НОВЕ
+        'display_in_showcase',
+        'presence',
+        'quantity',
+        'popularity',
+        'we_recommended',
+        'color',
+        'in_stock',
     ];
 
     protected $casts = [
@@ -32,5 +41,14 @@ class Product extends Model
         'orders_count'         => 'integer',
         'views_count'          => 'integer',
         'added_to_cart_count'  => 'integer',
+
+        // НОВЕ
+        'display_in_showcase'  => 'boolean',
+        'we_recommended'       => 'boolean',
+        'in_stock'             => 'boolean',
+        'quantity'             => 'integer',
+        'popularity'           => 'integer',
+        'presence'             => 'string',
+        'color'                => 'string',
     ];
 }

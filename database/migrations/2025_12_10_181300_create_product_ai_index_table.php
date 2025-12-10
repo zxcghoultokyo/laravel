@@ -4,9 +4,16 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
+return new class extends Migration
+{
     public function up(): void
     {
+        // Якщо таблиця вже існує (як у тебе на проді) — просто скіпаємо створення,
+        // щоб деплой не падав.
+        if (Schema::hasTable('product_ai_index')) {
+            return;
+        }
+
         Schema::create('product_ai_index', function (Blueprint $table) {
             $table->bigIncrements('id');
 
@@ -25,13 +32,13 @@ return new class extends Migration {
             // Стандарти, класи захисту (NIJ III+, STANAG, FR, etc)
             $table->text('standards')->nullable();
 
-            // Сленг, скорочення, альтернативні назви (каска, шолом, helmet, шлем, uhmwpe/uhmw, fr, "тритон", etc)
+            // Сленг, скорочення, альтернативні назви
             $table->text('slang')->nullable();
 
             // Ключові слова (ключові фрази, по яких будемо матчити пошук)
             $table->text('keywords')->nullable();
 
-            // Типове застосування (піхота, штурм, поліція, стрільба в тирі, кежуал, мерч...)
+            // Типове застосування
             $table->text('usage')->nullable();
 
             // Ембедінг — зберігаємо як JSON
@@ -43,7 +50,6 @@ return new class extends Migration {
                 ->references('id')->on('products')
                 ->onDelete('cascade');
 
-            // Індекси під пошук
             $table->index('product_type');
             $table->index('ai_category');
         });

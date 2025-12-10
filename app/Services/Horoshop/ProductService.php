@@ -2,139 +2,80 @@
 
 namespace App\Services\Horoshop;
 
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+
 class ProductService
 {
     public function __construct(
-        protected HoroshopClient $client
+        protected HoroshopClient $client,
     ) {}
 
-    // Пошук товарів через catalog/export з простим фільтром по тексту
-    public function search(?string $query = null, array $filters = []): array
-    {
-        $expr = [];
-
-        // Якщо передали category_id — фільтруємо по parent.id
-        if (! empty($filters['category_id'])) {
-            $expr['parent.id'] = (int) $filters['category_id'];
-        }
-
-        $payload = [
-            // Якщо немає умов — передаємо порожній об'єкт {}
-            'expr'           => $expr ?: new \stdClass(),
-            'limit'          => $filters['limit'] ?? 50,
-            'offset'         => $filters['offset'] ?? 0,
-            'includedParams' => [
-                'price',
-                'price_old',
-                'title',
-                'short_description',
-                'description',
-                'article',
-                'parent_article',
-                'images',
-                'link',
-            ],
-        ];
-
-        $response = $this->client->call('catalog/export', $payload);
-
-        $products = $response['products'] ?? [];
-
-        // Якщо немає текстового запиту — повертаємо все як є
-        if ($query === null || trim($query) === '') {
-            return $products;
-        }
-
-        $q = mb_strtolower(trim($query));
-
-        // Локальний фільтр по назві та артикулу
-        $filtered = array_filter($products, function (array $product) use ($q) {
-            $titleUa = $product['title']['ua'] ?? ($product['title']['ru'] ?? '');
-            $titleRu = $product['title']['ru'] ?? '';
-            $article = $product['article'] ?? '';
-
-            $haystack = mb_strtolower($titleUa . ' ' . $titleRu . ' ' . $article);
-
-            return str_contains($haystack, $q);
-        });
-
-        return array_values($filtered);
-    }
-
-    // Отримати один товар по артикулу
-    public function getByArticle(string $article): ?array
-    {
-        $payload = [
-            'expr' => [
-                'article' => [$article],
-            ],
-            'limit'          => 10,
-            'includedParams' => [
-                'price',
-                'price_old',
-                'title',
-                'short_description',
-                'description',
-                'article',
-                'parent_article',
-                'images',
-                'link',
-            ],
-        ];
-
-        $response = $this->client->call('catalog/export', $payload);
-
-        $products = $response['products'] ?? [];
-
-        return $products[0] ?? null;
-    }
-
-    // Батчевий експорт (щоб потім синкати в свою БД)
-    public function exportBatch(int $offset = 0, int $limit = 500): array
-    {
-        $payload = [
-            'expr'           => new \stdClass(),
-            'limit'          => $limit,
-            'offset'         => $offset,
-            'includedParams' => [
-                'price',
-                'price_old',
-                'title',
-                'short_description',
-                'description',
-                'article',
-                'parent_article',
-                'images',
-                'link',
-                'parent',
-                'brand',
-            ],
-        ];
-
-        $response = $this->client->call('catalog/export', $payload);
-
-        return $response['products'] ?? [];
-    }
-     /**
-     * Пошук товарів по тексту (для ChatController).
+    /**
+     * Простий пошук товарів по тексту.
      *
-     * @param string $query   Текст запиту користувача
-     * @param int    $limit   Макс. кількість товарів
-     * @param int|null $categoryId Необов'язкова категорія (якщо потім захочемо фільтрувати по категорії)
+     * @param  string  $query  – що написав юзер («плитоноска», «рюкзак 40л» тощо)
+     * @param  int     $limit  – скільки товарів максимум віддати
      * @return array
      */
-    public function searchByText(string $query, int $limit = 10, ?int $categoryId = null): array
+    public function searchByText(string $query, int $limit = 10): array
     {
-        // Формуємо фільтри для існуючого методу search()
-        $filters = [
-            'limit' => $limit,
-        ];
-
-        if ($categoryId !== null) {
-            $filters['category_id'] = $categoryId;
+        $query = trim($query);
+        if ($query === '') {
+            return [];
         }
 
-        // Використовуємо вже реалізований розумний пошук
-        return $this->search($query, $filters);
+        // 1) Тягнемо шматок каталогу з Хорошопу
+        //    (до 200 товарів, тільки базові поля, щоб не вбивати API)
+        $payload = [
+            'limit'          => 200,
+            'includedParams' => ['title', 'description', 'price', 'price_old', 'parent', 'slug', 'link', 'images'],
+        ];
+
+        $data = $this->client->postJson('catalog/export', $payload);
+
+        $products = $data['response']['products'] ?? [];
+        if (empty($products)) {
+            return [];
+        }
+
+        // 2) Фільтруємо по входженню тексту в назву/опис
+        $q = mb_strtolower($query, 'UTF-8');
+        $matched = [];
+
+        foreach ($products as $p) {
+            $titleUa = $p['title']['ua'] ?? '';
+            $titleRu = $p['title']['ru'] ?? '';
+            $descUa  = $p['description']['ua'] ?? '';
+            $descRu  = $p['description']['ru'] ?? '';
+
+            $haystack = mb_strtolower(
+                implode(' ', [$titleUa, $titleRu, $descUa, $descRu]),
+                'UTF-8'
+            );
+
+            if ($haystack === '') {
+                continue;
+            }
+
+            if (mb_stripos($haystack, $q, 0, 'UTF-8') === false) {
+                continue;
+            }
+
+            $matched[] = [
+                'article'   => $p['article']         ?? null,
+                'title'     => $titleUa ?: $titleRu,
+                'title_raw' => $p['title']           ?? null,
+                'price'     => $p['price']           ?? null,
+                'price_old' => $p['price_old']       ?? null,
+                'parent'    => $p['parent']['value'] ?? null,
+                'slug'      => $p['slug']            ?? null,
+                'link'      => $p['link']            ?? null,
+                'images'    => $p['images']          ?? [],
+            ];
+        }
+
+        // 3) Просто відрізаємо до ліміту
+        return array_slice($matched, 0, $limit);
     }
 }

@@ -49,7 +49,7 @@ class ProductService
             return [];
         }
 
-        // 4) Скоримо (AI intent + хард-правила + primary token)
+        // 4) Скоримо (AI intent + хард-правила + primary token + популярність + категорії)
         $scored = $this->scoreProducts($expandedQuery, $candidates);
 
         if ($scored->isEmpty()) {
@@ -57,19 +57,12 @@ class ProductService
             return [];
         }
 
-        // 5) Відносний поріг релевантності
+        // 5) Відносний поріг релевантності (більш м’який)
         $maxScore = $scored->max('score') ?? 0.0;
 
-        if ($maxScore < 1.0) {
-            Log::info('ProductService::searchByText max score too low', [
-                'max_score'      => $maxScore,
-                'price_filters'  => $priceFilters,
-            ]);
-            return [];
-        }
-
         $filtered = $scored->filter(function (array $row) use ($maxScore) {
-            return $row['score'] >= $maxScore * 0.5;
+            // беремо все, що не сильно відстає від топа
+            return $row['score'] >= $maxScore * 0.3;
         });
 
         if ($filtered->isEmpty()) {
@@ -84,9 +77,9 @@ class ProductService
         $sorted = $filtered
             ->sortByDesc('score')
             ->values()
-            ->take(50); // беремо трохи з запасом до дедупу
+            ->take(80); // беремо більше до дедупу
 
-        // 7) ДЕДУПЛІКАЦІЯ по parent_article / title (розміри → один товар)
+        // 7) Дедуплікація по parent_article / title (розміри → один товар)
         $deduped = $this->deduplicateProducts($sorted);
 
         // 8) Обрізаємо до топ-N для API
@@ -150,9 +143,9 @@ class ProductService
             });
         }
 
-        // if ($categoryId) { ... } // залишаємо на майбутнє
+        // $categoryId — на майбутнє, поки не чіпаємо
 
-        return $q->limit(150)->get();
+        return $q->limit(200)->get();
     }
 
     /**
@@ -232,8 +225,8 @@ class ProductService
      */
     protected function scoreProducts(string $query, Collection $products): Collection
     {
-        $query       = mb_strtolower(trim($query));
-        $queryTokens = $this->tokenize($query);
+        $query        = mb_strtolower(trim($query));
+        $queryTokens  = $this->tokenize($query);
         $primaryToken = $queryTokens[0] ?? null;
         $primaryNorm  = $primaryToken ? $this->normalizeWord($primaryToken) : null;
 
@@ -303,8 +296,11 @@ class ProductService
                 $baseScore -= 10;
             }
 
-            // бонус за колір
-            $colorBonus = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
+            // бонуси / штрафи
+            $colorBonus    = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
+            $categoryBonus = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
+            $popularityVal = (int) ($product->popularity ?? 0);
+            $popularityBonus = $this->getPopularityBonus($popularityVal);
 
             // штраф за “стіну тексту” без збігів
             $titlePenalty = 0.0;
@@ -312,7 +308,7 @@ class ProductService
                 $titlePenalty = 5.0;
             }
 
-            $score = $baseScore - $titlePenalty + $colorBonus;
+            $score = $baseScore - $titlePenalty + $colorBonus + $categoryBonus + $popularityBonus;
 
             $flags = [
                 'missing_product_type'   => false,
@@ -336,7 +332,7 @@ class ProductService
 
                 if (! $hasAnyTypeToken) {
                     $flags['missing_product_type'] = true;
-                    $score -= 20;
+                    $score -= 15; // м’якіше, ніж було
                 }
             }
 
@@ -359,15 +355,15 @@ class ProductService
 
                 if ($missing) {
                     $flags['missing_must_keywords'] = true;
-                    $score -= 50;
+                    $score -= 35; // теж м’якіше
                 }
             }
 
-            // c) PRIMARY TOKEN (типу "плитоноска", "футболка", "каска")
+            // c) PRIMARY TOKEN (типу "плитоноска", "футболка", "бронеплити")
             if ($primaryNorm && mb_strlen($primaryNorm) >= 4) {
                 if (mb_strpos($haystackNorm, $primaryNorm) === false) {
                     $flags['missing_primary_token'] = true;
-                    $score -= 25;
+                    $score -= 15; // раніше було -25
                 }
             }
 
@@ -378,43 +374,13 @@ class ProductService
             ];
         });
 
-        // Якщо є товари, що проходять по product_type – ріжемо всі, де його нема
-        $hasStrictTypeMatches = $scored->first(function ($row) {
-            return empty($row['flags']['missing_product_type']) && $row['score'] > 0;
-        });
+        // БЕЗ жорстких відсічень: intent/primary тільки штрафують, але не фільтрують
 
-        if ($hasStrictTypeMatches) {
-            $scored = $scored->filter(function ($row) {
-                return empty($row['flags']['missing_product_type']);
-            });
-        }
-
-        // Якщо є товари з must_have_keywords – ріжемо ті, де вони відсутні
-        $hasStrictKeywordMatches = $scored->first(function ($row) {
-            return empty($row['flags']['missing_must_keywords']) && $row['score'] > 0;
-        });
-
-        if ($hasStrictKeywordMatches) {
-            $scored = $scored->filter(function ($row) {
-                return empty($row['flags']['missing_must_keywords']);
-            });
-        }
-
-        // Якщо є товари з primary token – ріжемо ті, де його немає
-        $hasPrimaryMatches = $scored->first(function ($row) {
-            return empty($row['flags']['missing_primary_token']) && $row['score'] > 0;
-        });
-
-        if ($hasPrimaryMatches) {
-            $scored = $scored->filter(function ($row) {
-                return empty($row['flags']['missing_primary_token']);
-            });
-        }
-
-        // Фінальний фільтр
+        // Фінальний фільтр “сміття”
         $scored = $scored
             ->filter(function ($row) {
-                return $row['score'] > -30;
+                // зовсім мертвих кандидатів відріжемо
+                return $row['score'] > -40;
             })
             ->sortByDesc('score')
             ->values();
@@ -477,6 +443,9 @@ class ProductService
         return trim(implode(' ', array_filter($parts)));
     }
 
+    /**
+     * Бонус за збіг кольору з запитом (олива, зелений, піксель тощо).
+     */
     protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
     {
         if (!$productColor) {
@@ -501,12 +470,83 @@ class ProductService
                 str_contains($productColorNorm, $tokenNorm) ||
                 str_contains($tokenNorm, $productColorNorm)
             ) {
-                $bonus += 3.0;
+                $bonus += 6.0; // посилили вплив кольору
                 break;
             }
         }
 
         return $bonus;
+    }
+
+    /**
+     * Бонус за відповідність категорії (по факту використовуємо category_path, що вже з сайту).
+     */
+    protected function getCategoryMatchBonus(array $queryTokens, ?string $categoryPath): float
+    {
+        if (!$categoryPath) {
+            return 0.0;
+        }
+
+        $path  = mb_strtolower($categoryPath);
+        $bonus = 0.0;
+
+        // футботлка / t-shirt → категорії з "футболки"
+        if ($this->containsOneOf($queryTokens, ['футболка', 'футболки', 't-shirt', 'tshirt'])) {
+            if (str_contains($path, 'футболки')) {
+                $bonus += 8.0;
+            }
+        }
+
+        // бронеплити / плити / бронепластини → підкатегорії з "плити", загальний "бронезахист"
+        if ($this->containsOneOf($queryTokens, ['бронеплити', 'бронеплита', 'бронепластини', 'плити', 'plates', 'plate'])) {
+            if (str_contains($path, 'плити')) {
+                $bonus += 10.0;
+            }
+            if (str_contains($path, 'бронезахист')) {
+                $bonus += 5.0;
+            }
+        }
+
+        // каска / шолом → "шоломи"
+        if ($this->containsOneOf($queryTokens, ['каска', 'каски', 'шолом', 'шоломи', 'helmet', 'helmets'])) {
+            if (str_contains($path, 'шоломи')) {
+                $bonus += 10.0;
+            }
+            if (str_contains($path, 'бронезахист')) {
+                $bonus += 4.0;
+            }
+        }
+
+        // плитоноска → "плитоноски"
+        if ($this->containsOneOf($queryTokens, ['плитоноска', 'плитоноски', 'plate carrier'])) {
+            if (str_contains($path, 'плитоноски')) {
+                $bonus += 10.0;
+            }
+        }
+
+        // куртка → "куртки"
+        if ($this->containsOneOf($queryTokens, ['куртка', 'куртку', 'куртки'])) {
+            if (str_contains($path, 'куртки')) {
+                $bonus += 8.0;
+            }
+        }
+
+        return $bonus;
+    }
+
+    /**
+     * Бонус за популярність: все, що >0, має перевагу над 0.
+     */
+    protected function getPopularityBonus(int $popularity): float
+    {
+        if ($popularity <= 0) {
+            return 0.0;
+        }
+
+        // лог-подібний бонус, щоб не “стріляло” занадто сильно
+        $bonus = log(1 + $popularity) * 3.0;
+
+        return min($bonus, 20.0);
     }
 
     protected function extractProductTypeTokensFromIntent(array $intent): array
@@ -573,7 +613,8 @@ class ProductService
         $set = array_flip($tokens);
 
         foreach ($needles as $needle) {
-            if (isset($set[mb_strtolower($needle)])) {
+            $needle = mb_strtolower($needle);
+            if (isset($set[$needle])) {
                 return true;
             }
         }

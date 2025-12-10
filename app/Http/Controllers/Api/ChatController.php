@@ -30,17 +30,21 @@ class ChatController extends Controller
         $message      = trim($data['message']);
         $messageLower = mb_strtolower($message, 'UTF-8');
 
-        // 0) питаємо AI: що це за намір?
+        // 0) Питаємо AI-роутер: що це за намір?
         $routing = $this->aiRouter->classify($message);
 
-        $intent           = $routing['intent']           ?? 'UNKNOWN';
-        $normalizedQuery  = $routing['normalized_query'] ?? $message;
-        $orderId          = $routing['order_id']         ?? null;
+        $intent          = $routing['intent']           ?? 'UNKNOWN';
+        $normalizedQuery = $routing['normalized_query'] ?? $message;
+        $orderId         = $routing['order_id']         ?? null;
 
-        if ($intent === 'FALLBACK') {
+        // ---- ROUTING ПО ІНТЕНТАМ ----
+
+        // 1) Якщо AI каже "не знаю, що це" — запускаємо fallback пайплайн
+        if ($intent === 'FALLBACK' || $intent === 'UNKNOWN') {
             return $this->fallbackPipeline($message, $messageLower);
         }
 
+        // 2) Статус замовлення
         if ($intent === 'ORDER_STATUS') {
             if ($orderId) {
                 return $this->handleOrderStatusFlow($orderId);
@@ -52,6 +56,7 @@ class ChatController extends Controller
             ]);
         }
 
+        // 3) FAQ / довідка
         if ($intent === 'FAQ') {
             if ($answer = $this->faqService->match($messageLower)) {
                 return response()->json([
@@ -60,42 +65,42 @@ class ChatController extends Controller
                 ]);
             }
 
+            // Якщо в FAQ нічого не знайшли – fallback
             return $this->fallbackPipeline($message, $messageLower);
         }
 
+        // 4) Пошук товарів
         if ($intent === 'PRODUCT_SEARCH') {
             $products = $this->productService->searchByText($normalizedQuery);
 
-            if (!empty($products)) {
+            if (! empty($products)) {
+                // Пропускаємо товари через "розумний" сортер
+                try {
+                    $recommended = $this->aiRecommender->recommend($normalizedQuery, $products);
+                } catch (Throwable $e) {
+                    report($e);
+                    $recommended = $products; // на всякий випадок – віддамо, як є
+                }
+
                 return response()->json([
                     'type'     => 'products',
                     'query'    => $normalizedQuery,
-                    'products' => $products,
+                    'products' => $recommended,
                 ]);
             }
 
-            try {
-                $aiResult = $this->aiRecommender->recommend($normalizedQuery);
-
-                if ($aiResult) {
-                    return response()->json([
-                        'type' => 'ai_recommendation',
-                        'data' => $aiResult,
-                    ]);
-                }
-            } catch (Throwable $e) {
-                report($e);
-            }
-
+            // Якщо нічого не знайшли – просто no_results
             return response()->json([
                 'type'    => 'no_results',
                 'message' => sprintf(
-                    'Я не знайшов товарів за запитом: «%s». Спробуй змінити формулювання або вкажи категорію/бренд.',
+                    'Я не знайшов товарів за запитом: «%s». ' .
+                    'Спробуй змінити формулювання або вкажи категорію/бренд.',
                     $normalizedQuery
                 ),
             ]);
         }
 
+        // 5) Small talk / болталка
         if ($intent === 'SMALL_TALK') {
             return response()->json([
                 'type'    => 'small_talk',
@@ -103,11 +108,19 @@ class ChatController extends Controller
             ]);
         }
 
+        // 6) Все інше — через fallback (FAQ → пошук товарів → no_results)
         return $this->fallbackPipeline($message, $messageLower);
     }
 
+    /**
+     * Fallback-пайплайн:
+     * 1) спробувати FAQ
+     * 2) спробувати пошук товарів + AI-сортування
+     * 3) no_results
+     */
     protected function fallbackPipeline(string $message, string $messageLower)
     {
+        // 1) FAQ
         if ($answer = $this->faqService->match($messageLower)) {
             return response()->json([
                 'type'    => 'faq',
@@ -115,38 +128,39 @@ class ChatController extends Controller
             ]);
         }
 
+        // 2) Пошук товарів на Horoshop
         $products = $this->productService->searchByText($message);
 
-        if (!empty($products)) {
+        if (! empty($products)) {
+            try {
+                // Тут теж передаємо і текст, і масив товарів
+                $recommended = $this->aiRecommender->recommend($message, $products);
+            } catch (Throwable $e) {
+                report($e);
+                $recommended = $products;
+            }
+
             return response()->json([
                 'type'     => 'products',
                 'query'    => $message,
-                'products' => $products,
+                'products' => $recommended,
             ]);
         }
 
-        try {
-            $aiResult = $this->aiRecommender->recommend($message);
-
-            if ($aiResult) {
-                return response()->json([
-                    'type' => 'ai_recommendation',
-                    'data' => $aiResult,
-                ]);
-            }
-        } catch (Throwable $e) {
-            report($e);
-        }
-
+        // 3) Нічого не знайшли
         return response()->json([
             'type'    => 'no_results',
             'message' => sprintf(
-                'Я не знайшов товарів за запитом: «%s». Спробуй змінити формулювання або вкажи категорію/бренд.',
+                'Я не знайшов товарів за запитом: «%s». ' .
+                'Спробуй змінити формулювання або вкажи категорію/бренд.',
                 $message
             ),
         ]);
     }
 
+    /**
+     * Обробка флоу "статус замовлення"
+     */
     protected function handleOrderStatusFlow(int $orderId)
     {
         try {

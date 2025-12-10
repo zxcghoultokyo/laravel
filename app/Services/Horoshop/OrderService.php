@@ -2,102 +2,111 @@
 
 namespace App\Services\Horoshop;
 
+use Illuminate\Support\Arr;
+
 class OrderService
 {
     public function __construct(
-        protected HoroshopClient $client
+        protected HoroshopClient $client,
     ) {}
 
     /**
-     * Витягнути одне замовлення по ID (номер замовлення з Хорошопу).
+     * Отримати одне замовлення по ID з Horoshop.
      */
     public function getById(int $orderId): ?array
     {
-        $payload = [
+        // Викликаємо orders/get з параметром ids
+        $response = $this->client->request('orders/get', [
             'ids'           => [$orderId],
-            'additionalData'=> true,
-        ];
-
-        $response = $this->client->call('orders/get', $payload);
+            'additionalData'=> true, // щоб отримати delivery_data тощо
+        ]);
 
         $orders = $response['orders'] ?? [];
 
-        return $orders[0] ?? null;
+        if (empty($orders)) {
+            return null;
+        }
+
+        // Беремо перше (по ідеї там лише одне)
+        return $orders[0];
     }
 
     /**
-     * Перетворити "сире" замовлення з Хорошопа в зручний формат для фронта.
+     * Нормалізуємо "сирі" дані замовлення під формат, з яким працює ChatController.
      */
-    public function normalize(array $order): array
+    public function normalize(array $raw): array
     {
-        $statusCode = (int) ($order['stat_status'] ?? 0);
+        $statusCode = (int) ($raw['stat_status'] ?? 0);
 
-        return [
-            'order_id'   => (int) ($order['order_id'] ?? 0),
-            'status_code'=> $statusCode,
-            'status_label' => $this->mapStatus($statusCode),
-            'created_at' => $order['stat_created'] ?? null,
-            'currency'   => $order['currency'] ?? null,
-
-            'total' => [
-                'total_default' => $order['total_default'] ?? null,
-                'total_sum'     => $order['total_sum'] ?? null,
-                'total_quantity'=> $order['total_quantity'] ?? null,
-                'discount_value'=> $order['discount_value'] ?? null,
-                'coupon_code'   => $order['coupon_code'] ?? null,
-            ],
-
-            'customer' => [
-                'name'    => $order['delivery_name'] ?? null,
-                'email'   => $order['delivery_email'] ?? null,
-                'phone'   => $order['delivery_phone'] ?? null,
-                'city'    => $order['delivery_city'] ?? ($order['delivery_city_stable'] ?? null),
-                'address' => $order['delivery_address'] ?? null,
-            ],
-
-            'delivery' => [
-                'type_id'    => $order['delivery_type']['id']   ?? null,
-                'type_title' => $order['delivery_type']['title']?? null,
-                'price'      => $order['delivery_price']        ?? null,
-                'comment'    => $order['comment']               ?? null,
-                'data'       => $order['delivery_data']         ?? null,
-            ],
-
-            'payment' => [
-                'type_id'    => $order['payment_type']['id']    ?? null,
-                'type_title' => $order['payment_type']['title'] ?? null,
-                'price'      => $order['payment_price']         ?? null,
-                'payed'      => (int) ($order['payed'] ?? 0),
-            ],
-
-            'items' => collect($order['products'] ?? [])
-                ->map(function (array $item) {
-                    return [
-                        'title'         => $item['title']        ?? null,
-                        'article'       => $item['article']      ?? null,
-                        'price'         => $item['price']        ?? null,
-                        'quantity'      => $item['quantity']     ?? null,
-                        'total_price'   => $item['total_price']  ?? null,
-                        'discount_marker'=> $item['discount_marker'] ?? null,
-                        'type'          => $item['type']         ?? null,
-                    ];
-                })
-                ->all(),
-        ];
-    }
-
-    /**
-     * Маппінг числового статусу замовлення у людську назву.
-     */
-    protected function mapStatus(int $code): string
-    {
-        return match ($code) {
-            1 => 'нове',
+        $statusLabelMap = [
+            1 => 'новий',
             2 => 'в обробці',
             3 => 'доставлено',
             4 => 'не доставлено',
             6 => 'доставляється',
-            default => 'невідомий статус',
-        };
+        ];
+
+        $statusLabel = $statusLabelMap[$statusCode] ?? 'невідомий статус';
+
+        $items = [];
+
+        foreach ($raw['products'] ?? [] as $p) {
+            $items[] = [
+                'title'          => $p['title'] ?? '',
+                'article'        => $p['article'] ?? '',
+                'price'          => $p['price'] ?? 0,
+                'quantity'       => $p['quantity'] ?? 0,
+                'total_price'    => $p['total_price'] ?? ($p['price'] ?? 0) * ($p['quantity'] ?? 0),
+                'discount_marker'=> $p['discount_marker'] ?? null,
+                'type'           => $p['type'] ?? 'product',
+                'storage_id'     => $p['storage_id'] ?? null,
+                'parent_storage_id' => $p['parent_storage_id'] ?? null,
+            ];
+        }
+
+        return [
+            'order_id'  => (int) ($raw['order_id'] ?? 0),
+            'status_code'  => $statusCode,
+            'status_label' => $statusLabel,
+            'created_at'   => $raw['stat_created'] ?? null,
+            'currency'     => $raw['currency'] ?? null,
+
+            'total' => [
+                'total_default'      => $raw['total_default'] ?? 0,
+                'total_sum'          => $raw['total_sum'] ?? 0,
+                'total_quantity'     => $raw['total_quantity'] ?? 0,
+                'discount_value'     => $raw['discount_value'] ?? 0,
+                'coupon_code'        => $raw['coupon_code'] ?? '',
+                'coupon_discount_value' => $raw['coupon_discount_value'] ?? 0,
+            ],
+
+            'customer' => [
+                'name'    => $raw['delivery_name']  ?? '',
+                'email'   => $raw['delivery_email'] ?? '',
+                'phone'   => $raw['delivery_phone'] ?? '',
+                'city'    => $raw['delivery_city']  ?? ($raw['delivery_city_stable'] ?? ''),
+                'address' => $raw['delivery_address'] ?? '',
+            ],
+
+            'delivery' => [
+                'type_id'    => Arr::get($raw, 'delivery_type.id'),
+                'type_title' => Arr::get($raw, 'delivery_type.title'),
+                'price'      => $raw['delivery_price'] ?? 0,
+                'comment'    => $raw['comment'] ?? '',
+                'data'       => $raw['delivery_data'] ?? ($raw['additional_data'] ?? []),
+            ],
+
+            'payment' => [
+                'type_id'    => Arr::get($raw, 'payment_type.id'),
+                'type_title' => Arr::get($raw, 'payment_type.title'),
+                'price'      => $raw['payment_price'] ?? 0,
+                'payed'      => $raw['payed'] ?? 0,
+            ],
+
+            'items' => $items,
+
+            // залишаємо "сирі" дані, якщо раптом потім треба буде щось ще
+            '_raw'  => $raw,
+        ];
     }
 }

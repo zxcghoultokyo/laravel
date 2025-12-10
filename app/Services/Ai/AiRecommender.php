@@ -5,34 +5,45 @@ namespace App\Services\Ai;
 /**
  * Простий "розумний" рекоммендер товарів.
  *
- * Задача на зараз:
- * - прийняти текст запиту користувача
- * - прийняти масив товарів з Horoshop
- * - повернути ті ж товари, але відсортовані за "релевантністю"
+ * Підтримує ДВА варіанти виклику:
  *
- * Логіка дуже базова, але вже дає щось адекватне:
- * - в пріоритеті товари "в наявності"
- * - плюс за знижку
- * - плюс за популярність
- * - плюс, якщо текст запиту зустрічається в назві/описі
+ * 1) recommend($query, $products, $limit)
+ *    - $query  (string) — текст запиту користувача
+ *    - $products (array) — масив товарів з Horoshop
+ *
+ * 2) recommend($products)
+ *    - якщо переданий тільки масив товарів — просто відсортовуємо їх за популярністю/наявністю/знижкою
  */
 class AiRecommender
 {
     /**
-     * @param string $query    Текст запиту користувача
-     * @param array  $products Масив товарів з Horoshop (catalog/export або search)
-     * @param int    $limit    Максимальна кількість товарів у відповіді
-     * @return array           Ті ж товари, але відсортовані й обрізані до $limit
+     * @param string|array $queryOrProducts
+     *   - string: текст запиту користувача
+     *   - array:  масив товарів, якщо викликають recommend($products)
+     * @param array|null $products
+     *   - масив товарів, коли викликають recommend($query, $products)
+     * @param int $limit
+     * @return array
      */
-    public function recommend(string $query, array $products, int $limit = 5): array
+    public function recommend(string|array $queryOrProducts, ?array $products = null, int $limit = 5): array
     {
+        // Визначаємо, як нас викликали
+
+        if ($products === null) {
+            // Виклик виду: recommend($products)
+            $query    = '';
+            $products = is_array($queryOrProducts) ? $queryOrProducts : [];
+        } else {
+            // Виклик виду: recommend($query, $products)
+            $query = is_string($queryOrProducts) ? $queryOrProducts : '';
+        }
+
         if (empty($products)) {
             return [];
         }
 
         $queryLower = mb_strtolower($query);
-
-        $scored = [];
+        $scored     = [];
 
         foreach ($products as $product) {
             $score = 0;
@@ -60,7 +71,8 @@ class AiRecommender
                 $presenceText = $presenceUa ?: $presenceRu;
 
                 if ($presenceText !== null) {
-                    if (mb_strpos($presenceText, 'в наявності') !== false
+                    if (
+                        mb_strpos($presenceText, 'в наявності') !== false
                         || mb_strpos($presenceText, 'у наявності') !== false
                         || mb_strpos($presenceText, 'в наличии') !== false
                     ) {

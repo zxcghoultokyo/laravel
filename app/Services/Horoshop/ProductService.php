@@ -1,189 +1,77 @@
 <?php
 
-namespace App\Services\Horoshop;
+namespace App\Services;
 
 use App\Models\Product;
-use Illuminate\Support\Arr;
-use Throwable;
+use Illuminate\Support\Str;
 
 class ProductService
 {
-    public function __construct(
-        protected HoroshopClient $client,
-    ) {}
+    protected AiRouter $router;
 
-    /**
-     * Пошук товарів: спочатку в локальній БД, потім (fallback) напряму в Horoshop.
-     */
-    public function searchByText(string $query, ?int $limit = 10): array
+    public function __construct(AiRouter $router)
     {
-        $query = trim($query);
-
-        if ($query === '') {
-            return [];
-        }
-
-        // 1) Пошук у локальній БД
-        $local = $this->searchLocal($query, $limit);
-
-        if (!empty($local)) {
-            return $local;
-        }
-
-        // 2) Якщо в БД нічого не знайшли – fallback до прямого Horoshop API
-        $remote = $this->searchRemoteAndOptionallySync($query, $limit);
-
-        return $remote;
+        $this->router = $router;
     }
 
     /**
-     * Примітивний LIKE-пошук по нашій таблиці products.
+     * 🔥 Розумний пошук:
+     * 1) AI нормалізація
+     * 2) Fuzzy пошук
+     * 3) Пошук по декількох умовах
+     * 4) fallback → Horoshop API
      */
-    protected function searchLocal(string $query, ?int $limit = 10): array
+    public function searchByText(string $text, int $limit = 20): array
     {
-        $needle = mb_strtolower($query, 'UTF-8');
+        // 1 — AI нормалізація
+        $normalized = $this->router->normalizeSearchQuery($text);
 
-        $builder = Product::query()
-            ->where('search_index', 'LIKE', '%' . $needle . '%')
-            ->orderByDesc('orders_count')
-            ->orderByDesc('views_count');
+        // 2 — генеруємо часткові токени для fuzzy-пошуку
+        $tokens = $this->generateFuzzyTokens($normalized);
 
-        if ($limit !== null) {
-            $builder->limit($limit);
+        $query = Product::query();
+
+        foreach ($tokens as $token) {
+            $query->orWhere('search_index', 'LIKE', "%$token%");
         }
 
-        $items = $builder->get();
+        $results = $query->limit($limit)->get();
 
-        if ($items->isEmpty()) {
-            return [];
+        // Якщо знайшли — повертаємо локальні дані
+        if ($results->count() > 0) {
+            return $results->toArray();
         }
 
-        return $items->map(function (Product $p) {
-            return [
-                'title'     => $p->title,
-                'article'   => $p->article,
-                'price'     => $p->price,
-                'price_old' => $p->price_old,
-                'slug'      => $p->slug,
-                'link'      => $p->link,
-                'category'  => $p->category_path,
-                'images'    => $p->images ?? [],
-                '_raw'      => $p->raw ?? [],
-            ];
-        })->all();
+        // 4 — fallback до Horoshop API
+        return app(HoroshopService::class)->searchProducts($normalized);
     }
 
     /**
-     * Старий спосіб: тягнемо catalog/export напряму, фільтруємо по назві,
-     * і по дорозі оновлюємо/створюємо записи в локальній БД.
+     * Генерує fuzzy-токени (спрощено).
      */
-    protected function searchRemoteAndOptionallySync(string $query, ?int $limit = 10): array
+    protected function generateFuzzyTokens(string $text): array
     {
-        try {
-            $response = $this->client->request('catalog/export', [
-                'limit'          => 500,
-                'includedParams' => [
-                    'title',
-                    'price',
-                    'price_old',
-                    'article',
-                    'slug',
-                    'link',
-                    'images',
-                    'gallery_common',
-                    'gallery_360',
-                    'parent',
-                ],
-            ]);
+        $text = Str::lower($text);
 
-            $products = $response['products'] ?? [];
+        $parts = explode(' ', $text);
 
-            if (empty($products)) {
-                return [];
-            }
+        $tokens = [];
 
-            $normalized = [];
-            $needle     = mb_strtolower($query, 'UTF-8');
+        foreach ($parts as $p) {
+            if (strlen($p) < 3) continue;
 
-            foreach ($products as $raw) {
-                $article = (string) ($raw['article'] ?? '');
+            $tokens[] = $p; // прямий токен
 
-                if ($article === '') {
-                    continue;
-                }
+            // fuzzy варіанти
+            $tokens[] = substr($p, 0, 4);
+            $tokens[] = substr($p, 0, 3);
 
-                $titleRaw = $raw['title'] ?? '';
-                $titleUa  = '';
-                $titleRu  = '';
-
-                if (is_array($titleRaw)) {
-                    $titleUa = (string) Arr::get($titleRaw, 'ua', '');
-                    $titleRu = (string) Arr::get($titleRaw, 'ru', '');
-                } else {
-                    $titleUa = (string) $titleRaw;
-                }
-
-                $titleUaLower = mb_strtolower($titleUa, 'UTF-8');
-                $titleRuLower = mb_strtolower($titleRu, 'UTF-8');
-
-                if (
-                    ! str_contains($titleUaLower, $needle)
-                    && ! str_contains($titleRuLower, $needle)
-                ) {
-                    // Не співпало по тексту – пропускаємо
-                    continue;
-                }
-
-                $categoryPath = (string) Arr::get($raw, 'parent.value', '');
-
-                $images = $raw['images']
-                    ?? $raw['gallery_common']
-                    ?? $raw['gallery_360']
-                    ?? [];
-
-                $searchIndex = mb_strtolower(
-                    trim($titleUa . ' ' . $titleRu . ' ' . $categoryPath),
-                    'UTF-8'
-                );
-
-                // Оновлюємо/створюємо запис в нашій БД
-                Product::updateOrCreate(
-                    ['article' => $article],
-                    [
-                        'title'         => $titleUa !== '' ? $titleUa : ($titleRu ?: $titleRaw),
-                        'title_json'    => is_array($titleRaw) ? $titleRaw : null,
-                        'price'         => $raw['price'] ?? null,
-                        'price_old'     => $raw['price_old'] ?? null,
-                        'category_path' => $categoryPath,
-                        'slug'          => $raw['slug'] ?? null,
-                        'link'          => $raw['link'] ?? null,
-                        'images'        => $images,
-                        'raw'           => $raw,
-                        'search_index'  => $searchIndex,
-                    ]
-                );
-
-                $normalized[] = [
-                    'title'      => $titleUa !== '' ? $titleUa : ($titleRu ?: $titleRaw),
-                    'article'    => $article,
-                    'price'      => $raw['price'] ?? null,
-                    'price_old'  => $raw['price_old'] ?? null,
-                    'slug'       => $raw['slug'] ?? null,
-                    'link'       => $raw['link'] ?? null,
-                    'category'   => $categoryPath,
-                    'images'     => $images,
-                    '_raw'       => $raw,
-                ];
-
-                if ($limit !== null && count($normalized) >= $limit) {
-                    break;
-                }
-            }
-
-            return $normalized;
-        } catch (Throwable $e) {
-            report($e);
-            return [];
+            // ручні заміни (популярні помилки)
+            $tokens[] = str_replace('є', 'е', $p);
+            $tokens[] = str_replace('и', 'і', $p);
+            $tokens[] = str_replace('о', 'а', $p);
         }
+
+        return array_unique($tokens);
     }
 }

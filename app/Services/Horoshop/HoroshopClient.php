@@ -2,79 +2,58 @@
 
 namespace App\Services\Horoshop;
 
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 class HoroshopClient
 {
-    /**
-     * Базові налаштування для доступу до Хорошоп.
-     *
-     * Очікуємо, що в .env є:
-     * HOROSHOP_DOMAIN=https://yourshop.com
-     * HOROSHOP_LOGIN=api_login
-     * HOROSHOP_PASSWORD=api_password
-     */
-
     protected string $domain;
     protected string $login;
     protected string $password;
 
-    // ключ для кешу токена
-    protected string $tokenCacheKey = 'horoshop_api_token';
-
-    // TTL токена в секундах (у Хорошопа 600 сек, беремо трохи менше, щоб оновлювати завчасно)
-    protected int $tokenTtl = 540; // 9 хвилин
-
     public function __construct()
     {
-        $this->domain   = rtrim(config('services.horoshop.domain'), '/');
-        $this->login    = config('services.horoshop.login');
-        $this->password = config('services.horoshop.password');
+        $this->domain   = rtrim((string) config('services.horoshop.domain'), '/');
+        $this->login    = (string) config('services.horoshop.login');
+        $this->password = (string) config('services.horoshop.password');
 
-        if (empty($this->domain) || empty($this->login) || empty($this->password)) {
-            throw new RuntimeException('Horoshop config is missing. Check services.horoshop and .env variables.');
+        if (! $this->domain) {
+            throw new RuntimeException('Horoshop domain is not configured (services.horoshop.domain)');
         }
     }
 
     /**
-     * Отримуємо токен авторизації з Хорошопа.
-     * Токен кешується на ~9 хвилин.
+     * Отримати токен авторизації та закешувати його на ~9 хвилин (540 секунд).
      */
-    public function getToken(): string
+    protected function authenticate(): string
     {
-        return Cache::remember($this->tokenCacheKey, $this->tokenTtl, function () {
-            $url = sprintf('%s/api/auth/', $this->domain);
+        return Cache::remember('horoshop_api_token', 540, function () {
+            $url = $this->domain . '/api/auth/';
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post($url, [
-                'login'    => $this->login,
-                'password' => $this->password,
-            ]);
+            $response = Http::acceptJson()
+                ->asJson()
+                ->post($url, [
+                    'login'    => $this->login,
+                    'password' => $this->password,
+                ]);
 
             if (! $response->ok()) {
-                throw new RuntimeException(
-                    sprintf('Horoshop auth HTTP error %s', $response->status())
-                );
+                throw new RuntimeException('Horoshop auth HTTP error: ' . $response->status());
             }
 
-            $data = $response->json();
+            $json   = $response->json();
+            $status = $json['status'] ?? null;
 
-            if (! is_array($data)) {
-                throw new RuntimeException('Horoshop auth: invalid JSON response');
+            if ($status !== 'OK') {
+                $message = $json['response']['message'] ?? 'Unknown auth error';
+                throw new RuntimeException('Horoshop auth error: ' . $message);
             }
 
-            if (($data['status'] ?? null) !== 'OK') {
-                $message = $data['response']['message'] ?? 'Unknown auth error';
-                throw new RuntimeException("Horoshop auth error: {$message}");
-            }
+            $token = $json['response']['token'] ?? null;
 
-            $token = $data['response']['token'] ?? null;
-
-            if (! $token || ! is_string($token)) {
-                throw new RuntimeException('Horoshop auth: token is missing in response');
+            if (! $token) {
+                throw new RuntimeException('Horoshop auth: token not returned');
             }
 
             return $token;
@@ -82,49 +61,61 @@ class HoroshopClient
     }
 
     /**
-     * Базовий JSON POST до будь-якої функції Хорошоп API.
+     * Основний метод виклику будь-якої API-функції Horoshop.
      *
      * @param  string  $function  Наприклад: 'catalog/export', 'orders/get'
-     * @param  array   $payload   Тіло запиту (параметри). token додамо автоматично, якщо його немає.
-     * @return array              Розпарсена JSON-відповідь
+     * @param  array   $payload   Параметри без token (ми додамо самі)
+     * @return array              Поле "response" від Horoshop або []
+     *
+     * @throws \RuntimeException  При статусах ERROR / EXCEPTION / AUTHORIZATION_ERROR тощо
      */
-    public function postJson(string $function, array $payload): array
+    public function request(string $function, array $payload = []): array
     {
-        // гарантуємо, що токен є в payload
-        if (! isset($payload['token'])) {
-            $payload['token'] = $this->getToken();
-        }
+        $token = $this->authenticate();
+        $url   = $this->domain . '/api/' . trim($function, '/') . '/';
 
-        $url = sprintf(
-            '%s/api/%s/',
-            $this->domain,
-            trim($function, '/')
-        );
-
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json',
-        ])->post($url, $payload);
+        $response = Http::acceptJson()
+            ->asJson()
+            ->post($url, array_merge(['token' => $token], $payload));
 
         if (! $response->ok()) {
             throw new RuntimeException(
-                sprintf('Horoshop HTTP error %s for %s', $response->status(), $function)
+                sprintf('Horoshop HTTP error %d for %s', $response->status(), $function)
             );
         }
 
-        $data = $response->json();
+        $json   = $response->json();
+        $status = $json['status'] ?? 'UNKNOWN';
 
-        if (! is_array($data)) {
-            throw new RuntimeException("Horoshop: invalid JSON response for {$function}");
+        if ($status === 'OK') {
+            return $json['response'] ?? [];
         }
 
-        // status може бути OK або EMPTY – обидва варіанти не є фатальною помилкою
-        $status = $data['status'] ?? null;
-
-        if ($status && ! in_array($status, ['OK', 'EMPTY'], true)) {
-            $message = $data['response']['message'] ?? '';
-            throw new RuntimeException("Horoshop API error [{$status}]: {$message}");
+        if ($status === 'EMPTY') {
+            // Для деяких функцій це просто означає "нічого не знайшли"
+            return [];
         }
 
-        return $data;
+        $message = $json['response']['message'] ?? 'Unknown API error';
+
+        throw new RuntimeException(
+            sprintf('Horoshop API error [%s]: %s', $status, $message)
+        );
+    }
+
+    /**
+     * Backwards-compat: якщо десь в коді ще викликається ->call().
+     */
+    public function call(string $function, array $payload = []): array
+    {
+        return $this->request($function, $payload);
+    }
+
+    /**
+     * Backwards-compat: якщо десь викликається getToken().
+     */
+    public function getToken(): string
+    {
+        return $this->authenticate();
     }
 }

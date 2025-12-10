@@ -262,62 +262,160 @@ class ProductService
      *  - "ми рекомендуємо" (we_recommended)
      *  - БОНУС за збіг кольору (але БЕЗ доменного словника)
      */
-    protected function scoreProducts(Collection $products, string $query): Collection
+       protected function scoreProducts(string $query, Collection $products): Collection
     {
+        $query = mb_strtolower(trim($query));
         $queryTokens = $this->tokenize($query);
-        $queryPhrase = implode(' ', $queryTokens);
 
-        return $products->map(function (Product $product) use ($queryTokens, $queryPhrase) {
-            $haystack = mb_strtolower(trim(
-                ($product->title ?? '') . ' ' .
-                ($product->category_path ?? '') . ' ' .
-                ($product->search_index ?? '') . ' ' .
-                ($product->color ?? '')
-            ));
+        // 1. Викликаємо AI-розбір intent-у пошуку
+        $intent = [];
+        try {
+            /** @var \App\Services\Ai\AiRouter $aiRouter */
+            $aiRouter = app(\App\Services\Ai\AiRouter::class);
+            $intent   = $aiRouter->parseProductSearchIntent($query);
+        } catch (\Throwable $e) {
+            Log::warning('ProductService::scoreProducts intent parse failed: ' . $e->getMessage());
+        }
 
-            $productTokens = $this->tokenize($haystack);
+        $productTypeTokens = $this->extractProductTypeTokensFromIntent($intent);
+        $mustHaveKeywords  = $this->extractMustHaveKeywordsFromIntent($intent);
 
-            // 1) базовий скор за перетин токенів
-            $intersect       = array_intersect($queryTokens, $productTokens);
-            $tokenMatchScore = count($intersect);
+        // 2. Рахуємо базовий скоринг + додаємо наші хард-правила
+        $scored = $products->map(function (array $item) use ($query, $queryTokens, $productTypeTokens, $mustHaveKeywords) {
+            $product = $item['product'];
 
-            // невеликий додатковий бонус за кількість збігів
-            $tokenMatchScore += count($intersect) * 0.15;
+            $title   = mb_strtolower($product['title'] ?? '');
+            $index   = mb_strtolower($product['search_index'] ?? '');
+            $cats    = mb_strtolower(implode(' ', $product['categories'] ?? []));
+            $haystack = $title . ' ' . $index . ' ' . $cats;
 
-            // 2) бонус за точну фразу
-            $exactBonus = 0.0;
-            if ($queryPhrase !== '' && str_contains($haystack, $queryPhrase)) {
-                $exactBonus = 2.0;
+            $baseScore    = 0.0;
+            $termMatches  = 0;
+
+            // --- базовий лексичний скорінг по токенах запиту ---
+            foreach ($queryTokens as $token) {
+                if ($token === '') {
+                    continue;
+                }
+
+                if (mb_strpos($haystack, $token) !== false) {
+                    $termMatches++;
+
+                    // Трошки буста в title
+                    if (mb_strpos($title, $token) !== false) {
+                        $baseScore += 5;
+                    } else {
+                        $baseScore += 2;
+                    }
+                }
             }
 
-            // 3) популярність (замовлення, додавання в кошик, перегляди, popularity з Horoshop)
-            $ordersCount      = (int)($product->orders_count ?? 0);
-            $viewsCount       = (int)($product->views_count ?? 0);
-            $addedToCartCount = (int)($product->added_to_cart_count ?? 0);
-            $hsPopularity     = (int)($product->popularity ?? 0);
+            // Якщо взагалі нічого не співпало по тексту – дуже слабкий кандидат
+            if ($termMatches === 0) {
+                $baseScore -= 10;
+            }
 
-            $popularityRaw =
-                  $ordersCount      * 3.0   // замовлення — найцінніше
-                + $addedToCartCount * 1.2   // додали в кошик — сильний сигнал
-                + $hsPopularity     * 0.7   // популярність з Horoshop
-                + $viewsCount       * 0.03; // перегляди — слабший сигнал
+            // --- бонус за колір, якщо є match (в тебе вже був цей хелпер) ---
+            $colorBonus = $this->getColorMatchBonus($query, $product['title'] ?? '');
 
-            $popularityScore = min($popularityRaw, 12.0);
+            // --- штраф за дуже довгу назву без чітких збігів (анти «сміття») ---
+            $titlePenalty = 0.0;
+            if (mb_strlen($title) > 120 && $termMatches <= 1) {
+                $titlePenalty = 5.0;
+            }
 
-            // 4) "ми рекомендуємо"
-            $recommendedBonus = $product->we_recommended ? 2.5 : 0.0;
+            $score = $baseScore - $titlePenalty + $colorBonus;
 
-            // 5) БОНУС за збіг кольору (універсальний, без словників)
-            $colorBonus = $this->getColorMatchBonus($queryTokens, $product->color);
+            // ---------------- ХАРД-ПРАВИЛА ПО ТИПУ ТОВАРУ ----------------
 
-            $score = $tokenMatchScore + $exactBonus + $popularityScore + $recommendedBonus + $colorBonus;
+            $flags = [
+                'missing_product_type'  => false,
+                'missing_must_keywords' => false,
+            ];
+
+            // a) Якщо AI вирішив, що шукаємо конкретний тип (каска/плита/футболка тощо)
+            if (! empty($productTypeTokens)) {
+                $hasAnyTypeToken = false;
+
+                foreach ($productTypeTokens as $token) {
+                    if ($token === '') {
+                        continue;
+                    }
+
+                    if (mb_strpos($haystack, $token) !== false) {
+                        $hasAnyTypeToken = true;
+                        break;
+                    }
+                }
+
+                if (! $hasAnyTypeToken) {
+                    // ставимо флаг – потім, якщо будуть товари з match-ем, цей вилетить
+                    $flags['missing_product_type'] = true;
+                    $score -= 20; // помірний штраф, щоб не вбивати, якщо інших немає
+                }
+            }
+
+            // b) must_have_keywords (UHMWPE, FR, NIJ III+ і т.д.)
+            if (! empty($mustHaveKeywords)) {
+                $missing = false;
+
+                foreach ($mustHaveKeywords as $kw) {
+                    if ($kw === '') {
+                        continue;
+                    }
+
+                    if (mb_strpos($haystack, $kw) === false) {
+                        $missing = true;
+                        break;
+                    }
+                }
+
+                if ($missing) {
+                    $flags['missing_must_keywords'] = true;
+                    $score -= 50; // суворий штраф — скоріше за все вилетить
+                }
+            }
 
             return [
                 'product' => $product,
                 'score'   => $score,
+                'flags'   => $flags,
             ];
         });
+
+        // 3. Якщо є хоч один товар, який задовольняє product_type — викидуємо всі, що без типу
+        $hasStrictTypeMatches = $scored->first(function ($row) {
+            return empty($row['flags']['missing_product_type']) && $row['score'] > 0;
+        });
+
+        if ($hasStrictTypeMatches) {
+            $scored = $scored->filter(function ($row) {
+                return empty($row['flags']['missing_product_type']);
+            });
+        }
+
+        // 4. Якщо є хоч один товар, який задовольняє must_have_keywords — викидуємо всі, де вони відсутні
+        $hasStrictKeywordMatches = $scored->first(function ($row) {
+            return empty($row['flags']['missing_must_keywords']) && $row['score'] > 0;
+        });
+
+        if ($hasStrictKeywordMatches) {
+            $scored = $scored->filter(function ($row) {
+                return empty($row['flags']['missing_must_keywords']);
+            });
+        }
+
+        // 5. Фінальні фільтри: мінус усе, що дуже нижче нуля
+        $scored = $scored
+            ->filter(function ($row) {
+                return $row['score'] > -30;
+            })
+            ->sortByDesc('score')
+            ->values();
+
+        return $scored;
     }
+
 
     /**
      * Додаємо бонус, якщо слово з запиту схоже на значення кольору з каталогу.
@@ -354,6 +452,52 @@ class ProductService
         }
 
         return $bonus;
+    }
+    /**
+     * З intent-а витягуємо "сирі" токени типів товарів.
+     * Тут НЕ хардкодимо "футболка/каска/плита" — просто нормалізуємо те, що повернув AI.
+     */
+    protected function extractProductTypeTokensFromIntent(array $intent): array
+    {
+        $types = $intent['product_types'] ?? [];
+        $result = [];
+
+        foreach ($types as $type) {
+            $type = mb_strtolower(trim($type));
+            if ($type === '') {
+                continue;
+            }
+
+            $result[] = $type;
+
+            // Якщо тип у стилі "plate carrier" → додаємо варіант без пробілів
+            if (str_contains($type, ' ')) {
+                $result[] = str_replace(' ', '', $type);
+            }
+        }
+
+        return array_values(array_unique($result));
+    }
+
+    /**
+     * З intent-а забираємо must_have_keywords (UHMWPE, FR, NIJ III+ тощо)
+     * і нормалізуємо до нижнього регістру.
+     */
+    protected function extractMustHaveKeywordsFromIntent(array $intent): array
+    {
+        $keywords = $intent['must_have_keywords'] ?? [];
+        $result = [];
+
+        foreach ($keywords as $kw) {
+            $kw = mb_strtolower(trim($kw));
+            if ($kw === '') {
+                continue;
+            }
+
+            $result[] = $kw;
+        }
+
+        return array_values(array_unique($result));
     }
 
     /**

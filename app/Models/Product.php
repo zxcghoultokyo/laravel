@@ -46,7 +46,12 @@ class Product extends Model
         'presence'             => 'string',
         'color'                => 'string',
     ];
-
+    
+    public function tags()
+    {
+        return $this->belongsToMany(\App\Models\ProductTag::class, 'product_product_tag');
+    }
+    
     public function aiIndex()
     {
         return $this->hasOne(ProductAiIndex::class, 'product_id');

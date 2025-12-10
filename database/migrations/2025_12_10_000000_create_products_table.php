@@ -38,7 +38,8 @@ return new class extends Migration
             $table->json('raw')->nullable();
 
             // Спрощене поле для пошуку (нормалізований title+category)
-            $table->text('search_index')->nullable();
+            // Використовуємо string, щоб MySQL дозволив індексацію без гемору з довжиною
+            $table->string('search_index', 255)->nullable();
 
             // Місце під наші майбутні метрики
             $table->unsignedBigInteger('orders_count')->default(0);
@@ -47,7 +48,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Індекс по search_index для LIKE пошуку
+            // Індекси для пошуку
             $table->index('search_index');
             $table->index('category_path');
         });

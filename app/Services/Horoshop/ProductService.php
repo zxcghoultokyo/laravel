@@ -708,4 +708,86 @@ class ProductService
 
         return $bonus;
     }
+      /**
+     * Пошук товарів по внутрішньому ключу категорії (tourniquets, helmets, etc.).
+     *
+     * Тут поки що простий hardcode по category_path + тексту.
+     * Потім це можна перенести в config/product_categories.php.
+     */
+    public function searchByCategoryKey(string $categoryKey, int $limit = 3, array $priceFilters = []): array
+    {
+        $categoryKey = mb_strtolower($categoryKey);
+
+        /** @var Builder $q */
+        $q = Product::query()
+            ->where('display_in_showcase', true)
+            ->where('in_stock', true);
+
+        // Прімєр простої мапи category_key → умова
+        switch ($categoryKey) {
+            case 'tourniquets':
+                $q->where(function (Builder $q) {
+                    $q->where('category_path', 'LIKE', '%турнік%')
+                      ->orWhere('category_path', 'LIKE', '%тактична медицина%')
+                      ->orWhere('title', 'LIKE', '%турнікет%')
+                      ->orWhere('search_index', 'LIKE', '%tourniquet%');
+                });
+                break;
+
+            case 'ifak_kits':
+                $q->where(function (Builder $q) {
+                    $q->where('category_path', 'LIKE', '%аптечк%')
+                      ->orWhere('title', 'LIKE', '%аптечк%')
+                      ->orWhere('search_index', 'LIKE', '%ifak%');
+                });
+                break;
+
+            case 'helmets':
+                $q->where(function (Builder $q) {
+                    $q->where('category_path', 'LIKE', '%шолом%')
+                      ->orWhere('category_path', 'LIKE', '%каска%')
+                      ->orWhere('title', 'LIKE', '%шолом%')
+                      ->orWhere('title', 'LIKE', '%каска%')
+                      ->orWhere('search_index', 'LIKE', '%helmet%');
+                });
+                break;
+
+            case 'plate_carriers':
+                $q->where(function (Builder $q) {
+                    $q->where('category_path', 'LIKE', '%плитоноск%')
+                      ->orWhere('title', 'LIKE', '%плитоноск%')
+                      ->orWhere('search_index', 'LIKE', '%plate carrier%');
+                });
+                break;
+
+            case 'plates':
+                $q->where(function (Builder $q) {
+                    $q->where('category_path', 'LIKE', '%плити%')
+                      ->orWhere('category_path', 'LIKE', '%бронеплити%')
+                      ->orWhere('title', 'LIKE', '%плита%')
+                      ->orWhere('search_index', 'LIKE', '%sapi%');
+                });
+                break;
+
+            default:
+                // Якщо категорія невідома – нічого не додаємо, просто повернемо пустий масив
+                return [];
+        }
+
+        // Застосовуємо цінові фільтри, якщо є
+        if (! empty($priceFilters['min'])) {
+            $q->where('price', '>=', $priceFilters['min']);
+        }
+        if (! empty($priceFilters['max'])) {
+            $q->where('price', '<=', $priceFilters['max']);
+        }
+
+        $q->orderByDesc('popularity')->limit($limit);
+
+        $products = $q->get();
+
+        return $products
+            ->map(fn (Product $product) => $this->normalizeProductForApi($product))
+            ->all();
+    }
 }

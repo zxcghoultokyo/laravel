@@ -804,6 +804,46 @@ class ProductService
 
         return number_format($value, 0, '.', ' ') . ' грн';
     }
+    protected function getAccessoryPenalty(array $queryTokens, ?string $categoryPath, ?string $title): float
+    {
+        $categoryPath = mb_strtolower((string) $categoryPath);
+        $title        = mb_strtolower((string) $title);
+    
+        // 1. Визначаємо, що це аксесуар/комплектуюча штука
+        $accessoryCategoryMarkers = [
+            'аксесуари', 'аксессуары',
+            'комплектуючі', 'комплектующие',
+            'кріплення', 'креплен',
+            'adapter', 'picatinny', 'wing-loc',
+        ];
+    
+        $isAccessoryCategory = $this->containsOneOf(
+            [$categoryPath, $title],
+            $accessoryCategoryMarkers
+        );
+    
+        if (!$isAccessoryCategory) {
+            return 0.0;
+        }
+    
+        // 2. Якщо користувач прямо просить аксесуари — штраф не даємо
+        $accessoryWords = $this->getSearchKeywords('accessories');
+    
+        if ($this->containsOneOf($queryTokens, $accessoryWords)) {
+            return 0.0;
+        }
+    
+        // 3. Якщо юзер шукає core-item — аксесуарам даємо штраф
+        $coreItemWords = $this->getSearchKeywords('core_items');
+    
+        $penalty = 5.0;
+    
+        if ($this->containsOneOf($queryTokens, $coreItemWords)) {
+            $penalty += 5.0;
+        }
+
+    return $penalty;
+}
 
     /**
      * Побудова HTML картки товару (спрощений варіант,

@@ -670,3 +670,4 @@ class ProductService
 
         return $bonus;
     }
+}

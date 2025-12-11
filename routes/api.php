@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\OrderStatusController;
 use App\Http\Controllers\Api\DebugProductsController;
+use App\Http\Controllers\Api\ChatController;
+use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -17,3 +19,5 @@ Route::post('/chat', [ChatController::class, 'handle']);
 Route::post('/order-status', [OrderStatusController::class, 'show']);
 
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
+
+Route::post('/chat', [ChatController::class, 'handle']);

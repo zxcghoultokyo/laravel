@@ -422,6 +422,7 @@ PROMPT;
                                 'intent',
                                 'action',
                                 'confidence',
+                                'category_key',
                                 'message',
                                 'slots',
                             ],

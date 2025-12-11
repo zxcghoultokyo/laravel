@@ -25,7 +25,7 @@ class AiRecommender
         $queryLower = mb_strtolower($query, 'UTF-8');
         $tokens     = $this->tokenize($queryLower);
 
-        $filters = $this->extractFilters($tokens, $queryLower);
+        $filters    = $this->extractFilters($tokens, $queryLower);
         $colorFilter = $filters['color'] ?? null;
         $sizeFilter  = $filters['size'] ?? null;
         $typeHints   = $filters['types'] ?? [];
@@ -40,6 +40,7 @@ class AiRecommender
 
                 $categoryPath = mb_strtolower($p['category_path'] ?? '', 'UTF-8');
                 $searchIndex  = mb_strtolower($p['search_index'] ?? '', 'UTF-8');
+
                 $color        = mb_strtolower((string)($p['color'] ?? ''), 'UTF-8');
 
                 $haystack = $title . ' ' . $titleUa . ' ' . $titleRu . ' ' . $categoryPath . ' ' . $searchIndex;
@@ -73,12 +74,15 @@ class AiRecommender
 
                 // 2.1) Шоломи / аксесуари до шоломів
                 if (in_array('helmet', $typeHints, true)) {
-                    if ($isHelmet) {
-                        $score += 40;
-                    }
-
-                    if ($isHelmetAccessory) {
-                        $score -= 25;
+                    if ($isHelmet && ! $isHelmetAccessory) {
+                        // Справжній шолом
+                        $score += 60;
+                    } elseif ($isHelmetAccessory) {
+                        // Аксесуари до шоломів — вниз
+                        $score -= 40;
+                    } else {
+                        // Щось інше, не шолом
+                        $score -= 20;
                     }
                 }
 
@@ -108,7 +112,6 @@ class AiRecommender
                     if ($isPatch) {
                         $score += 30;
                     } else {
-                        // якщо явно просили патч — все інше не дуже релевантне
                         $score -= 20;
                     }
                 }
@@ -153,8 +156,8 @@ class AiRecommender
                 $score += min($addedToCartCount, 50) * 0.3;
 
                 // Мінімальний базовий скор, щоб не було суцільних відʼємних
-                if ($score < -50) {
-                    $score = -50;
+                if ($score < -80) {
+                    $score = -80;
                 }
 
                 $p['_score'] = $score;
@@ -176,29 +179,32 @@ class AiRecommender
     }
 
     /**
-     * Нормалізує товар до масиву.
+     * Нормалізує товар до масиву + добирає колір з raw, якщо немає.
      */
     protected function normalizeProduct($product): array
     {
         if (is_array($product)) {
-            return $product;
-        }
-
-        if ($product instanceof \JsonSerializable) {
+            $arr = $product;
+        } elseif ($product instanceof \JsonSerializable) {
             /** @var array $arr */
             $arr = $product->jsonSerialize();
-
-            return $arr;
-        }
-
-        if (is_object($product) && method_exists($product, 'toArray')) {
+        } elseif (is_object($product) && method_exists($product, 'toArray')) {
             /** @var array $arr */
             $arr = $product->toArray();
-
-            return $arr;
+        } else {
+            $arr = (array)$product;
         }
 
-        return (array) $product;
+        // якщо немає color, але є в raw.color.value.ua/ru — підтягнути
+        if (empty($arr['color'] ?? null)) {
+            if (!empty($arr['raw']['color']['value']['ua'] ?? null)) {
+                $arr['color'] = $arr['raw']['color']['value']['ua'];
+            } elseif (!empty($arr['raw']['color']['value']['ru'] ?? null)) {
+                $arr['color'] = $arr['raw']['color']['value']['ru'];
+            }
+        }
+
+        return $arr;
     }
 
     /**
@@ -216,7 +222,6 @@ class AiRecommender
             'будь', 'будьласка', 'будь-ласка', 'будь ласка',
             'для', 'на', 'у', 'в', 'та', 'і', 'або',
             'до', 'з', 'по', 'про',
-            'куртку', 'куртка', 'куртки', // залишимо, але можемо вийняти, якщо заважатиме
         ];
 
         $tokens = [];
@@ -335,34 +340,82 @@ class AiRecommender
 
     protected function isHelmet(string $title, string $titleUa, string $titleRu, string $categoryPath): bool
     {
-        $haystack = $title . ' ' . $titleUa . ' ' . $titleRu . ' ' . $categoryPath;
+        $haystack = $title . ' ' . $titleUa . ' ' . $titleRu;
 
-        return str_contains($haystack, 'шолом')
-            || str_contains($haystack, 'каска')
-            || str_contains($haystack, 'helmet');
+        $isHelmetCategory =
+            (str_contains($categoryPath, 'шоломи') || str_contains($categoryPath, 'helmet'))
+            && !str_contains($categoryPath, 'аксесуари')
+            && !str_contains($categoryPath, 'комплектуючі');
+
+        if ($isHelmetCategory) {
+            // але не чохол, не кавер і не панелі
+            $accessoryWords = [
+                'кріплення', 'adapter', 'адаптер', 'планка', 'picatinny',
+                'кавер', 'cover', 'чохол', 'велкро', 'панел', 'панель',
+            ];
+
+            foreach ($accessoryWords as $w) {
+                if (str_contains($haystack, $w)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Якщо категорія не однозначна, але з назви видно, що це саме шолом
+        if ((str_contains($haystack, 'шолом') || str_contains($haystack, 'каска') || str_contains($haystack, 'helmet'))) {
+
+            $accessoryWords = [
+                'кріплення', 'adapter', 'адаптер', 'планка', 'picatinny',
+                'кавер', 'cover', 'чохол', 'велкро', 'панел', 'панель',
+            ];
+
+            foreach ($accessoryWords as $w) {
+                if (str_contains($haystack, $w)) {
+                    // це все-таки аксесуар, не шолом
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     protected function isHelmetAccessory(string $title, string $titleUa, string $titleRu, string $categoryPath): bool
     {
         $haystack = $title . ' ' . $titleUa . ' ' . $titleRu . ' ' . $categoryPath;
 
-        if (! $this->isHelmet($title, $titleUa, $titleRu, $categoryPath)
-            && (str_contains($haystack, 'шолом') || str_contains($haystack, 'helmet'))) {
-            // якщо згадується шолом, але не як основний товар
-            if (str_contains($haystack, 'кріплення')
-                || str_contains($haystack, 'adapter')
-                || str_contains($haystack, 'адаптер')
-                || str_contains($haystack, 'планка')
-                || str_contains($haystack, 'picatinny')
-                || str_contains($haystack, 'кавер')
-                || str_contains($haystack, 'чохол')) {
-                return true;
+        $accessoryWords = [
+            'кріплення', 'адаптер', 'adapter', 'планка', 'picatinny',
+            'кавер', 'cover', 'чохол', 'велкро', 'панел', 'панель',
+            'панелі', 'панелі', 'панельки',
+        ];
+
+        $hasHelmetWord = str_contains($haystack, 'шолом')
+            || str_contains($haystack, 'каска')
+            || str_contains($haystack, 'helmet');
+
+        $hasAccessoryWord = false;
+        foreach ($accessoryWords as $w) {
+            if (str_contains($haystack, $w)) {
+                $hasAccessoryWord = true;
+                break;
             }
         }
 
-        return str_contains($categoryPath, 'аксесуари та комплектуючі')
-            || str_contains($categoryPath, 'аксесуари')
-            || str_contains($categoryPath, 'комплектуючі');
+        if ($hasHelmetWord && $hasAccessoryWord) {
+            return true;
+        }
+
+        // Категорія явно каже, що це аксесуар
+        if (str_contains($categoryPath, 'аксесуари') || str_contains($categoryPath, 'комплектуючі')) {
+            return true;
+        }
+
+        return false;
     }
 
     protected function isPlate(string $title, string $titleUa, string $titleRu, string $categoryPath): bool

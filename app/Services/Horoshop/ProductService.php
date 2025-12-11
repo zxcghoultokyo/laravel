@@ -615,6 +615,9 @@ class ProductService
         return $bonus;
     }
 
+    /**
+     * Бонус за збіг по категорії (шоломи, плитоноски, куртки, такмед, плити тощо).
+     */
     protected function getCategoryMatchBonus(array $queryTokens, ?string $categoryPath): float
     {
         if (! $categoryPath) {
@@ -624,7 +627,48 @@ class ProductService
         $categoryNorm = mb_strtolower($categoryPath);
         $bonus = 0.0;
 
+        // Ключ — "ядерне" слово, яке реально є в category_path
+        // Значення — слова/фрази, які можуть зустрітися в запиті
         $categoryHints = [
-            'шолом' => ['шолом', 'каска', 'helmet'],
-            'плитоноска' => ['плитоноска', 'plate carrier', 'розгрузка'],
-            'куртка' => ['куртка', 'co
+            'шолом' => [
+                'шолом', 'шоломи', 'каска', 'каски',
+                'helmet', 'helmets',
+            ],
+            'плитоноска' => [
+                'плитоноска', 'плитоноски',
+                'plate carrier', 'plate carriers',
+                'розгрузка', 'розрузка',
+            ],
+            'куртка' => [
+                'куртка', 'куртки', 'курточка',
+                'jacket', 'jackets',
+                'парка', 'softshell', 'soft shell',
+            ],
+            'тактична медицина' => [
+                'такмед', 'тактична медицина',
+                'медуха', 'аптечка', 'аптечки',
+                'ifak', 'іфак', 'медичка',
+            ],
+            'плити' => [
+                'плита', 'плити',
+                'бронеплита', 'бронеплити',
+                'sapi', 'plate',
+            ],
+            'бронежилети' => [
+                'бронік', 'бронежилет', 'броніки',
+                'body armor', 'armor vest',
+            ],
+        ];
+
+        foreach ($queryTokens as $token) {
+            $token = mb_strtolower($token);
+
+            foreach ($categoryHints as $catKey => $words) {
+                if (in_array($token, $words, true) && str_contains($categoryNorm, $catKey)) {
+                    $bonus += 10.0;
+                }
+            }
+        }
+
+        return $bonus;
+    }

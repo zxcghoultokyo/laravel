@@ -35,12 +35,12 @@ class ProductService
 
         do {
             $payload = [
-                'expr'   => [
+                'expr'  => [
                     // можна звузити по parent, display_in_showcase тощо, якщо треба
                     'display_in_showcase' => 1,
                 ],
-                'limit'  => $limit,
-                'offset' => $offset,
+                'limit' => $limit,
+                'offset'=> $offset,
             ];
 
             Log::info('Horoshop sync request', $payload);
@@ -86,23 +86,23 @@ class ProductService
         $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
 
         $product->fill([
-            'article'             => $article,
-            'parent_article'      => $item['parent_article'] ?? null,
-            'title'               => $title,
-            'title_json'          => $item['title'] ?? null,
-            'price'               => $item['price'] ?? 0,
-            'price_old'           => $item['price_old'] ?? 0,
-            'category_path'       => $item['parent']['value'] ?? null,
-            'slug'                => $item['slug'] ?? null,
-            'link'                => $item['link'] ?? null,
-            'images'              => $item['images'] ?? [],
-            'raw'                 => $item,
-            'presence'            => Arr::get($item, 'presence.value.ua')
-                                        ?? Arr::get($item, 'presence.value.ru')
-                                        ?? null,
-            'quantity'            => $item['quantity'] ?? 0,
-            'popularity'          => $item['popularity'] ?? 0,
-            'we_recommended'      => (bool) ($item['we_recommended'] ?? false),
+            'article'        => $article,
+            'parent_article' => $item['parent_article'] ?? null,
+            'title'          => $title,
+            'title_json'     => $item['title'] ?? null,
+            'price'          => $item['price'] ?? 0,
+            'price_old'      => $item['price_old'] ?? 0,
+            'category_path'  => $item['parent']['value'] ?? null,
+            'slug'           => $item['slug'] ?? null,
+            'link'           => $item['link'] ?? null,
+            'images'         => $item['images'] ?? [],
+            'raw'            => $item,
+            'presence'       => Arr::get($item, 'presence.value.ua')
+                                   ?? Arr::get($item, 'presence.value.ru')
+                                   ?? null,
+            'quantity'       => $item['quantity'] ?? 0,
+            'popularity'     => $item['popularity'] ?? 0,
+            'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
             'in_stock'            => $this->isInStock($item),
             'color'               => Arr::get($item, 'color.value.ua')
@@ -318,7 +318,7 @@ class ProductService
 
         $maxScore = $scored->max('score') ?? 0.0;
 
-        $filtered = $scored->filter(function (array $row) use ($maxScore) {
+        $filtered = $candidates = $scored->filter(function (array $row) use ($maxScore) {
             return $row['score'] >= $maxScore * 0.3;
         });
 
@@ -339,27 +339,6 @@ class ProductService
                 return $this->normalizeProductForApi($product);
             })
             ->all();
-    }
-
-    /**
-     * Видаляємо дублікати (якщо таке може бути).
-     */
-    protected function deduplicateProducts(Collection $scored): Collection
-    {
-        $seen = [];
-
-        return $scored->filter(function (array $row) use (&$seen) {
-            /** @var Product $product */
-            $product = $row['product'];
-
-            if (isset($seen[$product->article])) {
-                return false;
-            }
-
-            $seen[$product->article] = true;
-
-            return true;
-        });
     }
 
     /**
@@ -557,9 +536,9 @@ class ProductService
             $score = $baseScore - $titlePenalty - $mustHavePenalty - $equipmentPenalty + $colorBonus + $categoryBonus + $popularityBonus;
 
             $flags = [
-                'missing_product_type'    => false,
-                'missing_must_have'       => ! empty($mustHaveKeywords) && ($mustHavePenalty > 0),
-                'possible_accessory_only' => $equipmentPenalty > 0,
+                'missing_product_type'   => false,
+                'missing_must_have'      => ! empty($mustHaveKeywords) && ($mustHavePenalty > 0),
+                'possible_accessory_only'=> $equipmentPenalty > 0,
             ];
 
             return [
@@ -570,6 +549,9 @@ class ProductService
         });
     }
 
+    /**
+     * Вираховуємо бонус за популярність.
+     */
     protected function getPopularityBonus(int $popularity): float
     {
         if ($popularity <= 0) {
@@ -577,18 +559,39 @@ class ProductService
         }
 
         if ($popularity >= 100) {
-            return 15.0;
+            return 10.0;
         }
 
-        return min(15.0, $popularity / 10.0);
+        return min(10.0, $popularity / 10.0);
+    }
+
+    /**
+     * Видаляємо дублікати продуктів за article + parent_article.
+     */
+    protected function deduplicateProducts(Collection $scored): Collection
+    {
+        $seen = [];
+
+        return $scored->filter(function (array $row) use (&$seen) {
+            /** @var Product $p */
+            $p = $row['product'];
+            $key = $p->article . '|' . (string) $p->parent_article;
+
+            if (isset($seen[$key])) {
+                return false;
+            }
+
+            $seen[$key] = true;
+            return true;
+        })->values();
     }
 
     /**
      * Викликає AiRouter, щоб розібрати намір пошукового запиту.
      * Повертає масив:
-     *  - product_types      => []
-     *  - must_have_keywords => []
-     *  - fallback_types     => []
+     *  - product_types      => []   // типи товарів (каска, плита, plate carrier ...)
+     *  - must_have_keywords => []   // обов'язкові слова / абревіатури (uhmwpe, niii, level 4 ...)
+     *  - fallback_types     => []   // ширші категорії на випадок пустої видачі
      */
     protected function detectProductTypes(string $query): array
     {
@@ -697,6 +700,8 @@ class ProductService
         $categoryNorm = mb_strtolower($categoryPath);
         $bonus = 0.0;
 
+        // Ключ — "ядерне" слово, яке реально є в category_path
+        // Значення — слова/фрази, які можуть зустрітися в запиті
         $categoryHints = [
             'шолом' => [
                 'шолом', 'шоломи', 'каска', 'каски',
@@ -709,8 +714,10 @@ class ProductService
             ],
             'куртка' => [
                 'куртка', 'куртки', 'курточка',
-                'jacket', 'jackets',
-                'парка', 'softshell', 'soft shell', 'софтшел', 'софтшелл',
+                'зимова куртка', 'тепла куртка',
+                'парка', 'парку', 'jacket', 'jackets',
+                'softshell', 'soft shell', 'lvl7', 'лвл7', 'level 7',
+                'фліс', 'флиска', 'fleece', 'термуха', 'термобілизна',
             ],
             'тактична медицина' => [
                 'такмед', 'тактична медицина',
@@ -720,7 +727,8 @@ class ProductService
             'плити' => [
                 'плита', 'плити',
                 'бронеплита', 'бронеплити',
-                'sapi', 'plate',
+                'sapi', 'esapi', 'plate',
+                'броня',
             ],
             'бронежилети' => [
                 'бронік', 'бронежилет', 'броніки',
@@ -742,95 +750,10 @@ class ProductService
     }
 
     /**
-     * Маппінг тексту юзера → внутрішній category_key.
-     */
-    public function detectCategoryKeyFromText(string $text): ?string
-    {
-        $norm = mb_strtolower($text);
-        $norm = str_replace(['зиова', 'зиимова'], 'зимова', $norm);
-
-        // Турнікети
-        if ($this->containsAny($norm, [
-            'турнікет', 'турнікети', 'турникет', 'турникеты',
-            'tourniquet', 'cat gen7', 'cat gen 7', 'cat-7',
-        ])) {
-            return 'tourniquets';
-        }
-
-        // Аптечки / IFAK
-        if ($this->containsAny($norm, [
-            'аптечка', 'аптечки', 'ifak', 'іфак',
-            'медична сумка', 'тактична аптечка', 'тактична аптека',
-            'медичка', 'такмед аптечка',
-        ])) {
-            return 'ifak_kits';
-        }
-
-        // Шоломи / каски
-        if ($this->containsAny($norm, [
-            'шолом', 'шоломи', 'каска', 'каски',
-            'helmet', 'helmets',
-        ])) {
-            return 'helmets';
-        }
-
-        // Плитоноски / plate carrier / розгрузки
-        if ($this->containsAny($norm, [
-            'плитоноска', 'плитоноски',
-            'plate carrier', 'plate-carrier',
-            'розгрузка', 'розрузка',
-            'розвантажувальний жилет',
-        ])) {
-            return 'plate_carriers';
-        }
-
-        // Плити / бронеплити
-        if ($this->containsAny($norm, [
-            'бронеплита', 'бронеплити', 'плита', 'плити',
-            'sapi', 'esapi', 'plate', 'plates',
-        ])) {
-            return 'plates';
-        }
-
-        // Зимові куртки / парки / фліс / термуха → холодний одяг
-        if ($this->containsAny($norm, [
-            'зимова куртка', 'зимову куртку', 'зимові куртки',
-            'куртка зимова', 'тепла куртка', 'куртка для зими',
-            'парка', 'парки',
-            'softshell', 'софтшел', 'софтшелл',
-            'фліс', 'фліска', 'fleece',
-            'термуха', 'термобілизна', 'термобелье', 'thermal underwear', 'thermal',
-        ])) {
-            return 'cold_weather_jackets';
-        }
-
-        // Тактична медицина в цілому
-        if ($this->containsAny($norm, [
-            'такмед', 'тактична медицина', 'tactical medicine',
-            'медичне спорядження', 'медичне споряження',
-        ])) {
-            return 'tactical_medicine';
-        }
-
-        return null;
-    }
-
-    protected function containsAny(string $haystack, array $needles): bool
-    {
-        foreach ($needles as $needle) {
-            if ($needle === '') {
-                continue;
-            }
-            if (mb_stripos($haystack, $needle) !== false) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * Пошук товарів по внутрішньому ключу категорії (tourniquets, helmets, etc.).
+     *
+     * Тут поки що простий hardcode по category_path + тексту.
+     * Потім це можна перенести в config/product_categories.php.
      */
     public function searchByCategoryKey(string $categoryKey, int $limit = 3, array $priceFilters = []): array
     {
@@ -843,23 +766,32 @@ class ProductService
 
         switch ($categoryKey) {
             case 'tourniquets':
+                // Спробуємо знаходити САМЕ турнікети, а не підсумки
                 $q->where(function (Builder $q) {
-                    $q->where('category_path', 'LIKE', '%турнік%')
-                      ->orWhere('category_path', 'LIKE', '%турнікет%')
-                      ->orWhere('category_path', 'LIKE', '%турникет%')
-                      ->orWhere('category_path', 'LIKE', '%тактична медицина%')
+                    $q->where('search_index', 'LIKE', '%турнікет%')
+                      ->orWhere('search_index', 'LIKE', '%джгут%')
+                      ->orWhere('search_index', 'LIKE', '%жгут%')
+                      ->orWhere('search_index', 'LIKE', '%tourniquet%')
                       ->orWhere('title', 'LIKE', '%турнікет%')
-                      ->orWhere('search_index', 'LIKE', '%tourniquet%');
+                      ->orWhere('title', 'LIKE', '%джгут%')
+                      ->orWhere('title', 'LIKE', '%жгут%');
+                })
+                ->where(function (Builder $q) {
+                    // Відрізаємо підсумки/підсумки під турнікет
+                    $q->where('title', 'NOT LIKE', '%підсумок%')
+                      ->where('category_path', 'NOT LIKE', '%підсумк%')
+                      ->where('search_index', 'NOT LIKE', '%підсумок%')
+                      ->where('search_index', 'NOT LIKE', '%pouch%');
                 });
                 break;
 
             case 'ifak_kits':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%аптечк%')
-                      ->orWhere('category_path', 'LIKE', '%медичн%')
+                      ->orWhere('category_path', 'LIKE', '%тактична медицина%')
                       ->orWhere('title', 'LIKE', '%аптечк%')
                       ->orWhere('search_index', 'LIKE', '%ifak%')
-                      ->orWhere('search_index', 'LIKE', '%medic%');
+                      ->orWhere('search_index', 'LIKE', '%іфак%');
                 });
                 break;
 
@@ -876,9 +808,9 @@ class ProductService
             case 'plate_carriers':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%плитоноск%')
-                      ->orWhere('category_path', 'LIKE', '%розгруз%')
+                      ->orWhere('category_path', 'LIKE', '%розгрузк%')
                       ->orWhere('title', 'LIKE', '%плитоноск%')
-                      ->orWhere('title', 'LIKE', '%розгруз%')
+                      ->orWhere('title', 'LIKE', '%розгрузк%')
                       ->orWhere('search_index', 'LIKE', '%plate carrier%');
                 });
                 break;
@@ -889,24 +821,36 @@ class ProductService
                       ->orWhere('category_path', 'LIKE', '%бронеплити%')
                       ->orWhere('category_path', 'LIKE', '%бронезахист%')
                       ->orWhere('title', 'LIKE', '%плита%')
-                      ->orWhere('title', 'LIKE', '%бронеплит%')
+                      ->orWhere('title', 'LIKE', '%бронеплита%')
                       ->orWhere('search_index', 'LIKE', '%sapi%')
-                      ->orWhere('search_index', 'LIKE', '%plate%');
+                      ->orWhere('search_index', 'LIKE', '%esapi%')
+                      ->orWhere('search_index', 'LIKE', '%armor plate%');
                 });
                 break;
 
             case 'cold_weather_jackets':
+                // Теплі/зимові куртки, парки, фліси, lvl7
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%куртк%')
                       ->orWhere('category_path', 'LIKE', '%парка%')
-                      ->orWhere('category_path', 'LIKE', '%зим%')
+                      ->orWhere('category_path', 'LIKE', '%фліс%')
                       ->orWhere('title', 'LIKE', '%куртк%')
                       ->orWhere('title', 'LIKE', '%парка%')
-                      ->orWhere('search_index', 'LIKE', '%softshell%')
-                      ->orWhere('search_index', 'LIKE', '%фліс%')
+                      ->orWhere('title', 'LIKE', '%фліс%')
+                      ->orWhere('search_index', 'LIKE', '%куртк%')
+                      ->orWhere('search_index', 'LIKE', '%парка%')
                       ->orWhere('search_index', 'LIKE', '%fleece%')
-                      ->orWhere('search_index', 'LIKE', '%термобілизн%')
-                      ->orWhere('search_index', 'LIKE', '%термуха%');
+                      ->orWhere('search_index', 'LIKE', '%lvl7%')
+                      ->orWhere('search_index', 'LIKE', '%level 7%');
+                })
+                ->where(function (Builder $q) {
+                    // Відрізаємо штани, комбези тощо
+                    $q->where('title', 'NOT LIKE', '%штани%')
+                      ->where('title', 'NOT LIKE', '%брюки%')
+                      ->where('title', 'NOT LIKE', '%trousers%')
+                      ->where('category_path', 'NOT LIKE', '%штани%')
+                      ->where('category_path', 'NOT LIKE', '%брюки%')
+                      ->where('category_path', 'NOT LIKE', '%trousers%');
                 });
                 break;
 
@@ -914,17 +858,19 @@ class ProductService
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%тактична медицина%')
                       ->orWhere('category_path', 'LIKE', '%медичн%')
-                      ->orWhere('category_path', 'LIKE', '%медичні підсумки%')
-                      ->orWhere('search_index', 'LIKE', '%турнікет%')
+                      ->orWhere('title', 'LIKE', '%турнікет%')
+                      ->orWhere('title', 'LIKE', '%аптечк%')
                       ->orWhere('search_index', 'LIKE', '%ifak%')
-                      ->orWhere('search_index', 'LIKE', '%medic%');
+                      ->orWhere('search_index', 'LIKE', '%іфак%');
                 });
                 break;
 
             default:
+                // Якщо категорія невідома – нічого не додаємо, просто повернемо пустий масив
                 return [];
         }
 
+        // Застосовуємо цінові фільтри, якщо є
         if (! empty($priceFilters['min'])) {
             $q->where('price', '>=', $priceFilters['min']);
         }
@@ -964,5 +910,70 @@ class ProductService
             'color'          => $product->color,
             'popularity'     => (int) ($product->popularity ?? 0),
         ];
+    }
+
+    /**
+     * Евристика: визначаємо category_key просто з тексту юзера.
+     *
+     * Використовується в ChatService, якщо модель не повернула category_key.
+     */
+    public function detectCategoryKeyFromText(string $text): ?string
+    {
+        $norm = mb_strtolower(trim($text));
+
+        if ($norm === '') {
+            return null;
+        }
+
+        $map = [
+            'tourniquets' => [
+                'турнікет', 'турнікети', 'турникет', 'турникеты',
+                'джгут', 'жгут',
+                'cat gen7', 'c.a.t', 'c.a.t.', 'cat gen 7', 'ген7', 'ген 7',
+            ],
+            'ifak_kits' => [
+                'аптечка', 'аптечки', 'іфак', 'ifak',
+                'тактична аптечка', 'тактичні аптечки',
+            ],
+            'helmets' => [
+                'шолом', 'шоломи', 'каска', 'каски',
+                'helmet', 'helmets',
+            ],
+            'plate_carriers' => [
+                'плитоноска', 'плитоноски',
+                'plate carrier', 'plate carriers',
+                'розгрузка', 'розрузка', 'chest rig',
+            ],
+            'plates' => [
+                'плита', 'плити', 'бронеплита', 'бронеплити',
+                'sapi', 'esapi', 'броня', 'бронебійна плита', 'бронебійна',
+            ],
+            'cold_weather_jackets' => [
+                'зимова куртка', 'куртка зимова', 'куртка тепла', 'тепла куртка',
+                'куртка lvl7', 'куртка лвл7', 'pcu lvl7', 'level 7', 'лвл7',
+                'фліс', 'флиска', 'fleece',
+                'softshell', 'soft shell', 'софтшел', 'софтшелл',
+                'термуха', 'термобілизна', 'термобельё',
+            ],
+            'tactical_medicine' => [
+                'такмед', 'тактична медицина', 'тактичний мед', 'медуха',
+                'медичка', 'тактична аптечка',
+            ],
+        ];
+
+        foreach ($map as $categoryKey => $keywords) {
+            foreach ($keywords as $kw) {
+                if (mb_stripos($norm, $kw) !== false) {
+                    Log::info('ProductService::detectCategoryKeyFromText matched', [
+                        'text'         => $text,
+                        'category_key' => $categoryKey,
+                        'keyword'      => $kw,
+                    ]);
+                    return $categoryKey;
+                }
+            }
+        }
+
+        return null;
     }
 }

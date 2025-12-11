@@ -2,21 +2,250 @@
 
 namespace App\Services\Horoshop;
 
-use App\Models\Product;
-use App\Models\ProductSynonym;
 use App\Models\ColorSynonym;
+use App\Models\Product;
+use App\Models\ProductAiIndex;
+use App\Models\ProductSynonym;
+use App\Models\ProductTag;
+use App\Services\Search\QueryExpander;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\Builder;
-use App\Services\Search\QueryExpander;
 
 class ProductService
 {
     protected HoroshopClient $client;
+    protected QueryExpander $queryExpander;
 
-    public function __construct(HoroshopClient $client)
+    public function __construct(HoroshopClient $client, QueryExpander $queryExpander)
     {
-        $this->client = $client;
+        $this->client        = $client;
+        $this->queryExpander = $queryExpander;
+    }
+
+    /**
+     * Синхронізація товарів із Horoshop у локальну БД.
+     *
+     * @param int $limit Максимальна кількість товарів за один запит
+     */
+    public function syncFromHoroshop(int $limit = 200): void
+    {
+        $offset = 0;
+
+        do {
+            $payload = [
+                'expr'  => [
+                    // можна звузити по parent, display_in_showcase тощо, якщо треба
+                    'display_in_showcase' => 1,
+                ],
+                'limit' => $limit,
+                'offset'=> $offset,
+            ];
+
+            Log::info('Horoshop sync request', $payload);
+
+            $response = $this->client->request('catalog/export', $payload);
+
+            if (($response['status'] ?? '') !== 'OK') {
+                Log::warning('Horoshop sync status not OK', $response);
+                break;
+            }
+
+            $products = Arr::get($response, 'response.products', []);
+
+            if (empty($products)) {
+                Log::info('Horoshop sync: no more products, break');
+                break;
+            }
+
+            foreach ($products as $item) {
+                $this->upsertProductFromHoroshop($item);
+            }
+
+            $offset += $limit;
+        } while (true);
+    }
+
+    /**
+     * Оновлюємо / створюємо локальний запис Product з даних Horoshop.
+     */
+    protected function upsertProductFromHoroshop(array $item): void
+    {
+        $article = $item['article'] ?? null;
+
+        if (! $article) {
+            return;
+        }
+
+        /** @var Product $product */
+        $product = Product::query()->firstOrNew([
+            'article' => $article,
+        ]);
+
+        $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
+
+        $product->fill([
+            'article'        => $article,
+            'parent_article' => $item['parent_article'] ?? null,
+            'title'          => $title,
+            'title_json'     => $item['title'] ?? null,
+            'price'          => $item['price'] ?? 0,
+            'price_old'      => $item['price_old'] ?? 0,
+            'category_path'  => $item['parent']['value'] ?? null,
+            'slug'           => $item['slug'] ?? null,
+            'link'           => $item['link'] ?? null,
+            'images'         => $item['images'] ?? [],
+            'raw'            => $item,
+            'presence'       => Arr::get($item, 'presence.value.ua')
+                                   ?? Arr::get($item, 'presence.value.ru')
+                                   ?? null,
+            'quantity'       => $item['quantity'] ?? 0,
+            'popularity'     => $item['popularity'] ?? 0,
+            'we_recommended' => (bool) ($item['we_recommended'] ?? false),
+            'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
+            'in_stock'            => $this->isInStock($item),
+            'color'               => Arr::get($item, 'color.value.ua')
+                                        ?? Arr::get($item, 'color.value.ru')
+                                        ?? null,
+        ]);
+
+        $product->search_index = $this->buildSearchIndex($item, $product);
+
+        $product->save();
+    }
+
+    protected function isInStock(array $item): bool
+    {
+        $presenceValue = Arr::get($item, 'presence.value.ua')
+            ?? Arr::get($item, 'presence.value.ru')
+            ?? '';
+
+        $presenceValue = mb_strtolower((string) $presenceValue);
+
+        if ($presenceValue === '') {
+            return false;
+        }
+
+        $inStockPhrases = [
+            'в наявності',
+            'в наличии',
+        ];
+
+        foreach ($inStockPhrases as $phrase) {
+            if (str_contains($presenceValue, $phrase)) {
+                return true;
+            }
+        }
+
+        $quantity = (int) ($item['quantity'] ?? 0);
+
+        return $quantity > 0;
+    }
+
+    /**
+     * Формуємо search_index — один великий рядок для LIKE-пошуку.
+     */
+    protected function buildSearchIndex(array $item, Product $product): string
+    {
+        $parts = [];
+
+        $titleUa = Arr::get($item, 'title.ua', '');
+        $titleRu = Arr::get($item, 'title.ru', '');
+
+        $parts[] = $titleUa;
+        $parts[] = $titleRu;
+
+        $parts[] = Arr::get($item, 'parent.value', '');
+
+        $brandUa = Arr::get($item, 'brand.value.ua', '');
+        $brandRu = Arr::get($item, 'brand.value.ru', '');
+        $parts[] = $brandUa;
+        $parts[] = $brandRu;
+
+        $descUa = Arr::get($item, 'description.ua', '');
+        $descRu = Arr::get($item, 'description.ru', '');
+        $parts[] = $descUa;
+        $parts[] = $descRu;
+
+        $colorUa = Arr::get($item, 'color.value.ua', '');
+        $colorRu = Arr::get($item, 'color.value.ru', '');
+        $parts[] = $colorUa;
+        $parts[] = $colorRu;
+
+        $characters = $item['characteristics'] ?? [];
+        foreach ($characters as $key => $val) {
+            if (is_array($val)) {
+                $parts[] = implode(' ', $val);
+            } else {
+                $parts[] = (string) $val;
+            }
+        }
+
+        $parts[] = (string) ($item['article'] ?? '');
+        $parts[] = (string) ($item['parent_article'] ?? '');
+
+        $searchIndex = implode(' ', array_filter($parts));
+
+        return mb_strtolower($searchIndex);
+    }
+
+    /**
+     * Розширення запиту з урахуванням доменних синонімів, колірних синонімів та тегів.
+     */
+    protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk'): string
+    {
+        $baseTokens = preg_split('/\s+/u', $query) ?: [];
+        $baseTokens = array_values(array_filter($baseTokens, fn($t) => $t !== ''));
+
+        $expandedTokens = $baseTokens;
+
+        $synonyms = ProductSynonym::query()
+            ->whereIn('phrase', $baseTokens)
+            ->get();
+
+        foreach ($synonyms as $syn) {
+            $extra = $syn->synonyms ?? [];
+            foreach ($extra as $word) {
+                if (! in_array($word, $expandedTokens, true)) {
+                    $expandedTokens[] = $word;
+                }
+            }
+        }
+
+        $colors = ColorSynonym::query()
+            ->whereIn('phrase', $baseTokens)
+            ->get();
+
+        foreach ($colors as $colorSyn) {
+            $canonicalColor = $colorSyn->color_normalized;
+            if ($canonicalColor && ! in_array($canonicalColor, $expandedTokens, true)) {
+                $expandedTokens[] = $canonicalColor;
+            }
+        }
+
+        $tags = ProductTag::query()
+            ->whereIn('tag', $baseTokens)
+            ->get();
+
+        foreach ($tags as $tag) {
+            $extraTokens = $tag->extra_keywords ?? [];
+            foreach ($extraTokens as $word) {
+                if (! in_array($word, $expandedTokens, true)) {
+                    $expandedTokens[] = $word;
+                }
+            }
+        }
+
+        $expanded = implode(' ', $expandedTokens);
+
+        Log::info('ProductService::expandQueryWithDomainSynonyms', [
+            'input'    => $query,
+            'tokens'   => $baseTokens,
+            'expanded' => $expanded,
+        ]);
+
+        return $expanded;
     }
 
     /**
@@ -35,18 +264,14 @@ class ProductService
             return [];
         }
 
-        // 1) Базова нормалізація + розширення через синоніми з БД
         $expandedQuery = $this->expandQueryWithDomainSynonyms($normalized, $language);
 
-        Log::info('ProductService::searchByText expanded query', [
-            'normalized'      => $normalized,
-            'expanded_query'  => $expandedQuery,
-        ]);
+        [$priceFilters, $queryWithoutPrice] = $this->extractPriceFilters($expandedQuery);
 
-        // 2) Цінові фільтри з тексту
-        $priceFilters = $this->extractPriceFiltersFromQuery($normalized);
+        if ($queryWithoutPrice !== '') {
+            $expandedQuery = $queryWithoutPrice;
+        }
 
-        // 3) Шукаймо кандидатів у локальній БД
         $candidates = $this->findCandidates($expandedQuery, $categoryId, $priceFilters);
 
         if ($candidates->isEmpty()) {
@@ -57,7 +282,6 @@ class ProductService
             return [];
         }
 
-        // 4) Скоримо (AI intent + хард-правила + primary token + популярність + категорії)
         $scored = $this->scoreProducts($expandedQuery, $candidates);
 
         if ($scored->isEmpty()) {
@@ -65,42 +289,54 @@ class ProductService
             return [];
         }
 
-        // 5) Відносний поріг релевантності (більш м’який)
         $maxScore = $scored->max('score') ?? 0.0;
 
         $filtered = $scored->filter(function (array $row) use ($maxScore) {
-            // беремо все, що не сильно відстає від топа
             return $row['score'] >= $maxScore * 0.3;
         });
 
         if ($filtered->isEmpty()) {
-            Log::info('ProductService::searchByText filtered collection empty after threshold', [
-                'max_score'     => $maxScore,
-                'price_filters' => $priceFilters,
-            ]);
+            Log::info('ProductService::searchByText filtered collection empty after relative threshold');
             return [];
         }
 
-        // 6) Сортуємо
-        $sorted = $filtered
-            ->sortByDesc('score')
-            ->values()
-            ->take(80); // беремо більше до дедупу
+        $sorted = $filtered->sortByDesc('score')->values();
 
-        // 7) Дедуплікація по parent_article / title (розміри → один товар)
         $deduped = $this->deduplicateProducts($sorted);
 
-        // 8) Обрізаємо до топ-N для API
-        $top = $deduped->take(30);
-
-        // 9) Нормалізуємо для API
-        return $top
+        return $deduped
             ->map(function (array $row) {
                 /** @var Product $product */
                 $product = $row['product'];
+
                 return $this->normalizeProductForApi($product);
             })
             ->all();
+    }
+
+    /**
+     * Вирізаємо цінові обмеження з тексту.
+     */
+    protected function extractPriceFilters(string $query): array
+    {
+        $priceFilters = [
+            'min' => null,
+            'max' => null,
+        ];
+
+        $pattern = '/(?:до|менше|<)\s*(\d+)\s*(грн|uah|₴)?/ui';
+        if (preg_match($pattern, $query, $m)) {
+            $priceFilters['max'] = (float) $m[1];
+            $query = str_replace($m[0], ' ', $query);
+        }
+
+        $pattern = '/(?:від|більше|>|\+)\s*(\d+)\s*(грн|uah|₴)?/ui';
+        if (preg_match($pattern, $query, $m)) {
+            $priceFilters['min'] = (float) $m[1];
+            $query = str_replace($m[0], ' ', $query);
+        }
+
+        return [$priceFilters, trim($query)];
     }
 
     /**
@@ -117,17 +353,18 @@ class ProductService
         $q = Product::query()
             ->with('aiIndex');
 
-        // ЖОРСТКІ БІЗНЕС-ПРАВИЛА:
         $q->where('display_in_showcase', true)
           ->where('in_stock', true);
 
-        // Цінові фільтри
-        if (isset($priceFilters['min_price'])) {
-            $q->where('price', '>=', (int) $priceFilters['min_price']);
+        if ($categoryId !== null) {
+            $q->where('category_id', $categoryId);
         }
 
-        if (isset($priceFilters['max_price'])) {
-            $q->where('price', '<=', (int) $priceFilters['max_price']);
+        if (! empty($priceFilters['min'])) {
+            $q->where('price', '>=', $priceFilters['min']);
+        }
+        if (! empty($priceFilters['max'])) {
+            $q->where('price', '<=', $priceFilters['max']);
         }
 
         if ($tokens) {
@@ -138,121 +375,64 @@ class ProductService
                     $q->orWhere('search_index', 'LIKE', $like)
                       ->orWhere('title', 'LIKE', $like)
                       ->orWhere('category_path', 'LIKE', $like)
-                      ->orWhere('color', 'LIKE', $like) // + пошук по кольору
+                      ->orWhere('color', 'LIKE', $like)
                       ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
                           $ai->where('product_type', 'LIKE', $like)
                              ->orWhere('ai_category', 'LIKE', $like)
                              ->orWhere('materials', 'LIKE', $like)
                              ->orWhere('standards', 'LIKE', $like)
-                             ->orWhere('slang', 'LIKE', $like)
-                             ->orWhere('keywords', 'LIKE', $like)
-                             ->orWhere('usage', 'LIKE', $like);
+                             ->orWhere('description', 'LIKE', $like);
                       });
                 }
             });
         }
 
-        // $categoryId — на майбутнє, поки не чіпаємо
+        $products = $q->get();
 
-        return $q->limit(200)->get();
+        Log::info('ProductService::findCandidates result count', [
+            'count' => $products->count(),
+        ]);
+
+        return $products;
     }
 
     /**
-     * Парсимо цінові фільтри з тексту.
+     * Скоринг продуктів на основі запиту.
      */
-    protected function extractPriceFiltersFromQuery(string $query): array
+    protected function scoreProducts(string $query, Collection $candidates): Collection
     {
-        $q = mb_strtolower($query);
+        $query = mb_strtolower($query);
+        $queryTokens = preg_split('/\s+/u', $query) ?: [];
+        $queryTokens = array_values(array_filter($queryTokens, fn($t) => $t !== ''));
 
-        $result = [];
+        $primaryNorm = $queryTokens[0] ?? '';
 
-        $pattern = '/(\d+)\s*(тис|тыс|k|к)?/u';
-        preg_match_all($pattern, $q, $matches, PREG_OFFSET_CAPTURE);
+        $aiIndexMap = ProductAiIndex::query()
+            ->whereIn('product_id', $candidates->pluck('id'))
+            ->get()
+            ->keyBy('product_id');
 
-        if (empty($matches[0])) {
-            return $result;
-        }
-
-        $numbers = [];
-
-        foreach ($matches[0] as $index => $match) {
-            $pos    = $match[1];
-            $numStr = $matches[1][$index][0] ?? '';
-            $suffix = $matches[2][$index][0] ?? '';
-            $number = (int) $numStr;
-
-            if ($number <= 0) {
-                continue;
+        $candidates = $candidates->map(function (Product $product) use ($aiIndexMap) {
+            $aiIndex = $aiIndexMap->get($product->id);
+            if ($aiIndex) {
+                $product->setRelation('aiIndex', $aiIndex);
             }
+            return $product;
+        });
 
-            $multiplier = in_array($suffix, ['тис', 'тыс', 'k', 'к'], true) ? 1000 : 1;
-            $value      = $number * $multiplier;
+        $aiProductTypes = $this->detectProductTypes($query);
 
-            $numbers[] = [
-                'value' => $value,
-                'pos'   => $pos,
-            ];
+        $productTypeTokens = [];
+        foreach ($aiProductTypes['product_types'] ?? [] as $pType) {
+            $productTypeTokens[] = mb_strtolower($pType);
         }
 
-        if (empty($numbers)) {
-            return $result;
+        $mustHaveKeywords = [];
+        foreach ($aiProductTypes['must_have_keywords'] ?? [] as $w) {
+            $mustHaveKeywords[] = mb_strtolower($w);
         }
 
-        $findWordBefore = function (string $needle, int $pos) use ($q): bool {
-            $start = max(0, $pos - 20);
-            $chunk = mb_substr($q, $start, $pos - $start);
-            return str_contains($chunk, $needle);
-        };
-
-        // "від X до Y"
-        if (count($numbers) >= 2) {
-            $first  = $numbers[0];
-            $second = $numbers[1];
-
-            if ($findWordBefore('від', $first['pos']) && $findWordBefore('до', $second['pos'])) {
-                $result['min_price'] = $first['value'];
-                $result['max_price'] = $second['value'];
-                return $result;
-            }
-        }
-
-        // окремо "до X" / "від X"
-        foreach ($numbers as $n) {
-            if ($findWordBefore('до', $n['pos'])) {
-                $result['max_price'] = $n['value'];
-            }
-            if ($findWordBefore('від', $n['pos'])) {
-                $result['min_price'] = $n['value'];
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Скоринг для кожного товару.
-     */
-    protected function scoreProducts(string $query, Collection $products): Collection
-    {
-        $query        = mb_strtolower(trim($query));
-        $queryTokens  = $this->tokenize($query);
-        $primaryToken = $queryTokens[0] ?? null;
-        $primaryNorm  = $primaryToken ? $this->normalizeWord($primaryToken) : null;
-
-        // 1. AI intent
-        $intent = [];
-        try {
-            /** @var \App\Services\Ai\AiRouter $aiRouter */
-            $aiRouter = app(\App\Services\Ai\AiRouter::class);
-            $intent   = $aiRouter->parseProductSearchIntent($query);
-        } catch (\Throwable $e) {
-            Log::warning('ProductService::scoreProducts intent parse failed: ' . $e->getMessage());
-        }
-
-        $productTypeTokens = $this->extractProductTypeTokensFromIntent($intent);
-        $mustHaveKeywords  = $this->extractMustHaveKeywordsFromIntent($intent);
-
-        $scored = $products->map(function (Product $product) use (
+        return $candidates->map(function (Product $product) use (
             $query,
             $queryTokens,
             $productTypeTokens,
@@ -263,7 +443,6 @@ class ProductService
             $index = mb_strtolower($product->search_index ?? '');
             $cats  = mb_strtolower($product->category_path ?? '');
 
-            // AI-індекс → haystack
             $aiChunk = '';
             if ($product->relationLoaded('aiIndex') && $product->aiIndex) {
                 $aiChunkParts = [
@@ -271,110 +450,69 @@ class ProductService
                     $product->aiIndex->ai_category ?? '',
                     $product->aiIndex->materials ?? '',
                     $product->aiIndex->standards ?? '',
-                    $product->aiIndex->slang ?? '',
-                    $product->aiIndex->keywords ?? '',
-                    $product->aiIndex->usage ?? '',
+                    $product->aiIndex->description ?? '',
                 ];
-                $aiChunk = mb_strtolower(implode(' ', $aiChunkParts));
+                $aiChunk = mb_strtolower(implode(' ', array_filter($aiChunkParts)));
             }
 
-            $haystack     = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
-            $haystackNorm = $this->normalizeTextForMatching($haystack);
+            $haystack = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
 
-            $baseScore   = 0.0;
+            $baseScore = 0.0;
+
+            if ($primaryNorm !== '') {
+                if (str_starts_with($title, $primaryNorm)) {
+                    $baseScore += 25.0;
+                } elseif (str_contains($title, $primaryNorm)) {
+                    $baseScore += 15.0;
+                }
+            }
+
             $termMatches = 0;
-
-            // базовий лексичний скорінг
             foreach ($queryTokens as $token) {
                 if ($token === '') {
                     continue;
                 }
-
-                if (mb_strpos($haystack, $token) !== false) {
+                if (str_contains($haystack, $token)) {
                     $termMatches++;
-
-                    if (mb_strpos($title, $token) !== false) {
-                        $baseScore += 5;
-                    } else {
-                        $baseScore += 2;
-                    }
+                    $baseScore += 3.0;
                 }
             }
 
-            if ($termMatches === 0) {
-                $baseScore -= 10;
+            foreach ($productTypeTokens as $pType) {
+                if ($pType !== '' && str_contains($haystack, $pType)) {
+                    $baseScore += 12.0;
+                }
             }
 
-            // бонуси / штрафи
+            $mustHavePenalty = 0.0;
+            foreach ($mustHaveKeywords as $must) {
+                if (! str_contains($haystack, $must)) {
+                    $mustHavePenalty += 10.0;
+                }
+            }
+
+            $equipmentPenalty = 0.0;
+            if (! empty($productTypeTokens)) {
+                $equipmentPenalty = $this->getAccessoryPenalty($haystack, $productTypeTokens);
+            }
+
             $colorBonus      = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
             $categoryBonus   = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
             $popularityVal   = (int) ($product->popularity ?? 0);
             $popularityBonus = $this->getPopularityBonus($popularityVal);
 
-            // штраф за “стіну тексту” без збігів
             $titlePenalty = 0.0;
             if (mb_strlen($title) > 120 && $termMatches <= 1) {
                 $titlePenalty = 5.0;
             }
 
-            $score = $baseScore - $titlePenalty + $colorBonus + $categoryBonus + $popularityBonus;
+            $score = $baseScore - $titlePenalty - $mustHavePenalty - $equipmentPenalty + $colorBonus + $categoryBonus + $popularityBonus;
 
             $flags = [
                 'missing_product_type'   => false,
-                'missing_must_keywords'  => false,
-                'missing_primary_token'  => false,
+                'missing_must_have'      => ! empty($mustHaveKeywords) && ($mustHavePenalty > 0),
+                'possible_accessory_only'=> $equipmentPenalty > 0,
             ];
-
-            // a) product_types з intent-а
-            if (! empty($productTypeTokens)) {
-                $hasAnyTypeToken = false;
-
-                foreach ($productTypeTokens as $token) {
-                    if ($token === '') {
-                        continue;
-                    }
-                    if (mb_strpos($haystackNorm, $this->normalizeWord($token)) !== false) {
-                        $hasAnyTypeToken = true;
-                        break;
-                    }
-                }
-
-                if (! $hasAnyTypeToken) {
-                    $flags['missing_product_type'] = true;
-                    $score -= 15; // м’якіше, ніж було
-                }
-            }
-
-            // b) must_have_keywords
-            if (! empty($mustHaveKeywords)) {
-                $missing = false;
-
-                foreach ($mustHaveKeywords as $kw) {
-                    if ($kw === '') {
-                        continue;
-                    }
-
-                    $kwNorm = $this->normalizeWord($kw);
-
-                    if ($kwNorm && mb_strpos($haystackNorm, $kwNorm) === false) {
-                        $missing = true;
-                        break;
-                    }
-                }
-
-                if ($missing) {
-                    $flags['missing_must_keywords'] = true;
-                    $score -= 35; // теж м’якіше
-                }
-            }
-
-            // c) PRIMARY TOKEN (типу "плитоноска", "футболка", "бронеплити")
-            if ($primaryNorm && mb_strlen($primaryNorm) >= 4) {
-                if (mb_strpos($haystackNorm, $primaryNorm) === false) {
-                    $flags['missing_primary_token'] = true;
-                    $score -= 15; // раніше було -25
-                }
-            }
 
             return [
                 'product' => $product,
@@ -382,532 +520,83 @@ class ProductService
                 'flags'   => $flags,
             ];
         });
-
-        // БЕЗ жорстких відсічень: intent/primary тільки штрафують, але не фільтрують
-
-        // Фінальний фільтр “сміття”
-        $scored = $scored
-            ->filter(function ($row) {
-                // зовсім мертвих кандидатів відріжемо
-                return $row['score'] > -40;
-            })
-            ->sortByDesc('score')
-            ->values();
-
-        return $scored;
     }
 
-    /**
-     * Дедуплікація: групуємо товари по parent_article / title.
-     * Якщо в групі кілька варіантів (розміри) — залишаємо з найбільшим score.
-     */
-    protected function deduplicateProducts(Collection $scored): Collection
+    protected function getAccessoryPenalty(string $haystack, array $productTypeTokens): float
     {
-        $groups = [];
+        $accessoryPatterns = [
+            'cover', 'кобура', 'кавер', 'чохол', 'holder', 'кронштейн', 'adapt',
+            'планка', 'підсумок', 'pouch', 'ремінець', 'strap',
+            'карабін', 'панель', 'панелі', 'mount',
+        ];
 
-        foreach ($scored as $row) {
-            /** @var Product $product */
-            $product = $row['product'];
-
-            $parentArticle = null;
-            try {
-                $parentArticle = data_get($product->raw ?? [], 'parent_article');
-            } catch (\Throwable $e) {
-                $parentArticle = null;
-            }
-
-            if ($parentArticle) {
-                $groupKey = 'parent:' . $parentArticle;
-            } else {
-                $titleKey = mb_strtolower(preg_replace('/\s+/u', ' ', trim($product->title ?? '')));
-                $groupKey = 'title:' . $titleKey;
-            }
-
-            if (! isset($groups[$groupKey])) {
-                $groups[$groupKey] = $row;
-            } else {
-                if ($row['score'] > $groups[$groupKey]['score']) {
-                    $groups[$groupKey] = $row;
-                }
-            }
-        }
-
-        return collect(array_values($groups))
-            ->sortByDesc('score')
-            ->values();
-    }
-
-    /**
-     * Нормалізація тексту для пошуку (прибираємо сміття, лематизуємо слова).
-     */
-    protected function normalizeTextForMatching(string $text): string
-    {
-        $text = mb_strtolower($text);
-        $text = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
-        $parts = preg_split('/\s+/u', $text) ?: [];
-        $parts = array_map(function ($w) {
-            return $this->normalizeWord($w);
-        }, $parts);
-
-        return trim(implode(' ', array_filter($parts)));
-    }
-
-    /**
-     * Бонус за збіг кольору з запитом (олива, зелений, піксель тощо).
-     */
-    protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
-    {
-        if (!$productColor) {
-            return 0.0;
-        }
-
-        $productColorNorm = $this->normalizeWord($productColor);
-        if ($productColorNorm === '') {
-            return 0.0;
-        }
-
-        $bonus = 0.0;
-
-        foreach ($queryTokens as $token) {
-            $tokenNorm = $this->normalizeWord($token);
-
-            if (mb_strlen($tokenNorm) < 3) {
-                continue;
-            }
-
-            if (
-                str_contains($productColorNorm, $tokenNorm) ||
-                str_contains($tokenNorm, $productColorNorm)
-            ) {
-                $bonus += 6.0; // посилили вплив кольору
+        $accessoryHit = false;
+        foreach ($accessoryPatterns as $pattern) {
+            if (mb_stripos($haystack, $pattern) !== false) {
+                $accessoryHit = true;
                 break;
             }
         }
 
-        return $bonus;
-    }
-
-    /**
-     * Бонус за відповідність категорії (по факту використовуємо category_path, що вже з сайту).
-     */
-    protected function getCategoryMatchBonus(array $queryTokens, ?string $categoryPath): float
-    {
-        if (!$categoryPath) {
+        if (! $accessoryHit) {
             return 0.0;
         }
 
-        $path  = mb_strtolower($categoryPath);
+        $basePenalty = 10.0;
+
+        foreach ($productTypeTokens as $pType) {
+            if ($pType === '') {
+                continue;
+            }
+            if (mb_stripos($haystack, $pType) !== false) {
+                $basePenalty -= 5.0;
+            }
+        }
+
+        return max(0.0, $basePenalty);
+    }
+
+    protected function getColorMatchBonus(array $queryTokens, ?string $productColor): float
+    {
+        if (! $productColor) {
+            return 0.0;
+        }
+
+        $productColorNorm = mb_strtolower($productColor);
+
+        $colorSynonyms = [
+            'чорний' => ['чорний', 'чёрный', 'black', 'blk'],
+            'оливковий' => ['оливковий', 'олива', 'olive', 'olive drab'],
+            'зелений' => ['зелений', 'зелёный', 'green'],
+            'койот' => ['койот', 'coyote', 'coy'],
+            'мультикам' => ['мультикам', 'multicam', 'mc'],
+        ];
+
         $bonus = 0.0;
 
-        // футболка / t-shirt → категорії з "футболки"
-        if ($this->containsOneOf($queryTokens, ['футболка', 'футболки', 't-shirt', 'tshirt'])) {
-            if (str_contains($path, 'футболки')) {
-                $bonus += 8.0;
-            }
-        }
+        foreach ($queryTokens as $token) {
+            $token = mb_strtolower($token);
 
-        // бронеплити / плити / бронепластини → підкатегорії з "плити", загальний "бронезахист"
-        if ($this->containsOneOf($queryTokens, ['бронеплити', 'бронеплита', 'бронепластини', 'плити', 'plates', 'plate'])) {
-            if (str_contains($path, 'плити')) {
-                $bonus += 10.0;
-            }
-            if (str_contains($path, 'бронезахист')) {
-                $bonus += 5.0;
-            }
-        }
-
-        // каска / шолом → "шоломи"
-        if ($this->containsOneOf($queryTokens, ['каска', 'каски', 'шолом', 'шоломи', 'helmet', 'helmets'])) {
-            if (str_contains($path, 'шоломи')) {
-                $bonus += 10.0;
-            }
-            if (str_contains($path, 'бронезахист')) {
-                $bonus += 4.0;
-            }
-        }
-
-        // плитоноска → "плитоноски"
-        if ($this->containsOneOf($queryTokens, ['плитоноска', 'плитоноски', 'plate carrier'])) {
-            if (str_contains($path, 'плитоноски')) {
-                $bonus += 10.0;
-            }
-        }
-
-        // куртка → "куртки"
-        if ($this->containsOneOf($queryTokens, ['куртка', 'куртку', 'куртки'])) {
-            if (str_contains($path, 'куртки')) {
-                $bonus += 8.0;
+            foreach ($colorSynonyms as $group => $syns) {
+                if (in_array($token, $syns, true) && str_contains($productColorNorm, $group)) {
+                    $bonus += 8.0;
+                }
             }
         }
 
         return $bonus;
     }
 
-    /**
-     * Бонус за популярність: все, що >0, має перевагу над 0.
-     */
-    protected function getPopularityBonus(int $popularity): float
+    protected function getCategoryMatchBonus(array $queryTokens, ?string $categoryPath): float
     {
-        if ($popularity <= 0) {
+        if (! $categoryPath) {
             return 0.0;
         }
 
-        // лог-подібний бонус, щоб не “стріляло” занадто сильно
-        $bonus = log(1 + $popularity) * 3.0;
+        $categoryNorm = mb_strtolower($categoryPath);
+        $bonus = 0.0;
 
-        return min($bonus, 20.0);
-    }
-
-    protected function extractProductTypeTokensFromIntent(array $intent): array
-    {
-        $types  = $intent['product_types'] ?? [];
-        $result = [];
-
-        foreach ($types as $type) {
-            $type = mb_strtolower(trim($type));
-            if ($type === '') {
-                continue;
-            }
-
-            $result[] = $type;
-
-            if (str_contains($type, ' ')) {
-                $result[] = str_replace(' ', '', $type);
-            }
-        }
-
-        return array_values(array_unique($result));
-    }
-
-    protected function extractMustHaveKeywordsFromIntent(array $intent): array
-    {
-        $keywords = $intent['must_have_keywords'] ?? [];
-        $result   = [];
-
-        foreach ($keywords as $kw) {
-            $kw = mb_strtolower(trim($kw));
-            if ($kw === '') {
-                continue;
-            }
-
-            $result[] = $kw;
-        }
-
-        return array_values(array_unique($result));
-    }
-
-    protected function tokenize(string $text): array
-    {
-        $text   = mb_strtolower($text);
-        $text   = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $text);
-        $tokens = preg_split('/\s+/u', $text) ?: [];
-
-        return array_values(array_filter($tokens));
-    }
-
-    /**
-     * Дуже проста нормалізація слова.
-     */
-    protected function normalizeWord(string $word): string
-    {
-        $w = mb_strtolower(trim($word));
-        $w = preg_replace('/[^\p{L}\p{N}]+/u', '', $w);
-        $w = preg_replace('/(ий|ій|ый|ой|ая|ое|ого|ому|им|их|ої|ою|а|я|е|і)$/u', '', $w);
-
-        return $w;
-    }
-
-    protected function containsOneOf(array $tokens, array $needles): bool
-    {
-        $set = array_flip($tokens);
-
-        foreach ($needles as $needle) {
-            $needle = mb_strtolower($needle);
-            if (isset($set[$needle])) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Розширення запиту через синоніми з БД (product_synonyms + color_synonyms).
-     *
-     * Тут НІЯКОГО хардкоду — все тягнеться з таблиць.
-     */
-    protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk', ?string $domain = null): string
-    {
-        $normalized = mb_strtolower(trim($query));
-        if ($normalized === '') {
-            return $normalized;
-        }
-
-        $baseTokens = $this->tokenize($normalized);
-        if (empty($baseTokens)) {
-            return $normalized;
-        }
-
-        $allTokens = $baseTokens;
-
-        // -------- PRODUCT_SYNONYMS --------
-        try {
-            $productSynonymsQuery = ProductSynonym::query()
-                ->where('is_active', true)
-                ->where(function (Builder $q) use ($baseTokens) {
-                    foreach ($baseTokens as $token) {
-                        $q->orWhere('synonym', 'LIKE', '%' . $token . '%')
-                          ->orWhere('product_type', 'LIKE', '%' . $token . '%');
-                    }
-                });
-
-            if ($language !== '') {
-                $productSynonymsQuery->where(function (Builder $q) use ($language) {
-                    $q->whereNull('language')
-                      ->orWhere('language', $language);
-                });
-            }
-
-            if ($domain !== null) {
-                $productSynonymsQuery->where(function (Builder $q) use ($domain) {
-                    $q->whereNull('domain')
-                      ->orWhere('domain', $domain);
-                });
-            }
-
-            $productSynonyms = $productSynonymsQuery->get();
-
-            foreach ($productSynonyms as $syn) {
-                if ($syn->product_type) {
-                    $allTokens[] = mb_strtolower($syn->product_type);
-                }
-                if ($syn->synonym) {
-                    $allTokens[] = mb_strtolower($syn->synonym);
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('ProductService::expandQueryWithDomainSynonyms product_synonyms failed: ' . $e->getMessage());
-        }
-
-        // -------- COLOR_SYNONYMS --------
-        try {
-            $colorSynonymsQuery = ColorSynonym::query()
-                ->where('is_active', true)
-                ->where(function (Builder $q) use ($baseTokens) {
-                    foreach ($baseTokens as $token) {
-                        $q->orWhere('synonym', 'LIKE', '%' . $token . '%')
-                          ->orWhere('color_group', 'LIKE', '%' . $token . '%');
-                    }
-                });
-
-            if ($language !== '') {
-                $colorSynonymsQuery->where(function (Builder $q) use ($language) {
-                    $q->whereNull('language')
-                      ->orWhere('language', $language);
-                });
-            }
-
-            if ($domain !== null) {
-                $colorSynonymsQuery->where(function (Builder $q) use ($domain) {
-                    $q->whereNull('domain')
-                      ->orWhere('domain', $domain);
-                });
-            }
-
-            $colorSynonyms = $colorSynonymsQuery->get();
-
-            // групуємо по color_group, щоб додати всі синоніми групи
-            $byGroup = [];
-            foreach ($colorSynonyms as $syn) {
-                $group = mb_strtolower($syn->color_group ?? '');
-                if ($group === '') {
-                    continue;
-                }
-                if (!isset($byGroup[$group])) {
-                    $byGroup[$group] = [];
-                }
-                if ($syn->synonym) {
-                    $byGroup[$group][] = mb_strtolower($syn->synonym);
-                }
-                $byGroup[$group][] = $group;
-            }
-
-            foreach ($byGroup as $group => $tokens) {
-                foreach ($tokens as $t) {
-                    $allTokens[] = $t;
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('ProductService::expandQueryWithDomainSynonyms color_synonyms failed: ' . $e->getMessage());
-        }
-
-        // унікалізація
-        $allTokens = array_values(array_unique(array_filter($allTokens)));
-
-        $expanded = implode(' ', $allTokens);
-
-        Log::info('ProductService::expandQueryWithDomainSynonyms result', [
-            'input'    => $query,
-            'tokens'   => $baseTokens,
-            'expanded' => $expanded,
-        ]);
-
-        return $expanded;
-    }
-
-    /**
-     * Формат повернення під /api/chat.
-     */
-    public function normalizeProductForApi(Product $product): array
-    {
-        $data = [
-            'id'                   => $product->id,
-            'article'              => $product->article,
-            'title'                => $product->title,
-            'title_json'           => $product->title_json,
-            'price'                => $product->price,
-            'price_old'            => $product->price_old,
-            'category_path'        => $product->category_path,
-            'slug'                 => $product->slug,
-            'link'                 => $product->link,
-            'images'               => $product->images,
-            'raw'                  => $product->raw,
-            'search_index'         => $product->search_index,
-            'orders_count'         => $product->orders_count,
-            'views_count'          => $product->views_count,
-            'added_to_cart_count'  => $product->added_to_cart_count,
-            'display_in_showcase'  => (bool) $product->display_in_showcase,
-            'in_stock'             => (bool) $product->in_stock,
-            'presence'             => $product->presence,
-            'quantity'             => $product->quantity,
-            'popularity'           => $product->popularity,
-            'we_recommended'       => (bool) $product->we_recommended,
-            'color'                => $product->color,
-        ];
-
-        // Готова HTML-картка товару для прев’ю (Postman / фронт)
-        $data['html_card'] = $this->buildHtmlCard($product);
-
-        return $data;
-    }
-
-    /**
-     * Форматування ціни "12 345 грн".
-     */
-    protected function formatPrice($price): string
-    {
-        if ($price === null || $price === '' || (float) $price <= 0) {
-            return '';
-        }
-
-        $value = (float) $price;
-
-        return number_format($value, 0, '.', ' ') . ' грн';
-    }
-    protected function getAccessoryPenalty(array $queryTokens, ?string $categoryPath, ?string $title): float
-    {
-        $categoryPath = mb_strtolower((string) $categoryPath);
-        $title        = mb_strtolower((string) $title);
-    
-        // 1. Визначаємо, що це аксесуар/комплектуюча штука
-        $accessoryCategoryMarkers = [
-            'аксесуари', 'аксессуары',
-            'комплектуючі', 'комплектующие',
-            'кріплення', 'креплен',
-            'adapter', 'picatinny', 'wing-loc',
-        ];
-    
-        $isAccessoryCategory = $this->containsOneOf(
-            [$categoryPath, $title],
-            $accessoryCategoryMarkers
-        );
-    
-        if (!$isAccessoryCategory) {
-            return 0.0;
-        }
-    
-        // 2. Якщо користувач прямо просить аксесуари — штраф не даємо
-        $accessoryWords = $this->getSearchKeywords('accessories');
-    
-        if ($this->containsOneOf($queryTokens, $accessoryWords)) {
-            return 0.0;
-        }
-    
-        // 3. Якщо юзер шукає core-item — аксесуарам даємо штраф
-        $coreItemWords = $this->getSearchKeywords('core_items');
-    
-        $penalty = 5.0;
-    
-        if ($this->containsOneOf($queryTokens, $coreItemWords)) {
-            $penalty += 5.0;
-        }
-
-    return $penalty;
-}
-
-    /**
-     * Побудова HTML картки товару (спрощений варіант,
-     * схожий на сітку з GoodShop/Хорошоп).
-     */
-    protected function buildHtmlCard(Product $product): string
-    {
-        $title    = e($product->title ?? '');
-        $link     = e($product->link ?? '#');
-        $category = e($product->category_path ?? '');
-        $article  = e($product->article ?? '');
-        $presence = e($product->presence ?? '');
-        $color    = e($product->color ?? '');
-
-        $images = $product->images;
-        $image  = '';
-
-        if (is_array($images) && count($images) > 0) {
-            $image = e($images[0]);
-        }
-
-        $price    = $this->formatPrice($product->price);
-        $priceOld = $this->formatPrice($product->price_old);
-        $hasOld   = $priceOld !== '' && (float) $product->price_old > (float) $product->price;
-
-        $html  = '<div class="product-card" data-product-id="' . (int) $product->id . '">';
-
-        if ($image !== '') {
-            $html .= '<a href="' . $link . '" class="product-card__image-wrapper">';
-            $html .= '<img src="' . $image . '" alt="' . $title . '" class="product-card__image" loading="lazy">';
-            $html .= '</a>';
-        }
-
-        $html .= '<div class="product-card__body">';
-
-        $html .= '<a href="' . $link . '" class="product-card__title">' . $title . '</a>';
-
-        $html .= '<div class="product-card__prices">';
-        if ($price !== '') {
-            $html .= '<span class="product-card__price">' . $price . '</span>';
-        }
-        if ($hasOld) {
-            $html .= '<span class="product-card__price-old">' . $priceOld . '</span>';
-        }
-        $html .= '</div>';
-
-        $html .= '<div class="product-card__meta">';
-        if ($presence !== '') {
-            $html .= '<span class="product-card__presence">' . $presence . '</span>';
-        }
-        if ($color !== '') {
-            $html .= '<span class="product-card__color">Колір: ' . $color . '</span>';
-        }
-        if ($article !== '') {
-            $html .= '<span class="product-card__sku">Артикул: ' . $article . '</span>';
-        }
-        if ($category !== '') {
-            $html .= '<span class="product-card__category">' . $category . '</span>';
-        }
-        $html .= '</div>'; // meta
-
-        $html .= '</div>'; // body
-        $html .= '</div>'; // card
-
-        return $html;
-    }
-}
+        $categoryHints = [
+            'шолом' => ['шолом', 'каска', 'helmet'],
+            'плитоноска' => ['плитоноска', 'plate carrier', 'розгрузка'],
+            'куртка' => ['куртка', 'co

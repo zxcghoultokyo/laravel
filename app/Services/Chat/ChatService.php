@@ -19,64 +19,45 @@ class ChatService
     /**
      * Головний метод: обробка одного повідомлення користувача.
      *
-     * @param string $message
-     * @param string|null $sessionId
-     * @return array
+     * @param string $message     — текст від юзера
+     * @param string|null $sessionId — ідентифікатор сесії (можна зберігати в кукі/LS)
+     *
+     * @return array — нормалізована відповідь для фронту
      */
     public function handleMessage(string $message, ?string $sessionId = null): array
     {
         $normalizedMessage = trim($message);
 
-        $sessionKey       = $sessionId ?: request()->ip();
-        $contextCacheKey  = 'chat_ctx_' . $sessionKey;
-
-        $context = Cache::get($contextCacheKey, [
-            'last_intent'       => null,
-            'last_category_key' => null,
-            'last_slots'        => [],
-        ]);
+        $sessionKey      = $this->buildSessionKey($sessionId);
+        $sessionContext  = $this->loadSessionContext($sessionKey);
 
         Log::info('ChatService::handleMessage incoming', [
-            'message'    => $message,
+            'message'    => $normalizedMessage,
             'session_id' => $sessionId,
-            'context'    => $context,
+            'sessionKey' => $sessionKey,
+            'ctx'        => $sessionContext,
         ]);
 
-        // 1. Швидкі категорії «турнікет», «плитоноска» і т.д.
-        $quickCategoryResponse = $this->handleQuickCategoryShortcuts($normalizedMessage);
+        // 1. Простий rule-based хендлер на чисті категорії (турнікети, шоломи, плитоноски)
+        $quickCategoryResponse = $this->handleQuickCategoryShortcuts($normalizedMessage, $sessionKey);
         if ($quickCategoryResponse !== null) {
             Log::info('ChatService::quickCategoryResponse', [
                 'response' => $quickCategoryResponse,
             ]);
-
-            $context['last_intent']       = 'product_search';
-            $context['last_category_key'] = $quickCategoryResponse['data']['category_key'] ?? null;
-            $context['last_slots']        = [];
-
-            Cache::put($contextCacheKey, $context, now()->addMinutes(30));
-
             return $quickCategoryResponse;
         }
 
-        // 2. Викликаємо AiRouter
+        // 2. Викликаємо AiRouter, щоб отримати JSON із інтенцією / дією / категорією
         $aiData = $this->aiRouter->routeChatMessage($normalizedMessage, [
-            'session_id' => $sessionKey,
-            'context'    => $context,
+            'session_id' => $sessionId,
         ]);
 
-        Log::info('ChatService::AiRouter result', [
-            'aiData' => $aiData,
-        ]);
-
+        // Перестраховка: навіть якщо AiRouter верне щось криве – не ламаємо чат
         if (! is_array($aiData)) {
-            $resp = $this->simpleTextResponse(
+            $response = $this->simpleTextResponse(
                 "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
             );
-            Log::info('ChatService::fallback non-array AiRouter', [
-                'response' => $resp,
-            ]);
-
-            return $resp;
+            return $response;
         }
 
         $intent      = Arr::get($aiData, 'intent', 'unknown');
@@ -86,76 +67,89 @@ class ChatService
         $slots       = Arr::get($aiData, 'slots', []);
         $messageOut  = Arr::get($aiData, 'message', '');
 
-        // 3. Оновлюємо контекст
-        if ($intent === 'product_search') {
-            if ($categoryKey) {
-                $context['last_category_key'] = $categoryKey;
-            }
-            $context['last_intent'] = 'product_search';
-            $context['last_slots']  = $slots;
-        } elseif (in_array($intent, ['order_status', 'shop_info', 'smalltalk', 'abuse'])) {
-            $context['last_intent'] = $intent;
-        }
-
-        Cache::put($contextCacheKey, $context, now()->addMinutes(30));
-
-        Log::info('ChatService::updated context', [
-            'context' => $context,
+        Log::info('ChatService::AiRouter result', [
+            'aiData' => $aiData,
         ]);
 
-        // 4. Роутимо по інтенціях
+        // 3. Роутимо по інтенції / дії
         switch ($intent) {
             case 'product_search':
                 $response = $this->handleProductSearchIntent(
-                    $normalizedMessage,
-                    $action,
-                    $confidence,
-                    $categoryKey ?: $context['last_category_key'],
-                    $slots,
-                    $messageOut,
-                    $context
+                    originalQuery: $normalizedMessage,
+                    action: $action,
+                    confidence: $confidence,
+                    categoryKey: $categoryKey,
+                    slots: $slots,
+                    messageOut: $messageOut,
+                    sessionKey: $sessionKey,
+                    sessionContext: $sessionContext
                 );
-                Log::info('ChatService::product_search response', ['response' => $response]);
-                return $response;
+                break;
 
             case 'order_status':
-                $response = $this->handleOrderStatusIntent($aiData);
-                Log::info('ChatService::order_status response', ['response' => $response]);
-                return $response;
+                $response = $this->handleOrderStatusIntent($aiData, $sessionKey, $sessionContext);
+                break;
 
             case 'shop_info':
-                $response = $this->handleShopInfoIntent($aiData);
-                Log::info('ChatService::shop_info response', ['response' => $response]);
-                return $response;
+                $response = $this->handleShopInfoIntent($aiData, $sessionKey, $sessionContext);
+                break;
 
             case 'smalltalk':
-                $response = $this->simpleTextResponse($messageOut ?: "Я тут, слухаю 🙂");
+                $response = $this->simpleTextResponse(
+                    $messageOut ?: "Я тут, слухаю 🙂"
+                );
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'smalltalk',
+                    'last_action'       => $action,
+                    'last_category_key' => null,
+                    'last_query'        => $normalizedMessage,
+                    'slots'             => $slots,
+                ]);
                 Log::info('ChatService::smalltalk response', ['response' => $response]);
-                return $response;
+                break;
 
             case 'abuse':
                 $response = $this->simpleTextResponse(
                     "Розумію, що може бути нервова ситуація. Якщо хочеш, я допоможу підібрати спорядження або підкажу по замовленню."
                 );
-                Log::info('ChatService::abuse response', ['response' => $response]);
-                return $response;
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'abuse',
+                    'last_action'       => $action,
+                    'last_category_key' => null,
+                    'last_query'        => $normalizedMessage,
+                    'slots'             => $slots,
+                ]);
+                break;
 
             case 'unknown':
             default:
                 $response = $this->simpleTextResponse(
                     $messageOut ?: "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
                 );
-                Log::info('ChatService::unknown response', ['response' => $response]);
-                return $response;
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'unknown',
+                    'last_action'       => $action,
+                    'last_category_key' => null,
+                    'last_query'        => $normalizedMessage,
+                    'slots'             => $slots,
+                ]);
+                break;
         }
+
+        Log::info('ChatService::handleMessage outgoing', [
+            'response' => $response,
+        ]);
+
+        return $response;
     }
 
     /**
-     * Швидкий хендлер явно сформульованих категорій.
+     * Швидкий хендлер для дуже явних запитів типу "турнікети", "шоломи".
+     * Це працює навіть без AI, щоб юзер відразу бачив товар.
      */
-    protected function handleQuickCategoryShortcuts(string $message): ?array
+    protected function handleQuickCategoryShortcuts(string $message, string $sessionKey): ?array
     {
-        $norm = mb_strtolower(trim($message));
+        $norm = mb_strtolower($message);
 
         $map = [
             'турнікети'   => 'tourniquets',
@@ -170,9 +164,6 @@ class ChatService
             'аптечки'     => 'ifak_kits',
             'іфак'        => 'ifak_kits',
             'ifak'        => 'ifak_kits',
-            'бронеплита'  => 'plates',
-            'бронеплити'  => 'plates',
-            'плита'       => 'plates',
         ];
 
         if (! array_key_exists($norm, $map)) {
@@ -183,11 +174,26 @@ class ChatService
 
         $products = $this->productService->searchByCategoryKey($categoryKey, 3);
 
-        return $this->productsResponse(
+        $response = $this->productsResponse(
             text: "Ось, що маємо по цій категорії 👇",
             products: $products,
             categoryKey: $categoryKey
         );
+
+        // Записуємо контекст сесії
+        $this->saveSessionContext($sessionKey, [
+            'last_intent'       => 'product_search',
+            'last_action'       => 'SHOW_PRODUCTS',
+            'last_category_key' => $categoryKey,
+            'last_query'        => $message,
+            'slots'             => [],
+        ]);
+
+        Log::info('ChatService::quickCategoryResponse', [
+            'response' => $response,
+        ]);
+
+        return $response;
     }
 
     /**
@@ -200,27 +206,37 @@ class ChatService
         ?string $categoryKey,
         array $slots,
         string $messageOut,
-        array $context = []
+        string $sessionKey,
+        array $sessionContext = []
     ): array {
-        $normalized = mb_strtolower($originalQuery);
+        $effectiveCategoryKey = $categoryKey;
 
-        $isMoreRequest =
-            str_contains($normalized, 'ще')
-            || str_contains($normalized, 'покажи ще')
-            || str_contains($normalized, 'ще варіант')
-            || str_contains($normalized, 'будь-як');
-
-        // Якщо юзер просить "ще" → використовуємо попередню категорію
-        if ($isMoreRequest && ! $categoryKey) {
-            $categoryKey = $context['last_category_key'] ?? null;
-            if ($categoryKey) {
-                $action     = 'SHOW_PRODUCTS';
-                $confidence = max($confidence, 0.7);
+        // 1) Якщо модель не дала category_key — пробуємо самі його вирахувати по тексту
+        if (! $effectiveCategoryKey) {
+            $detected = $this->productService->detectCategoryKeyFromText($originalQuery);
+            if ($detected) {
+                $effectiveCategoryKey = $detected;
+                Log::info('ChatService::handleProductSearchIntent detected category from text', [
+                    'query'            => $originalQuery,
+                    'detected_category'=> $detected,
+                ]);
             }
         }
 
-        // SHOW_PRODUCTS + є категорія → показуємо товари
-        if ($action === 'SHOW_PRODUCTS' && $categoryKey && $confidence >= 0.4) {
+        // 2) Якщо все ще немає категорії, але є попередній product_search з категорією
+        if (! $effectiveCategoryKey && ($sessionContext['last_intent'] ?? null) === 'product_search') {
+            $prevCategory = $sessionContext['last_category_key'] ?? null;
+            if ($prevCategory && $this->isFollowupMoreRequest($originalQuery)) {
+                $effectiveCategoryKey = $prevCategory;
+                Log::info('ChatService::handleProductSearchIntent using previous category (followup "ще")', [
+                    'query'          => $originalQuery,
+                    'prev_category'  => $prevCategory,
+                ]);
+            }
+        }
+
+        // Якщо AI каже SHOW_PRODUCTS і є категорія + нормальна впевненість
+        if ($action === 'SHOW_PRODUCTS' && $effectiveCategoryKey && $confidence >= 0.6) {
             $limit = 3;
 
             $priceFilters = [
@@ -229,52 +245,84 @@ class ChatService
             ];
 
             $products = $this->productService->searchByCategoryKey(
-                categoryKey: $categoryKey,
+                categoryKey: $effectiveCategoryKey,
                 limit: $limit,
                 priceFilters: $priceFilters
             );
 
-            // Якщо по категорії тихо – пробуємо текстовий пошук
             if (empty($products)) {
-                $products = $this->productService->searchByText($originalQuery, null, 'uk');
-            }
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'product_search',
+                    'last_action'       => $action,
+                    'last_category_key' => $effectiveCategoryKey,
+                    'last_query'        => $originalQuery,
+                    'slots'             => $slots,
+                ]);
 
-            if (! empty($products)) {
-                return $this->productsResponse(
-                    text: $messageOut ?: "Ось, що можу запропонувати 👇",
-                    products: $products,
-                    categoryKey: $categoryKey
+                return $this->simpleTextResponse(
+                    "Зараз по цій категорії немає товарів в наявності або я не зміг їх знайти 😔 Спробуй сформулювати інакше або обрати іншу категорію."
                 );
             }
+
+            $response = $this->productsResponse(
+                text: $messageOut ?: "Ось, що можу запропонувати 👇",
+                products: $products,
+                categoryKey: $effectiveCategoryKey
+            );
+
+            $this->saveSessionContext($sessionKey, [
+                'last_intent'       => 'product_search',
+                'last_action'       => $action,
+                'last_category_key' => $effectiveCategoryKey,
+                'last_query'        => $originalQuery,
+                'slots'             => $slots,
+            ]);
+
+            Log::info('ChatService::productsResponse', [
+                'response' => $response,
+            ]);
+
+            return $response;
+        }
+
+        // Якщо AI хоче уточнення
+        if ($action === 'ASK_CLARIFICATION') {
+            $this->saveSessionContext($sessionKey, [
+                'last_intent'       => 'product_search',
+                'last_action'       => $action,
+                'last_category_key' => $effectiveCategoryKey,
+                'last_query'        => $originalQuery,
+                'slots'             => $slots,
+            ]);
 
             return $this->simpleTextResponse(
-                "Зараз по цій категорії немає товарів в наявності або я не зміг їх знайти 😔 Спробуй сформулювати інакше або обрати іншу категорію."
+                $messageOut ?: "Уточни, будь ласка, який саме товар або під які задачі тобі потрібен."
             );
         }
 
-        // ASK_CLARIFICATION, але є категорія в контексті → показуємо базові варіанти
-        if ($action === 'ASK_CLARIFICATION' && ($categoryKey ?: ($context['last_category_key'] ?? null))) {
-            $effectiveCategoryKey = $categoryKey ?: $context['last_category_key'];
-            $products             = $this->productService->searchByCategoryKey($effectiveCategoryKey, 3);
-
-            if (! empty($products)) {
-                return $this->productsResponse(
-                    text: $messageOut ?: "Поки ти уточнюєш — ось кілька базових варіантів 👇",
-                    products: $products,
-                    categoryKey: $effectiveCategoryKey
-                );
-            }
-        }
-
-        // Fallback: текстовий пошук
+        // Fallback – просто спробуємо текстовий пошук
         $products = $this->productService->searchByText($originalQuery, null, 'uk');
 
+        $this->saveSessionContext($sessionKey, [
+            'last_intent'       => 'product_search',
+            'last_action'       => $action,
+            'last_category_key' => $effectiveCategoryKey,
+            'last_query'        => $originalQuery,
+            'slots'             => $slots,
+        ]);
+
         if (! empty($products)) {
-            return $this->productsResponse(
+            $response = $this->productsResponse(
                 text: $messageOut ?: "Ось, що знайшов за твоїм запитом 👇",
                 products: $products,
-                categoryKey: $categoryKey
+                categoryKey: $effectiveCategoryKey
             );
+
+            Log::info('ChatService::productsResponse (fallback text search)', [
+                'response' => $response,
+            ]);
+
+            return $response;
         }
 
         return $this->simpleTextResponse(
@@ -284,34 +332,76 @@ class ChatService
 
     /**
      * Інтенція: статус замовлення.
+     * Тут поки просто шаблон – ти можеш підключити свій CRM/ERP.
      */
-    protected function handleOrderStatusIntent(array $aiData): array
+    protected function handleOrderStatusIntent(array $aiData, string $sessionKey, array $sessionContext = []): array
     {
         $slots       = Arr::get($aiData, 'slots', []);
         $orderNumber = Arr::get($slots, 'order_number');
 
         if (! $orderNumber) {
-            return $this->simpleTextResponse(
+            $response = $this->simpleTextResponse(
                 "Напиши, будь ласка, номер замовлення, щоб я міг його перевірити."
             );
+
+            $this->saveSessionContext($sessionKey, [
+                'last_intent'       => 'order_status',
+                'last_action'       => Arr::get($aiData, 'action', 'ASK_CLARIFICATION'),
+                'last_category_key' => null,
+                'last_query'        => null,
+                'slots'             => $slots,
+            ]);
+
+            Log::info('ChatService::order_status response (no order number)', [
+                'response' => $response,
+            ]);
+
+            return $response;
         }
 
-        // TODO: інтеграція з CRM / Horoshop
-        return $this->simpleTextResponse(
-            "Ти вказав номер замовлення {$orderNumber}. У демо-версії статуси ще не прив’язані до CRM, але в проді тут буде відстеження посилки 😉"
+        $response = $this->simpleTextResponse(
+            "Ти вказав номер замовлення {$orderNumber}. Зараз у демо-версії статуси ще не прив’язані до CRM, але в проді тут буде відстеження посилки 😉"
         );
+
+        $this->saveSessionContext($sessionKey, [
+            'last_intent'       => 'order_status',
+            'last_action'       => Arr::get($aiData, 'action', 'NONE'),
+            'last_category_key' => null,
+            'last_query'        => null,
+            'slots'             => $slots,
+        ]);
+
+        Log::info('ChatService::order_status response', [
+            'response' => $response,
+        ]);
+
+        return $response;
     }
 
     /**
      * Інтенція: інформація про магазин (доставка/оплата/повернення).
      */
-    protected function handleShopInfoIntent(array $aiData): array
+    protected function handleShopInfoIntent(array $aiData, string $sessionKey, array $sessionContext = []): array
     {
         $messageOut = Arr::get($aiData, 'message');
 
-        return $this->simpleTextResponse(
+        $response = $this->simpleTextResponse(
             $messageOut ?: "Ми відправляємо замовлення Новою Поштою по всій Україні, оплата — на карту або післяплата. Якщо треба деталі — напиши, що цікавить: доставка, оплата чи повернення."
         );
+
+        $this->saveSessionContext($sessionKey, [
+            'last_intent'       => 'shop_info',
+            'last_action'       => Arr::get($aiData, 'action', 'NONE'),
+            'last_category_key' => null,
+            'last_query'        => null,
+            'slots'             => Arr::get($aiData, 'slots', []),
+        ]);
+
+        Log::info('ChatService::shop_info response', [
+            'response' => $response,
+        ]);
+
+        return $response;
     }
 
     /**
@@ -319,23 +409,27 @@ class ChatService
      */
     protected function simpleTextResponse(string $text): array
     {
-        $resp = [
+        $response = [
             'type' => 'text',
             'text' => $text,
             'data' => null,
         ];
 
-        Log::info('ChatService::simpleTextResponse', ['response' => $resp]);
+        Log::info('ChatService::simpleTextResponse', [
+            'response' => $response,
+        ]);
 
-        return $resp;
+        return $response;
     }
 
     /**
      * Формат відповіді з товарами + текст.
+     *
+     * $products тут – масив з ProductService::normalizeProductForApi()
      */
     protected function productsResponse(string $text, array $products, ?string $categoryKey = null): array
     {
-        $resp = [
+        $response = [
             'type' => 'products',
             'text' => $text,
             'data' => [
@@ -344,8 +438,75 @@ class ChatService
             ],
         ];
 
-        Log::info('ChatService::productsResponse', ['response' => $resp]);
+        Log::info('ChatService::productsResponse', [
+            'response' => $response,
+        ]);
 
-        return $resp;
+        return $response;
+    }
+
+    /**
+     * Будуємо ключ для кешу сесії.
+     */
+    protected function buildSessionKey(?string $sessionId): string
+    {
+        if ($sessionId && $sessionId !== '') {
+            return 'chat_' . $sessionId;
+        }
+
+        // fallback по IP, щоб все одно була якась "сесія"
+        $ip = request()->ip() ?: 'unknown_ip';
+
+        return 'chat_ip_' . $ip;
+    }
+
+    protected function loadSessionContext(string $sessionKey): array
+    {
+        return Cache::get('chat_ctx_' . $sessionKey, []);
+    }
+
+    protected function saveSessionContext(string $sessionKey, array $data): void
+    {
+        Cache::put('chat_ctx_' . $sessionKey, $data, now()->addHours(6));
+
+        Log::info('ChatService::saveSessionContext', [
+            'sessionKey' => $sessionKey,
+            'data'       => $data,
+        ]);
+    }
+
+    /**
+     * Визначаємо, чи запит виглядає як "ще", "ще покажи", "давай ще" і т.д.
+     */
+    protected function isFollowupMoreRequest(string $query): bool
+    {
+        $norm = mb_strtolower(trim($query));
+
+        // абсолютно короткі варіанти
+        $short = [
+            'ще', 'еще', 'ещё', 'more', 'ще показати', 'ще покажи', 'покажи ще',
+            'давай ще', 'давай ще варіанти',
+        ];
+
+        foreach ($short as $s) {
+            if ($norm === $s) {
+                return true;
+            }
+        }
+
+        // якщо є слово "ще" + "варіант"/"покажи"/"давай"
+        if (mb_stripos($norm, 'ще') !== false &&
+            (mb_stripos($norm, 'варіант') !== false
+                || mb_stripos($norm, 'покаж') !== false
+                || mb_stripos($norm, 'давай') !== false)
+        ) {
+            return true;
+        }
+
+        if (mb_stripos($norm, 'more') !== false) {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -5,36 +5,52 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\Chat\ChatService;
 use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
-    public function __construct(
-        protected ChatService $chatService,
-    ) {
+    protected ChatService $chatService;
+
+    public function __construct(ChatService $chatService)
+    {
+        $this->chatService = $chatService;
     }
 
-    /**
-     * POST /api/chat
-     *
-     * Body:
-     * {
-     *   "message": "турнікети",
-     *   "session_id": "optional-session-id"
-     * }
-     */
-    public function handle(Request $request): JsonResponse
+    public function handle(Request $request)
     {
-        $validated = $request->validate([
-            'message'    => ['required', 'string', 'max:2000'],
-            'session_id' => ['nullable', 'string', 'max:255'],
+        $payload = $request->all();
+
+        Log::info('ChatController::handle incoming', [
+            'payload' => $payload,
         ]);
 
-        $response = $this->chatService->handleMessage(
-            $validated['message'],
-            $validated['session_id'] ?? null
-        );
+        try {
+            $message   = (string) ($payload['message'] ?? '');
+            $sessionId = $payload['session_id'] ?? null;
+            $context   = $payload['context'] ?? [];
 
-        return response()->json($response);
+            // ТУТ ВАЖЛИВО: підстав свій метод, якщо він у тебе називається не handleMessage, а handle
+            $response = $this->chatService->handleMessage(
+                $message,
+                $sessionId,
+                is_array($context) ? $context : []
+            );
+
+            Log::info('ChatController::handle response', [
+                'response' => $response,
+            ]);
+
+            return response()->json($response);
+        } catch (\Throwable $e) {
+            Log::error('ChatController::handle exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'type' => 'message',
+                'text' => 'Сталася технічна помилка на сервері. Спробуй, будь ласка, ще раз пізніше 🛠️',
+            ], 500);
+        }
     }
 }

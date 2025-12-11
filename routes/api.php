@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\OrderStatusController;
 use App\Http\Controllers\Api\DebugProductsController;
-use Illuminate\Support\Facades\Route;
+
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();

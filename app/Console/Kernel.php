@@ -26,4 +26,7 @@ protected function schedule(Schedule $schedule): void
 
     $schedule->job(new GenerateCategoryScenariosJob())
         ->dailyAt('04:00');
+
+    $schedule->job(new GenerateCategoryScriptsJob())
+        ->weeklyOn(1, '05:00'); // щопонеділка о 04:00
 }

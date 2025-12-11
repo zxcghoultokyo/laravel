@@ -440,16 +440,23 @@ PROMPT;
         }
 
         $content = $response->json('choices.0.message.content');
-        $decoded = json_decode($content, true);
+$decoded = json_decode($content, true);
 
-        if (! is_array($decoded)) {
-            Log::warning('AiRouter::routeChatMessage got non-JSON content', [
-                'content' => $content,
-            ]);
-            return $fallback;
-        }
+if (! is_array($decoded)) {
+    Log::warning('AiRouter::routeChatMessage got non-JSON content', [
+        'content' => $content,
+    ]);
+    return $fallback;
+}
 
-        return array_merge($fallback, $decoded);
+// ЛОГУЄМО, ЩО НАМ НАСИЛАЄ МОДЕЛЬ
+Log::info('AiRouter::routeChatMessage decoded', [
+    'raw_content' => $content,
+    'decoded'     => $decoded,
+]);
+
+return array_merge($fallback, $decoded);
+        
     } catch (\Throwable $e) {
         Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
             'exception' => $e,

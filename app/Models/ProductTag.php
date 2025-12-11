@@ -17,10 +17,6 @@ class ProductTag extends Model
         'domain',
     ];
 
-    protected $casts = [
-        'is_auto_generated' => 'boolean',
-    ];
-
     public function products()
     {
         return $this->belongsToMany(Product::class, 'product_product_tag');

@@ -723,7 +723,7 @@ class ProductService
             ->where('display_in_showcase', true)
             ->where('in_stock', true);
 
-        // Прімєр простої мапи category_key → умова
+        // приклад простої мапи category_key → умова
         switch ($categoryKey) {
             case 'tourniquets':
                 $q->where(function (Builder $q) {

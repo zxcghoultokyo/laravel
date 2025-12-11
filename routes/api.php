@@ -18,5 +18,3 @@ Route::post('/chat', [ChatController::class, 'handle']);
 Route::post('/order-status', [OrderStatusController::class, 'show']);
 
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
-
-Route::post('/chat', [ChatController::class, 'handle']);

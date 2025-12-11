@@ -142,6 +142,34 @@ class ProductService
 
         return $quantity > 0;
     }
+        /**
+     * Пошук товарів за частковим збігом у category_path.
+     * Використовується сценаріями на кшталт TACTICAL_MEDICINE, де ми хочемо
+     * взяти всі товари з певного розділу/гілки каталогу.
+     */
+    public function searchByCategoryPathContains(string $needle, int $limit = 50): array
+    {
+        $needle = trim($needle);
+        if ($needle === '') {
+            return [];
+        }
+
+        /** @var \Illuminate\Database\Eloquent\Builder $q */
+        $q = Product::query()
+            ->where('display_in_showcase', true)
+            ->where('in_stock', true)
+            ->where('category_path', 'LIKE', '%' . $needle . '%')
+            ->orderByDesc('popularity')
+            ->limit($limit);
+
+        $products = $q->get();
+
+        return $products
+            ->map(function (Product $product) {
+                return $this->normalizeProductForApi($product);
+            })
+            ->all();
+    }
 
     /**
      * Формуємо search_index — один великий рядок для LIKE-пошуку.

@@ -9,6 +9,7 @@ use App\Services\Horoshop\OrderService;
 use App\Services\Ai\AiRecommender;
 use App\Services\Ai\AiRouter;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Throwable;
 
 class ChatController extends Controller
@@ -19,9 +20,13 @@ class ChatController extends Controller
         protected OrderService $orderService,
         protected AiRecommender $aiRecommender,
         protected AiRouter $aiRouter,
-    ) {}
+    ) {
+    }
 
-    public function handle(Request $request)
+    /**
+     * Головна точка входу для веб-чату /api/chat.
+     */
+    public function handle(Request $request): JsonResponse
     {
         $data = $request->validate([
             'message' => ['required', 'string', 'max:2000'],
@@ -30,33 +35,27 @@ class ChatController extends Controller
         $message      = trim($data['message']);
         $messageLower = mb_strtolower($message, 'UTF-8');
 
-        // 0) Питаємо AI-роутер: що це за намір?
+        // 0) Питаємо AI-роутер: який намір у користувача?
         $routing = $this->aiRouter->classify($message);
 
-        $intent          = $routing['intent']           ?? 'UNKNOWN';
+        $intent          = strtoupper($routing['intent'] ?? 'UNKNOWN');
         $normalizedQuery = $routing['normalized_query'] ?? $message;
-        $orderId         = $routing['order_id']         ?? null;
+        $orderId         = $routing['order_id'] ?? null;
 
-        // ---- ROUTING ПО ІНТЕНТАМ ----
-
-        // 1) Якщо AI каже "не знаю, що це" — запускаємо fallback пайплайн
-        if ($intent === 'FALLBACK' || $intent === 'UNKNOWN') {
-            return $this->fallbackPipeline($message, $messageLower);
+        // 1) Якщо це запит по замовленню і вже є номер — одразу працюємо з ним
+        if ($intent === 'ORDER_STATUS' && $orderId) {
+            return $this->handleOrderStatusFlow((int) $orderId);
         }
 
-        // 2) Статус замовлення
-        if ($intent === 'ORDER_STATUS') {
-            if ($orderId) {
-                return $this->handleOrderStatusFlow($orderId);
-            }
-
+        // 1.1) Якщо фраза про замовлення, але без номера
+        if ($intent === 'ORDER_STATUS' && ! $orderId) {
             return response()->json([
                 'type'    => 'order_need_id',
                 'message' => 'Вкажи, будь ласка, номер замовлення (наприклад: "замовлення 123").',
             ]);
         }
 
-        // 3) FAQ / довідка
+        // 2) FAQ / довідка
         if ($intent === 'FAQ') {
             if ($answer = $this->faqService->match($messageLower)) {
                 return response()->json([
@@ -65,21 +64,23 @@ class ChatController extends Controller
                 ]);
             }
 
-            // Якщо в FAQ нічого не знайшли – fallback
+            // Якщо в FAQ нічого не знайшли – спробуємо fallback-пайплайн
             return $this->fallbackPipeline($message, $messageLower);
         }
 
-        // 4) Пошук товарів
+        // 3) Пошук товарів
         if ($intent === 'PRODUCT_SEARCH') {
-            $products = $this->productService->searchByText($normalizedQuery);
+            // Беремо побільше кандидатів, потім AiRecommender їх відсортує
+            $products = $this->productService->searchByText($normalizedQuery, 20);
 
             if (! empty($products)) {
-                // Пропускаємо товари через "розумний" сортер
                 try {
-                    $recommended = $this->aiRecommender->recommend($normalizedQuery, $products);
+                    // тут відбувається “даблчек” релевантності на стороні AI
+                    $recommended = $this->aiRecommender->recommend($normalizedQuery, $products, 3);
                 } catch (Throwable $e) {
                     report($e);
-                    $recommended = $products; // на всякий випадок – віддамо, як є
+                    // На всякий випадок — повертаємо як є
+                    $recommended = $products;
                 }
 
                 return response()->json([
@@ -89,7 +90,7 @@ class ChatController extends Controller
                 ]);
             }
 
-            // Якщо нічого не знайшли – просто no_results
+            // Нічого не знайшли — no_results
             return response()->json([
                 'type'    => 'no_results',
                 'message' => sprintf(
@@ -100,15 +101,16 @@ class ChatController extends Controller
             ]);
         }
 
-        // 5) Small talk / болталка
+        // 4) Small-talk / болталка
         if ($intent === 'SMALL_TALK') {
+            // Поки без окремого AI-ендпоінта — проста відповідь
             return response()->json([
                 'type'    => 'small_talk',
                 'message' => 'Я тут, щоб допомогти з товарами і замовленнями 😊 Запитай про товар або замовлення.',
             ]);
         }
 
-        // 6) Все інше — через fallback (FAQ → пошук товарів → no_results)
+        // 5) Будь-що інше — fallback-пайплайн (FAQ → пошук товарів → no_results)
         return $this->fallbackPipeline($message, $messageLower);
     }
 
@@ -118,7 +120,7 @@ class ChatController extends Controller
      * 2) спробувати пошук товарів + AI-сортування
      * 3) no_results
      */
-    protected function fallbackPipeline(string $message, string $messageLower)
+    protected function fallbackPipeline(string $message, string $messageLower): JsonResponse
     {
         // 1) FAQ
         if ($answer = $this->faqService->match($messageLower)) {
@@ -128,13 +130,12 @@ class ChatController extends Controller
             ]);
         }
 
-        // 2) Пошук товарів на Horoshop
-        $products = $this->productService->searchByText($message);
+        // 2) Пошук товарів
+        $products = $this->productService->searchByText($message, 20);
 
         if (! empty($products)) {
             try {
-                // Тут теж передаємо і текст, і масив товарів
-                $recommended = $this->aiRecommender->recommend($message, $products);
+                $recommended = $this->aiRecommender->recommend($message, $products, 3);
             } catch (Throwable $e) {
                 report($e);
                 $recommended = $products;
@@ -151,38 +152,56 @@ class ChatController extends Controller
         return response()->json([
             'type'    => 'no_results',
             'message' => sprintf(
-                'Я не знайшов товарів за запитом: «%s». ' .
-                'Спробуй змінити формулювання або вкажи категорію/бренд.',
+                'Я не знайшов відповіді на запит: «%s». ' .
+                'Спробуй переформулювати або вкажи більше деталей.',
                 $message
             ),
         ]);
     }
 
     /**
-     * Обробка флоу "статус замовлення"
+     * Обробка запиту по статусу замовлення за номером.
      */
-    protected function handleOrderStatusFlow(int $orderId)
+    protected function handleOrderStatusFlow(int $orderId): JsonResponse
     {
         try {
-            $rawOrder = $this->orderService->getById($orderId);
+            $order = $this->orderService->getById($orderId);
 
-            if (! $rawOrder) {
+            if (! $order) {
                 return response()->json([
                     'type'    => 'order_not_found',
-                    'message' => "Замовлення №{$orderId} не знайдено. Перевір номер або дату оформлення.",
-                ], 404);
+                    'message' => "Я не знайшов замовлення №{$orderId}. Перевір, будь ласка, номер.",
+                ]);
             }
 
-            $order = $this->orderService->normalize($rawOrder);
+            $status     = $order['status']['title'] ?? $order['status'] ?? 'обробка';
+            $total      = $order['total'] ?? 0;
+            $currency   = $order['currency'] ?? 'UAH';
+            $createdAt  = $order['created_at'] ?? null;
+            $items      = $order['items'] ?? [];
 
-            $statusText = sprintf(
-                "Замовлення №%d зараз у статусі: «%s».\nСума: %s %s.\nОформлено: %s.",
-                $order['order_id'],
-                $order['status_label'],
-                $order['total']['total_sum'] ?? '—',
-                $order['currency'] ?? '',
-                $order['created_at'] ?? 'невідомо'
-            );
+            $lines   = [];
+            $lines[] = "Замовлення №{$orderId} зараз у статусі: «{$status}».";
+            $lines[] = "Сума: {$total} {$currency}.";
+
+            if ($createdAt) {
+                $lines[] = "Оформлено: {$createdAt}.";
+            }
+
+            if (! empty($items)) {
+                $lines[] = '';
+                $lines[] = 'Товари в замовленні:';
+
+                foreach ($items as $item) {
+                    $name  = $item['name'] ?? 'Товар';
+                    $qty   = $item['quantity'] ?? ($item['qty'] ?? 1);
+                    $price = $item['price'] ?? 0;
+
+                    $lines[] = sprintf('- %s × %s шт. (%s %s)', $name, $qty, $price, $currency);
+                }
+            }
+
+            $statusText = implode("\n", $lines);
 
             return response()->json([
                 'type'     => 'order_status',

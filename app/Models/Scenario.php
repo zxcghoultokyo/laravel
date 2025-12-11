@@ -8,15 +8,14 @@ class Scenario extends Model
 {
     protected $fillable = [
         'code',
-        'name',
-        'description',
-        'handler_class',
+        'title',
+        'type',
         'is_active',
         'config',
     ];
 
     protected $casts = [
-        'is_active' => 'bool',
+        'is_active' => 'boolean',
         'config'    => 'array',
     ];
 }

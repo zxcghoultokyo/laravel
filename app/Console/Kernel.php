@@ -16,3 +16,14 @@ protected function schedule(Schedule $schedule): void
     $schedule->job(new SyncHoroshopProductsJob())
         ->dailyAt('03:00'); // можна змінити час
 }
+
+use App\Jobs\GenerateCategoryScenariosJob;
+
+protected function schedule(Schedule $schedule): void
+{
+    $schedule->job(new SyncHoroshopProductsJob())
+        ->dailyAt('03:00');
+
+    $schedule->job(new GenerateCategoryScenariosJob())
+        ->dailyAt('04:00');
+}

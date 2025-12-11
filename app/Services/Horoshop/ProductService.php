@@ -3,9 +3,12 @@
 namespace App\Services\Horoshop;
 
 use App\Models\Product;
+use App\Models\ProductSynonym;
+use App\Models\ColorSynonym;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Builder;
+use App\Services\Search\QueryExpander;
 
 class ProductService
 {
@@ -32,8 +35,13 @@ class ProductService
             return [];
         }
 
-        // 1) Базова нормалізація запиту
-        $expandedQuery = $normalized;
+        // 1) Базова нормалізація + розширення через синоніми з БД
+        $expandedQuery = $this->expandQueryWithDomainSynonyms($normalized, $language);
+
+        Log::info('ProductService::searchByText expanded query', [
+            'normalized'      => $normalized,
+            'expanded_query'  => $expandedQuery,
+        ]);
 
         // 2) Цінові фільтри з тексту
         $priceFilters = $this->extractPriceFiltersFromQuery($normalized);
@@ -130,6 +138,7 @@ class ProductService
                     $q->orWhere('search_index', 'LIKE', $like)
                       ->orWhere('title', 'LIKE', $like)
                       ->orWhere('category_path', 'LIKE', $like)
+                      ->orWhere('color', 'LIKE', $like) // + пошук по кольору
                       ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
                           $ai->where('product_type', 'LIKE', $like)
                              ->orWhere('ai_category', 'LIKE', $like)
@@ -620,6 +629,130 @@ class ProductService
         }
 
         return false;
+    }
+
+    /**
+     * Розширення запиту через синоніми з БД (product_synonyms + color_synonyms).
+     *
+     * Тут НІЯКОГО хардкоду — все тягнеться з таблиць.
+     */
+    protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk', ?string $domain = null): string
+    {
+        $normalized = mb_strtolower(trim($query));
+        if ($normalized === '') {
+            return $normalized;
+        }
+
+        $baseTokens = $this->tokenize($normalized);
+        if (empty($baseTokens)) {
+            return $normalized;
+        }
+
+        $allTokens = $baseTokens;
+
+        // -------- PRODUCT_SYNONYMS --------
+        try {
+            $productSynonymsQuery = ProductSynonym::query()
+                ->where('is_active', true)
+                ->where(function (Builder $q) use ($baseTokens) {
+                    foreach ($baseTokens as $token) {
+                        $q->orWhere('synonym', 'LIKE', '%' . $token . '%')
+                          ->orWhere('product_type', 'LIKE', '%' . $token . '%');
+                    }
+                });
+
+            if ($language !== '') {
+                $productSynonymsQuery->where(function (Builder $q) use ($language) {
+                    $q->whereNull('language')
+                      ->orWhere('language', $language);
+                });
+            }
+
+            if ($domain !== null) {
+                $productSynonymsQuery->where(function (Builder $q) use ($domain) {
+                    $q->whereNull('domain')
+                      ->orWhere('domain', $domain);
+                });
+            }
+
+            $productSynonyms = $productSynonymsQuery->get();
+
+            foreach ($productSynonyms as $syn) {
+                if ($syn->product_type) {
+                    $allTokens[] = mb_strtolower($syn->product_type);
+                }
+                if ($syn->synonym) {
+                    $allTokens[] = mb_strtolower($syn->synonym);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ProductService::expandQueryWithDomainSynonyms product_synonyms failed: ' . $e->getMessage());
+        }
+
+        // -------- COLOR_SYNONYMS --------
+        try {
+            $colorSynonymsQuery = ColorSynonym::query()
+                ->where('is_active', true)
+                ->where(function (Builder $q) use ($baseTokens) {
+                    foreach ($baseTokens as $token) {
+                        $q->orWhere('synonym', 'LIKE', '%' . $token . '%')
+                          ->orWhere('color_group', 'LIKE', '%' . $token . '%');
+                    }
+                });
+
+            if ($language !== '') {
+                $colorSynonymsQuery->where(function (Builder $q) use ($language) {
+                    $q->whereNull('language')
+                      ->orWhere('language', $language);
+                });
+            }
+
+            if ($domain !== null) {
+                $colorSynonymsQuery->where(function (Builder $q) use ($domain) {
+                    $q->whereNull('domain')
+                      ->orWhere('domain', $domain);
+                });
+            }
+
+            $colorSynonyms = $colorSynonymsQuery->get();
+
+            // групуємо по color_group, щоб додати всі синоніми групи
+            $byGroup = [];
+            foreach ($colorSynonyms as $syn) {
+                $group = mb_strtolower($syn->color_group ?? '');
+                if ($group === '') {
+                    continue;
+                }
+                if (!isset($byGroup[$group])) {
+                    $byGroup[$group] = [];
+                }
+                if ($syn->synonym) {
+                    $byGroup[$group][] = mb_strtolower($syn->synonym);
+                }
+                $byGroup[$group][] = $group;
+            }
+
+            foreach ($byGroup as $group => $tokens) {
+                foreach ($tokens as $t) {
+                    $allTokens[] = $t;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ProductService::expandQueryWithDomainSynonyms color_synonyms failed: ' . $e->getMessage());
+        }
+
+        // унікалізація
+        $allTokens = array_values(array_unique(array_filter($allTokens)));
+
+        $expanded = implode(' ', $allTokens);
+
+        Log::info('ProductService::expandQueryWithDomainSynonyms result', [
+            'input'    => $query,
+            'tokens'   => $baseTokens,
+            'expanded' => $expanded,
+        ]);
+
+        return $expanded;
     }
 
     /**

@@ -69,57 +69,7 @@
         {{-- Область повідомлень --}}
         <div id="chatMessages"
              class="p-4 space-y-4 bg-secondary/30 h-96 overflow-y-auto">
-
-            {{-- Приклад перших фіксованих повідомлень (можеш потім прибрати) --}}
-            <div class="flex justify-end">
-                <div class="max-w-[85%] rounded-2xl px-4 py-2.5 bg-accent text-primary rounded-br-md">
-                    <p class="text-sm">
-                        Привіт! Шукаю куртку для зими, бюджет до 5000 грн
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex justify-start">
-                <div class="max-w-[85%] rounded-2xl px-4 py-2.5 bg-card border rounded-bl-md">
-                    <p class="text-sm">
-                        Вітаю! 👋 Допоможу знайти ідеальну зимову куртку. Скажіть, який стиль вам більше до вподоби — класичний чи спортивний?
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex justify-end">
-                <div class="max-w-[85%] rounded-2xl px-4 py-2.5 bg-accent text-primary rounded-br-md">
-                    <p class="text-sm">
-                        Спортивний, для активного відпочинку
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex justify-start">
-                <div class="max-w-[85%] rounded-2xl px-4 py-2.5 bg-card border rounded-bl-md">
-                    <p class="text-sm">
-                        Чудовий вибір! Ось 3 найпопулярніші моделі у вашому бюджеті:
-                    </p>
-
-                    <div class="mt-3 space-y-2">
-                        <div class="flex items-center gap-3 bg-secondary/50 rounded-lg p-2">
-                            <span class="text-2xl">🧥</span>
-                            <div class="flex-1">
-                                <div class="text-xs font-medium">Куртка Alpine Pro</div>
-                                <div class="text-xs text-accent font-semibold">4 299 ₴</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 bg-secondary/50 rounded-lg p-2">
-                            <span class="text-2xl">🧥</span>
-                            <div class="flex-1">
-                                <div class="text-xs font-medium">Пуховик North Wind</div>
-                                <div class="text-xs text-accent font-semibold">4 850 ₴</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+            {{-- Початково тут пусто, перше вітання додамо з JS --}}
         </div>
 
         {{-- Інпут повідомлення --}}
@@ -130,7 +80,9 @@
                     id="chatInput"
                     type="text"
                     placeholder="Напишіть повідомлення..."
-                    class="flex-1 bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-500">
+                    class="flex-1 bg-transparent text-sm outline-none text-slate-900 placeholder:text-slate-500"
+                    autocomplete="off"
+                >
 
                 <button
                     type="submit"
@@ -142,74 +94,3 @@
                          stroke-linecap="round" stroke-linejoin="round"
                          class="w-4 h-4">
                         <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
-                        <path d="m21.854 2.147-10.94 10.939"></path>
-                    </svg>
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-    const chatForm = document.getElementById('chatForm');
-    const chatInput = document.getElementById('chatInput');
-    const chatMessages = document.getElementById('chatMessages');
-
-    function appendMessage(text, side = 'user') {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'flex ' + (side === 'user' ? 'justify-end' : 'justify-start');
-
-        const bubble = document.createElement('div');
-        bubble.className =
-            'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' +
-            (side === 'user'
-                ? 'bg-accent text-primary rounded-br-md'
-                : 'bg-card border rounded-bl-md');
-
-        bubble.innerText = text;
-        wrapper.appendChild(bubble);
-        chatMessages.appendChild(wrapper);
-
-        // автоскрол донизу
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    chatForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const text = chatInput.value.trim();
-        if (!text) return;
-
-        appendMessage(text, 'user');
-        chatInput.value = '';
-
-        // Поки що просто мок-відповідь, щоб протестити UI.
-        // Потім тут можна підключити твій реальний /api/chat ендпоінт.
-        setTimeout(() => {
-            appendMessage('Я поки відповідаю як мок. Потім тут буде реальна логіка з бекенду 👌', 'bot');
-        }, 500);
-
-        /*
-        // Коли будеш готовий підключити реальний бекенд:
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({ message: text }),
-            });
-
-            const data = await response.json();
-            appendMessage(data.reply ?? 'Щось пішло не так, спробуйте ще раз 🥲', 'bot');
-        } catch (e) {
-            appendMessage('Помилка з’єднання з сервером 😔', 'bot');
-        }
-        */
-    });
-</script>
-
-</body>
-</html>

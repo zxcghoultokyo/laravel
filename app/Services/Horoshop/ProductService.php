@@ -790,4 +790,32 @@ class ProductService
             ->map(fn (Product $product) => $this->normalizeProductForApi($product))
             ->all();
     }
+
+        /**
+     * Нормалізує модель Product до простого масиву для API-відповіді чату.
+     */
+    public function normalizeProductForApi(Product $product): array
+    {
+        return [
+            'id'             => $product->id,
+            'article'        => $product->article,
+            'parent_article' => $product->parent_article,
+            'title'          => $product->title,
+            'title_json'     => $product->title_json,
+            'price'          => (float) ($product->price ?? 0),
+            'price_old'      => (float) ($product->price_old ?? 0),
+            'category_path'  => $product->category_path,
+            'slug'           => $product->slug,
+            'link'           => $product->link,
+            'images'         => $product->images ?? [],
+            'presence'       => $product->presence,
+            'quantity'       => (int) ($product->quantity ?? 0),
+            'in_stock'       => (bool) ($product->in_stock ?? false),
+            'color'          => $product->color,
+            'popularity'     => (int) ($product->popularity ?? 0),
+        ];
+    }
+}
+
+    
 }

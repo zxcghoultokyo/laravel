@@ -7,7 +7,7 @@ use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Models\ProductSynonym;
 use App\Models\ProductTag;
-use App\Services\Search\QueryExpander;
+use App\Services\Ai\AiRouter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -16,12 +16,12 @@ use Illuminate\Support\Facades\Log;
 class ProductService
 {
     protected HoroshopClient $client;
-    protected QueryExpander $queryExpander;
+    protected AiRouter $aiRouter;
 
-    public function __construct(HoroshopClient $client, QueryExpander $queryExpander)
+    public function __construct(HoroshopClient $client, AiRouter $aiRouter)
     {
-        $this->client        = $client;
-        $this->queryExpander = $queryExpander;
+        $this->client   = $client;
+        $this->aiRouter = $aiRouter;
     }
 
     /**
@@ -546,6 +546,44 @@ class ProductService
                 'flags'   => $flags,
             ];
         });
+    }
+
+    
+    /**
+     * Викликає AiRouter, щоб розібрати намір пошукового запиту.
+     * Повертає масив:
+     *  - product_types      => []   // типи товарів (каска, плита, plate carrier ...)
+     *  - must_have_keywords => []   // обов'язкові слова / абревіатури (uhmwpe, niii, level 4 ...)
+     *  - fallback_types     => []   // ширші категорії на випадок пустої видачі
+     */
+    protected function detectProductTypes(string $query): array
+    {
+        $result = $this->aiRouter->parseProductSearchIntent($query);
+
+        if (! is_array($result)) {
+            return [
+                'product_types'      => [],
+                'must_have_keywords' => [],
+                'fallback_types'     => [],
+            ];
+        }
+
+        $normalize = function ($value): array {
+            if (! is_array($value)) {
+                return [];
+            }
+
+            return array_values(array_filter(
+                $value,
+                fn($v) => is_string($v) && $v !== ''
+            ));
+        };
+
+        return [
+            'product_types'      => $normalize($result['product_types']      ?? []),
+            'must_have_keywords' => $normalize($result['must_have_keywords'] ?? []),
+            'fallback_types'     => $normalize($result['fallback_types']     ?? []),
+        ];
     }
 
     protected function getAccessoryPenalty(string $haystack, array $productTypeTokens): float

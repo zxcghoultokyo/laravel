@@ -16,9 +16,4 @@ class ProductSynonym extends Model
         'domain',
         'is_active',
     ];
-
-    protected $casts = [
-        'is_active' => 'boolean',
-        'weight' => 'integer',
-    ];
 }

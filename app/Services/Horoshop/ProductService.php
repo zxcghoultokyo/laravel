@@ -169,7 +169,6 @@ class ProductService
             ->all();
     }
 
-
     /**
      * Формуємо search_index — один великий рядок для LIKE-пошуку.
      */

@@ -181,4 +181,35 @@
         if (!text) return;
 
         appendMessage(text, 'user');
-        chat
+        chatInput.value = '';
+
+        // Поки що просто мок-відповідь, щоб протестити UI.
+        // Потім тут можна підключити твій реальний /api/chat ендпоінт.
+        setTimeout(() => {
+            appendMessage('Я поки відповідаю як мок. Потім тут буде реальна логіка з бекенду 👌', 'bot');
+        }, 500);
+
+        /*
+        // Коли будеш готовий підключити реальний бекенд:
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ message: text }),
+            });
+
+            const data = await response.json();
+            appendMessage(data.reply ?? 'Щось пішло не так, спробуйте ще раз 🥲', 'bot');
+        } catch (e) {
+            appendMessage('Помилка з’єднання з сервером 😔', 'bot');
+        }
+        */
+    });
+</script>
+
+</body>
+</html>

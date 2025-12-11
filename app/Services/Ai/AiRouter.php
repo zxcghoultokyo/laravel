@@ -273,25 +273,28 @@ PROMPT;
      * Повертає JSON-структуру, з якою працює ChatService.
      */
     public function routeChatMessage(string $message, array $context = []): array
-    {
-        $fallback = [
-            'intent'       => 'unknown',
-            'action'       => 'ASK_CLARIFICATION',
-            'confidence'   => 0.0,
-            'category_key' => null,
-            'message'      => "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏",
-            'slots'        => [],
-        ];
+{
+    $fallback = [
+        'intent'       => 'unknown',
+        'action'       => 'ASK_CLARIFICATION',
+        'confidence'   => 0.0,
+        'category_key' => null,
+        'message'      => "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙂",
+        'slots'        => [
+            'budget_min'   => null,
+            'budget_max'   => null,
+            'order_number' => null,
+        ],
+    ];
 
-        if (empty($this->apiKey)) {
-            Log::warning('AiRouter::routeChatMessage called without OPENAI_API_KEY');
-            return $fallback;
-        }
+    if (empty($this->apiKey)) {
+        Log::warning('AiRouter::routeChatMessage called without OPENAI_API_KEY');
+        return $fallback;
+    }
 
-        $sessionId = $context['session_id'] ?? null;
-
-        $systemPrompt = <<<PROMPT
+    $systemPrompt = <<<PROMPT
 Ти — AI-оркестратор для чату інтернет-магазину тактичного спорядження та такмеду.
+
 Твоє завдання — на основі повідомлення користувача визначити:
 - інтенцію (intent),
 - дію (action),
@@ -356,25 +359,24 @@ slots — вільна структура, але ми очікуємо прин
 }
 PROMPT;
 
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->apiKey,
-                'Content-Type'  => 'application/json',
-            ])->post($this->baseUrl . '/chat/completions', [
-                'model' => $this->model,
+    try {
+        $response = Http::withToken($this->apiKey)
+            ->post($this->baseUrl . '/chat/completions', [
+                'model'    => $this->model,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user',   'content' => $message],
                 ],
-                'temperature' => 0.2,
+                'temperature'     => 0.2,
                 'response_format' => [
-                    'type' => 'json_schema',
+                    'type'        => 'json_schema',
                     'json_schema' => [
                         'name'   => 'chat_routing',
                         'strict' => true,
                         'schema' => [
-                            'type'       => 'object',
-                            'properties' => [
+                            'type'                 => 'object',
+                            'additionalProperties' => false,
+                            'properties'           => [
                                 'intent' => [
                                     'type' => 'string',
                                     'enum' => [
@@ -395,7 +397,7 @@ PROMPT;
                                     ],
                                 ],
                                 'confidence' => [
-                                    'type' => 'number',
+                                    'type'    => 'number',
                                     'minimum' => 0,
                                     'maximum' => 1,
                                 ],
@@ -406,49 +408,54 @@ PROMPT;
                                     'type' => 'string',
                                 ],
                                 'slots' => [
-                                    'type'       => 'object',
-                                    'properties' => [
+                                    'type'                 => 'object',
+                                    'additionalProperties' => false,
+                                    'properties'           => [
                                         'budget_min' => ['type' => ['number', 'null']],
                                         'budget_max' => ['type' => ['number', 'null']],
                                         'order_number' => ['type' => ['string', 'null']],
                                     ],
-                                    'additionalProperties' => true,
+                                    'required' => ['budget_min', 'budget_max', 'order_number'],
                                 ],
                             ],
-                            'required' => ['intent', 'action', 'confidence'],
-                            'additionalProperties' => true,
+                            'required' => [
+                                'intent',
+                                'action',
+                                'confidence',
+                                'message',
+                                'slots',
+                            ],
                         ],
                     ],
                 ],
             ]);
 
-            if (! $response->successful()) {
-                Log::warning('AiRouter::routeChatMessage HTTP error', [
-                    'status' => $response->status(),
-                    'body'   => $response->body(),
-                ]);
-
-                return $fallback;
-            }
-
-            $content = $response->json('choices.0.message.content');
-            $decoded = json_decode($content, true);
-
-            if (! is_array($decoded)) {
-                Log::warning('AiRouter::routeChatMessage got non-JSON content', [
-                    'content' => $content,
-                ]);
-
-                return $fallback;
-            }
-
-            return array_merge($fallback, $decoded);
-        } catch (\Throwable $e) {
-            Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
-                'exception' => $e,
+        if (! $response->successful()) {
+            Log::warning('AiRouter::routeChatMessage HTTP error', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
             ]);
-
             return $fallback;
         }
+
+        $content = $response->json('choices.0.message.content');
+        $decoded = json_decode($content, true);
+
+        if (! is_array($decoded)) {
+            Log::warning('AiRouter::routeChatMessage got non-JSON content', [
+                'content' => $content,
+            ]);
+            return $fallback;
+        }
+
+        return array_merge($fallback, $decoded);
+    } catch (\Throwable $e) {
+        Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
+            'exception' => $e,
+        ]);
+        return $fallback;
     }
 }
+
+    }
+

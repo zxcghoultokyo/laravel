@@ -5,6 +5,7 @@ namespace App\Services\Chat;
 use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 
 class ChatService
 {
@@ -17,27 +18,35 @@ class ChatService
     /**
      * Головний метод: обробка одного повідомлення користувача.
      *
-     * @param string $message     — текст від юзера
-     * @param string|null $sessionId — ідентифікатор сесії (можна зберігати в кукі/LS)
-     *
      * @return array — нормалізована відповідь для фронту
      */
     public function handleMessage(string $message, ?string $sessionId = null): array
     {
         $normalizedMessage = trim($message);
 
-        // 1. Простий rule-based хендлер на чисті категорії (турнікети, шоломи, плитоноски)
+        // 🔥 ЛОГУЄМО ВХІДНЕ ПОВІДОМЛЕННЯ
+        Log::info('ChatService::handleMessage incoming', [
+            'message'    => $normalizedMessage,
+            'session_id' => $sessionId,
+        ]);
+
+        // 1. Швидкі категорії
         $quickCategoryResponse = $this->handleQuickCategoryShortcuts($normalizedMessage);
         if ($quickCategoryResponse !== null) {
+            Log::info('ChatService::quickCategoryResponse', ['response' => $quickCategoryResponse]);
             return $quickCategoryResponse;
         }
 
-        // 2. Викликаємо AiRouter, щоб отримати JSON із інтенцією / дією / категорією
+        // 2. Викликаємо AiRouter
         $aiData = $this->aiRouter->routeChatMessage($normalizedMessage, [
             'session_id' => $sessionId,
         ]);
 
-        // Перестраховка: навіть якщо AiRouter верне щось криве – не ламаємо чат
+        // 🔥 ЛОГУЄМО ВІДПОВІДЬ ВІД AiRouter
+        Log::info('ChatService::AiRouter result', [
+            'aiData' => $aiData,
+        ]);
+
         if (! is_array($aiData)) {
             return $this->simpleTextResponse(
                 "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
@@ -51,45 +60,47 @@ class ChatService
         $slots      = Arr::get($aiData, 'slots', []);
         $messageOut = Arr::get($aiData, 'message', '');
 
-        // 3. Роутимо по інтенції / дії
+        // 3. Роутимо за інтенцією
         switch ($intent) {
             case 'product_search':
-                return $this->handleProductSearchIntent(
-                    $normalizedMessage,
-                    $action,
-                    $confidence,
-                    $categoryKey,
-                    $slots,
-                    $messageOut
+                $resp = $this->handleProductSearchIntent(
+                    $normalizedMessage, $action, $confidence, $categoryKey, $slots, $messageOut
                 );
+                Log::info('ChatService::product_search response', ['response' => $resp]);
+                return $resp;
 
             case 'order_status':
-                return $this->handleOrderStatusIntent($aiData);
+                $resp = $this->handleOrderStatusIntent($aiData);
+                Log::info('ChatService::order_status response', ['response' => $resp]);
+                return $resp;
 
             case 'shop_info':
-                return $this->handleShopInfoIntent($aiData);
+                $resp = $this->handleShopInfoIntent($aiData);
+                Log::info('ChatService::shop_info response', ['response' => $resp]);
+                return $resp;
 
             case 'smalltalk':
-                return $this->simpleTextResponse($messageOut ?: "Я тут, слухаю 🙂");
+                $resp = $this->simpleTextResponse($messageOut ?: "Я тут, слухаю 🙂");
+                Log::info('ChatService::smalltalk response', ['response' => $resp]);
+                return $resp;
 
             case 'abuse':
-                // Можна м’яко відповідати або ігнорити – залежить від політики
-                return $this->simpleTextResponse(
+                $resp = $this->simpleTextResponse(
                     "Розумію, що може бути нервова ситуація. Якщо хочеш, я допоможу підібрати спорядження або підкажу по замовленню."
                 );
+                Log::info('ChatService::abuse response', ['response' => $resp]);
+                return $resp;
 
-            case 'unknown':
             default:
-                return $this->simpleTextResponse(
-                    $messageOut ?: "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
+                $resp = $this->simpleTextResponse(
+                    $messageOut ?: "Я трохи не зрозумів запит. Спробуй сформулювати ще раз 🙏"
                 );
+                Log::info('ChatService::unknown response', ['response' => $resp]);
+                return $resp;
         }
     }
 
-    /**
-     * Швидкий хендлер для дуже явних запитів типу "турнікети", "шоломи".
-     * Це працює навіть без AI, щоб юзер відразу бачив товар.
-     */
+
     protected function handleQuickCategoryShortcuts(string $message): ?array
     {
         $norm = mb_strtolower($message);
@@ -114,19 +125,16 @@ class ChatService
         }
 
         $categoryKey = $map[$norm];
-
         $products = $this->productService->searchByCategoryKey($categoryKey, 3);
 
         return $this->productsResponse(
-            text: "Ось, що маємо по цій категорії 👇",
-            products: $products,
-            categoryKey: $categoryKey
+            "Ось, що маємо по цій категорії 👇",
+            $products,
+            $categoryKey
         );
     }
 
-    /**
-     * Обробка інтенції product_search.
-     */
+
     protected function handleProductSearchIntent(
         string $originalQuery,
         string $action,
@@ -135,66 +143,48 @@ class ChatService
         array $slots,
         string $messageOut
     ): array {
-        // Якщо AI каже SHOW_PRODUCTS і є категорія + нормальна впевненість
         if ($action === 'SHOW_PRODUCTS' && $categoryKey && $confidence >= 0.6) {
-            $limit = 3;
 
-            // Можемо зчитати бюджет із slots, якщо треба
-            $priceFilters = [
-                'min' => Arr::get($slots, 'budget_min'),
-                'max' => Arr::get($slots, 'budget_max'),
-            ];
-
-            $products = $this->productService->searchByCategoryKey(
-                categoryKey: $categoryKey,
-                limit: $limit,
-                priceFilters: $priceFilters
-            );
+            $products = $this->productService->searchByCategoryKey($categoryKey, 3);
 
             if (empty($products)) {
                 return $this->simpleTextResponse(
-                    "Зараз по цій категорії немає товарів в наявності або я не зміг їх знайти 😔 Спробуй сформулювати інакше або обрати іншу категорію."
+                    "Поки немає товарів у цій категорії 😔"
                 );
             }
 
             return $this->productsResponse(
-                text: $messageOut ?: "Ось, що можу запропонувати 👇",
-                products: $products,
-                categoryKey: $categoryKey
+                $messageOut ?: "Ось, що можу запропонувати 👇",
+                $products,
+                $categoryKey
             );
         }
 
-        // Якщо AI хоче уточнення
         if ($action === 'ASK_CLARIFICATION') {
             return $this->simpleTextResponse(
-                $messageOut ?: "Уточни, будь ласка, який саме товар або під які задачі тобі потрібен."
+                $messageOut ?: "Уточни, будь ласка, який саме товар тобі потрібен."
             );
         }
 
-        // Fallback – просто спробуємо текстовий пошук
         $products = $this->productService->searchByText($originalQuery, null, 'uk');
 
         if (! empty($products)) {
             return $this->productsResponse(
-                text: $messageOut ?: "Ось, що знайшов за твоїм запитом 👇",
-                products: $products,
-                categoryKey: $categoryKey
+                $messageOut ?: "Ось, що я знайшов 👇",
+                $products,
+                $categoryKey
             );
         }
 
         return $this->simpleTextResponse(
-            $messageOut ?: "Я не знайшов підходящих товарів за цим запитом. Можеш трохи конкретизувати, будь ласка?"
+            "Не знайшов нічого за твоїм запитом. Можеш трохи уточнити?"
         );
     }
 
-    /**
-     * Інтенція: статус замовлення.
-     * Тут поки просто шаблон – ти можеш підключити свій CRM/ERP.
-     */
+
     protected function handleOrderStatusIntent(array $aiData): array
     {
-        $slots       = Arr::get($aiData, 'slots', []);
-        $orderNumber = Arr::get($slots, 'order_number');
+        $orderNumber = Arr::get($aiData, 'slots.order_number');
 
         if (! $orderNumber) {
             return $this->simpleTextResponse(
@@ -202,45 +192,40 @@ class ChatService
             );
         }
 
-        // TODO: тут ти підключаєшся до CRM / Horoshop / NovaPoshta API і т.д.
-        // Поки що просто шаблонна відповідь.
         return $this->simpleTextResponse(
-            "Ти вказав номер замовлення {$orderNumber}. Зараз у демо-версії статуси ще не прив’язані до CRM, але в проді тут буде відстеження посилки 😉"
+            "Ти вказав номер замовлення {$orderNumber}. У демо-версії статуси ще не прив’язані до CRM."
         );
     }
 
-    /**
-     * Інтенція: інформація про магазин (доставка/оплата/повернення).
-     */
+
     protected function handleShopInfoIntent(array $aiData): array
     {
         $messageOut = Arr::get($aiData, 'message');
 
         return $this->simpleTextResponse(
-            $messageOut ?: "Ми відправляємо замовлення Новою Поштою по всій Україні, оплата — на карту або післяплата. Якщо треба деталі — напиши, що цікавить: доставка, оплата чи повернення."
+            $messageOut ?: "Доставка — НП, оплата — на карту або післяплата."
         );
     }
 
-    /**
-     * Простий формат відповіді тільки з текстом.
-     */
+
     protected function simpleTextResponse(string $text): array
     {
-        return [
+        $resp = [
             'type' => 'text',
             'text' => $text,
             'data' => null,
         ];
+
+        // 🔥 ЛОГУЄМО ФІНАЛЬНУ ВІДПОВІДЬ
+        Log::info('ChatService::simpleTextResponse', ['response' => $resp]);
+
+        return $resp;
     }
 
-    /**
-     * Формат відповіді з товарами + текст.
-     *
-     * $products тут – масив з ProductService::normalizeProductForApi()
-     */
+
     protected function productsResponse(string $text, array $products, ?string $categoryKey = null): array
     {
-        return [
+        $resp = [
             'type' => 'products',
             'text' => $text,
             'data' => [
@@ -248,5 +233,10 @@ class ChatService
                 'products'     => $products,
             ],
         ];
+
+        // 🔥 ЛОГУЄМО ФІНАЛЬНУ ВІДПОВІДЬ З ТОВАРАМИ
+        Log::info('ChatService::productsResponse', ['response' => $resp]);
+
+        return $resp;
     }
 }

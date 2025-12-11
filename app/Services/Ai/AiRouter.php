@@ -268,4 +268,187 @@ PROMPT;
             return [];
         }
     }
+        /**
+     * Високорівнева маршрутизація повідомлення чату.
+     * Повертає JSON-структуру, з якою працює ChatService.
+     */
+    public function routeChatMessage(string $message, array $context = []): array
+    {
+        $fallback = [
+            'intent'       => 'unknown',
+            'action'       => 'ASK_CLARIFICATION',
+            'confidence'   => 0.0,
+            'category_key' => null,
+            'message'      => "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏",
+            'slots'        => [],
+        ];
+
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::routeChatMessage called without OPENAI_API_KEY');
+            return $fallback;
+        }
+
+        $sessionId = $context['session_id'] ?? null;
+
+        $systemPrompt = <<<PROMPT
+Ти — AI-оркестратор для чату інтернет-магазину тактичного спорядження та такмеду.
+Твоє завдання — на основі повідомлення користувача визначити:
+- інтенцію (intent),
+- дію (action),
+- категорію товарів (category_key), якщо це пошук,
+- допоміжні слоти (slots) — бюджет, номер замовлення тощо,
+- текст-відповідь message, який одразу можна показати користувачу.
+
+Можливі intent:
+- "product_search" — користувач хоче підібрати/подивитись товар.
+- "order_status"  — користувач питає про статус/доставку свого замовлення.
+- "shop_info"     — питання про магазин: доставка, оплата, повернення, гарантія, наявність.
+- "smalltalk"     — привітання, подяка, просто розмова ("привіт", "як справи" тощо).
+- "abuse"         — мат, образи, токсична поведінка.
+- "unknown"       — нічого з вище описаного впевнено не підходить.
+
+Можливі action:
+- "SHOW_PRODUCTS"      — можна відразу показувати список товарів.
+- "ASK_CLARIFICATION"  — треба поставити уточнююче питання.
+- "NONE"               — просто відповісти текстом (наприклад, smalltalk, shop_info).
+
+category_key використовується ТІЛЬКИ для intent = "product_search".
+Дозволені значення category_key:
+- "tourniquets"          — турнікети.
+- "ifak_kits"            — аптечки IFAK / тактичні аптечки.
+- "helmets"              — шоломи / каски.
+- "plate_carriers"       — плитоноски / розгрузки під плити.
+- "plates"               — бронеплити / плити SAPI.
+- "cold_weather_jackets" — зимові/теплі куртки, парки, софтшели.
+- "tactical_medicine"    — загалом тактична медицина (якщо важко вибрати точнішу категорію).
+
+slots — вільна структура, але ми очікуємо принаймні:
+- "budget_min": мінімальний бюджет у гривнях (float) або null.
+- "budget_max": максимальний бюджет у гривнях (float) або null.
+- "order_number": рядок з номером замовлення або null.
+
+Важливі правила:
+- Якщо користувач ПРЯМО називає категорію ("турнікети", "шоломи", "аптечка ifak") —
+  intent = "product_search", action = "SHOW_PRODUCTS", category_key = відповідна категорія, confidence >= 0.7.
+- Якщо запит розмитий ("порадь щось щоб не замерзнути") —
+  intent = "product_search", але action = "ASK_CLARIFICATION" і message має містити уточнююче запитання.
+- Якщо є фрази типу "де моє замовлення", "статус доставки", "коли прийде посилка" —
+  intent = "order_status". Якщо знайшов номер замовлення в тексті — поклади його у slots.order_number.
+- Якщо питання про умови, оплату, доставку, повернення —
+  intent = "shop_info" і у message дай коротку структуровану відповідь.
+- Якщо це просто "привіт", "дякую" тощо — intent = "smalltalk".
+- Якщо багато матюків/образ — intent = "abuse", але message повинен бути м'яким, ввічливим.
+
+Ти ПОВИНЕН повернути ЧИСТИЙ JSON без пояснень, без markdown.
+
+Структура JSON:
+{
+  "intent": "product_search" | "order_status" | "shop_info" | "smalltalk" | "abuse" | "unknown",
+  "action": "SHOW_PRODUCTS" | "ASK_CLARIFICATION" | "NONE",
+  "confidence": 0.0-1.0,
+  "category_key": string|null,
+  "message": "текст відповіді, який можна одразу показати користувачу",
+  "slots": {
+    "budget_min": float|null,
+    "budget_max": float|null,
+    "order_number": string|null
+  }
+}
+PROMPT;
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type'  => 'application/json',
+            ])->post($this->baseUrl . '/chat/completions', [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $message],
+                ],
+                'temperature' => 0.2,
+                'response_format' => [
+                    'type' => 'json_schema',
+                    'json_schema' => [
+                        'name'   => 'chat_routing',
+                        'strict' => true,
+                        'schema' => [
+                            'type'       => 'object',
+                            'properties' => [
+                                'intent' => [
+                                    'type' => 'string',
+                                    'enum' => [
+                                        'product_search',
+                                        'order_status',
+                                        'shop_info',
+                                        'smalltalk',
+                                        'abuse',
+                                        'unknown',
+                                    ],
+                                ],
+                                'action' => [
+                                    'type' => 'string',
+                                    'enum' => [
+                                        'SHOW_PRODUCTS',
+                                        'ASK_CLARIFICATION',
+                                        'NONE',
+                                    ],
+                                ],
+                                'confidence' => [
+                                    'type' => 'number',
+                                    'minimum' => 0,
+                                    'maximum' => 1,
+                                ],
+                                'category_key' => [
+                                    'type' => ['string', 'null'],
+                                ],
+                                'message' => [
+                                    'type' => 'string',
+                                ],
+                                'slots' => [
+                                    'type'       => 'object',
+                                    'properties' => [
+                                        'budget_min' => ['type' => ['number', 'null']],
+                                        'budget_max' => ['type' => ['number', 'null']],
+                                        'order_number' => ['type' => ['string', 'null']],
+                                    ],
+                                    'additionalProperties' => true,
+                                ],
+                            ],
+                            'required' => ['intent', 'action', 'confidence'],
+                            'additionalProperties' => true,
+                        ],
+                    ],
+                ],
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('AiRouter::routeChatMessage HTTP error', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+
+                return $fallback;
+            }
+
+            $content = $response->json('choices.0.message.content');
+            $decoded = json_decode($content, true);
+
+            if (! is_array($decoded)) {
+                Log::warning('AiRouter::routeChatMessage got non-JSON content', [
+                    'content' => $content,
+                ]);
+
+                return $fallback;
+            }
+
+            return array_merge($fallback, $decoded);
+        } catch (\Throwable $e) {
+            Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+
+            return $fallback;
+        }
+    }
 }

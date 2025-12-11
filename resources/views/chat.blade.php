@@ -143,75 +143,60 @@
 
     // 🔧 ОНОВЛЕНИЙ рендер відповіді від бекенду
     function renderBotReply(data) {
-        console.log('Chat renderBotReply payload:', data);
-
-        if (!data) {
-            appendMessage('Порожня відповідь від сервера 🥲', 'bot');
-            return;
-        }
-
-        // універсально дістаємо текст
-        const text = data.message || data.text || '';
-
-        // 1) Якщо це список товарів
-        if (data.type === 'products') {
-            // бекенд зараз кладе товари в data.products
-            const productsSource =
-                Array.isArray(data.products)
-                    ? data.products
-                    : (data.data && Array.isArray(data.data.products)
-                        ? data.data.products
-                        : []);
-
-            if (productsSource.length) {
-                const products = productsSource.slice(0, 3); // показуємо топ-3
-
-                let html = '';
-                if (text) {
-                    html += `<p class="text-sm mb-2">${text}</p>`;
-                } else {
-                    html += `<p class="text-sm mb-2">Ось ${products.length} найрелевантніші моделі:</p>`;
-                }
-
-                html += '<div class="mt-1 space-y-2">';
-
-                products.forEach((p) => {
-                    const title =
-                        p.title
-                        ?? (p.title_json && (p.title_json.ua || p.title_json.ru))
-                        ?? 'Без назви';
-
-                    const price = p.price ? (p.price + ' ₴') : '';
-                    const link  = p.link || '#';
-
-                    html += `
-                        <a href="${link}" target="_blank"
-                           class="flex items-center gap-3 bg-secondary/50 rounded-lg p-2 hover:bg-secondary transition">
-                            <span class="text-2xl">🧥</span>
-                            <div class="flex-1">
-                                <div class="text-xs font-medium">${title}</div>
-                                <div class="text-xs text-accent font-semibold">${price}</div>
-                            </div>
-                        </a>
-                    `;
-                });
-
-                html += '</div>';
-
-                appendBotHtml(html);
-                return;
-            }
-        }
-
-        // 2) FAQ, small-talk, статус замовлення, no_results і т.д. — просто текст
-        if (text) {
-            appendMessage(text, 'bot');
-            return;
-        }
-
-        // 3) Фолбек, якщо формат якийсь інший
-        appendMessage('Я отримав відповідь, але не знаю, як її показати 🤔', 'bot');
+    if (!data) {
+        appendMessage('Порожня відповідь від сервера 🥲', 'bot');
+        return;
     }
+
+    // 1) products
+    const products = data.products
+        || (data.data && Array.isArray(data.data.products) ? data.data.products : null);
+
+    if (data.type === 'products' && Array.isArray(products) && products.length) {
+        const top = products.slice(0, 3);
+
+        let html = '<p class="text-sm">' + (data.text || ('Ось ' + top.length + ' варіанти:')) + '</p>';
+        html += '<div class="mt-3 space-y-2">';
+
+        top.forEach((p) => {
+            const title =
+                p.title
+                ?? (p.title_json && (p.title_json.ua || p.title_json.ru))
+                ?? 'Без назви';
+
+            const price = p.price ? (p.price + ' ₴') : '';
+            const link  = p.link || '#';
+
+            html += `
+                <a href="${link}" target="_blank"
+                   class="flex items-center gap-3 bg-secondary/50 rounded-lg p-2 hover:bg-secondary transition">
+                    <span class="text-2xl">🧥</span>
+                    <div class="flex-1">
+                        <div class="text-xs font-medium">${title}</div>
+                        <div class="text-xs text-accent font-semibold">${price}</div>
+                    </div>
+                </a>
+            `;
+        });
+
+        html += '</div>';
+
+        appendBotHtml(html);
+        return;
+    }
+
+    // 2) текстові відповіді
+    if (data.text) {
+        appendMessage(data.text, 'bot');
+        return;
+    }
+    if (data.message) { // про всяк – якщо AiRouter колись шле message
+        appendMessage(data.message, 'bot');
+        return;
+    }
+
+    appendMessage('Я отримав відповідь, але не знаю, як її показати 🤔', 'bot');
+}
 
     chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -94,3 +94,146 @@
                          stroke-linecap="round" stroke-linejoin="round"
                          class="w-4 h-4">
                         <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
+                        <path d="m21.854 2.147-10.94 10.939"></path>
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const chatMessages = document.getElementById('chatMessages');
+
+    // Додаємо звичайне текстове повідомлення
+    function appendMessage(text, side = 'user') {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex ' + (side === 'user' ? 'justify-end' : 'justify-start');
+
+        const bubble = document.createElement('div');
+        bubble.className =
+            'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ' +
+            (side === 'user'
+                ? 'bg-accent text-primary rounded-br-md'
+                : 'bg-card border rounded-bl-md');
+
+        bubble.innerText = text;
+        wrapper.appendChild(bubble);
+        chatMessages.appendChild(wrapper);
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Додаємо бот-відповідь з HTML (для списку товарів)
+    function appendBotHtml(html) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex justify-start';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 bg-card border rounded-bl-md text-sm';
+
+        bubble.innerHTML = html;
+        wrapper.appendChild(bubble);
+        chatMessages.appendChild(wrapper);
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Рендерим відповідь бекенду з /api/chat
+    function renderBotReply(data) {
+        if (!data) {
+            appendMessage('Порожня відповідь від сервера 🥲', 'bot');
+            return;
+        }
+
+        // 1) Якщо це список товарів
+        if (data.type === 'products' && Array.isArray(data.products) && data.products.length) {
+            const products = data.products.slice(0, 3); // показуємо топ-3
+
+            let html = '<p class="text-sm">Ось ' + products.length + ' найрелевантніші моделі:</p>';
+            html += '<div class="mt-3 space-y-2">';
+
+            products.forEach((p) => {
+                const title =
+                    p.title
+                    ?? (p.title_json && (p.title_json.ua || p.title_json.ru))
+                    ?? 'Без назви';
+
+                const price = p.price ? (p.price + ' ₴') : '';
+                const link  = p.link || '#';
+
+                html += `
+                    <a href="${link}" target="_blank"
+                       class="flex items-center gap-3 bg-secondary/50 rounded-lg p-2 hover:bg-secondary transition">
+                        <span class="text-2xl">🧥</span>
+                        <div class="flex-1">
+                            <div class="text-xs font-medium">${title}</div>
+                            <div class="text-xs text-accent font-semibold">${price}</div>
+                        </div>
+                    </a>
+                `;
+            });
+
+            html += '</div>';
+
+            appendBotHtml(html);
+            return;
+        }
+
+        // 2) FAQ, small-talk, статус замовлення, no_results і т.д. — просто текст
+        if (data.message) {
+            appendMessage(data.message, 'bot');
+            return;
+        }
+
+        // 3) Фолбек, якщо формат якийсь інший
+        appendMessage('Я отримав відповідь, але не знаю, як її показати 🤔', 'bot');
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const text = chatInput.value.trim();
+        if (!text) return;
+
+        // показуємо меседж юзера
+        appendMessage(text, 'user');
+        chatInput.value = '';
+
+        // Можна додати "д друкує..." — але поки пропустимо
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ message: text }),
+            });
+
+            if (!response.ok) {
+                appendMessage('Помилка сервера: ' + response.status, 'bot');
+                return;
+            }
+
+            const data = await response.json();
+            renderBotReply(data);
+        } catch (err) {
+            console.error(err);
+            appendMessage('Помилка з’єднання з сервером 😔', 'bot');
+        }
+    });
+
+    // Початкове привітання від бота
+    window.addEventListener('DOMContentLoaded', () => {
+        appendMessage(
+            'Вітаю! 👋 Я AILure Асистент. Напишіть, що шукаєте (наприклад: "зимова куртка до 5000 грн").',
+            'bot'
+        );
+    });
+</script>
+
+</body>
+</html>

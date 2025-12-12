@@ -31,6 +31,7 @@ class Kernel extends ConsoleKernel
     protected function commands(): void
     {
         $this->load(__DIR__ . '/Commands');
+        $this->command(\App\Console\Commands\SearchEvaluate::class);
         require base_path('routes/console.php');
     }
 }

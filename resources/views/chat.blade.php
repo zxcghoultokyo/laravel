@@ -107,17 +107,24 @@
     const chatInput = document.getElementById('chatInput');
     const chatMessages = document.getElementById('chatMessages');
 
-    // ---- НОВЕ: простий генератор session_id ----
-    function getSessionId() {
-        const key = 'ailure_chat_session_id';
-        let sid = localStorage.getItem(key);
+    const SESSION_KEY = 'ailure_chat_session_id';
 
-        if (!sid) {
-            sid = 'sess_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-            localStorage.setItem(key, sid);
+    function getOrCreateSessionId() {
+        let sid = localStorage.getItem(SESSION_KEY);
+
+        if (!sid || typeof sid !== 'string' || sid.trim() === '') {
+            // UUID v4 (працює в сучасних браузерах)
+            sid = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + Math.random().toString(16).slice(2));
+            localStorage.setItem(SESSION_KEY, sid);
         }
 
         return sid;
+    }
+
+    function setSessionId(sid) {
+        if (sid && typeof sid === 'string' && sid.trim() !== '') {
+            localStorage.setItem(SESSION_KEY, sid.trim());
+        }
     }
 
     // Додаємо звичайне текстове повідомлення
@@ -155,21 +162,27 @@
     }
 
     // Рендерим відповідь бекенду з /api/chat
-    function renderBotReply(data) {
-        if (!data) {
+    function renderBotReply(payload) {
+        if (!payload) {
             appendMessage('Порожня відповідь від сервера 🥲', 'bot');
             return;
         }
 
-        // 1) Якщо це список товарів
-        if (data.type === 'products' &&
-            data.data &&
-            Array.isArray(data.data.products) &&
-            data.data.products.length
-        ) {
-            const products = data.data.products.slice(0, 3); // показуємо топ-3
+        // підхоплюємо session_id з відповіді (якщо бек згенерив)
+        if (payload.session_id) {
+            setSessionId(payload.session_id);
+        }
 
-            let html = '<p class="text-sm">' + (data.text || 'Ось, що можу запропонувати 👇') + '</p>';
+        // ВАЖЛИВО: у тебе формат відповіді = { type, text, data }
+        // а товари лежать в payload.data.products, НЕ payload.products
+        if (payload.type === 'products'
+            && payload.data
+            && Array.isArray(payload.data.products)
+            && payload.data.products.length
+        ) {
+            const products = payload.data.products.slice(0, 3);
+
+            let html = '<p class="text-sm">' + (payload.text || 'Ось варіанти:') + '</p>';
             html += '<div class="mt-3 space-y-2">';
 
             products.forEach((p) => {
@@ -194,18 +207,17 @@
             });
 
             html += '</div>';
-
             appendBotHtml(html);
             return;
         }
 
-        // 2) FAQ, small-talk, статус замовлення та ін. — просто текст
-        if (data.text) {
-            appendMessage(data.text, 'bot');
+        // текстова відповідь
+        if (payload.type === 'text' && payload.text) {
+            appendMessage(payload.text, 'bot');
             return;
         }
 
-        // 3) Фолбек
+        // фолбек
         appendMessage('Я отримав відповідь, але не знаю, як її показати 🤔', 'bot');
     }
 
@@ -218,6 +230,8 @@
         appendMessage(text, 'user');
         chatInput.value = '';
 
+        const sessionId = getOrCreateSessionId();
+
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
@@ -227,7 +241,7 @@
                 },
                 body: JSON.stringify({
                     message: text,
-                    session_id: getSessionId(),   // 🔥 надсилаємо session_id
+                    session_id: sessionId,
                 }),
             });
 
@@ -236,8 +250,8 @@
                 return;
             }
 
-            const data = await response.json();
-            renderBotReply(data);
+            const payload = await response.json();
+            renderBotReply(payload);
         } catch (err) {
             console.error(err);
             appendMessage('Помилка з’єднання з сервером 😔', 'bot');
@@ -246,13 +260,13 @@
 
     // Початкове привітання від бота
     window.addEventListener('DOMContentLoaded', () => {
+        getOrCreateSessionId();
         appendMessage(
             'Вітаю! 👋 Я AILure Асистент. Напишіть, що шукаєте (наприклад: "зимова куртка до 5000 грн").',
             'bot'
         );
     });
 </script>
-
 
 </body>
 </html>

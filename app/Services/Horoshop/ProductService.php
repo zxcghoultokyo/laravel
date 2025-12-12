@@ -83,6 +83,10 @@ class ProductService
             'article' => $article,
         ]);
 
+        $brand = Arr::get($item, 'brand.value.ua')
+            ?? Arr::get($item, 'brand.value.ru')
+            ?? null;
+
         $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
 
         $product->fill([
@@ -101,6 +105,7 @@ class ProductService
                                    ?? Arr::get($item, 'presence.value.ru')
                                    ?? null,
             'quantity'       => $item['quantity'] ?? 0,
+            'brand' => $brand,
             'popularity'     => $item['popularity'] ?? 0,
             'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),

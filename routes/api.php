@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\OrderStatusController;
 use App\Http\Controllers\Api\DebugProductsController;
+use App\Http\Controllers\Api\AdminJobsController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -17,3 +18,7 @@ Route::post('/order-status', [OrderStatusController::class, 'show']);
 
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
+
+Route::get('/admin/jobs/sync-horoshop', [AdminJobsController::class, 'syncHoroshop']);
+
+Route::get('/admin/jobs/rebuild-category-index', [AdminJobsController::class, 'rebuildCategoryIndex']);

@@ -30,6 +30,7 @@ class Product extends Model
         'popularity',
         'we_recommended',
         'color',
+        'brand',
     ];
 
     protected $casts = [
@@ -46,6 +47,7 @@ class Product extends Model
         'popularity'           => 'integer',
         'presence'             => 'string',
         'color'                => 'string',
+        'brand' => 'string',
     ];
     
     public function tags()

@@ -271,8 +271,57 @@ PROMPT;
             return [];
         }
     }
+    /**
+     * Отримати історію сесії (масив з елементів формату ['role' => 'user|assistant', 'content' => '...']).
+     */
+    protected function getSessionHistory(?string $sessionId): array
+    {
+        if (! $sessionId) {
+            return [];
+        }
+
+        $key = "chat_history:{$sessionId}";
+        $history = Cache::get($key, []);
+
+        if (! is_array($history)) {
+            return [];
+        }
+
+        return $history;
+    }
 
     /**
+     * Додати в історію сесії поточний обмін (user → assistant).
+     */
+    protected function pushSessionExchange(?string $sessionId, string $userMessage, string $assistantMessage): void
+    {
+        if (! $sessionId) {
+            return;
+        }
+
+        $key = "chat_history:{$sessionId}";
+
+        $history = $this->getSessionHistory($sessionId);
+
+        $history[] = [
+            'role'    => 'user',
+            'content' => $userMessage,
+        ];
+        $history[] = [
+            'role'    => 'assistant',
+            'content' => $assistantMessage,
+        ];
+
+        // залишаємо останні 20 повідомлень (10 реплік: user+assistant)
+        if (count($history) > 20) {
+            $history = array_slice($history, -20);
+        }
+
+        Cache::put($key, $history, now()->addHours(6));
+    }
+
+    
+       /**
      * Високорівнева маршрутизація повідомлення чату.
      * Повертає JSON-структуру, з якою працює ChatService.
      */
@@ -295,6 +344,9 @@ PROMPT;
             Log::warning('AiRouter::routeChatMessage called without OPENAI_API_KEY');
             return $fallback;
         }
+
+        $sessionId = $context['session_id'] ?? null;
+        $history   = $this->getSessionHistory($sessionId);
 
         $systemPrompt = <<<PROMPT
 Ти — AI-оркестратор для чату інтернет-магазину тактичного спорядження та такмеду.
@@ -326,7 +378,7 @@ category_key використовується ТІЛЬКИ для intent = "prod
 - "helmets"              — шоломи / каски.
 - "plate_carriers"       — плитоноски / розгрузки під плити.
 - "plates"               — бронеплити / плити SAPI.
-- "cold_weather_jackets" — зимові/теплі куртки, парки, фліси, lvl7.
+- "cold_weather_jackets" — зимові/теплі куртки, парки, софтшели.
 - "tactical_medicine"    — загалом тактична медицина (якщо важко вибрати точнішу категорію).
 
 slots — вільна структура, але ми очікуємо принаймні:
@@ -334,49 +386,17 @@ slots — вільна структура, але ми очікуємо прин
 - "budget_max": максимальний бюджет у гривнях (float) або null.
 - "order_number": рядок з номером замовлення або null.
 
-ДУЖЕ ВАЖЛИВО — СТИЛЬ ВІДПОВІДІ:
-
-1) Якщо користувач ПРЯМО НАЗИВАЄ товар/категорію (наприклад: "турнікет", "турнікет кат", "аптечку", "аптечка", "ifak", "плитоноска", "бронеплита", "плита бронебійна", "зимова куртка", "куртка lvl7", "фліска", "фліс", "термуха"):
-   - intent = "product_search"
-   - action = "SHOW_PRODUCTS"
-   - category_key повинен бути виставлений відповідно (tourniquets, ifak_kits, plates, plate_carriers, cold_weather_jackets, tactical_medicine і т.д.).
-   - НЕ став action = "ASK_CLARIFICATION" у таких випадках.
-   - message має бути КОРОТКИМ і дружнім, наприклад:
-     - "Ось кілька варіантів аптечок IFAK 👇 Якщо потрібно під фронт/авто/дім — напишіть, я звужу підбір."
-     - "Показую варіанти бронеплит. Якщо є вимоги по класу захисту чи вазі — напишіть, підлаштую підбір."
-   - НЕ ПИШИ довгих анкет типу:
-     - "Підкажіть, будь ласка: 1) ... 2) ... 3) ..."
-     - НЕ використовуй нумеровані списки з 2–3 запитань у message.
-   - Допускається максимум ОДНЕ коротке уточнююче запитання в кінці одного речення.
-
-2) Для intent = "product_search" ЗАГАЛОМ:
-   - Якщо є хоч приблизне розуміння, що показувати — краще "SHOW_PRODUCTS" + короткий текст + максимум 1 уточнення.
-   - Використовуй "ASK_CLARIFICATION" ТІЛЬКИ якщо ти НЕ МОЖЕШ навіть приблизно визначити категорію товару і не можеш нічого показати.
-   - Уникай довгих "брифів" з 3–4 пунктами.
-
-3) Приклади поведінки:
-   - "аптечку", "які є варіанти аптечок":
-     intent = "product_search", action = "SHOW_PRODUCTS", category_key = "ifak_kits",
-     message: короткий опис + "Якщо це для фронту/авто/дому — напишіть, звужу підбір."
-   - "куртка lvl7", "тепла зимова куртка", "куртка чорна зимова":
-     intent = "product_search", action = "SHOW_PRODUCTS", category_key = "cold_weather_jackets".
-   - "плита бронебійна", "бронеплита", "броня на груди":
-     intent = "product_search", action = "SHOW_PRODUCTS", category_key = "plates".
-   - "турнікет", "турнікети", "турнікет кат", "джгут":
-     intent = "product_search", action = "SHOW_PRODUCTS", category_key = "tourniquets".
-
-4) Якщо є фрази типу "де моє замовлення", "статус доставки", "коли прийде посилка":
-   - intent = "order_status".
-   - Якщо знайшов номер замовлення в тексті — поклади його у slots.order_number.
-   - message: коротко поясни, що потрібен номер замовлення або ПІБ+телефон (але без 3–4 нумерованих пунктів).
-
-5) Якщо питання про умови, оплату, доставку, повернення:
-   - intent = "shop_info", action = "NONE".
-   - message: коротка структурована відповідь (2–4 короткі речення).
-
-6) Якщо це просто "привіт", "дякую" тощо — intent = "smalltalk".
-
-7) Якщо багато матюків/образ — intent = "abuse", але message повинен бути м'яким, ввічливим.
+Важливі правила:
+- Якщо користувач ПРЯМО називає категорію ("турнікети", "шоломи", "аптечка ifak") —
+  intent = "product_search", action = "SHOW_PRODUCTS", category_key = відповідна категорія, confidence >= 0.7.
+- Якщо запит розмитий ("порадь щось щоб не замерзнути") —
+  intent = "product_search", але action = "ASK_CLARIFICATION" і message має містити уточнююче запитання.
+- Якщо є фрази типу "де моє замовлення", "статус доставки", "коли прийде посилка" —
+  intent = "order_status". Якщо знайшов номер замовлення в тексті — поклади його у slots.order_number.
+- Якщо питання про умови, оплату, доставку, повернення —
+  intent = "shop_info" і у message дай коротку структуровану відповідь.
+- Якщо це просто "привіт", "дякую" тощо — intent = "smalltalk".
+- Якщо багато матюків/образ — intent = "abuse", але message повинен бути м'яким, ввічливим.
 
 Ти ПОВИНЕН повернути ЧИСТИЙ JSON без пояснень, без markdown.
 
@@ -396,13 +416,31 @@ slots — вільна структура, але ми очікуємо прин
 PROMPT;
 
         try {
+            // будуємо messages з історією
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt],
+            ];
+
+            foreach ($history as $item) {
+                if (! isset($item['role'], $item['content'])) {
+                    continue;
+                }
+                $messages[] = [
+                    'role'    => $item['role'],
+                    'content' => $item['content'],
+                ];
+            }
+
+            // поточне повідомлення юзера
+            $messages[] = [
+                'role'    => 'user',
+                'content' => $message,
+            ];
+
             $response = Http::withToken($this->apiKey)
                 ->post($this->baseUrl . '/chat/completions', [
                     'model'    => $this->model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user',   'content' => $message],
-                    ],
+                    'messages' => $messages,
                     'temperature'     => 0.2,
                     'response_format' => [
                         'type'        => 'json_schema',
@@ -491,8 +529,16 @@ PROMPT;
                 'decoded'     => $decoded,
             ]);
 
-            return array_merge($fallback, $decoded);
+            $merged = array_merge($fallback, $decoded);
 
+            // зберігаємо в історію сесії (для контексту наступних реплік)
+            $this->pushSessionExchange(
+                $sessionId,
+                $message,
+                $merged['message'] ?? $fallback['message']
+            );
+
+            return $merged;
         } catch (\Throwable $e) {
             Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
                 'exception' => $e,

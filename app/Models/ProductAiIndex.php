@@ -18,10 +18,17 @@ class ProductAiIndex extends Model
         'keywords',
         'usage',
         'embedding',
+        'raw_ai_json',
     ];
 
     protected $casts = [
-        'embedding' => 'array',
+        'materials'   => 'array',
+        'standards'   => 'array',
+        'slang'       => 'array',
+        'keywords'    => 'array',
+        'usage'       => 'array',
+        'embedding'   => 'array',
+        'raw_ai_json' => 'array',
     ];
 
     public function product()

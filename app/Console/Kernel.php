@@ -14,6 +14,7 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\SyncHoroshopProducts::class,
         \App\Console\Commands\BuildProductAiIndex::class,
         \App\Console\Commands\SearchEvaluate::class,
+        \App\Console\Commands\SearchSeedEval::class,
     ];
 
     protected function schedule(Schedule $schedule): void

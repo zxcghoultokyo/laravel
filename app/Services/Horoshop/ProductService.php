@@ -295,69 +295,63 @@ class ProductService
     /**
      * Головний метод пошуку товарів по текстовому запиту.
      */
-    public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
-    {
-        Log::info('ProductService::searchByText', [
-            'raw_query'   => $rawQuery,
-            'category_id' => $categoryId,
-            'language'    => $language,
-        ]);
-
-        $normalized = mb_strtolower(trim($rawQuery));
-        if ($normalized === '') {
-            return [];
-        }
-
-        $expandedQuery = $this->expandQueryWithDomainSynonyms($normalized, $language);
-
-        [$priceFilters, $queryWithoutPrice] = $this->extractPriceFilters($expandedQuery);
-
-        if ($queryWithoutPrice !== '') {
-            $expandedQuery = $queryWithoutPrice;
-        }
-
-        $candidates = $this->findCandidates($expandedQuery, $categoryId, $priceFilters);
-
-        if ($candidates->isEmpty()) {
-            Log::info('ProductService::searchByText no candidates found', [
-                'expanded_query' => $expandedQuery,
-                'price_filters'  => $priceFilters,
+   public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
+        {
+            Log::info('ProductService::searchByText', [
+                'raw_query'   => $rawQuery,
+                'category_id' => $categoryId,
+                'language'    => $language,
             ]);
-            return [];
+        
+            // 1) базова нормалізація
+            $normalized = mb_strtolower(trim($rawQuery));
+            if ($normalized === '') {
+                return [];
+            }
+        
+            // 2) Парсимо запит (розширення синонімами, ціни, сигнали з БД)
+            /** @var \App\Services\Search\SearchQueryParser $parser */
+            $parser = app(\App\Services\Search\SearchQueryParser::class);
+        
+            // Якщо в проекті є домен/магазин — можна передати сюди (поки null)
+            $parsed = $parser->parse($rawQuery, $language, null);
+        
+            if (($parsed['normalized'] ?? '') === '') {
+                return [];
+            }
+        
+            // 3) AI intent (опційно): витягуємо product_types / must_have_keywords,
+            //    але пошук робить БД-движок, не "магія" в AI.
+            //    detectProductTypes() у тебе вже існує — лишаємо.
+            $parsed['ai_intent'] = $this->detectProductTypes((string) ($parsed['normalized'] ?? $normalized));
+        
+            // 4) Пошук + ранжування
+            /** @var \App\Services\Search\ProductSearchEngine $engine */
+            $engine = app(\App\Services\Search\ProductSearchEngine::class);
+        
+            $scored = $engine->search($parsed, $categoryId, limit: 10);
+        
+            if ($scored->isEmpty()) {
+                Log::info('ProductService::searchByText no results', [
+                    'normalized' => $parsed['normalized'] ?? $normalized,
+                    'expanded'   => $parsed['expanded'] ?? null,
+                    'signals'    => $parsed['signals'] ?? null,
+                ]);
+                return [];
+            }
+        
+            // 5) Дедуп + нормалізація під API
+            $deduped = $this->deduplicateProducts($scored);
+        
+            return $deduped
+                ->map(function (array $row) {
+                    /** @var \App\Models\Product $product */
+                    $product = $row['product'];
+        
+                    return $this->normalizeProductForApi($product);
+                })
+                ->all();
         }
-
-        $scored = $this->scoreProducts($expandedQuery, $candidates);
-
-        if ($scored->isEmpty()) {
-            Log::info('ProductService::searchByText all candidates filtered out by score');
-            return [];
-        }
-
-        $maxScore = $scored->max('score') ?? 0.0;
-
-        $filtered = $candidates = $scored->filter(function (array $row) use ($maxScore) {
-            return $row['score'] >= $maxScore * 0.3;
-        });
-
-        if ($filtered->isEmpty()) {
-            Log::info('ProductService::searchByText filtered collection empty after relative threshold');
-            return [];
-        }
-
-        $sorted = $filtered->sortByDesc('score')->values();
-
-        $deduped = $this->deduplicateProducts($sorted);
-
-        return $deduped
-            ->map(function (array $row) {
-                /** @var Product $product */
-                $product = $row['product'];
-
-                return $this->normalizeProductForApi($product);
-            })
-            ->all();
-    }
-
     /**
      * Вирізаємо цінові обмеження з тексту.
      */

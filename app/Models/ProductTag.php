@@ -10,11 +10,17 @@ class ProductTag extends Model
     protected $table = 'product_tags';
 
     protected $fillable = [
-        'name',
-        'slug',
-        'type',
-        'is_auto_generated',
-        'domain',
+    'name',
+    'slug',
+    'type',
+    'is_auto_generated',
+    'domain',
+    'extra_keywords', // ✅ додай
+    ];
+    
+    protected $casts = [
+        'is_auto_generated' => 'boolean',
+        'extra_keywords'    => 'array', // ✅ додай
     ];
 
     public function products()

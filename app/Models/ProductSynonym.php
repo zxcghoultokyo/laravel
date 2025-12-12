@@ -9,11 +9,17 @@ class ProductSynonym extends Model
     protected $table = 'product_synonyms';
 
     protected $fillable = [
-        'product_type',
-        'synonym',
+        'phrase',        // базова фраза (те, що ввів юзер)
+        'synonyms',      // JSON масив синонімів
         'language',
         'weight',
         'domain',
         'is_active',
+    ];
+
+    protected $casts = [
+        'synonyms'  => 'array',
+        'is_active' => 'boolean',
+        'weight'    => 'float',
     ];
 }

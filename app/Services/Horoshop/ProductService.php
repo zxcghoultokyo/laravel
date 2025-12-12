@@ -217,62 +217,73 @@ class ProductService
         return mb_strtolower($searchIndex);
     }
 
-    /**
-     * Розширення запиту з урахуванням доменних синонімів, колірних синонімів та тегів.
-     */
+   /**
+ * Розширення запиту з урахуванням доменних синонімів та колірних синонімів.
+ * (product_tags поки не розширюємо extra_keywords, бо їх немає в таблиці)
+ */
     protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk'): string
     {
         $baseTokens = preg_split('/\s+/u', $query) ?: [];
         $baseTokens = array_values(array_filter($baseTokens, fn($t) => $t !== ''));
-
+    
         $expandedTokens = $baseTokens;
-
+    
+        // 1) product_synonyms: synonym -> product_type (канонічний “токен”)
         $synonyms = ProductSynonym::query()
-            ->whereIn('phrase', $baseTokens)
+            ->whereIn('synonym', $baseTokens)
+            ->where(function ($q) use ($language) {
+                $q->whereNull('language')->orWhere('language', $language);
+            })
+            ->where('is_active', true)
             ->get();
-
+    
         foreach ($synonyms as $syn) {
-            $extra = $syn->synonyms ?? [];
-            foreach ($extra as $word) {
-                if (! in_array($word, $expandedTokens, true)) {
-                    $expandedTokens[] = $word;
-                }
+            // додаємо канонічний product_type як “розширення”
+            $canonical = $syn->product_type ?? null;
+            if (is_string($canonical) && $canonical !== '' && !in_array($canonical, $expandedTokens, true)) {
+                $expandedTokens[] = $canonical;
             }
         }
-
+    
+        // 2) color_synonyms: synonym -> color_group (канонічний колір)
         $colors = ColorSynonym::query()
-            ->whereIn('phrase', $baseTokens)
+            ->whereIn('synonym', $baseTokens)
+            ->where(function ($q) use ($language) {
+                $q->whereNull('language')->orWhere('language', $language);
+            })
+            ->where('is_active', true)
             ->get();
-
+    
         foreach ($colors as $colorSyn) {
-            $canonicalColor = $colorSyn->color_normalized;
-            if ($canonicalColor && ! in_array($canonicalColor, $expandedTokens, true)) {
+            $canonicalColor = $colorSyn->color_group ?? null;
+            if (is_string($canonicalColor) && $canonicalColor !== '' && !in_array($canonicalColor, $expandedTokens, true)) {
                 $expandedTokens[] = $canonicalColor;
             }
         }
-
+    
+        // 3) product_tags: просто підсилюємо збіг якщо токен є тегом (name/slug)
+        // (без extra_keywords, бо їх немає в таблиці)
         $tags = ProductTag::query()
-            ->whereIn('name', $baseTokens)
+            ->whereIn('slug', $baseTokens)
+            ->orWhereIn('name', $baseTokens)
             ->get();
-        
+    
         foreach ($tags as $tag) {
-            $extraTokens = $tag->extra_keywords ?? [];
-        
-            foreach ($extraTokens as $word) {
-                if (! in_array($word, $expandedTokens, true)) {
-                    $expandedTokens[] = $word;
-                }
+            // додамо slug як стабільний токен
+            $slug = $tag->slug ?? null;
+            if (is_string($slug) && $slug !== '' && !in_array($slug, $expandedTokens, true)) {
+                $expandedTokens[] = $slug;
             }
         }
-
+    
         $expanded = implode(' ', $expandedTokens);
-
+    
         Log::info('ProductService::expandQueryWithDomainSynonyms', [
             'input'    => $query,
             'tokens'   => $baseTokens,
             'expanded' => $expanded,
         ]);
-
+    
         return $expanded;
     }
 

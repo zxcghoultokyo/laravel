@@ -9,11 +9,14 @@ class ColorSynonym extends Model
     protected $table = 'color_synonyms';
 
     protected $fillable = [
-        'color_group',
-        'synonym',
+        'phrase',            // "олива", "olive", "blk"...
+        'color_normalized',  // "оливковий", "чорний", "койот", ...
         'language',
         'domain',
-        'is_primary',
         'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

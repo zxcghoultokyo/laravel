@@ -16,43 +16,47 @@ class ChatController extends Controller
 
     public function handle(Request $request)
     {
-        $message   = (string) $request->input('message', '');
-        $sessionId = $request->input('session_id');
+        $payload = $request->all();
 
-        // Якщо фронт не передав session_id — генеруємо тут,
-        // щоб сесія існувала вже з першого запиту.
-        if (!is_string($sessionId) || trim($sessionId) === '') {
-            $sessionId = (string) Str::uuid();
-        } else {
-            $sessionId = trim($sessionId);
-        }
+        Log::info('ChatController::handle incoming', ['payload' => $payload]);
 
-        Log::info('ChatController::handle incoming', [
-            'payload' => [
-                'message'    => $message,
-                'session_id' => $sessionId,
-            ],
-        ]);
+        try {
+            $message   = (string) ($payload['message'] ?? '');
+            $sessionId = $payload['session_id'] ?? null;
 
-        if (trim($message) === '') {
-            return response()->json([
-                'type'       => 'text',
-                'text'       => 'Напишіть, будь ласка, запит 🙂',
-                'data'       => null,
+            // Якщо фронт не передав session_id — генеримо, щоб контекст не губився
+            if (! is_string($sessionId) || trim($sessionId) === '') {
+                $sessionId = (string) Str::uuid();
+            }
+
+            if (trim($message) === '') {
+                return response()->json([
+                    'type'       => 'text',
+                    'text'       => 'Напишіть, будь ласка, запит 🙂',
+                    'data'       => null,
+                    'session_id' => $sessionId,
+                ]);
+            }
+
+            $response = $this->chatService->handleMessage($message, $sessionId, [
                 'session_id' => $sessionId,
             ]);
+
+            // Повертаємо session_id завжди
+            $response['session_id'] = $sessionId;
+
+            Log::info('ChatController::handle response', ['response' => $response]);
+
+            return response()->json($response);
+        } catch (\Throwable $e) {
+            Log::error('ChatController::handle exception: ' . $e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'type'       => 'text',
+                'text'       => 'Сталася помилка. Спробуйте ще раз 🙏',
+                'data'       => null,
+                'session_id' => $payload['session_id'] ?? null,
+            ], 500);
         }
-
-        $response = $this->chatService->handleMessage($message, $sessionId);
-
-        // Завжди додаємо session_id у відповідь,
-        // щоб фронт міг зберегти/підтвердити його.
-        $response['session_id'] = $sessionId;
-
-        Log::info('ChatController::handle response', [
-            'response' => $response,
-        ]);
-
-        return response()->json($response);
     }
 }

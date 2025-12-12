@@ -404,12 +404,9 @@ class ProductService
                       ->orWhere('category_path', 'LIKE', $like)
                       ->orWhere('color', 'LIKE', $like)
                       ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
-                          $ai->where('product_type', 'LIKE', $like)
-                             ->orWhere('ai_category', 'LIKE', $like)
-                             ->orWhere('materials', 'LIKE', $like)
-                             ->orWhere('standards', 'LIKE', $like)
-                             ->orWhere('description', 'LIKE', $like);
-                      });
+                        $ai->where('product_type', 'LIKE', $like)
+                           ->orWhere('ai_category', 'LIKE', $like);
+                    });
                 }
             });
         }
@@ -473,11 +470,12 @@ class ProductService
             $aiChunk = '';
             if ($product->relationLoaded('aiIndex') && $product->aiIndex) {
                 $aiChunkParts = [
-                    $product->aiIndex->product_type ?? '',
-                    $product->aiIndex->ai_category ?? '',
-                    $product->aiIndex->materials ?? '',
-                    $product->aiIndex->standards ?? '',
-                    $product->aiIndex->description ?? '',
+                    (string) ($product->aiIndex->product_type ?? ''),
+                    (string) ($product->aiIndex->ai_category ?? ''),
+                    is_array($product->aiIndex->materials) ? implode(' ', $product->aiIndex->materials) : (string) ($product->aiIndex->materials ?? ''),
+                    is_array($product->aiIndex->standards) ? implode(' ', $product->aiIndex->standards) : (string) ($product->aiIndex->standards ?? ''),
+                    is_array($product->aiIndex->keywords) ? implode(' ', $product->aiIndex->keywords) : (string) ($product->aiIndex->keywords ?? ''),
+                    is_array($product->aiIndex->slang) ? implode(' ', $product->aiIndex->slang) : (string) ($product->aiIndex->slang ?? ''),
                 ];
                 $aiChunk = mb_strtolower(implode(' ', array_filter($aiChunkParts)));
             }

@@ -252,11 +252,12 @@ class ProductService
         }
 
         $tags = ProductTag::query()
-            ->whereIn('tag', $baseTokens)
+            ->whereIn('name', $baseTokens)
             ->get();
-
+        
         foreach ($tags as $tag) {
             $extraTokens = $tag->extra_keywords ?? [];
+        
             foreach ($extraTokens as $word) {
                 if (! in_array($word, $expandedTokens, true)) {
                     $expandedTokens[] = $word;

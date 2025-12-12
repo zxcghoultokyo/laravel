@@ -509,4 +509,31 @@ class ChatService
 
         return false;
     }
+    
+    protected function shouldForceShowProducts(string $query, array $sessionContext = []): bool
+    {
+        $norm = mb_strtolower(trim($query));
+        if ($norm === '') {
+            return false;
+        }
+    
+        $forcePhrases = [
+            'будь що', 'що завгодно', 'похер', 'пофіг', 'пофиг',
+            'не задавай питання', 'не питай', 'просто покажи', 'покажи варіанти',
+            'any', 'anything', 'whatever',
+        ];
+    
+        foreach ($forcePhrases as $p) {
+            if (mb_stripos($norm, $p) !== false) {
+                return true;
+            }
+        }
+    
+        // якщо юзер пише дуже коротко (1-2 слова) і в сесії вже був product_search — краще показати, ніж допитувати
+        if (mb_strlen($norm) <= 10 && ($sessionContext['last_intent'] ?? null) === 'product_search') {
+            return true;
+        }
+    
+        return false;
+    }
 }

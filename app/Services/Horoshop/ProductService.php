@@ -975,4 +975,16 @@ class ProductService
 
         return null;
     }
+    public function getPopularProducts(int $limit = 3): array
+    {
+        return Product::query()
+            ->where('display_in_showcase', true)
+            ->where('in_stock', true)
+            ->orderByDesc('popularity')
+            ->limit($limit)
+            ->get()
+            ->map(fn (Product $p) => $this->normalizeProductForApi($p))
+            ->all();
+    }
+
 }

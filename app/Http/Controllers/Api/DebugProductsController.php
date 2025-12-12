@@ -19,7 +19,7 @@ class DebugProductsController extends Controller
 
         if ($query !== '') {
             $data['query']   = $query;
-            $data['results'] = $productService->searchByText($query, 10);
+            $data['results'] = $productService->searchByText($query, null, 'uk');
         } else {
             $data['sample'] = Product::limit(5)->get();
         }

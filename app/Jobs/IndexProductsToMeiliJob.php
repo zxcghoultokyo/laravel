@@ -17,12 +17,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
     public int $timeout = 120;
 
-    public function __construct(
-        public int $fromId,
-        public int $toId,
-        public int $chunk = 500,
-    ) {
-    }
+    public function __construct(public int $chunk = 500) {}
 
     public function handle(MeiliClient $meili): void
     {
@@ -30,7 +25,6 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
         Product::query()
             ->with('aiIndex')
-            ->whereBetween('id', [$this->fromId, $this->toId])
             ->orderBy('id')
             ->chunkById($this->chunk, function (EloquentCollection $products) use ($index) {
 
@@ -40,33 +34,41 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     return [
                         'id' => (int) $p->id,
 
+                        // identity / variants (for dedupe)
+                        'article' => (string) ($p->article ?? ''),
+                        'parent_article' => (string) ($p->parent_article ?? ''),
+
                         // searchable
                         'title' => (string) ($p->title ?? ''),
-                        'category_path' => (string) ($p->category_path ?? ''),
                         'search_index' => (string) ($p->search_index ?? ''),
+                        'category_path' => (string) ($p->category_path ?? ''),
+                        'brand' => (string) ($p->brand ?? ''),
+                        'color' => (string) ($p->color ?? ''),
 
-                        'ai_category' => (string) ($ai->ai_category ?? ''),
-                        'ai_product_type' => (string) ($ai->product_type ?? ''),
-                        'ai_materials' => (string) ($ai->materials ?? ''),
-                        'ai_standards' => (string) ($ai->standards ?? ''),
-                        'ai_keywords' => (string) ($ai->keywords ?? ''),
-                        'ai_slang' => (string) ($ai->slang ?? ''),
-                        'ai_spec' => (string) ($ai->spec ?? ''),
+                        // type facet (NO niche hardcode: type comes from your AI indexer + synonyms DB)
+                        'product_type' => (string) ($ai->product_type ?? ''),
+                        'ai_category'  => (string) ($ai->ai_category ?? ''),
 
-                        // filters / facets
-                        'price' => (float) ($p->price ?? 0),
-                        'price_old' => (float) ($p->price_old ?? 0),
-                        'in_stock' => (int) ($p->in_stock ?? 0),
+                        // filterable flags
+                        'display_in_showcase' => (bool) ($p->display_in_showcase ?? false),
+                        'in_stock' => (bool) ($p->in_stock ?? false),
                         'presence_raw' => (string) ($p->presence ?? ''),
-                        'camo_group' => $this->detectCamoGroup(
+
+                        'camo_group' => $this->normalizeCamo(
+                            (string) ($p->color ?? ''),
+                            (string) ($p->search_index ?? ''),
                             (string) ($p->title ?? ''),
-                            (string) ($p->category_path ?? ''),
-                            (string) ($ai->keywords ?? '')
+                            (string) ($p->category_path ?? '')
                         ),
 
-                        // ranking
-                        'we_recommended' => (int) ($p->we_recommended ?? 0),
-                        'popularity' => (float) ($p->popularity ?? 0),
+                        // numeric/filter
+                        'price' => (float) ($p->price ?? 0),
+                        'price_old' => (float) ($p->price_old ?? 0),
+                        'quantity' => (int) ($p->quantity ?? 0),
+
+                        // ranking/sort
+                        'we_recommended' => (bool) ($p->we_recommended ?? false),
+                        'popularity' => (int) ($p->popularity ?? 0),
                         'orders_count' => (int) ($p->orders_count ?? 0),
                         'views_count' => (int) ($p->views_count ?? 0),
                         'added_to_cart_count' => (int) ($p->added_to_cart_count ?? 0),
@@ -74,17 +76,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     ];
                 })->values()->all();
 
-                if (!empty($docs)) {
-                    $index->addDocuments($docs);
-                }
+                // primaryKey already `id`, so this is enough
+                $index->addDocuments($docs);
             });
     }
 
-    private function detectCamoGroup(string ...$parts): ?string
+    private function normalizeCamo(string $color, string $searchIndex, string $title, string $categoryPath): ?string
     {
-        $t = mb_strtolower(implode(' ', $parts));
+        $t = mb_strtolower($color.' '.$searchIndex.' '.$title.' '.$categoryPath);
 
         if (
+            str_contains($t, 'mm14') ||
             str_contains($t, 'мм-14') ||
             str_contains($t, 'мм14') ||
             str_contains($t, 'піксель') ||

@@ -12,7 +12,7 @@ class MeiliReindexProducts extends Command
 
     public function handle(): int
     {
-        IndexProductsToMeiliJob::dispatch((int)$this->option('chunk'));
+        IndexProductsToMeiliJob::dispatch((int)$this->option('chunk'))->onQueue('meili');
         $this->info('IndexProductsToMeiliJob dispatched.');
         return self::SUCCESS;
     }

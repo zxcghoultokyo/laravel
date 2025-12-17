@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use App\Services\Search\ProductSearchEngine;
 use Illuminate\Http\Request;
@@ -10,8 +11,12 @@ use Illuminate\Support\Facades\Log;
 
 class ProductSearchController extends Controller
 {
-    public function index(Request $request, ProductSearchEngine $engine, ProductService $productService)
-    {
+    public function index(
+        Request $request,
+        ProductSearchEngine $engine,
+        ProductService $productService,
+        AiRouter $aiRouter
+    ) {
         $q = trim((string) $request->query('q', ''));
         $limit = (int) $request->query('limit', 10);
         $limit = max(1, min(50, $limit));
@@ -37,11 +42,19 @@ class ProductSearchController extends Controller
         /** @var \App\Services\Search\SearchQueryParser $parser */
         $parser = app(\App\Services\Search\SearchQueryParser::class);
 
-        // parse -> normalized/expanded/signals
         $parsed = $parser->parse($q, $language, null);
+        if (($parsed['normalized'] ?? '') === '') {
+            return response()->json([
+                'type' => 'products',
+                'query' => $q,
+                'limit' => $limit,
+                'estimated_total' => 0,
+                'products' => [],
+            ]);
+        }
 
-        // AI intent (опціонально, але дає шанс відсікати “плити” vs “бронежилет” через ai_product_type)
-        $parsed['ai_intent'] = $productService->detectProductTypes((string)($parsed['normalized'] ?? $q));
+        // ✅ AI intent: напряму через AiRouter (без protected-методів ProductService)
+        $parsed['ai_intent'] = $aiRouter->parseProductSearchIntent((string) ($parsed['normalized'] ?? $q));
 
         Log::info('API /search/products', [
             'q' => $q,

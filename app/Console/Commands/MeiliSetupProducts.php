@@ -14,27 +14,30 @@ class MeiliSetupProducts extends Command
     {
         $index = $meili->productsIndex();
 
-        // 1) searchable fields (text relevance)
+        // Searchable (text relevance)
         $index->updateSearchableAttributes([
             'title',
             'search_index',
             'category_path',
-            'ai_product_type',
-            'ai_keywords',
-            'ai_slang',
+            'brand',
+            'color',
+            'product_type',
+            'ai_category',
         ]);
 
-        // 2) filterable fields
+        // Filterable (facets)
         $index->updateFilterableAttributes([
-            'in_stock',
             'display_in_showcase',
+            'in_stock',
+            'presence_raw',
             'price',
-            'category_id',
             'camo_group',
-            'ai_product_type',
+            'product_type',
+            'brand',
+            'color',
         ]);
 
-        // 3) sortable fields (IMPORTANT: only these can be used in `sort` param)
+        // Sortable (business sorting via `sort` in search query)
         $index->updateSortableAttributes([
             'we_recommended',
             'popularity',
@@ -45,12 +48,7 @@ class MeiliSetupProducts extends Command
             'price',
         ]);
 
-        /**
-         * 4) ranking rules:
-         * In this Meili version, you cannot use desc(field) here.
-         * Business ranking must be applied via the `sort` search option,
-         * and for that you must keep `sort` rule enabled.
-         */
+        // Ranking rules (your Meili version allows only these + `sort`)
         $index->updateRankingRules([
             'words',
             'typo',
@@ -60,7 +58,7 @@ class MeiliSetupProducts extends Command
             'sort',
         ]);
 
-        $this->info('Meili products index configured (searchable/filterable/sortable + ranking rules with sort).');
+        $this->info('Meili products index configured.');
         return self::SUCCESS;
     }
 }

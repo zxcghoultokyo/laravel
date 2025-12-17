@@ -27,32 +27,31 @@ class MeiliSetupProducts extends Command
         $index->updateFilterableAttributes([
             'display_in_showcase',
             'in_stock',
-            'presence_raw',
+            'category_id',
             'price',
-            'brand',
             'product_type',
             'ai_category',
         ]);
 
         $index->updateSortableAttributes([
             'we_recommended',
-            'popularity',
             'orders_count',
+            'popularity',
             'views_count',
             'added_to_cart_count',
             'updated_at_ts',
             'price',
-            'price_old',
             'quantity',
         ]);
 
+        // ✅ rankingRules — тільки дозволені правила
         $index->updateRankingRules([
             'words',
             'typo',
             'proximity',
             'attribute',
             'exactness',
-            'sort',
+            'sort', // дозволяє використовувати sort в search()
         ]);
 
         $this->info('Meili products index configured.');

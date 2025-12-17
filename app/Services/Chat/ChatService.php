@@ -310,7 +310,8 @@ class ChatService
                 products: $raw,
                 originalQuery: $originalQuery,
                 categoryKey: $effectiveCategoryKey,
-                sessionContext: $sessionContext
+                sessionContext: $sessionContext,
+                negativeTerms: $state['negative_terms'] ?? []
             );
 
             // Якщо AI не дав результатів — fallback на механічну фільтрацію
@@ -365,7 +366,8 @@ class ChatService
                 products: $rawText,
                 originalQuery: $originalQuery,
                 categoryKey: $effectiveCategoryKey,
-                sessionContext: $sessionContext
+                sessionContext: $sessionContext,
+                negativeTerms: $state['negative_terms'] ?? []
             );
 
             // Якщо AI не дав результатів — fallback на механічну фільтрацію

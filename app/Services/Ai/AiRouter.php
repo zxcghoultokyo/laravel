@@ -546,4 +546,127 @@ PROMPT;
             return $fallback;
         }
     }
+
+    /**
+     * Оцінка релевантності товарів по контексту запиту.
+     * 
+     * Отримує масив товарів (50+), контекст сесії, запит — AI вирішує які найрелевантніші.
+     * Повертає топ-10 з оцінками релевантності (0.0-1.0).
+     */
+    public function rankProductsByRelevance(
+        array $products,
+        string $originalQuery,
+        ?string $categoryKey,
+        array $sessionContext = []
+    ): array {
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::rankProductsByRelevance called without OPENAI_API_KEY');
+            return [];
+        }
+
+        if (empty($products)) {
+            return [];
+        }
+
+        // Беремо максимум 50 товарів для оцінки (щоб не перевантажити токени)
+        $toRank = array_slice($products, 0, 50);
+
+        // Будуємо опис товарів для AI
+        $productsText = '';
+        foreach ($toRank as $idx => $p) {
+            $title = $p['title'] ?? 'N/A';
+            $category = $p['category_path'] ?? '';
+            $price = $p['price'] ?? 'N/A';
+            $description = $p['description'] ?? '';
+            
+            $productsText .= "[$idx] Title: {$title} | Category: {$category} | Price: {$price} | Desc: {$description}\n";
+        }
+
+        // Контекст сесії для AI
+        $lastCategory = $sessionContext['last_category_key'] ?? null;
+        $lastIntent = $sessionContext['last_intent'] ?? null;
+
+        $systemPrompt = <<<PROMPT
+Ти — експерт по тактичному спорядженню.
+Твоє завдання — оцінити релевантність кожного товару до запиту користувача.
+
+Поверни JSON масив об'єктів:
+[
+  {"index": 0, "relevance": 0.95, "reason": "коротко чому релевантний"},
+  {"index": 5, "relevance": 0.80, "reason": "..."},
+  ...
+]
+
+Сортуй по релевантності (спадаючий порядок).
+Включай тільки товари з relevance >= 0.5.
+Максимум 10 товарів.
+
+Важливо:
+- Якщо юзер не просив "панель", "підсумок", "чохол" — це не релевантно.
+- Якщо юзер просив "легка" і це плитоноска — дивись на вагу/матеріали.
+- Якщо є контекст сесії (он просив дещо раніше) — врахуй це.
+
+Поверни ТІЛЬКИ JSON, без пояснень.
+PROMPT;
+
+        try {
+            $userPrompt = <<<PROMPT
+Запит: "{$originalQuery}"
+Категорія: {$categoryKey}
+Контекст: {$lastIntent} (категорія раніше: {$lastCategory})
+
+Товари для оцінки:
+{$productsText}
+PROMPT;
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type'  => 'application/json',
+            ])->post($this->baseUrl . '/chat/completions', [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $userPrompt],
+                ],
+                'temperature' => 0.3,
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('AiRouter::rankProductsByRelevance HTTP error', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                ]);
+                return [];
+            }
+
+            $content = $response->json('choices.0.message.content');
+            $decoded = json_decode($content, true);
+
+            if (! is_array($decoded)) {
+                Log::warning('AiRouter::rankProductsByRelevance got non-JSON content', [
+                    'content' => $content,
+                ]);
+                return [];
+            }
+
+            // Побудуємо масив з індексами товарів в оригінальному порядку релевантності
+            $ranked = [];
+            foreach ($decoded as $item) {
+                $idx = $item['index'] ?? null;
+                if ($idx !== null && isset($toRank[$idx])) {
+                    $ranked[] = array_merge($toRank[$idx], [
+                        'ai_relevance' => $item['relevance'] ?? 0.0,
+                        'ai_reason'    => $item['reason'] ?? '',
+                    ]);
+                }
+            }
+
+            return array_slice($ranked, 0, 10);
+        } catch (\Throwable $e) {
+            Log::error('AiRouter::rankProductsByRelevance exception: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+            return [];
+        }
+    }
 }

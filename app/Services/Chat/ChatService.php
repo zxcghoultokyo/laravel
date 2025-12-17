@@ -172,7 +172,7 @@ class ChatService
 
         $categoryKey = $map[$norm];
 
-        $products = $this->productService->searchByCategoryKey($categoryKey, 3);
+        $products = $this->productService->searchByCategoryKey($categoryKey, 10);
 
         $response = $this->productsResponse(
             text: "Ось, що маємо по цій категорії 👇",
@@ -285,24 +285,119 @@ class ChatService
             return $response;
         }
 
-        // Якщо AI хоче уточнення
-        if ($action === 'ASK_CLARIFICATION') {
-            $this->saveSessionContext($sessionKey, [
-                'last_intent'       => 'product_search',
-                'last_action'       => $action,
-                'last_category_key' => $effectiveCategoryKey,
-                'last_query'        => $originalQuery,
-                'slots'             => $slots,
-            ]);
+        // ===== Session-aware search state =====
+        $state = $this->loadSearchState($sessionKey);
+        $state = $this->mergeSearchState($state, $effectiveCategoryKey, $slots, $originalQuery);
 
-            return $this->simpleTextResponse(
-                $messageOut ?: "Уточни, будь ласка, який саме товар або під які задачі тобі потрібен."
+        // якщо юзер не хоче питань — або короткий follow-up — показуємо товари
+        $forceShow = $this->shouldForceShowProducts($originalQuery, $sessionContext);
+
+        // 1) якщо є категорія — шукаємо по категорії з більшим лімітом (внутрішньо 50), потім фільтр/дедуп до 10
+        if ($effectiveCategoryKey) {
+            $priceFilters = [
+                'min' => $state['filters']['budget_min'] ?? Arr::get($slots, 'budget_min'),
+                'max' => $state['filters']['budget_max'] ?? Arr::get($slots, 'budget_max'),
+            ];
+
+            $raw = $this->productService->searchByCategoryKey(
+                categoryKey: $effectiveCategoryKey,
+                limit: 50,
+                priceFilters: $priceFilters
             );
+
+            // AI вирішує які товари найрелевантніші
+            $products = $this->aiRouter->rankProductsByRelevance(
+                products: $raw,
+                originalQuery: $originalQuery,
+                categoryKey: $effectiveCategoryKey,
+                sessionContext: $sessionContext
+            );
+
+            // Якщо AI не дав результатів — fallback на механічну фільтрацію
+            if (empty($products)) {
+                $products = $this->filterAndDedupProducts($raw, $state, 10);
+            }
+
+            if (!empty($products)) {
+                // запам'ятали що показали (щоб "ще" не повторювало те саме)
+                foreach ($products as $p) {
+                    if (isset($p['id'])) $state['shown_ids'][] = $p['id'];
+                }
+                $state['shown_ids'] = array_values(array_unique($state['shown_ids']));
+
+                $this->saveSearchState($sessionKey, $state);
+
+                // навіть якщо AI хотів уточнення — покажемо товари, а уточнення (якщо треба) коротко після
+                $text = "Ось варіанти 👇";
+                if ($action === 'ASK_CLARIFICATION' && !$forceShow && $messageOut) {
+                    // тільки 1 раз те саме питання
+                    $hash = md5($messageOut);
+                    if (($state['last_question'] ?? null) !== $hash) {
+                        $state['last_question'] = $hash;
+                        $this->saveSearchState($sessionKey, $state);
+                        $text = "Ось варіанти 👇\n\n" . $messageOut;
+                    }
+                }
+
+                $response = $this->productsResponse(
+                    text: $text,
+                    products: $products,
+                    categoryKey: $effectiveCategoryKey
+                );
+
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'product_search',
+                    'last_action'       => 'SHOW_PRODUCTS',
+                    'last_category_key' => $effectiveCategoryKey,
+                    'last_query'        => $originalQuery,
+                    'slots'             => $slots,
+                ]);
+
+                return $response;
+            }
         }
 
-        // Fallback – просто спробуємо текстовий пошук
-        $products = $this->productService->searchByText($originalQuery, null, 'uk');
+        // 2) якщо категорії нема або порожньо — fallback текстовий (теж 50 -> AI-ранжування)
+        $rawText = $this->productService->searchByText($originalQuery, null, 'uk');
+        if (!empty($rawText)) {
+            // AI вирішує які товари найрелевантніші
+            $products = $this->aiRouter->rankProductsByRelevance(
+                products: $rawText,
+                originalQuery: $originalQuery,
+                categoryKey: $effectiveCategoryKey,
+                sessionContext: $sessionContext
+            );
 
+            // Якщо AI не дав результатів — fallback на механічну фільтрацію
+            if (empty($products)) {
+                $products = $this->filterAndDedupProducts($rawText, $state, 10);
+            }
+
+            if (!empty($products)) {
+                foreach ($products as $p) {
+                    if (isset($p['id'])) $state['shown_ids'][] = $p['id'];
+                }
+                $state['shown_ids'] = array_values(array_unique($state['shown_ids']));
+                $this->saveSearchState($sessionKey, $state);
+
+                $this->saveSessionContext($sessionKey, [
+                    'last_intent'       => 'product_search',
+                    'last_action'       => 'SHOW_PRODUCTS',
+                    'last_category_key' => $effectiveCategoryKey,
+                    'last_query'        => $originalQuery,
+                    'slots'             => $slots,
+                ]);
+
+                return $this->productsResponse(
+                    text: "Ось, що знайшов 👇",
+                    products: $products,
+                    categoryKey: $effectiveCategoryKey
+                );
+            }
+        }
+
+        // 3) тільки якщо реально 0 — тоді текст
+        $this->saveSearchState($sessionKey, $state);
         $this->saveSessionContext($sessionKey, [
             'last_intent'       => 'product_search',
             'last_action'       => $action,
@@ -310,23 +405,8 @@ class ChatService
             'last_query'        => $originalQuery,
             'slots'             => $slots,
         ]);
-
-        if (! empty($products)) {
-            $response = $this->productsResponse(
-                text: $messageOut ?: "Ось, що знайшов за твоїм запитом 👇",
-                products: $products,
-                categoryKey: $effectiveCategoryKey
-            );
-
-            Log::info('ChatService::productsResponse (fallback text search)', [
-                'response' => $response,
-            ]);
-
-            return $response;
-        }
-
         return $this->simpleTextResponse(
-            $messageOut ?: "Я не знайшов підходящих товарів за цим запитом. Можеш трохи конкретизувати, будь ласка?"
+            $messageOut ?: "Поки не знайшов релевантних товарів. Напиши 1-2 слова: колір/бюджет/розмір — і я перешукаю."
         );
     }
 
@@ -535,5 +615,97 @@ class ChatService
         }
     
         return false;
+    }
+
+    protected function loadSearchState(string $sessionKey): array
+    {
+        return Cache::get('chat_search_' . $sessionKey, [
+            'topic'         => null,
+            'category_key'  => null,
+            'filters'       => [
+                'budget_min' => null,
+                'budget_max' => null,
+                'camo'       => null,   // multicam / pixel / olive ...
+                'color'      => null,
+            ],
+            'negative_terms'=> [],      // що НЕ показувати (панелі/підсумки/комплекти...)
+            'shown_ids'     => [],      // щоб не повторювати одне й те саме
+            'last_question' => null,    // щоб не дрочити тим самим
+        ]);
+    }
+
+    protected function saveSearchState(string $sessionKey, array $state): void
+    {
+        Cache::put('chat_search_' . $sessionKey, $state, now()->addHours(6));
+    }
+
+    protected function mergeSearchState(array $state, ?string $categoryKey, array $slots, string $originalQuery): array
+    {
+        // категорія
+        if ($categoryKey) {
+            $state['category_key'] = $categoryKey;
+        }
+
+        // бюджет
+        $min = Arr::get($slots, 'budget_min');
+        $max = Arr::get($slots, 'budget_max');
+        if ($min !== null) $state['filters']['budget_min'] = $min;
+        if ($max !== null) $state['filters']['budget_max'] = $max;
+
+        // простенька детекція camo/color з тексту (без AI)
+        $q = mb_strtolower($originalQuery);
+
+        if (str_contains($q, 'мультикам') || str_contains($q, 'multicam')) $state['filters']['camo'] = 'multicam';
+        if (str_contains($q, 'піксель') || str_contains($q, 'pixel'))       $state['filters']['camo'] = 'pixel';
+        if (str_contains($q, 'олива') || str_contains($q, 'olive'))         $state['filters']['camo'] = 'olive';
+        if (str_contains($q, 'койот') || str_contains($q, 'coyote'))        $state['filters']['color'] = 'coyote';
+        if (str_contains($q, 'чорн') || str_contains($q, 'black'))          $state['filters']['color'] = 'black';
+
+        // якщо юзер НЕ просив "панель/підсумок", додаємо як негативи для плитоноски
+        // (це вирішує твоє "панель грьобана" без ручного хардкоду під кожну нішу)
+        if (($state['category_key'] ?? null) === 'plate_carriers') {
+            $defaultNegatives = ['панель','підсумок','pouch','cummerbund','камербанд','чохол','cover','модуль','клапан','кап'];
+            $state['negative_terms'] = array_values(array_unique(array_merge($state['negative_terms'] ?? [], $defaultNegatives)));
+        }
+
+        return $state;
+    }
+
+    protected function filterAndDedupProducts(array $products, array $state, int $limit = 10): array
+    {
+        $neg = array_map(fn($x) => mb_strtolower($x), $state['negative_terms'] ?? []);
+        $shown = array_flip($state['shown_ids'] ?? []);
+
+        $out = [];
+        $seen = [];
+
+        foreach ($products as $p) {
+            $id = $p['id'] ?? null;
+            if ($id && isset($shown[$id])) continue;
+
+            $title = mb_strtolower((string)($p['title'] ?? ''));
+            $cat   = mb_strtolower((string)($p['category_path'] ?? ''));
+
+            $blocked = false;
+            foreach ($neg as $w) {
+                if ($w !== '' && (str_contains($title, $w) || str_contains($cat, $w))) {
+                    $blocked = true;
+                    break;
+                }
+            }
+            if ($blocked) continue;
+
+            // дедуп по title+price (бо у тебе дублікати архангела різними slugами)
+            $price = (string)($p['price'] ?? '');
+            $key = md5($title . '|' . $price);
+            if (isset($seen[$key])) continue;
+
+            $seen[$key] = true;
+            $out[] = $p;
+
+            if (count($out) >= $limit) break;
+        }
+
+        return $out;
     }
 }

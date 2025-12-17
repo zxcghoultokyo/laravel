@@ -580,16 +580,25 @@ class ProductService
     protected function deduplicateProducts(Collection $scored): Collection
     {
         $seen = [];
-
+    
         return $scored->filter(function (array $row) use (&$seen) {
             /** @var Product $p */
             $p = $row['product'];
-            $key = $p->article . '|' . (string) $p->parent_article;
-
+    
+            $parent = (string) ($p->parent_article ?? '');
+            $article = (string) ($p->article ?? '');
+    
+            // ✅ головне: варіанти з одним parent_article — це один “товар” для чату
+            $key = $parent !== '' ? $parent : $article;
+    
+            if ($key === '') {
+                return false;
+            }
+    
             if (isset($seen[$key])) {
                 return false;
             }
-
+    
             $seen[$key] = true;
             return true;
         })->values();

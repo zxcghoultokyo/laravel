@@ -172,7 +172,7 @@ class ChatService
 
         $categoryKey = $map[$norm];
 
-        $products = $this->productService->searchByCategoryKey($categoryKey, 3);
+        $products = $this->productService->searchByCategoryKey($categoryKey, 10);
 
         $response = $this->productsResponse(
             text: "Ось, що маємо по цій категорії 👇",

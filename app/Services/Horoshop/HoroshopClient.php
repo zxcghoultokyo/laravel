@@ -14,11 +14,18 @@ class HoroshopClient
 
     public function __construct()
     {
-        $this->domain   = rtrim((string) config('services.horoshop.domain'), '/');
+        $this->domain   = (string) config('services.horoshop.domain');
         $this->login    = (string) config('services.horoshop.login');
         $this->password = (string) config('services.horoshop.password');
 
+        // ✅ Важливо: не валимо composer/artisan під час деплою/інсталяції
         if (! $this->domain) {
+            if (app()->runningInConsole()) {
+                // просто лишаємо client "неактивним" — реальні API виклики все одно впадуть,
+                // але composer install і package:discover пройдуть
+                return;
+            }
+
             throw new RuntimeException('Horoshop domain is not configured (services.horoshop.domain)');
         }
     }

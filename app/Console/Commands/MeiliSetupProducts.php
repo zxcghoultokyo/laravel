@@ -14,7 +14,6 @@ class MeiliSetupProducts extends Command
     {
         $index = $meili->productsIndex();
 
-        // Searchable (text relevance)
         $index->updateSearchableAttributes([
             'title',
             'search_index',
@@ -25,19 +24,16 @@ class MeiliSetupProducts extends Command
             'ai_category',
         ]);
 
-        // Filterable (facets)
         $index->updateFilterableAttributes([
             'display_in_showcase',
             'in_stock',
             'presence_raw',
             'price',
-            'camo_group',
-            'product_type',
             'brand',
-            'color',
+            'product_type',
+            'ai_category',
         ]);
 
-        // Sortable (business sorting via `sort` in search query)
         $index->updateSortableAttributes([
             'we_recommended',
             'popularity',
@@ -46,9 +42,10 @@ class MeiliSetupProducts extends Command
             'added_to_cart_count',
             'updated_at_ts',
             'price',
+            'price_old',
+            'quantity',
         ]);
 
-        // Ranking rules (your Meili version allows only these + `sort`)
         $index->updateRankingRules([
             'words',
             'typo',

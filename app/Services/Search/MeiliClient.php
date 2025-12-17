@@ -4,6 +4,7 @@ namespace App\Services\Search;
 
 use App\Exceptions\MeiliUnavailableException;
 use Meilisearch\Client;
+use Meilisearch\Endpoints\Indexes;
 
 class MeiliClient
 {
@@ -14,7 +15,7 @@ class MeiliClient
         }
 
         if (!config('meilisearch.host')) {
-            throw new MeiliUnavailableException('MEILI_HOST is not set.');
+            throw new MeiliUnavailableException('Meilisearch host is not configured (MEILI_HOST).');
         }
     }
 
@@ -28,9 +29,20 @@ class MeiliClient
         );
     }
 
-    public function productsIndex()
+    /**
+     * Generic index accessor (so jobs/services can call $meili->index('products')).
+     */
+    public function index(string $name): Indexes
     {
-        return $this->client()->index(
+        return $this->client()->index($name);
+    }
+
+    /**
+     * Dedicated products index accessor (preferred).
+     */
+    public function productsIndex(): Indexes
+    {
+        return $this->index(
             (string) config('meilisearch.indexes.products', 'products')
         );
     }

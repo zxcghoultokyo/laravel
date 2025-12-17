@@ -6,7 +6,6 @@ use App\Models\Product;
 use App\Services\Search\MeiliClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -15,76 +14,70 @@ class IndexProductsToMeiliJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public int $chunk = 500) {}
+    public int $chunkSize;
+
+    public function __construct(int $chunkSize = 500)
+    {
+        $this->chunkSize = max(50, $chunkSize);
+        $this->onQueue('meili');
+    }
 
     public function handle(MeiliClient $meili): void
     {
-        // без fallback: якщо Meili не доступний — хай впаде (щоб ти бачив проблему)
         $index = $meili->productsIndex();
 
         Product::query()
             ->with('aiIndex')
             ->orderBy('id')
-            ->chunkById($this->chunk, function (EloquentCollection $products) use ($index) {
+            ->chunk($this->chunkSize, function ($products) use ($index) {
+                $docs = [];
 
-                $docs = $products->map(function (Product $p) {
-                    $ai = $p->aiIndex;
-
-                    return [
+                foreach ($products as $p) {
+                    $docs[] = [
                         'id' => (int) $p->id,
 
-                        // searchable
-                        'title' => (string) ($p->title ?? ''),
+                        // для дедупу варіантів/розмірів
+                        'article'        => (string) ($p->article ?? ''),
+                        'parent_article' => (string) ($p->parent_article ?? ''),
+
+                        // текст
+                        'title'        => (string) ($p->title ?? ''),
+                        'category_path'=> (string) ($p->category_path ?? ''),
+                        'brand'        => (string) ($p->brand ?? ''),
+                        'color'        => (string) ($p->color ?? ''),
+
+                        // “широкий” індексний рядок (синоніми/категорії/опис)
                         'search_index' => (string) ($p->search_index ?? ''),
-                        'category_path' => (string) ($p->category_path ?? ''),
-                        'brand' => (string) ($p->brand ?? ''),
-                        'color' => (string) ($p->color ?? ''),
 
-                        // filterable
-                        'camo_group' => $this->normalizeCamo(
-                            (string) ($p->color ?? ''),
-                            (string) ($p->search_index ?? ''),
-                            (string) ($p->title ?? ''),
-                            (string) ($p->category_path ?? '')
-                        ),
-                        'product_type' => (string) ($ai->product_type ?? ''),
-                        'ai_category'  => (string) ($ai->ai_category ?? ''),
+                        // сток/вітрина
+                        'in_stock'            => (int) ((bool) $p->in_stock),
+                        'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
+                        'quantity'            => (int) ($p->quantity ?? 0),
+                        'presence_raw'        => (string) ($p->presence ?? ''),
 
-                        // numeric/filter
-                        'price' => (float) ($p->price ?? 0),
-                        'in_stock' => (bool) ($p->in_stock ?? false),
+                        // ціни
+                        'price'     => (int) ($p->price ?? 0),
+                        'price_old' => (int) ($p->price_old ?? 0),
 
-                        // ranking/sort
-                        'we_recommended' => (bool) ($p->we_recommended ?? false),
-                        'popularity' => (int) ($p->popularity ?? 0),
-                        'orders_count' => (int) ($p->orders_count ?? 0),
-                        'views_count' => (int) ($p->views_count ?? 0),
-                        'added_to_cart_count' => (int) ($p->added_to_cart_count ?? 0),
-                        'updated_at_ts' => $p->updated_at ? $p->updated_at->timestamp : 0,
+                        // бізнес-сигнали
+                        'we_recommended'       => (int) ((bool) $p->we_recommended),
+                        'popularity'           => (int) ($p->popularity ?? 0),
+                        'orders_count'         => (int) ($p->orders_count ?? 0),
+                        'views_count'          => (int) ($p->views_count ?? 0),
+                        'added_to_cart_count'  => (int) ($p->added_to_cart_count ?? 0),
+                        'updated_at_ts'        => (int) ($p->updated_at_ts ?? 0),
+
+                        // AI класифікація (для “плити” != “бронежилет”)
+                        'ai_product_type' => (string) (($p->aiIndex->product_type ?? '') ?: ''),
+                        'ai_category'     => (string) (($p->aiIndex->ai_category ?? '') ?: ''),
+                        'camo_group'      => (string) ($p->camo_group ?? ''),
+                        'category_id'     => (int) ($p->category_id ?? 0),
                     ];
-                })->values()->all();
+                }
 
-                $index->addDocuments($docs, 'id');
+                if (!empty($docs)) {
+                    $index->addDocuments($docs);
+                }
             });
-    }
-
-    private function normalizeCamo(string $color, string $searchIndex, string $title, string $categoryPath): ?string
-    {
-        $t = mb_strtolower($color.' '.$searchIndex.' '.$title.' '.$categoryPath);
-
-        if (
-            str_contains($t, 'mm14') ||
-            str_contains($t, 'мм-14') ||
-            str_contains($t, 'мм14') ||
-            str_contains($t, 'піксель') ||
-            str_contains($t, 'пиксель')
-        ) return 'mm14_pixel';
-
-        if (str_contains($t, 'multicam') || str_contains($t, 'мультикам') || preg_match('/\bmc\b/u', $t)) return 'multicam';
-        if (str_contains($t, 'coyote')   || str_contains($t, 'койот')) return 'coyote';
-        if (str_contains($t, 'black')    || str_contains($t, 'чорн') || str_contains($t, 'черн')) return 'black';
-        if (str_contains($t, 'oliv')     || str_contains($t, 'олив') || str_contains($t, 'olive') || preg_match('/\bod\b/u', $t)) return 'olive';
-
-        return null;
     }
 }

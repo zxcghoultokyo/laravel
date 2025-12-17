@@ -295,63 +295,144 @@ class ProductService
     /**
      * Головний метод пошуку товарів по текстовому запиту.
      */
-   public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
-        {
-            Log::info('ProductService::searchByText', [
-                'raw_query'   => $rawQuery,
-                'category_id' => $categoryId,
-                'language'    => $language,
-            ]);
-        
-            // 1) базова нормалізація
-            $normalized = mb_strtolower(trim($rawQuery));
-            if ($normalized === '') {
-                return [];
-            }
-        
-            // 2) Парсимо запит (розширення синонімами, ціни, сигнали з БД)
-            /** @var \App\Services\Search\SearchQueryParser $parser */
-            $parser = app(\App\Services\Search\SearchQueryParser::class);
-        
-            // Якщо в проекті є домен/магазин — можна передати сюди (поки null)
-            $parsed = $parser->parse($rawQuery, $language, null);
-        
-            if (($parsed['normalized'] ?? '') === '') {
-                return [];
-            }
-        
-            // 3) AI intent (опційно): витягуємо product_types / must_have_keywords,
-            //    але пошук робить БД-движок, не "магія" в AI.
-            //    detectProductTypes() у тебе вже існує — лишаємо.
-            $parsed['ai_intent'] = $this->detectProductTypes((string) ($parsed['normalized'] ?? $normalized));
-        
-            // 4) Пошук + ранжування
-            /** @var \App\Services\Search\ProductSearchEngine $engine */
-            $engine = app(\App\Services\Search\ProductSearchEngine::class);
-        
-            $scored = $engine->search($parsed, $categoryId, limit: 10);
-        
-            if ($scored->isEmpty()) {
-                Log::info('ProductService::searchByText no results', [
-                    'normalized' => $parsed['normalized'] ?? $normalized,
-                    'expanded'   => $parsed['expanded'] ?? null,
-                    'signals'    => $parsed['signals'] ?? null,
-                ]);
-                return [];
-            }
-        
-            // 5) Дедуп + нормалізація під API
-            $deduped = $this->deduplicateProducts($scored);
-        
-            return $deduped
-                ->map(function (array $row) {
-                    /** @var \App\Models\Product $product */
-                    $product = $row['product'];
-        
-                    return $this->normalizeProductForApi($product);
-                })
-                ->all();
+    public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
+    {
+        Log::info('ProductService::searchByText', [
+            'raw_query'   => $rawQuery,
+            'category_id' => $categoryId,
+            'language'    => $language,
+        ]);
+    
+        // 1) базова нормалізація
+        $normalized = mb_strtolower(trim($rawQuery));
+        if ($normalized === '') {
+            return [];
         }
+    
+        // 2) Парсимо запит (синоніми, ціни, сигнали)
+        /** @var \App\Services\Search\SearchQueryParser $parser */
+        $parser = app(\App\Services\Search\SearchQueryParser::class);
+        $parsed = $parser->parse($rawQuery, $language, null);
+    
+        if (($parsed['normalized'] ?? '') === '') {
+            return [];
+        }
+    
+        // 3) AI intent (типи товарів, must-have, але НЕ фільтруємо тут)
+        $parsed['ai_intent'] = $this->detectProductTypes(
+            (string) ($parsed['normalized'] ?? $normalized)
+        );
+    
+        /** @var \App\Services\Search\ProductSearchEngine $engine */
+        $engine = app(\App\Services\Search\ProductSearchEngine::class);
+    
+        // ⚠️ важливо: беремо БАГАТО кандидатів
+        $candidatesLimit = 50;
+        $finalLimit = 10;
+    
+        $rows = $engine->search($parsed, $categoryId, limit: $candidatesLimit);
+    
+        if ($rows->isEmpty()) {
+            Log::info('ProductService::searchByText no results', [
+                'normalized' => $parsed['normalized'],
+            ]);
+            return [];
+        }
+    
+        // 4) Готуємо кандидатів для AI rerank
+        $candidates = $rows->map(function (array $row) {
+            /** @var \App\Models\Product $p */
+            $p = $row['product'];
+    
+            return [
+                'id'                   => (int) $p->id,
+                'title'                => (string) $p->title,
+                'category_path'        => (string) $p->category_path,
+                'price'                => (float) ($p->price ?? 0),
+                'in_stock'             => (int) ((bool) $p->in_stock),
+                'display_in_showcase'  => (int) ((bool) $p->display_in_showcase),
+                'product_type'         => (string) ($p->product_type ?? ''),
+                'ai_product_type'      => (string) optional($p->aiIndex)->product_type,
+            ];
+        })->values()->all();
+    
+        // session_id — звідки тобі зручно (header / request / context)
+        $sessionId = request()->header('X-Session-Id');
+    
+        // 5) AI rerank (головна магія)
+        $reranked = $this->aiRouter->rerankProductCandidates(
+            $rawQuery,
+            $candidates,
+            $sessionId,
+            $finalLimit
+        );
+    
+        // 6) Якщо AI каже "мало релевантного" → 1 refined пошук
+        if (
+            count($reranked['chosen_ids']) < 3
+            && !empty($reranked['refined_query'])
+        ) {
+            Log::info('ProductService::searchByText refined search', [
+                'refined_query' => $reranked['refined_query'],
+            ]);
+    
+            $parsed2 = $parsed;
+            $parsed2['normalized'] = (string) $reranked['refined_query'];
+    
+            $rows2 = $engine->search($parsed2, $categoryId, limit: $candidatesLimit);
+    
+            if ($rows2->isNotEmpty()) {
+                $candidates2 = $rows2->map(function (array $row) {
+                    $p = $row['product'];
+                    return [
+                        'id'                   => (int) $p->id,
+                        'title'                => (string) $p->title,
+                        'category_path'        => (string) $p->category_path,
+                        'price'                => (float) ($p->price ?? 0),
+                        'in_stock'             => (int) ((bool) $p->in_stock),
+                        'display_in_showcase'  => (int) ((bool) $p->display_in_showcase),
+                        'product_type'         => (string) ($p->product_type ?? ''),
+                        'ai_product_type'      => (string) optional($p->aiIndex)->product_type,
+                    ];
+                })->values()->all();
+    
+                $reranked = $this->aiRouter->rerankProductCandidates(
+                    $rawQuery,
+                    $candidates2,
+                    $sessionId,
+                    $finalLimit
+                );
+    
+                $rows = $rows2;
+            }
+        }
+    
+        // 7) Фінальна збірка по chosen_ids
+        $chosenIds = $reranked['chosen_ids'] ?? [];
+    
+        if (!empty($chosenIds)) {
+            $rowMap = $rows->keyBy(fn ($row) => (int) $row['product']->id);
+    
+            $rows = collect($chosenIds)
+                ->map(fn ($id) => $rowMap->get((int) $id))
+                ->filter()
+                ->values();
+        } else {
+            // fallback — перші N
+            $rows = $rows->take($finalLimit);
+        }
+    
+        // 8) Дедуп (варіації / однакові товари)
+        $deduped = $this->deduplicateProducts($rows);
+    
+        // 9) Нормалізація під API
+        return $deduped
+            ->take($finalLimit)
+            ->map(function (array $row) {
+                return $this->normalizeProductForApi($row['product']);
+            })
+            ->all();
+    }
     /**
      * Вирізаємо цінові обмеження з тексту.
      */
@@ -580,16 +661,25 @@ class ProductService
     protected function deduplicateProducts(Collection $scored): Collection
     {
         $seen = [];
-
+    
         return $scored->filter(function (array $row) use (&$seen) {
             /** @var Product $p */
             $p = $row['product'];
-            $key = $p->article . '|' . (string) $p->parent_article;
-
+    
+            $parent = (string) ($p->parent_article ?? '');
+            $article = (string) ($p->article ?? '');
+    
+            // ✅ головне: варіанти з одним parent_article — це один “товар” для чату
+            $key = $parent !== '' ? $parent : $article;
+    
+            if ($key === '') {
+                return false;
+            }
+    
             if (isset($seen[$key])) {
                 return false;
             }
-
+    
             $seen[$key] = true;
             return true;
         })->values();
@@ -995,6 +1085,10 @@ class ProductService
             ->get()
             ->map(fn (Product $p) => $this->normalizeProductForApi($p))
             ->all();
+    }
+    public function detectProductTypesPublic(string $query): array
+    {
+        return $this->detectProductTypes($query);
     }
 
 }

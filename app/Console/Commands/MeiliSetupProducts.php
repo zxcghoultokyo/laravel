@@ -14,18 +14,17 @@ class MeiliSetupProducts extends Command
     {
         $index = $meili->productsIndex();
 
-        // 1) What fields are searchable (text relevance)
+        // 1) searchable fields (text relevance)
         $index->updateSearchableAttributes([
             'title',
             'search_index',
             'category_path',
             'ai_product_type',
             'ai_keywords',
-            'brand',
-            'color',
+            'ai_slang',
         ]);
 
-        // 2) What can be used in filters
+        // 2) filterable fields
         $index->updateFilterableAttributes([
             'in_stock',
             'display_in_showcase',
@@ -33,11 +32,9 @@ class MeiliSetupProducts extends Command
             'category_id',
             'camo_group',
             'ai_product_type',
-            'brand',
-            'color',
         ]);
 
-        // 3) What can be used in sort (and in custom ranking rules)
+        // 3) sortable fields (IMPORTANT: only these can be used in `sort` param)
         $index->updateSortableAttributes([
             'we_recommended',
             'popularity',
@@ -49,11 +46,10 @@ class MeiliSetupProducts extends Command
         ]);
 
         /**
-         * 4) Ranking rules:
-         * - first Meili does textual relevance (words/typo/proximity/attribute/exactness)
-         * - then our custom business ranking kicks in (recommended/popularity/orders/...)
-         *
-         * IMPORTANT: custom rules must be AFTER the text relevance rules, otherwise you’ll get “popular but irrelevant”.
+         * 4) ranking rules:
+         * In this Meili version, you cannot use desc(field) here.
+         * Business ranking must be applied via the `sort` search option,
+         * and for that you must keep `sort` rule enabled.
          */
         $index->updateRankingRules([
             'words',
@@ -61,20 +57,10 @@ class MeiliSetupProducts extends Command
             'proximity',
             'attribute',
             'exactness',
-
-            // business ranking (our fields)
-            'desc(we_recommended)',
-            'desc(popularity)',
-            'desc(orders_count)',
-            'desc(views_count)',
-            'desc(added_to_cart_count)',
-            'desc(updated_at_ts)',
-
-            // allow explicit sort from queries too (optional)
             'sort',
         ]);
 
-        $this->info('Meili products index configured (searchable/filterable/sortable + ranking rules).');
+        $this->info('Meili products index configured (searchable/filterable/sortable + ranking rules with sort).');
         return self::SUCCESS;
     }
 }

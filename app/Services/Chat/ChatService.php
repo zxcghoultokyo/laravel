@@ -667,12 +667,6 @@ class ChatService
             $state['negative_terms'] = array_values(array_unique(array_merge($state['negative_terms'] ?? [], $defaultNegatives)));
         }
 
-        // Негативи для шоломів - не показувати кріплення, адаптери, рейки
-        if (($state['category_key'] ?? null) === 'helmets') {
-            $defaultNegatives = ['крейпінг','кріплення','планка','адаптер','gopro','rail','рейка','мантаж','монтаж','мат'];
-            $state['negative_terms'] = array_values(array_unique(array_merge($state['negative_terms'] ?? [], $defaultNegatives)));
-        }
-
         return $state;
     }
 

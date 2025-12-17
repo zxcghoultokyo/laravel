@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 class MeiliReindexProducts extends Command
 {
-    protected $signature = 'meili:reindex-products {--chunk=500 : Number of products per job (by ID ranges)}';
+    protected $signature = 'meili:reindex-products {--chunk=500 : Products per job}';
     protected $description = 'Dispatch products reindex jobs to Meilisearch (queue: meili)';
 
     public function handle(): int
@@ -24,7 +24,7 @@ class MeiliReindexProducts extends Command
 
         $jobs = 0;
 
-        // Dispatch one job per ID range (roughly $chunk products per job)
+        // One job per ID range (≈ $chunk items)
         Product::query()
             ->select('id')
             ->orderBy('id')
@@ -32,12 +32,13 @@ class MeiliReindexProducts extends Command
                 $fromId = (int) $rows->first()->id;
                 $toId   = (int) $rows->last()->id;
 
-                IndexProductsToMeiliJob::dispatch($fromId, $toId, $chunk)->onQueue('meili');
+                IndexProductsToMeiliJob::dispatch($fromId, $toId, $chunk)
+                    ->onQueue('meili');
 
                 $jobs++;
             });
 
-        $this->info("Dispatched {$jobs} Meili indexing job(s) for {$total} product(s) to queue=meili (chunk={$chunk}).");
+        $this->info("Dispatched {$jobs} job(s) to queue=meili for {$total} product(s). Chunk={$chunk}.");
 
         return self::SUCCESS;
     }

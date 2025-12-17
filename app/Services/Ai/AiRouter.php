@@ -406,4 +406,159 @@ PROMPT;
             return $fallback;
         }
     }
+        /**
+     * Реранк кандидатів з Meili з урахуванням сесійної історії.
+     * Повертає:
+     *  - chosen_ids: [int]   // які показати (у правильному порядку)
+     *  - refined_query: ?string // якщо треба зробити повторний пошук
+     *  - reason_short: string   // коротко для логів
+     */
+    public function rerankProductCandidates(
+        string $userQuery,
+        array $candidates,
+        ?string $sessionId = null,
+        int $limit = 10
+    ): array {
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::rerankProductCandidates called without OPENAI_API_KEY');
+            return [
+                'chosen_ids' => array_slice(array_map(fn($x) => (int)($x['id'] ?? 0), $candidates), 0, $limit),
+                'refined_query' => null,
+                'reason_short' => 'no_api_key_fallback',
+            ];
+        }
+
+        $history = $this->getSessionHistory($sessionId);
+        $historyText = '';
+        if (!empty($history)) {
+            // беремо останні 10 елементів (5 реплік)
+            $tail = array_slice($history, -10);
+            foreach ($tail as $h) {
+                $role = $h['role'] ?? '';
+                $content = $h['content'] ?? '';
+                if ($role && $content) {
+                    $historyText .= strtoupper($role) . ": " . $content . "\n";
+                }
+            }
+        }
+
+        // обрізаємо кандидатів до розумної кількості, щоб не роздувати промпт
+        $candidates = array_slice($candidates, 0, 60);
+
+        $systemPrompt = <<<PROMPT
+Ти — модуль rerank для e-commerce пошуку.
+Ти отримуєш:
+- запит користувача
+- коротку історію чату (контекст)
+- список кандидатів (результати Meili)
+
+Твоя задача:
+1) Вибрати найрелевантніші товари під поточний запит + контекст історії.
+2) Прибрати дублікати (однаковий товар у різних варіантах) — залиш 1 кращий.
+3) Якщо кандидати нерелевантні (наприклад, це аксесуари замість основного товару) — НЕ вибирай їх.
+4) Якщо після відбору виходить менше 3 адекватних товарів — запропонуй refined_query (1 коротка фраза) щоб повторити пошук ширше/точніше.
+   refined_query має бути нейтральний і універсальний (без хардкоду під нішу).
+
+Поверни ЧИСТИЙ JSON.
+PROMPT;
+
+        $userPayload = [
+            'query' => $userQuery,
+            'limit' => $limit,
+            'chat_history' => $historyText,
+            'candidates' => array_map(function ($c) {
+                return [
+                    'id' => (int)($c['id'] ?? 0),
+                    'title' => (string)($c['title'] ?? ''),
+                    'category_path' => (string)($c['category_path'] ?? ''),
+                    'price' => (float)($c['price'] ?? 0),
+                    'in_stock' => (int)($c['in_stock'] ?? 0),
+                    'display_in_showcase' => (int)($c['display_in_showcase'] ?? 0),
+                    'product_type' => (string)($c['product_type'] ?? ''),
+                    'ai_product_type' => (string)($c['ai_product_type'] ?? ''),
+                ];
+            }, $candidates),
+        ];
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type'  => 'application/json',
+            ])->post($this->baseUrl . '/chat/completions', [
+                'model' => $this->model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user', 'content' => json_encode($userPayload, JSON_UNESCAPED_UNICODE)],
+                ],
+                'temperature' => 0.2,
+                'response_format' => [
+                    'type' => 'json_schema',
+                    'json_schema' => [
+                        'name' => 'rerank_products',
+                        'strict' => true,
+                        'schema' => [
+                            'type' => 'object',
+                            'additionalProperties' => false,
+                            'properties' => [
+                                'chosen_ids' => [
+                                    'type' => 'array',
+                                    'items' => ['type' => 'integer'],
+                                ],
+                                'refined_query' => [
+                                    'type' => ['string', 'null'],
+                                ],
+                                'reason_short' => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => ['chosen_ids', 'refined_query', 'reason_short'],
+                        ],
+                    ],
+                ],
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('AiRouter::rerankProductCandidates HTTP error', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return [
+                    'chosen_ids' => array_slice(array_map(fn($x) => (int)($x['id'] ?? 0), $candidates), 0, $limit),
+                    'refined_query' => null,
+                    'reason_short' => 'http_error_fallback',
+                ];
+            }
+
+            $content = $response->json('choices.0.message.content');
+            $decoded = json_decode($content, true);
+
+            if (!is_array($decoded)) {
+                Log::warning('AiRouter::rerankProductCandidates non-JSON content', ['content' => $content]);
+                return [
+                    'chosen_ids' => array_slice(array_map(fn($x) => (int)($x['id'] ?? 0), $candidates), 0, $limit),
+                    'refined_query' => null,
+                    'reason_short' => 'json_decode_fallback',
+                ];
+            }
+
+            // safety: чистимо chosen_ids
+            $ids = array_values(array_filter($decoded['chosen_ids'] ?? [], fn($v) => is_int($v) || ctype_digit((string)$v)));
+            $ids = array_map('intval', $ids);
+            $ids = array_slice($ids, 0, $limit);
+
+            return [
+                'chosen_ids' => $ids,
+                'refined_query' => $decoded['refined_query'] ?? null,
+                'reason_short' => (string)($decoded['reason_short'] ?? ''),
+            ];
+        } catch (\Throwable $e) {
+            Log::error('AiRouter::rerankProductCandidates exception: ' . $e->getMessage(), ['exception' => $e]);
+            return [
+                'chosen_ids' => array_slice(array_map(fn($x) => (int)($x['id'] ?? 0), $candidates), 0, $limit),
+                'refined_query' => null,
+                'reason_short' => 'exception_fallback',
+            ];
+        }
+    }
 }

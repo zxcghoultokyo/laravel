@@ -15,6 +15,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $timeout = 120;
+
     public function __construct(
         public int $fromId,
         public int $toId,
@@ -24,7 +26,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
     public function handle(MeiliClient $meili): void
     {
-        $index = $meili->index('products');
+        $index = $meili->productsIndex();
 
         Product::query()
             ->with('aiIndex')
@@ -56,7 +58,11 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'price_old' => (float) ($p->price_old ?? 0),
                         'in_stock' => (int) ($p->in_stock ?? 0),
                         'presence_raw' => (string) ($p->presence ?? ''),
-                        'camo_group' => $this->detectCamoGroup((string) ($p->title ?? ''), (string) ($p->category_path ?? ''), (string) ($ai->keywords ?? '')),
+                        'camo_group' => $this->detectCamoGroup(
+                            (string) ($p->title ?? ''),
+                            (string) ($p->category_path ?? ''),
+                            (string) ($ai->keywords ?? '')
+                        ),
 
                         // ranking
                         'we_recommended' => (int) ($p->we_recommended ?? 0),

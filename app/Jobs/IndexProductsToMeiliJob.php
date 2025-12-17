@@ -15,15 +15,20 @@ class IndexProductsToMeiliJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public int $chunk = 500) {}
+    public function __construct(
+        public int $fromId,
+        public int $toId,
+        public int $chunk = 500,
+    ) {
+    }
 
     public function handle(MeiliClient $meili): void
     {
-        // без fallback: якщо Meili не доступний — хай впаде (щоб ти бачив проблему)
-        $index = $meili->productsIndex();
+        $index = $meili->index('products');
 
         Product::query()
             ->with('aiIndex')
+            ->whereBetween('id', [$this->fromId, $this->toId])
             ->orderBy('id')
             ->chunkById($this->chunk, function (EloquentCollection $products) use ($index) {
 
@@ -35,28 +40,27 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
                         // searchable
                         'title' => (string) ($p->title ?? ''),
-                        'search_index' => (string) ($p->search_index ?? ''),
                         'category_path' => (string) ($p->category_path ?? ''),
-                        'brand' => (string) ($p->brand ?? ''),
-                        'color' => (string) ($p->color ?? ''),
+                        'search_index' => (string) ($p->search_index ?? ''),
 
-                        // filterable
-                        'camo_group' => $this->normalizeCamo(
-                            (string) ($p->color ?? ''),
-                            (string) ($p->search_index ?? ''),
-                            (string) ($p->title ?? ''),
-                            (string) ($p->category_path ?? '')
-                        ),
-                        'product_type' => (string) ($ai->product_type ?? ''),
-                        'ai_category'  => (string) ($ai->ai_category ?? ''),
+                        'ai_category' => (string) ($ai->ai_category ?? ''),
+                        'ai_product_type' => (string) ($ai->product_type ?? ''),
+                        'ai_materials' => (string) ($ai->materials ?? ''),
+                        'ai_standards' => (string) ($ai->standards ?? ''),
+                        'ai_keywords' => (string) ($ai->keywords ?? ''),
+                        'ai_slang' => (string) ($ai->slang ?? ''),
+                        'ai_spec' => (string) ($ai->spec ?? ''),
 
-                        // numeric/filter
+                        // filters / facets
                         'price' => (float) ($p->price ?? 0),
-                        'in_stock' => (bool) ($p->in_stock ?? false),
+                        'price_old' => (float) ($p->price_old ?? 0),
+                        'in_stock' => (int) ($p->in_stock ?? 0),
+                        'presence_raw' => (string) ($p->presence ?? ''),
+                        'camo_group' => $this->detectCamoGroup((string) ($p->title ?? ''), (string) ($p->category_path ?? ''), (string) ($ai->keywords ?? '')),
 
-                        // ranking/sort
-                        'we_recommended' => (bool) ($p->we_recommended ?? false),
-                        'popularity' => (int) ($p->popularity ?? 0),
+                        // ranking
+                        'we_recommended' => (int) ($p->we_recommended ?? 0),
+                        'popularity' => (float) ($p->popularity ?? 0),
                         'orders_count' => (int) ($p->orders_count ?? 0),
                         'views_count' => (int) ($p->views_count ?? 0),
                         'added_to_cart_count' => (int) ($p->added_to_cart_count ?? 0),
@@ -64,16 +68,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     ];
                 })->values()->all();
 
-                $index->addDocuments($docs, 'id');
+                if (!empty($docs)) {
+                    $index->addDocuments($docs);
+                }
             });
     }
 
-    private function normalizeCamo(string $color, string $searchIndex, string $title, string $categoryPath): ?string
+    private function detectCamoGroup(string ...$parts): ?string
     {
-        $t = mb_strtolower($color.' '.$searchIndex.' '.$title.' '.$categoryPath);
+        $t = mb_strtolower(implode(' ', $parts));
 
         if (
-            str_contains($t, 'mm14') ||
             str_contains($t, 'мм-14') ||
             str_contains($t, 'мм14') ||
             str_contains($t, 'піксель') ||

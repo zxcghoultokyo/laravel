@@ -26,7 +26,6 @@ class AiRouter
      */
     public function classify(string $message): array
     {
-        // 🔙 Фолбек якщо щось пішло не так
         $fallback = [
             'intent'           => 'PRODUCT_SEARCH',
             'normalized_query' => $message,
@@ -39,13 +38,13 @@ class AiRouter
         }
 
         $prompt = "
-Ти — AI роутер для e-commerce магазину тактичного спорядження.
-Визнач намір користувача та нормалізуй текст для подальшого пошуку товарів.
+Ти — AI-роутер для e-commerce чату.
+Визнач намір користувача та нормалізуй текст для подальших дій.
 
 Поверни JSON рівно у такому форматі:
 {
   \"intent\": \"PRODUCT_SEARCH | ORDER_STATUS | FAQ | SMALL_TALK | FALLBACK\",
-  \"normalized_query\": \"ключові слова для пошуку\",
+  \"normalized_query\": \"ключові слова для пошуку/дії\",
   \"order_id\": null або номер замовлення (якщо є у тексті)
 }
 
@@ -77,7 +76,6 @@ class AiRouter
                 return $fallback;
             }
 
-            // merge, щоб були всі очікувані ключі
             return array_merge($fallback, $decoded);
         } catch (\Throwable $e) {
             Log::error('AiRouter::classify exception: ' . $e->getMessage(), ['exception' => $e]);
@@ -98,19 +96,15 @@ class AiRouter
         }
 
         $prompt = "
-Ти — AI нормалізатор пошукових запитів.
+Ти — AI нормалізатор пошукових запитів інтернет-магазину.
 Користувач пише будь-яким стилем, з помилками, сленгом.
 
-Твоє завдання: повернути 1–3 ключові слова, за якими можна шукати товар у магазині.
+Завдання: повернути 1–5 ключових слів, за якими можна шукати релевантні товари.
 
-Приклади:
-«потрібна плитоноска» → «плитоноска»
-«плєтоноска» → «плитоноска»
-«бронік» → «плитоноска»
-«хочу шось під аптечку» → «підсумок аптечка»
-«магазин для глока» → «магазин глок»
-
-❗ Поверни ТІЛЬКИ слова для пошуку, без пояснень, без лапок.
+Правила:
+- НЕ додавай пояснень.
+- НЕ додавай лапки.
+- Поверни тільки ключові слова/фрази.
 
 Текст: \"{$message}\"
 ";
@@ -141,26 +135,11 @@ class AiRouter
 
     public function buildProductIndexData(Product $product): array
     {
-        $title    = mb_strtolower($product->title ?? '');
-        $category = mb_strtolower($product->category_path ?? '');
-        $index    = mb_strtolower($product->search_index ?? '');
-        $haystack = $title . ' ' . $index . ' ' . $category;
-
-        $productType = null;
-
-        if (str_contains($category, 'шолом')) {
-            $productType = 'helmet';
-        } elseif (str_contains($category, 'плитоноски')) {
-            $productType = 'plate_carrier';
-        } elseif (str_contains($category, 'бронезахист')) {
-            $productType = 'armor_plate';
-        } elseif (str_contains($category, 'футболк')) {
-            $productType = 'tshirt';
-        }
-
+        // Ця функція має бути без “ніші”.
+        // Якщо хочеш — наступним кроком зробимо нормальну класифікацію через CategoryAlias/ProductSynonym таблиці.
         return [
-            'product_type' => $productType,
-            'ai_category'  => $productType ? 'tactical_gear' : null,
+            'product_type' => null,
+            'ai_category'  => null,
             'materials'    => null,
             'standards'    => null,
             'slang'        => null,
@@ -172,11 +151,10 @@ class AiRouter
 
     /**
      * Розбір запиту користувача в структурований intent для пошуку товарів.
-     *
-     * Повертає масив:
-     *  - product_types        => []   // типи товарів, як їх бачить AI (футболка, каска, плита...)
-     *  - must_have_keywords   => []   // обов'язкові абревіатури/матеріали/стандарти (UHMWPE, FR...)
-     *  - fallback_types       => []   // ширші категорії на випадок, якщо нічого не знайшли
+     * Повертає:
+     *  - product_types        => []
+     *  - must_have_keywords   => []
+     *  - fallback_types       => []
      */
     public function parseProductSearchIntent(string $message): array
     {
@@ -186,21 +164,16 @@ class AiRouter
         }
 
         $systemPrompt = <<<PROMPT
-Ти — AI-модуль, який розбирає пошукові запити по тактичному спорядженню / одягу.
-Твоє завдання — повернути ЧИСТИЙ JSON з полями:
+Ти — AI-модуль, який розбирає пошукові запити інтернет-магазину.
+Поверни ЧИСТИЙ JSON:
 
-- "product_types": масив коротких назв типів товарів так, як їх написав користувач.
-  Приклади: ["каска", "плита", "футболка", "розгрузка", "plate carrier"].
-- "must_have_keywords": масив важливих слів/скорочень/позначень, які ОБОВ'ЯЗКОВО мають бути в товарі,
-  якщо користувач явно це просить.
-  Приклади: ["uhmwpe", "fr", "niii", "level 4", "molle"].
-- "fallback_types": масив ширших категорій, які можна показати, якщо точних товарів немає.
-  Приклади: ["шоломи", "бронеплити", "одяг"].
+- "product_types": масив типів товарів так, як це звучить у запиті (коротко).
+- "must_have_keywords": важливі слова/скорочення/ознаки, які користувач прямо вимагає.
+- "fallback_types": ширші категорії, якщо точного типу нема.
 
-Важливе:
-- НЕ вигадуй нові абревіатури.
-- Якщо не впевнений у чомусь — краще залиш масив порожнім.
-- Використовуй і українські/російські слова, і англійські абревіатури так, як у запиті.
+Правила:
+- Не вигадуй нових фактів/абревіатур.
+- Якщо не впевнений — залиш порожній масив.
 PROMPT;
 
         try {
@@ -271,9 +244,7 @@ PROMPT;
             return [];
         }
     }
-    /**
-     * Отримати історію сесії (масив з елементів формату ['role' => 'user|assistant', 'content' => '...']).
-     */
+
     protected function getSessionHistory(?string $sessionId): array
     {
         if (! $sessionId) {
@@ -283,16 +254,9 @@ PROMPT;
         $key = "chat_history:{$sessionId}";
         $history = Cache::get($key, []);
 
-        if (! is_array($history)) {
-            return [];
-        }
-
-        return $history;
+        return is_array($history) ? $history : [];
     }
 
-    /**
-     * Додати в історію сесії поточний обмін (user → assistant).
-     */
     protected function pushSessionExchange(?string $sessionId, string $userMessage, string $assistantMessage): void
     {
         if (! $sessionId) {
@@ -300,19 +264,11 @@ PROMPT;
         }
 
         $key = "chat_history:{$sessionId}";
-
         $history = $this->getSessionHistory($sessionId);
 
-        $history[] = [
-            'role'    => 'user',
-            'content' => $userMessage,
-        ];
-        $history[] = [
-            'role'    => 'assistant',
-            'content' => $assistantMessage,
-        ];
+        $history[] = ['role' => 'user', 'content' => $userMessage];
+        $history[] = ['role' => 'assistant', 'content' => $assistantMessage];
 
-        // залишаємо останні 20 повідомлень (10 реплік: user+assistant)
         if (count($history) > 20) {
             $history = array_slice($history, -20);
         }
@@ -320,11 +276,6 @@ PROMPT;
         Cache::put($key, $history, now()->addHours(6));
     }
 
-    
-       /**
-     * Високорівнева маршрутизація повідомлення чату.
-     * Повертає JSON-структуру, з якою працює ChatService.
-     */
     public function routeChatMessage(string $message, array $context = []): array
     {
         $fallback = [
@@ -332,7 +283,7 @@ PROMPT;
             'action'       => 'ASK_CLARIFICATION',
             'confidence'   => 0.0,
             'category_key' => null,
-            'message'      => "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙂",
+            'message'      => "Я трохи не зрозумів запит. Спробуй сформулювати ще раз 🙂",
             'slots'        => [
                 'budget_min'   => null,
                 'budget_max'   => null,
@@ -349,163 +300,81 @@ PROMPT;
         $history   = $this->getSessionHistory($sessionId);
 
         $systemPrompt = <<<PROMPT
-Ти — AI-оркестратор для чату інтернет-магазину тактичного спорядження та такмеду.
+Ти — AI-оркестратор для e-commerce чату.
 
-Твоє завдання — на основі повідомлення користувача визначити:
-- інтенцію (intent),
-- дію (action),
-- категорію товарів (category_key), якщо це пошук,
-- допоміжні слоти (slots) — бюджет, номер замовлення тощо,
-- текст-відповідь message, який одразу можна показати користувачу.
-
-Можливі intent:
-- "product_search" — користувач хоче підібрати/подивитись товар.
-- "order_status"  — користувач питає про статус/доставку свого замовлення.
-- "shop_info"     — питання про магазин: доставка, оплата, повернення, гарантія, наявність.
-- "smalltalk"     — привітання, подяка, просто розмова ("привіт", "як справи" тощо).
-- "abuse"         — мат, образи, токсична поведінка.
-- "unknown"       — нічого з вище описаного впевнено не підходить.
-
-Можливі action:
-- "SHOW_PRODUCTS"      — можна відразу показувати список товарів.
-- "ASK_CLARIFICATION"  — треба поставити уточнююче питання.
-- "NONE"               — просто відповісти текстом (наприклад, smalltalk, shop_info).
-
-category_key використовується ТІЛЬКИ для intent = "product_search".
-Дозволені значення category_key:
-- "tourniquets"          — турнікети.
-- "ifak_kits"            — аптечки IFAK / тактичні аптечки.
-- "helmets"              — шоломи / каски.
-- "plate_carriers"       — плитоноски / розгрузки під плити.
-- "plates"               — бронеплити / плити SAPI.
-- "cold_weather_jackets" — зимові/теплі куртки, парки, софтшели.
-- "tactical_medicine"    — загалом тактична медицина (якщо важко вибрати точнішу категорію).
-
-slots — вільна структура, але ми очікуємо принаймні:
-- "budget_min": мінімальний бюджет у гривнях (float) або null.
-- "budget_max": максимальний бюджет у гривнях (float) або null.
-- "order_number": рядок з номером замовлення або null.
-
-Важливі правила:
-- Якщо користувач ПРЯМО називає категорію ("турнікети", "шоломи", "аптечка ifak") —
-  intent = "product_search", action = "SHOW_PRODUCTS", category_key = відповідна категорія, confidence >= 0.7.
-- Якщо запит розмитий ("порадь щось щоб не замерзнути") —
-  intent = "product_search", але action = "ASK_CLARIFICATION" і message має містити уточнююче запитання.
-- Якщо є фрази типу "де моє замовлення", "статус доставки", "коли прийде посилка" —
-  intent = "order_status". Якщо знайшов номер замовлення в тексті — поклади його у slots.order_number.
-- Якщо питання про умови, оплату, доставку, повернення —
-  intent = "shop_info" і у message дай коротку структуровану відповідь.
-- Якщо це просто "привіт", "дякую" тощо — intent = "smalltalk".
-- Якщо багато матюків/образ — intent = "abuse", але message повинен бути м'яким, ввічливим.
-
-Ти ПОВИНЕН повернути ЧИСТИЙ JSON без пояснень, без markdown.
-
-Структура JSON:
+Ти маєш повернути ЧИСТИЙ JSON:
 {
   "intent": "product_search" | "order_status" | "shop_info" | "smalltalk" | "abuse" | "unknown",
   "action": "SHOW_PRODUCTS" | "ASK_CLARIFICATION" | "NONE",
   "confidence": 0.0-1.0,
   "category_key": string|null,
-  "message": "текст відповіді, який можна одразу показати користувачу",
+  "message": "готовий текст відповіді користувачу",
   "slots": {
     "budget_min": float|null,
     "budget_max": float|null,
     "order_number": string|null
   }
 }
+
+Правила:
+- Якщо це пошук товару — intent=product_search.
+- Якщо статус замовлення/доставка — intent=order_status.
+- Якщо доставка/оплата/повернення/умови — intent=shop_info.
+- Якщо привітання/подяка — intent=smalltalk.
+- Якщо токсично — intent=abuse, але відповідь ввічлива.
+
+category_key поки може бути null (ми не прив’язуємось до ніші).
 PROMPT;
 
         try {
-            // будуємо messages з історією
             $messages = [
                 ['role' => 'system', 'content' => $systemPrompt],
             ];
 
             foreach ($history as $item) {
-                if (! isset($item['role'], $item['content'])) {
-                    continue;
-                }
-                $messages[] = [
-                    'role'    => $item['role'],
-                    'content' => $item['content'],
-                ];
+                if (!isset($item['role'], $item['content'])) continue;
+                $messages[] = ['role' => $item['role'], 'content' => $item['content']];
             }
 
-            // поточне повідомлення юзера
-            $messages[] = [
-                'role'    => 'user',
-                'content' => $message,
-            ];
+            $messages[] = ['role' => 'user', 'content' => $message];
 
             $response = Http::withToken($this->apiKey)
                 ->post($this->baseUrl . '/chat/completions', [
                     'model'    => $this->model,
                     'messages' => $messages,
-                    'temperature'     => 0.2,
+                    'temperature' => 0.2,
                     'response_format' => [
-                        'type'        => 'json_schema',
+                        'type' => 'json_schema',
                         'json_schema' => [
                             'name'   => 'chat_routing',
                             'strict' => true,
                             'schema' => [
-                                'type'                 => 'object',
+                                'type' => 'object',
                                 'additionalProperties' => false,
-                                'properties'           => [
-                                    'intent' => [
-                                        'type' => 'string',
-                                        'enum' => [
-                                            'product_search',
-                                            'order_status',
-                                            'shop_info',
-                                            'smalltalk',
-                                            'abuse',
-                                            'unknown',
-                                        ],
-                                    ],
-                                    'action' => [
-                                        'type' => 'string',
-                                        'enum' => [
-                                            'SHOW_PRODUCTS',
-                                            'ASK_CLARIFICATION',
-                                            'NONE',
-                                        ],
-                                    ],
-                                    'confidence' => [
-                                        'type'    => 'number',
-                                        'minimum' => 0,
-                                        'maximum' => 1,
-                                    ],
-                                    'category_key' => [
-                                        'type' => ['string', 'null'],
-                                    ],
-                                    'message' => [
-                                        'type' => 'string',
-                                    ],
+                                'properties' => [
+                                    'intent' => ['type' => 'string'],
+                                    'action' => ['type' => 'string'],
+                                    'confidence' => ['type' => 'number', 'minimum' => 0, 'maximum' => 1],
+                                    'category_key' => ['type' => ['string', 'null']],
+                                    'message' => ['type' => 'string'],
                                     'slots' => [
-                                        'type'                 => 'object',
+                                        'type' => 'object',
                                         'additionalProperties' => false,
-                                        'properties'           => [
-                                            'budget_min'   => ['type' => ['number', 'null']],
-                                            'budget_max'   => ['type' => ['number', 'null']],
+                                        'properties' => [
+                                            'budget_min' => ['type' => ['number', 'null']],
+                                            'budget_max' => ['type' => ['number', 'null']],
                                             'order_number' => ['type' => ['string', 'null']],
                                         ],
                                         'required' => ['budget_min', 'budget_max', 'order_number'],
                                     ],
                                 ],
-                                'required' => [
-                                    'intent',
-                                    'action',
-                                    'confidence',
-                                    'category_key',
-                                    'message',
-                                    'slots',
-                                ],
+                                'required' => ['intent', 'action', 'confidence', 'category_key', 'message', 'slots'],
                             ],
                         ],
                     ],
                 ]);
 
-            if (! $response->successful()) {
+            if (!$response->successful()) {
                 Log::warning('AiRouter::routeChatMessage HTTP error', [
                     'status' => $response->status(),
                     'body'   => $response->body(),
@@ -516,22 +385,15 @@ PROMPT;
             $content = $response->json('choices.0.message.content');
             $decoded = json_decode($content, true);
 
-            if (! is_array($decoded)) {
+            if (!is_array($decoded)) {
                 Log::warning('AiRouter::routeChatMessage got non-JSON content', [
                     'content' => $content,
                 ]);
                 return $fallback;
             }
 
-            // ЛОГУЄМО, ЩО НАМ НАСИЛАЄ МОДЕЛЬ
-            Log::info('AiRouter::routeChatMessage decoded', [
-                'raw_content' => $content,
-                'decoded'     => $decoded,
-            ]);
-
             $merged = array_merge($fallback, $decoded);
 
-            // зберігаємо в історію сесії (для контексту наступних реплік)
             $this->pushSessionExchange(
                 $sessionId,
                 $message,
@@ -540,9 +402,7 @@ PROMPT;
 
             return $merged;
         } catch (\Throwable $e) {
-            Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), [
-                'exception' => $e,
-            ]);
+            Log::error('AiRouter::routeChatMessage exception: ' . $e->getMessage(), ['exception' => $e]);
             return $fallback;
         }
     }

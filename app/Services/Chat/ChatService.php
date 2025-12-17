@@ -603,10 +603,7 @@ class ChatService
             'будь що', 'що завгодно', 'похер', 'пофіг', 'пофиг',
             'не задавай питання', 'не питай', 'просто покажи', 'покажи варіанти',
             'any', 'anything', 'whatever',
-        ];
-    
-        foreach ($forcePhrases as $p) {
-            if (mb_stripos($norm, $p) !== false) {
+            'чисто', 'окремо', 'саме', 'тільки', 'одразу', 'только',
                 return true;
             }
         }
@@ -670,6 +667,12 @@ class ChatService
             $state['negative_terms'] = array_values(array_unique(array_merge($state['negative_terms'] ?? [], $defaultNegatives)));
         }
 
+        // Негативи для шоломів - не показувати кріплення, адаптери, рейки
+        if (($state['category_key'] ?? null) === 'helmets') {
+            $defaultNegatives = ['крейпінг','кріплення','планка','адаптер','gopro','rail','рейка','мантаж','монтаж','мат'];
+            $state['negative_terms'] = array_values(array_unique(array_merge($state['negative_terms'] ?? [], $defaultNegatives)));
+        }
+
         return $state;
     }
 
@@ -697,9 +700,8 @@ class ChatService
             }
             if ($blocked) continue;
 
-            // дедуп по title+price (бо у тебе дублікати архангела різними slugами)
-            $price = (string)($p['price'] ?? '');
-            $key = md5($title . '|' . $price);
+            // дедуп по title (без ціни, бо одна модель різними цінами)
+            $key = md5($title);
             if (isset($seen[$key])) continue;
 
             $seen[$key] = true;

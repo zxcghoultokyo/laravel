@@ -1086,5 +1086,9 @@ class ProductService
             ->map(fn (Product $p) => $this->normalizeProductForApi($p))
             ->all();
     }
+    public function detectProductTypesPublic(string $query): array
+    {
+        return $this->detectProductTypes($query);
+    }
 
 }

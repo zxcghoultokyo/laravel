@@ -29,8 +29,8 @@ class AiRouter
         // Quick rule-based classification для простих випадків
         $lower = mb_strtolower(trim($message));
         
-        // Вітання та small talk
-        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|героям слава)$/ui', $lower)) {
+        // Вітання та small talk (на початку повідомлення)
+        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|дякую|спасибі|thanks|дякую|допобачення|до побачення|бувай)/ui', $lower)) {
             return [
                 'intent'           => 'SMALL_TALK',
                 'normalized_query' => '',

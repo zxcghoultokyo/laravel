@@ -252,32 +252,42 @@ class AgentOrchestrator
     }
 
     /**
-     * Generate follow-up clarification question
+     * Generate follow-up clarification question using AI
      * Only after products are shown
      */
     private function generateFollowUpQuestion(string $originalMessage, string $searchQuery, array $filters, array $products): string
     {
-        // Extract category from products
-        $categories = array_unique(array_map(fn($p) => $this->extractMainCategory($p), $products));
+        // Збираємо контекст про товари
+        $productTitles = array_slice(array_column($products, 'title'), 0, 5);
+        $categories = array_unique(array_column($products, 'category_path'));
         
-        if (in_array('plates', $categories) || in_array('armor', $categories)) {
-            return "Щоб точніше підібрати: потрібен SAPI чи ESAPI формат? Який розмір (S/M/L)?";
+        $productsContext = implode(', ', array_slice($productTitles, 0, 3));
+        $categoryContext = implode(', ', array_slice($categories, 0, 2));
+        
+        $prompt = "Користувач шукав: \"{$searchQuery}\"
+Знайдено товари: {$productsContext}
+Категорії: {$categoryContext}
+
+Згенеруй ОДНЕ коротке уточнююче питання (до 15 слів) щоб допомогти вибрати товар.
+Питання має бути про: розмір, колір, бюджет, характеристики, призначення - що релевантно для цих товарів.
+
+Поверни ТІЛЬКИ текст питання українською, без лапок, без пояснень.
+Формат: 'Щоб точніше підібрати: ...'";
+
+        try {
+            $response = $this->aiRouter->callOpenAI($prompt, 0.7, 60);
+            $question = trim($response, " \n\r\t\"'");
+            
+            // Fallback якщо AI повернула щось дивне
+            if (empty($question) || mb_strlen($question) > 150) {
+                return "Щоб підібрати точніше: є побажання щодо розміру, кольору чи бюджету?";
+            }
+            
+            return $question;
+        } catch (\Exception $e) {
+            Log::warning('generateFollowUpQuestion: AI failed', ['error' => $e->getMessage()]);
+            return "Щоб підібрати точніше: є побажання щодо характеристик?";
         }
-        
-        if (in_array('helmets', $categories)) {
-            return "Щоб звузити вибір: балістичний чи bump? Який розмір?";
-        }
-        
-        if (in_array('plate-carriers', $categories)) {
-            return "Щоб підібрати краще: який розмір потрібен? Є побажання щодо кольору/камуфляжу?";
-        }
-        
-        // Generic follow-up
-        if (!empty($filters['budget_min']) || !empty($filters['budget_max'])) {
-            return "Є побажання щодо розміру, кольору чи додаткових характеристик?";
-        }
-        
-        return "Щоб підібрати точніше: який бюджет? Є побажання щодо характеристик?";
     }
 
     /**
@@ -447,6 +457,18 @@ class AgentOrchestrator
             }
             if (str_contains($mainCategory, 'носій') || str_contains($mainCategory, 'carrier')) {
                 return 'plate-carriers';
+            }
+            if (str_contains($mainCategory, 'сумк')) {
+                return 'bags';
+            }
+            if (str_contains($mainCategory, 'рюкзак')) {
+                return 'backpacks';
+            }
+            if (str_contains($mainCategory, 'куртк') || str_contains($mainCategory, 'форм')) {
+                return 'clothing';
+            }
+            if (str_contains($mainCategory, 'черевик') || str_contains($mainCategory, 'взутт')) {
+                return 'footwear';
             }
         }
         

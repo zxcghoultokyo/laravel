@@ -118,8 +118,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'attributes_text' => $attrsText,
                         'attrs' => $attrsMap,
 
-                        'in_stock' => (int) ((bool) $p->in_stock),
-                        'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
+                        'in_stock' => (bool) $p->in_stock,
+                        'display_in_showcase' => (bool) $p->display_in_showcase,
                         'quantity' => (int) ($p->quantity ?? 0),
                         'presence_raw' => (string) ($p->presence ?? ''),
 
@@ -128,7 +128,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'price' => (float) ($p->price ?? 0),
                         'price_old' => (float) ($p->price_old ?? 0),
 
-                        'we_recommended' => (int) ((bool) $p->we_recommended),
+                        'we_recommended' => (bool) $p->we_recommended,
                         'popularity' => (int) ($p->popularity ?? 0),
                         'orders_count' => (int) ($p->orders_count ?? 0),
                         'views_count' => (int) ($p->views_count ?? 0),
@@ -139,8 +139,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
                         'ai_product_type' => is_string($p->aiIndex->product_type ?? null) ? trim($p->aiIndex->product_type) : '',
                         'ai_category' => is_string($p->aiIndex->ai_category ?? null) ? trim($p->aiIndex->ai_category) : '',
-                        'has_ai_type' => ($p->aiIndex->product_type ?? null) ? 1 : 0,
-                        'has_ai_category' => ($p->aiIndex->ai_category ?? null) ? 1 : 0,
+                        'has_ai_type' => (bool) ($p->aiIndex->product_type ?? null),
+                        'has_ai_category' => (bool) ($p->aiIndex->ai_category ?? null),
                     ];
                 }
 

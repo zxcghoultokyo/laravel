@@ -76,12 +76,17 @@ class AiRerankTool
     {
         $candidatesList = [];
         foreach (array_slice($candidates, 0, 40) as $idx => $c) {
+            $categoryPath = $c['category_path'] ?? 'N/A';
+            if (is_array($categoryPath)) {
+                $categoryPath = implode(' > ', $categoryPath);
+            }
+            
             $candidatesList[] = sprintf(
                 "ID %d: %s | %s грн | %s | Popular: %d | Stock: %s",
                 $c['id'],
                 $c['title'],
                 $c['price'],
-                $c['category_path'] ?? 'N/A',
+                $categoryPath,
                 $c['popularity'] ?? 0,
                 $c['in_stock'] ? 'Yes' : 'No'
             );

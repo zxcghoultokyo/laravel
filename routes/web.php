@@ -11,6 +11,9 @@ Route::get('/', function () {
 
 // Admin routes
 Route::prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', function () {
+        return redirect()->route('admin.chats.index');
+    });
     Route::get('/chats', ChatsList::class)->name('chats.index');
     Route::get('/chats/{sessionId}', ChatDetail::class)->name('chats.show');
     Route::get('/widget', WidgetSettings::class)->name('widget.settings');

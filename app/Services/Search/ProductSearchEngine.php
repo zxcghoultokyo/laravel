@@ -55,9 +55,10 @@ class ProductSearchEngine
         $normalized = trim((string)($parsed['normalized'] ?? ''));
         $expanded   = trim((string)($parsed['expanded'] ?? $normalized));
 
-        // базові фільтри: наявність + показ у вітрині
+        // базові фільтри: наявність + показ у вітрині + кількість
         $filters = [
             'in_stock = 1',
+            'quantity > 0',
             'display_in_showcase = 1',
         ];
 
@@ -222,7 +223,8 @@ class ProductSearchEngine
         $q = Product::query()->with('aiIndex');
 
         $q->where('display_in_showcase', true)
-            ->where('in_stock', true);
+            ->where('in_stock', true)
+            ->where('quantity', '>', 0);
 
         if ($categoryId !== null) {
             $q->where('category_id', $categoryId);

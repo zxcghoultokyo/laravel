@@ -40,6 +40,14 @@ class IndexProductsToMeiliJob implements ShouldQueue
     {
         $index = $meili->productsIndex();
         $chunkSize = $this->effectiveChunkSize();
+        
+        $totalCount = Product::count();
+        $processedCount = 0;
+        $startTime = microtime(true);
+
+        echo "🔄 Індексація товарів у Meilisearch...\n";
+        echo "📦 Всього товарів: {$totalCount}\n";
+        echo "📊 Розмір чанку: {$chunkSize}\n\n";
 
         // Ensure filterable attributes for AI flags exist (idempotent)
         try {
@@ -57,14 +65,15 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     'color',
                 ],
             ]);
+            echo "✅ Налаштування Meili оновлено\n\n";
         } catch (\Throwable $e) {
-            // non-fatal: settings update may be async or already set
+            echo "⚠️  Налаштування Meili: {$e->getMessage()}\n\n";
         }
 
         Product::query()
             ->with('aiIndex')
             ->orderBy('id')
-            ->chunk($chunkSize, function ($products) use ($index) {
+            ->chunk($chunkSize, function ($products) use ($index, &$processedCount, $totalCount) {
                 $docs = [];
 
                 // Підтягнемо raw батьківських товарів для fallback
@@ -137,7 +146,15 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
                 if (! empty($docs)) {
                     $index->addDocuments($docs);
+                    $processedCount += count($docs);
+                    $percent = $totalCount > 0 ? round(($processedCount / $totalCount) * 100, 1) : 0;
+                    echo "📤 Проіндексовано: {$processedCount}/{$totalCount} ({$percent}%)\n";
                 }
             });
+
+        $duration = round(microtime(true) - $startTime, 2);
+        echo "\n✅ Індексація завершена!\n";
+        echo "📊 Оброблено товарів: {$processedCount}\n";
+        echo "⏱️  Час виконання: {$duration} сек\n";
     }
 }

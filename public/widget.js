@@ -29,10 +29,8 @@
 
         console.log('AILure Chat: токен отримано, завантаження налаштувань...');
 
-        // Отримуємо налаштування віджета з сервера
-        const apiUrl = window.location.origin.includes('aimbot.laravel.cloud') 
-            ? 'https://aimbot.laravel.cloud/api/widget/settings'
-            : '/api/widget/settings';
+        // ЗАВЖДИ використовуємо повний URL до нашого сервера
+        const apiUrl = 'https://aimbot.laravel.cloud/api/widget/settings';
 
         fetch(apiUrl, {
             headers: {
@@ -250,10 +248,8 @@
             // Показуємо індикатор завантаження
             const loader = addLoader();
 
-            // Визначаємо URL API
-            const chatApiUrl = window.location.origin.includes('aimbot.laravel.cloud')
-                ? 'https://aimbot.laravel.cloud/api/chat'
-                : '/api/chat';
+            // ЗАВЖДИ використовуємо повний URL до нашого сервера
+            const chatApiUrl = 'https://aimbot.laravel.cloud/api/chat';
 
             // Відправляємо на сервер
             fetch(chatApiUrl, {

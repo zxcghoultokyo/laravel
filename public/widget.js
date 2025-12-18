@@ -405,6 +405,15 @@ settings.start_state === 'open';
         function getOrCreateSessionId() {
             let sessionId = localStorage.getItem('ailure_session_id');
             if (!sessionId) {
+                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('ailure_session_id', sessionId);
+            }
+            return sessionId;
+        }
+
+        function saveSessionId(sessionId) {
+            localStorage.setItem('ailure_session_id', sessionId);
+        }
 
         function saveMessage(sessionId, message) {
             const key = `ailure_messages_${sessionId}`;
@@ -420,15 +429,6 @@ settings.start_state === 'open';
         function loadMessages(sessionId) {
             const key = `ailure_messages_${sessionId}`;
             return JSON.parse(localStorage.getItem(key) || '[]');
-        }
-                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('ailure_session_id', sessionId);
-            }
-            return sessionId;
-        }
-
-        function saveSessionId(sessionId) {
-            localStorage.setItem('ailure_session_id', sessionId);
         }
     }
 })();

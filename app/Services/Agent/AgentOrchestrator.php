@@ -186,8 +186,8 @@ class AgentOrchestrator
         // Step 5: Generate response message
         $message = $this->generateProductMessage($products, $originalMessage, $plan);
         
-        // Step 6: Add follow-up question if ambiguous AND есть разнообразие (AFTER products)
-        if ($plan['ambiguous'] && count($products) > 5 && $this->hasProductDiversity($products)) {
+        // Step 6: Add follow-up question if ambiguous (AFTER products)
+        if ($plan['ambiguous'] && count($products) > 5) {
             $message .= "\n\n" . $this->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
         }
 
@@ -252,32 +252,48 @@ class AgentOrchestrator
     }
 
     /**
-     * Generate follow-up clarification question
-     * Only after products are shown
+     * Generate follow-up clarification question using AI
+     * Only after products are shown AND есть разнообразие
      */
     private function generateFollowUpQuestion(string $originalMessage, string $searchQuery, array $filters, array $products): string
     {
-        // Extract category from products
-        $categories = array_unique(array_map(fn($p) => $this->extractMainCategory($p), $products));
+        // Збираємо контекст про товари
+        $productTitles = array_slice(array_column($products, 'title'), 0, 5);
+        $categories = array_unique(array_column($products, 'category_path'));
+        $colors = array_filter(array_unique(array_column($products, 'color')));
+        $prices = array_column($products, 'price');
         
-        if (in_array('plates', $categories) || in_array('armor', $categories)) {
-            return "Щоб точніше підібрати: потрібен SAPI чи ESAPI формат? Який розмір (S/M/L)?";
+        $productsContext = implode(', ', array_slice($productTitles, 0, 3));
+        $categoryContext = implode(', ', array_slice($categories, 0, 2));
+        $colorContext = !empty($colors) ? implode(', ', array_slice($colors, 0, 3)) : 'різні';
+        $priceRange = !empty($prices) ? round(min($prices)) . '-' . round(max($prices)) . ' грн' : '';
+        
+        $prompt = "Користувач шукав: \"{$searchQuery}\"
+Знайдено товари: {$productsContext}
+Категорії: {$categoryContext}
+Кольори: {$colorContext}
+Ціновий діапазон: {$priceRange}
+
+Згенеруй ОДНЕ коротке уточнююче питання (до 15 слів) щоб допомогти вибрати товар.
+Питай тільки про те, де є реальна різноманітність у знайдених товарах.
+
+Поверни ТІЛЬКИ текст питання українською, без лапок, без пояснень.
+Формат: 'Щоб точніше підібрати: ...'";
+
+        try {
+            $response = $this->aiRouter->callOpenAI($prompt, 0.7, 60);
+            $question = trim($response, " \n\r\t\"'");
+            
+            // Fallback якщо AI повернула щось дивне
+            if (empty($question) || mb_strlen($question) > 150) {
+                return "Щоб підібрати точніше: є побажання щодо характеристик?";
+            }
+            
+            return $question;
+        } catch (\Exception $e) {
+            Log::warning('generateFollowUpQuestion: AI failed', ['error' => $e->getMessage()]);
+            return "Щоб підібрати точніше: є побажання щодо характеристик?";
         }
-        
-        if (in_array('helmets', $categories)) {
-            return "Щоб звузити вибір: балістичний чи bump? Який розмір?";
-        }
-        
-        if (in_array('plate-carriers', $categories)) {
-            return "Щоб підібрати краще: який розмір потрібен? Є побажання щодо кольору/камуфляжу?";
-        }
-        
-        // Generic follow-up
-        if (!empty($filters['budget_min']) || !empty($filters['budget_max'])) {
-            return "Є побажання щодо розміру, кольору чи додаткових характеристик?";
-        }
-        
-        return "Щоб підібрати точніше: який бюджет? Є побажання щодо характеристик?";
     }
 
     /**
@@ -485,34 +501,6 @@ class AgentOrchestrator
         ];
         
         return $categoryNames[$topCategory] ?? null;
-    }
-
-    /**
-     * Check if products have enough diversity to ask clarifying questions
-     * Don't ask if all products are very similar
-     */
-    private function hasProductDiversity(array $products): bool
-    {
-        if (count($products) < 3) {
-            return false; // Мало товарів - не питаємо
-        }
-        
-        // Перевіряємо різноманітність категорій
-        $categories = array_unique(array_column($products, 'category_path'));
-        if (count($categories) === 1) {
-            // Одна категорія - перевіряємо кольори та ціни
-            $colors = array_filter(array_unique(array_column($products, 'color')));
-            $prices = array_column($products, 'price');
-            
-            $priceRange = !empty($prices) ? (max($prices) - min($prices)) : 0;
-            
-            // Якщо немає різноманітності кольорів І ціни схожі - не питаємо
-            if (count($colors) <= 2 && $priceRange < 1000) {
-                return false;
-            }
-        }
-        
-        return true;
     }
 
     /**

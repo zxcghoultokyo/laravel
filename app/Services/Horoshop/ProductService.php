@@ -129,30 +129,36 @@ class ProductService
 
     protected function isInStock(array $item): bool
     {
+        $quantity = (int) ($item['quantity'] ?? 0);
+
+        // Якщо кількість 0 — однозначно не в наявності
+        if ($quantity <= 0) {
+            return false;
+        }
+
         $presenceValue = Arr::get($item, 'presence.value.ua')
             ?? Arr::get($item, 'presence.value.ru')
             ?? '';
 
         $presenceValue = mb_strtolower((string) $presenceValue);
 
-        if ($presenceValue === '') {
-            return false;
-        }
-
-        $inStockPhrases = [
-            'в наявності',
-            'в наличии',
+        // Якщо presence явно каже "немає" — не в наявності навіть при quantity > 0
+        $outOfStockPhrases = [
+            'немає',
+            'нема',
+            'нет',
+            'відсутній',
+            'отсутствует',
         ];
 
-        foreach ($inStockPhrases as $phrase) {
+        foreach ($outOfStockPhrases as $phrase) {
             if (str_contains($presenceValue, $phrase)) {
-                return true;
+                return false;
             }
         }
 
-        $quantity = (int) ($item['quantity'] ?? 0);
-
-        return $quantity > 0;
+        // Якщо є кількість і presence не каже "немає" — в наявності
+        return true;
     }
 
     /**

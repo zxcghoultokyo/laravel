@@ -41,8 +41,8 @@ class AgentOrchestrator
 
         // Step 2: Execute based on intent
         $result = match($plan['intent']) {
-            'product_search' => $this->handleProductSearch($message, $plan, $context),
-            'order_status' => $this->handleOrderStatus($message, $plan, $context),
+            'productsearch' => $this->handleProductSearch($message, $plan, $context),
+            'orderstatus' => $this->handleOrderStatus($message, $plan, $context),
             'faq' => $this->handleFaq($message, $plan, $context),
             'smalltalk' => $this->handleSmallTalk($message, $plan, $context),
             default => $this->handleUnknown($message, $plan, $context),
@@ -66,15 +66,15 @@ class AgentOrchestrator
         // Use existing AiRouter for intent classification
         $classification = $this->aiRouter->classify($message);
         
-        // Normalize intent to lowercase
-        $intent = strtolower($classification['intent'] ?? 'unknown');
+        // Normalize intent to lowercase and replace underscores with no separator
+        $intent = str_replace('_', '', strtolower($classification['intent'] ?? 'unknown'));
         
         // Normalize search query if product-related
         $searchQuery = null;
         $filters = [];
         $ambiguous = false;
         
-        if ($intent === 'product_search') {
+        if ($intent === 'productsearch') {
             $normalized = $this->aiRouter->normalizeSearchQuery($message);
             
             // normalizeSearchQuery returns a string, not array

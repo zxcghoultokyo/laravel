@@ -60,13 +60,15 @@ class ChatService
             $response = [
                 'type'       => 'products', // або text, залежно від наявності products
                 'text'       => $agentResult['message'] ?? '',
-                'products'   => $agentResult['products'] ?? [],
+                'data'       => [
+                    'products' => $agentResult['products'] ?? [],
+                ],
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],
             ];
             
             // Якщо немає товарів - тип text
-            if (empty($response['products'])) {
+            if (empty($agentResult['products'])) {
                 $response['type'] = 'text';
             }
             

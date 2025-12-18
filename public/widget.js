@@ -125,6 +125,9 @@
                 .ailure-messages::-webkit-scrollbar-thumb:hover {
                     background: #94a3b8;
                 }
+                #ailure-overlay {
+                    transition: opacity 0.3s ease;
+                }
                 @media (max-width: 480px) {
                     .ailure-widget {
                         position: fixed !important;
@@ -140,14 +143,18 @@
                         right: 0 !important;
                         width: 100% !important;
                         max-width: 100% !important;
-                        height: 100vh !important;
-                        max-height: 100vh !important;
-                        border-radius: 0 !important;
+                        height: auto !important;
+                        max-height: 85vh !important;
+                        border-radius: 16px 16px 0 0 !important;
                     }
                     .ailure-toggle {
                         position: fixed !important;
                         bottom: 20px !important;
                         right: 20px !important;
+                        z-index: 10000 !important;
+                    }
+                    #ailure-overlay {
+                        display: block !important;
                     }
                 }
             `;
@@ -161,8 +168,18 @@
         const savedMessages = loadMessages(sessionId);
 
         // Створюємо HTML структуру
-        container.innerHTML = `
-            <div class="ailure-widget" style="
+        container.innerHTML = `            <!-- Overlay для закриття на мобільних -->
+            <div id="ailure-overlay" style="
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 9998;
+            "></div>
+                        <div class="ailure-widget" style="
                 position: fixed;
                 bottom: 20px;
                 ${settings.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
@@ -304,29 +321,38 @@
         const toggle = document.getElementById('ailure-toggle');
         const close = document.getElementById('ailure-close');
         const chatWindow = document.getElementById('ailure-window');
+        const overlay = document.getElementById('ailure-overlay');
         const input = document.getElementById('ailure-input');
         const send = document.getElementById('ailure-send');
         const messages = document.getElementById('ailure-messages');
 
-        let isOpen = settings.start_state === 'open' || false;
+        let isOpen = false; // ЗАВЖДИ закритий на старті
 
-        toggle.addEventListener('click', () => {
-            isOpen = !isOpen;
-            chatWindow.style.display = isOpen ? 'flex' : 'none';
-            if (isOpen) {
-                input.focus();
-            }
-        });
+        function openWidget() {
+            isOpen = true;
+            chatWindow.style.display = 'flex';
+            overlay.style.display = 'block';
+            toggle.style.display = 'none';
+            if (input) input.focus();
+        }
 
-        close.addEventListener('click', () => {
+        function closeWidget() {
             isOpen = false;
             chatWindow.style.display = 'none';
-        });
-
-        // Встановлюємо початковий стан вікна
-        if (isOpen) {
-            chatWindow.style.display = 'flex';
+            overlay.style.display = 'none';
+            toggle.style.display = 'flex';
         }
+
+        toggle.addEventListener('click', openWidget);
+        close.addEventListener('click', closeWidget);
+        overlay.addEventListener('click', closeWidget);
+
+        // Закриття по ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isOpen) {
+                closeWidget();
+            }
+        });
 
         // Відновлюємо історію або показуємо вітальне повідомлення
         if (savedMessages.length > 0) {

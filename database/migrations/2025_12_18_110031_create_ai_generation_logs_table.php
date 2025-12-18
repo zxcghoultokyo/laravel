@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('ai_generation_logs')) {
+            return;
+        }
+
         Schema::create('ai_generation_logs', function (Blueprint $table) {
             $table->id();
 

@@ -105,6 +105,14 @@ class AccessoryFilterTool
         $categoryPath = mb_strtolower($product['category_path'] ?? '');
         $title = mb_strtolower($product['title'] ?? '');
         $combined = $categoryPath . ' ' . $title;
+
+        // Detect obvious accessory wording before main-type heuristics
+        $carrierAccessoryHints = ['ремін', 'ремен', 'strap', 'sling', 'плечов', 'одноточков', 'двоточков', 'кріплен', 'harness', 'панел', 'cummerbund', 'камбербанд', 'shoulder', 'панель'];
+        foreach ($carrierAccessoryHints as $hint) {
+            if (str_contains($combined, $hint)) {
+                return 'carrier-accessory';
+            }
+        }
         
         if (str_contains($combined, 'плит') || str_contains($combined, 'plate')) {
             // Check if it's accessory or main
@@ -115,13 +123,25 @@ class AccessoryFilterTool
         }
         
         if (str_contains($combined, 'шолом') || str_contains($combined, 'каск') || str_contains($combined, 'helmet')) {
-            if (str_contains($combined, 'кріплення') || str_contains($combined, 'mount') || str_contains($combined, 'рейка')) {
+                    if (
+                        str_contains($combined, 'кріплення') ||
+                        str_contains($combined, 'кріпленн') ||
+                        str_contains($combined, 'mount') ||
+                        str_contains($combined, 'рейка') ||
+                        str_contains($combined, 'рейки') ||
+                        str_contains($combined, 'adapter') ||
+                        str_contains($combined, 'підборід') ||
+                        str_contains($combined, 'щелеп')
+                    ) {
                 return 'helmet-accessory';
             }
             return 'helmets';
         }
         
         if (str_contains($combined, 'носій') || str_contains($combined, 'carrier') || str_contains($combined, 'плитоноск')) {
+                    if (str_contains($combined, 'панел') || str_contains($combined, 'камбербанд')) {
+                        return 'carrier-accessory';
+                    }
             return 'plate-carriers';
         }
         
@@ -142,9 +162,9 @@ class AccessoryFilterTool
     private function isAccessoryOf(string $productType, string $primaryType): bool
     {
         $accessoryMap = [
-            'plates' => ['plate-accessory', 'pouches', 'plate-carriers'], // carriers can hold plates
+            'plates' => ['plate-accessory', 'pouches', 'plate-carriers', 'carrier-accessory'], // carriers/straps are accessories to plates
             'helmets' => ['helmet-accessory', 'pouches'],
-            'plate-carriers' => ['pouches', 'plates'], // carriers need plates
+            'plate-carriers' => ['pouches', 'plates', 'plate-accessory', 'carrier-accessory'],
             'vests' => ['pouches'],
         ];
         

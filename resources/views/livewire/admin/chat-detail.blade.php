@@ -79,7 +79,19 @@
                         @endif
                         
                         <!-- Chosen IDs -->
-                        @if(!empty($message->meta['chosen_ids']))
+                        @if(!empty($message->meta['chosen_articles']))
+                        <div class="col-span-2">
+                            <span class="text-gray-500">Обрані артикули:</span>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                @foreach(array_slice($message->meta['chosen_articles'], 0, 10) as $article)
+                                <code class="px-2 py-0.5 bg-blue-50 text-blue-800 rounded text-xs font-mono">{{ $article }}</code>
+                                @endforeach
+                                @if(count($message->meta['chosen_articles']) > 10)
+                                <span class="text-xs text-gray-400">+{{ count($message->meta['chosen_articles']) - 10 }} more</span>
+                                @endif
+                            </div>
+                        </div>
+                        @elseif(!empty($message->meta['chosen_ids']))
                         <div>
                             <span class="text-gray-500">Chosen IDs:</span>
                             <span class="ml-1 font-mono text-xs text-gray-900">{{ implode(', ', array_slice($message->meta['chosen_ids'], 0, 5)) }}@if(count($message->meta['chosen_ids']) > 5)...@endif</span>

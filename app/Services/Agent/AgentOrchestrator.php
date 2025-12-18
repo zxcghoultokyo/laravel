@@ -7,6 +7,7 @@ use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Agent\Tools\DeduperTool;
 use App\Services\Agent\Tools\AccessoryFilterTool;
+use App\Services\Agent\Tools\AiRerankTool;
 use Illuminate\Support\Facades\Log;
 
 class AgentOrchestrator
@@ -16,7 +17,8 @@ class AgentOrchestrator
         private MeiliProductSearchTool $searchTool,
         private ProductDetailsTool $detailsTool,
         private DeduperTool $deduperTool,
-        private AccessoryFilterTool $accessoryFilterTool
+        private AccessoryFilterTool $accessoryFilterTool,
+        private AiRerankTool $rerankTool
     ) {}
 
     /**
@@ -157,9 +159,19 @@ class AgentOrchestrator
             'reranked' => count($filtered),
         ];
         
+        // Step 3.5: AI Re-ranking (intelligent relevance scoring)
+        $startTime = microtime(true);
+        $reranked = $this->rerankTool->rerank($filtered, $searchQuery, $filters, 10);
+        $debug['steps'][] = [
+            'step' => 'ai_rerank',
+            'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
+            'before' => count($filtered),
+            'after' => count($reranked),
+        ];
+        
         // Step 4: Get top 10 products with full details
         $startTime = microtime(true);
-        $topIds = array_slice(array_column($filtered, 'id'), 0, 10);
+        $topIds = array_column($reranked, 'id');
         $products = $this->detailsTool->getCards($topIds, 10);
         $debug['steps'][] = [
             'step' => 'get_details',
@@ -167,6 +179,9 @@ class AgentOrchestrator
             'ids' => $topIds,
             'products_fetched' => count($products),
         ];
+        
+        // Collect articles for debug
+        $chosenArticles = array_column($products, 'article');
         
         // Step 5: Generate response message
         $message = $this->generateProductMessage($products, $originalMessage, $plan);
@@ -185,6 +200,7 @@ class AgentOrchestrator
                 'refined_query' => $searchQuery,
                 'filters' => $filters,
                 'chosen_ids' => $topIds,
+                'chosen_articles' => $chosenArticles,
                 'search_debug' => $debug,
             ],
         ];

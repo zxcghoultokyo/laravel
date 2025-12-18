@@ -701,4 +701,40 @@ PROMPT;
             return [];
         }
     }
+
+    /**
+     * Generic OpenAI call helper for tools
+     */
+    public function callOpenAI(string $prompt, float $temperature = 0.3, int $maxTokens = 1000): string
+    {
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::callOpenAI called without OPENAI_API_KEY');
+            return '{"error": "OpenAI key not configured"}';
+        }
+
+        try {
+            $response = Http::withToken($this->apiKey)
+                ->timeout(30)
+                ->post($this->baseUrl . '/chat/completions', [
+                    'model'       => $this->model,
+                    'messages'    => [
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature' => $temperature,
+                    'max_tokens'  => $maxTokens,
+                ]);
+
+            $data = $response->json();
+
+            if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
+                Log::error('AiRouter::callOpenAI invalid response', ['data' => $data]);
+                return '{"error": "Invalid OpenAI response"}';
+            }
+
+            return trim((string) $data['choices'][0]['message']['content']);
+        } catch (\Throwable $e) {
+            Log::error('AiRouter::callOpenAI exception: ' . $e->getMessage());
+            return '{"error": "' . $e->getMessage() . '"}';
+        }
+    }
 }

@@ -24,6 +24,9 @@ try {
     $accessoryTool = $app->make(App\Services\Agent\Tools\AccessoryFilterTool::class);
     echo "  ✅ AccessoryFilterTool\n";
     
+    $rerankTool = $app->make(App\Services\Agent\Tools\AiRerankTool::class);
+    echo "  ✅ AiRerankTool\n";
+    
     $orchestrator = $app->make(App\Services\Agent\AgentOrchestrator::class);
     echo "  ✅ AgentOrchestrator\n\n";
     

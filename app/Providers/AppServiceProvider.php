@@ -85,6 +85,12 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\Agent\Tools\AccessoryFilterTool();
         });
 
+        $this->app->singleton(\App\Services\Agent\Tools\AiRerankTool::class, function ($app) {
+            return new \App\Services\Agent\Tools\AiRerankTool(
+                $app->make(\App\Services\Ai\AiRouter::class)
+            );
+        });
+
         // Agent Orchestrator
         $this->app->singleton(\App\Services\Agent\AgentOrchestrator::class, function ($app) {
             return new \App\Services\Agent\AgentOrchestrator(
@@ -92,7 +98,8 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(\App\Services\Agent\Tools\MeiliProductSearchTool::class),
                 $app->make(\App\Services\Agent\Tools\ProductDetailsTool::class),
                 $app->make(\App\Services\Agent\Tools\DeduperTool::class),
-                $app->make(\App\Services\Agent\Tools\AccessoryFilterTool::class)
+                $app->make(\App\Services\Agent\Tools\AccessoryFilterTool::class),
+                $app->make(\App\Services\Agent\Tools\AiRerankTool::class)
             );
         });
     }

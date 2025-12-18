@@ -77,6 +77,7 @@ class ChatService
                 'last_refined_query' => $agentResult['meta']['refined_query'] ?? null,
                 'ambiguous'         => $agentResult['meta']['ambiguous'] ?? false,
                 'last_chosen_ids'   => $agentResult['meta']['chosen_ids'] ?? [],
+                'last_chosen_articles' => $agentResult['meta']['chosen_articles'] ?? [],
             ]);
             
             Log::info('ChatService::AgentOrchestrator response', [
@@ -878,6 +879,7 @@ class ChatService
                 'intent'            => $agentMeta['intent'] ?? $response['intent'] ?? 'unknown',
                 'ambiguous'         => $agentMeta['ambiguous'] ?? false,
                 'chosen_ids'        => $agentMeta['chosen_ids'] ?? [],
+                'chosen_articles'   => $agentMeta['chosen_articles'] ?? [],
                 'refined_query'     => $agentMeta['refined_query'] ?? null,
                 'filters'           => $agentMeta['filters'] ?? [],
                 'search_debug'      => $agentMeta['search_debug'] ?? [],

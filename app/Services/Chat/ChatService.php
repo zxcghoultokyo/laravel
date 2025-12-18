@@ -2,11 +2,14 @@
 
 namespace App\Services\Chat;
 
+use App\Models\ChatMessage;
+use App\Models\ChatSession;
 use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ChatService
 {
@@ -28,6 +31,11 @@ class ChatService
     {
         $normalizedMessage = trim($message);
 
+        // Якщо sessionId не передано, генеруємо новий
+        if (! $sessionId) {
+            $sessionId = (string) Str::uuid();
+        }
+
         $sessionKey      = $this->buildSessionKey($sessionId);
         $sessionContext  = $this->loadSessionContext($sessionKey);
 
@@ -38,12 +46,19 @@ class ChatService
             'ctx'        => $sessionContext,
         ]);
 
+        // Логуємо повідомлення користувача
+        $this->logUserMessage($sessionId, $normalizedMessage);
+
         // 1. Простий rule-based хендлер на чисті категорії (турнікети, шоломи, плитоноски)
         $quickCategoryResponse = $this->handleQuickCategoryShortcuts($normalizedMessage, $sessionKey);
         if ($quickCategoryResponse !== null) {
             Log::info('ChatService::quickCategoryResponse', [
                 'response' => $quickCategoryResponse,
             ]);
+            
+            // Логуємо відповідь асистента
+            $this->logAssistantMessage($sessionId, $quickCategoryResponse);
+            
             return $quickCategoryResponse;
         }
 
@@ -55,8 +70,12 @@ class ChatService
         // Перестраховка: навіть якщо AiRouter верне щось криве – не ламаємо чат
         if (! is_array($aiData)) {
             $response = $this->simpleTextResponse(
-                "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
+                "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏",
+                'unknown'
             );
+            
+            $this->logAssistantMessage($sessionId, $response);
+            
             return $response;
         }
 
@@ -96,7 +115,8 @@ class ChatService
 
             case 'smalltalk':
                 $response = $this->simpleTextResponse(
-                    $messageOut ?: "Я тут, слухаю 🙂"
+                    $messageOut ?: "Я тут, слухаю 🙂",
+                    'smalltalk'
                 );
                 $this->saveSessionContext($sessionKey, [
                     'last_intent'       => 'smalltalk',
@@ -106,11 +126,13 @@ class ChatService
                     'slots'             => $slots,
                 ]);
                 Log::info('ChatService::smalltalk response', ['response' => $response]);
+                $this->logAssistantMessage($sessionId, $response);
                 break;
 
             case 'abuse':
                 $response = $this->simpleTextResponse(
-                    "Розумію, що може бути нервова ситуація. Якщо хочеш, я допоможу підібрати спорядження або підкажу по замовленню."
+                    "Розумію, що може бути нервова ситуація. Якщо хочеш, я допоможу підібрати спорядження або підкажу по замовленню.",
+                    'abuse'
                 );
                 $this->saveSessionContext($sessionKey, [
                     'last_intent'       => 'abuse',
@@ -119,12 +141,14 @@ class ChatService
                     'last_query'        => $normalizedMessage,
                     'slots'             => $slots,
                 ]);
+                $this->logAssistantMessage($sessionId, $response);
                 break;
 
             case 'unknown':
             default:
                 $response = $this->simpleTextResponse(
-                    $messageOut ?: "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏"
+                    $messageOut ?: "Я трохи не зрозумів запит. Спробуй сформулювати ще раз, будь ласка 🙏",
+                    'unknown'
                 );
                 $this->saveSessionContext($sessionKey, [
                     'last_intent'       => 'unknown',
@@ -139,6 +163,9 @@ class ChatService
         Log::info('ChatService::handleMessage outgoing', [
             'response' => $response,
         ]);
+
+        // Логуємо відповідь асистента
+        $this->logAssistantMessage($sessionId, $response);
 
         return $response;
     }
@@ -177,7 +204,9 @@ class ChatService
         $response = $this->productsResponse(
             text: "Ось, що маємо по цій категорії 👇",
             products: $products,
-            categoryKey: $categoryKey
+            categoryKey: $categoryKey,
+            filters: null,
+            normalizedQuery: $message
         );
 
         // Записуємо контекст сесії
@@ -260,14 +289,17 @@ class ChatService
                 ]);
 
                 return $this->simpleTextResponse(
-                    "Зараз по цій категорії немає товарів в наявності або я не зміг їх знайти 😔 Спробуй сформулювати інакше або обрати іншу категорію."
+                    "Зараз по цій категорії немає товарів в наявності або я не зміг їх знайти 😔 Спробуй сформулювати інакше або обрати іншу категорію.",
+                    'product_search'
                 );
             }
 
             $response = $this->productsResponse(
                 text: $messageOut ?: "Ось, що можу запропонувати 👇",
                 products: $products,
-                categoryKey: $effectiveCategoryKey
+                categoryKey: $effectiveCategoryKey,
+                filters: $priceFilters,
+                normalizedQuery: $originalQuery
             );
 
             $this->saveSessionContext($sessionKey, [
@@ -343,7 +375,9 @@ class ChatService
                 $response = $this->productsResponse(
                     text: $text,
                     products: $products,
-                    categoryKey: $effectiveCategoryKey
+                    categoryKey: $effectiveCategoryKey,
+                    filters: $state['filters'] ?? null,
+                    normalizedQuery: $originalQuery
                 );
 
                 $this->saveSessionContext($sessionKey, [
@@ -393,7 +427,9 @@ class ChatService
                 return $this->productsResponse(
                     text: "Ось, що знайшов 👇",
                     products: $products,
-                    categoryKey: $effectiveCategoryKey
+                    categoryKey: $effectiveCategoryKey,
+                    filters: $state['filters'] ?? null,
+                    normalizedQuery: $originalQuery
                 );
             }
         }
@@ -408,7 +444,8 @@ class ChatService
             'slots'             => $slots,
         ]);
         return $this->simpleTextResponse(
-            $messageOut ?: "Поки не знайшов релевантних товарів. Напиши 1-2 слова: колір/бюджет/розмір — і я перешукаю."
+            $messageOut ?: "Поки не знайшов релевантних товарів. Напиши 1-2 слова: колір/бюджет/розмір — і я перешукаю.",
+            'product_search'
         );
     }
 
@@ -423,7 +460,8 @@ class ChatService
 
         if (! $orderNumber) {
             $response = $this->simpleTextResponse(
-                "Напиши, будь ласка, номер замовлення, щоб я міг його перевірити."
+                "Напиши, будь ласка, номер замовлення, щоб я міг його перевірити.",
+                'order_status'
             );
 
             $this->saveSessionContext($sessionKey, [
@@ -442,7 +480,8 @@ class ChatService
         }
 
         $response = $this->simpleTextResponse(
-            "Ти вказав номер замовлення {$orderNumber}. Зараз у демо-версії статуси ще не прив’язані до CRM, але в проді тут буде відстеження посилки 😉"
+            "Ти вказав номер замовлення {$orderNumber}. Зараз у демо-версії статуси ще не прив'язані до CRM, але в проді тут буде відстеження посилки 😉",
+            'order_status'
         );
 
         $this->saveSessionContext($sessionKey, [
@@ -468,7 +507,8 @@ class ChatService
         $messageOut = Arr::get($aiData, 'message');
 
         $response = $this->simpleTextResponse(
-            $messageOut ?: "Ми відправляємо замовлення Новою Поштою по всій Україні, оплата — на карту або післяплата. Якщо треба деталі — напиши, що цікавить: доставка, оплата чи повернення."
+            $messageOut ?: "Ми відправляємо замовлення Новою Поштою по всій Україні, оплата — на карту або післяплата. Якщо треба деталі — напиши, що цікавить: доставка, оплата чи повернення.",
+            'shop_info'
         );
 
         $this->saveSessionContext($sessionKey, [
@@ -489,12 +529,13 @@ class ChatService
     /**
      * Простий формат відповіді тільки з текстом.
      */
-    protected function simpleTextResponse(string $text): array
+    protected function simpleTextResponse(string $text, ?string $intent = null): array
     {
         $response = [
             'type' => 'text',
             'text' => $text,
             'data' => null,
+            'intent' => $intent ?? 'unknown',
         ];
 
         Log::info('ChatService::simpleTextResponse', [
@@ -509,7 +550,7 @@ class ChatService
      *
      * $products тут – масив з ProductService::normalizeProductForApi()
      */
-    protected function productsResponse(string $text, array $products, ?string $categoryKey = null): array
+    protected function productsResponse(string $text, array $products, ?string $categoryKey = null, ?array $filters = null, ?string $normalizedQuery = null): array
     {
         $response = [
             'type' => 'products',
@@ -517,7 +558,10 @@ class ChatService
             'data' => [
                 'category_key' => $categoryKey,
                 'products'     => $products,
+                'filters'      => $filters,
+                'normalized_query' => $normalizedQuery,
             ],
+            'intent' => 'product_search',
         ];
 
         Log::info('ChatService::productsResponse', [
@@ -714,5 +758,78 @@ class ChatService
         }
 
         return $out;
+    }
+
+    /**
+     * Логування повідомлення користувача до БД.
+     */
+    protected function logUserMessage(string $sessionId, string $content): void
+    {
+        try {
+            $session = ChatSession::firstOrCreate(
+                ['session_id' => $sessionId],
+                [
+                    'language' => 'uk',
+                    'status' => 'open',
+                    'meta' => [],
+                ]
+            );
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'user',
+                'content' => $content,
+                'meta' => [],
+            ]);
+
+            $session->increment('messages_count');
+            $session->update([
+                'last_user_query' => $content,
+                'last_message_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to log user message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Логування відповіді асистента до БД.
+     */
+    protected function logAssistantMessage(string $sessionId, array $response): void
+    {
+        try {
+            $session = ChatSession::where('session_id', $sessionId)->first();
+            if (! $session) {
+                return;
+            }
+
+            $meta = [
+                'intent' => $response['intent'] ?? null,
+                'products_shown' => isset($response['data']['products']) ? count($response['data']['products']) : 0,
+                'normalized_query' => $response['data']['normalized_query'] ?? null,
+                'filters' => $response['data']['filters'] ?? null,
+            ];
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'assistant',
+                'content' => $response['text'] ?? '',
+                'meta' => $meta,
+            ]);
+
+            $session->increment('messages_count');
+            $session->update([
+                'last_intent' => $response['intent'] ?? 'unknown',
+                'last_message_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to log assistant message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

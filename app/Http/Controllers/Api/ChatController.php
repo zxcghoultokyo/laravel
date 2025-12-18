@@ -38,9 +38,7 @@ class ChatController extends Controller
                 ]);
             }
 
-            $response = $this->chatService->handleMessage($message, $sessionId, [
-                'session_id' => $sessionId,
-            ]);
+            $response = $this->chatService->handleMessage($message, $sessionId);
 
             // Повертаємо session_id завжди
             $response['session_id'] = $sessionId;

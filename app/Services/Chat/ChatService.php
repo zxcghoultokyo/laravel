@@ -766,6 +766,8 @@ class ChatService
     protected function logUserMessage(string $sessionId, string $content): void
     {
         try {
+            Log::info('logUserMessage called', ['session_id' => $sessionId]);
+            
             $session = ChatSession::firstOrCreate(
                 ['session_id' => $sessionId],
                 [
@@ -775,12 +777,16 @@ class ChatService
                 ]
             );
 
+            Log::info('Session created/found', ['session_id' => $sessionId, 'db_id' => $session->id]);
+
             ChatMessage::create([
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $content,
                 'meta' => [],
             ]);
+
+            Log::info('User message logged', ['session_id' => $sessionId]);
 
             $session->increment('messages_count');
             $session->update([
@@ -791,6 +797,7 @@ class ChatService
             Log::error('Failed to log user message', [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }
@@ -801,8 +808,11 @@ class ChatService
     protected function logAssistantMessage(string $sessionId, array $response): void
     {
         try {
+            Log::info('logAssistantMessage called', ['session_id' => $sessionId]);
+            
             $session = ChatSession::where('session_id', $sessionId)->first();
             if (! $session) {
+                Log::warning('Session not found for assistant message', ['session_id' => $sessionId]);
                 return;
             }
 
@@ -820,6 +830,8 @@ class ChatService
                 'meta' => $meta,
             ]);
 
+            Log::info('Assistant message logged', ['session_id' => $sessionId]);
+
             $session->increment('messages_count');
             $session->update([
                 'last_intent' => $response['intent'] ?? 'unknown',
@@ -829,6 +841,7 @@ class ChatService
             Log::error('Failed to log assistant message', [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }

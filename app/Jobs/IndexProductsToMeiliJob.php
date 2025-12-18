@@ -53,7 +53,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'display_in_showcase',
+                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'quantity', 'display_in_showcase',
                 ])),
                 'searchableAttributes' => [
                     'title',

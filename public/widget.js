@@ -303,7 +303,7 @@
         // Додаємо обробники подій
         const toggle = document.getElementById('ailure-toggle');
         const close = document.getElementById('ailure-close');
-        const window = document.getElementById('ailure-window');
+        const chatWindow = document.getElementById('ailure-window');
         const input = document.getElementById('ailure-input');
         const send = document.getElementById('ailure-send');
         const messages = document.getElementById('ailure-messages');
@@ -312,7 +312,7 @@
 
         toggle.addEventListener('click', () => {
             isOpen = !isOpen;
-            window.style.display = isOpen ? 'flex' : 'none';
+            chatWindow.style.display = isOpen ? 'flex' : 'none';
             if (isOpen) {
                 input.focus();
             }
@@ -320,12 +320,12 @@
 
         close.addEventListener('click', () => {
             isOpen = false;
-            window.style.display = 'none';
+            chatWindow.style.display = 'none';
         });
 
         // Встановлюємо початковий стан вікна
         if (isOpen) {
-            window.style.display = 'flex';
+            chatWindow.style.display = 'flex';
         }
 
         // Відновлюємо історію або показуємо вітальне повідомлення

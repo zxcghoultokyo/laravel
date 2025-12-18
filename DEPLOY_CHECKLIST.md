@@ -36,8 +36,14 @@ git push origin main
 # Міграції (якщо були зміни БД)
 php artisan migrate --force
 
+# Sync товарів з Horoshop (якщо потрібно)
+php artisan sync:horoshop-products
+
+# Setup Meilisearch (один раз)
+php artisan meili:setup-products
+
 # Індексація products в Meilisearch
-php artisan app:index-products-to-meili
+php artisan meili:reindex-products
 
 # Очистити кеш
 php artisan optimize

@@ -1,18 +1,58 @@
 # Команди для індексації products в Meilisearch
 
-## 1. Індексація всіх товарів
+## ✅ Правильні команди для production:
+
+### 1. Налаштування Meilisearch індексу (один раз)
 ```bash
-php artisan app:index-products-to-meili
+php artisan meili:setup-products
+```
+Встановлює settings для індексу (searchable attributes, filters, etc.)
+
+### 2. Індексація всіх товарів
+```bash
+php artisan meili:reindex-products
 ```
 
-## 2. Rebuild category index (якщо потрібно)
+Опції:
 ```bash
-php artisan app:rebuild-category-index
+# З chunk size (дефолт: 500 товарів на job)
+php artisan meili:reindex-products --chunk=1000
 ```
 
-## 3. Sync products from Horoshop (якщо потрібні свіжі дані)
+### 3. Sync products from Horoshop
 ```bash
-php artisan app:sync-horoshop-products
+php artisan sync:horoshop-products
+```
+Синхронізує товари з Хорошопу в локальну БД, потім треба зробити reindex.
+
+## 📋 Повний flow для першого деплою:
+
+```bash
+# 1. Sync з Horoshop
+php artisan sync:horoshop-products
+
+# 2. Setup Meilisearch
+php artisan meili:setup-products
+
+# 3. Index всі products
+php artisan meili:reindex-products
+
+# 4. Restart queue
+php artisan queue:restart
+
+# 5. Optimize
+php artisan optimize
+```
+
+## 🔍 Перевірка після індексації:
+
+```bash
+php artisan tinker
+$meili = app(\App\Services\Search\MeiliClient::class);
+$index = $meili->productsIndex();
+$stats = $index->stats();
+echo "Documents: " . $stats['numberOfDocuments'] . PHP_EOL;
+exit
 ```
 
 ## 4. Перевірка індексу

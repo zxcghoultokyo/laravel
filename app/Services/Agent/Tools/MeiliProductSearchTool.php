@@ -77,14 +77,37 @@ class MeiliProductSearchTool
             
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);
             
-            // Ensure ai_product_type is set
+            // Ensure ai_product_type is set and filter out obvious accessories
+            $filtered = [];
+            $accessoryKeywords = ['ремін', 'ремен', 'strap', 'sling', 'плечов', 'одноточков', 'двоточков', 'кріплен', 'harness', 'панел', 'cummerbund', 'камбербанд', 'shoulder', 'панель', 'ліхтар', 'ліхтарик', 'навушник', 'гарнітур', 'кавер', 'чохол', 'адаптер', 'кронштейн', 'кріплення'];
+            
             foreach ($hits as &$hit) {
                 if (empty($hit['ai_product_type'])) {
                     $hit['ai_product_type'] = '__unknown__';
                 }
+                
+                // Skip obvious accessories on keyword match
+                $titleLower = mb_strtolower($hit['title'] ?? '');
+                $isAccessory = false;
+                
+                foreach ($accessoryKeywords as $keyword) {
+                    if (str_contains($titleLower, $keyword)) {
+                        $isAccessory = true;
+                        break;
+                    }
+                }
+                
+                if (!$isAccessory) {
+                    $filtered[] = $hit;
+                }
             }
             
-            return $hits;
+            // If we filtered out too many (likely false positives), return originals
+            if (count($filtered) === 0) {
+                return $hits;
+            }
+            
+            return $filtered;
             
         } catch (\Exception $e) {
             Log::error('MeiliProductSearchTool: error, falling back to Eloquent', [

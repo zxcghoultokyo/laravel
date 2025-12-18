@@ -411,11 +411,35 @@ class AgentOrchestrator
      */
     private function handleSmallTalk(string $message, array $plan, array $context): array
     {
-        return [
-            'message' => "Радий спілкуватися! Якщо потрібна допомога з вибором екіпірування — пишіть, підкажу.",
-            'products' => [],
-            'meta' => ['intent' => 'smalltalk'],
-        ];
+        try {
+            $prompt = "Користувач написав: \"{$message}\"
+
+Це smalltalk (вітання, подяка, допобачення і т.д.). 
+
+Згенеруй коротку природну відповідь українською (до 15 слів). Будь дружнім і готовим допомогти з підбором тактичного екіпірування.
+
+Поверни ТІЛЬКИ текст відповіді, без лапок.";
+
+            $response = $this->aiRouter->callOpenAI($prompt, 0.7, 50);
+            $reply = trim($response, " \n\r\t\"'");
+            
+            if (empty($reply) || mb_strlen($reply) > 100) {
+                $reply = "👋";
+            }
+            
+            return [
+                'message' => $reply,
+                'products' => [],
+                'meta' => ['intent' => 'smalltalk'],
+            ];
+        } catch (\Exception $e) {
+            Log::warning('handleSmallTalk: AI failed', ['error' => $e->getMessage()]);
+            return [
+                'message' => "👋",
+                'products' => [],
+                'meta' => ['intent' => 'smalltalk'],
+            ];
+        }
     }
 
     /**

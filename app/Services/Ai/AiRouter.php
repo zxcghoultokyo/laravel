@@ -30,7 +30,7 @@ class AiRouter
         $lower = mb_strtolower(trim($message));
         
         // Вітання та small talk (на початку повідомлення)
-        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|дякую|спасибі|thanks|дякую|допобачення|до побачення|бувай)/ui', $lower)) {
+        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|дякую|спасибі|thanks|допобачення|до побачення|бувай|чо|що|як справи|як діла)/u', $lower)) {
             return [
                 'intent'           => 'SMALL_TALK',
                 'normalized_query' => '',
@@ -728,32 +728,27 @@ PROMPT;
     {
         if (empty($this->apiKey)) {
             Log::warning('AiRouter::callOpenAI called without OPENAI_API_KEY');
-            return '{"error": "OpenAI key not configured"}';
+            throw new \RuntimeException('OpenAI key not configured');
         }
 
-        try {
-            $response = Http::withToken($this->apiKey)
-                ->timeout(30)
-                ->post($this->baseUrl . '/chat/completions', [
-                    'model'       => $this->model,
-                    'messages'    => [
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'temperature' => $temperature,
-                    'max_tokens'  => $maxTokens,
-                ]);
+        $response = Http::withToken($this->apiKey)
+            ->timeout(30)
+            ->post($this->baseUrl . '/chat/completions', [
+                'model'       => $this->model,
+                'messages'    => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => $temperature,
+                'max_tokens'  => $maxTokens,
+            ]);
 
-            $data = $response->json();
+        $data = $response->json();
 
-            if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
-                Log::error('AiRouter::callOpenAI invalid response', ['data' => $data]);
-                return '{"error": "Invalid OpenAI response"}';
-            }
-
-            return trim((string) $data['choices'][0]['message']['content']);
-        } catch (\Throwable $e) {
-            Log::error('AiRouter::callOpenAI exception: ' . $e->getMessage());
-            return '{"error": "' . $e->getMessage() . '"}';
+        if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
+            Log::error('AiRouter::callOpenAI invalid response', ['data' => $data]);
+            throw new \RuntimeException('Invalid OpenAI response: ' . json_encode($data));
         }
+
+        return trim((string) $data['choices'][0]['message']['content']);
     }
 }

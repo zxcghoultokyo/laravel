@@ -188,7 +188,10 @@ class AgentOrchestrator
         
         // Step 6: Add follow-up question if ambiguous (AFTER products)
         if ($plan['ambiguous'] && count($products) > 5) {
-            $message .= "\n\n" . $this->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
+            $question = $this->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
+            if (!empty($question)) {
+                $message .= "\n\n" . $question;
+            }
         }
 
         return [
@@ -283,19 +286,24 @@ class AgentOrchestrator
 Будь природним і корисним. Не використовуй шаблони.
 Поверни ТІЛЬКИ текст питання українською, без лапок.";
 
+        // Перевіряємо чи є реальна різноманітність
+        if (!$this->hasProductDiversity($products)) {
+            return ''; // Не питаємо якщо немає про що питати
+        }
+        
         try {
             $response = $this->aiRouter->callOpenAI($prompt, 0.7, 60);
             $question = trim($response, " \n\r\t\"'");
             
             // Fallback якщо AI повернула щось дивне
             if (empty($question) || mb_strlen($question) > 150) {
-                return "Щоб підібрати точніше: є побажання щодо характеристик?";
+                return ''; // Краще нічого не питати, ніж показувати шаблон
             }
             
             return $question;
         } catch (\Exception $e) {
             Log::warning('generateFollowUpQuestion: AI failed', ['error' => $e->getMessage()]);
-            return "Щоб підібрати точніше: є побажання щодо характеристик?";
+            return ''; // Просто не питаємо, якщо AI не працює
         }
     }
 

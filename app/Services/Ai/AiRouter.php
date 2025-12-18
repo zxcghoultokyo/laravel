@@ -26,18 +26,6 @@ class AiRouter
      */
     public function classify(string $message): array
     {
-        // Quick rule-based classification для простих випадків
-        $lower = mb_strtolower(trim($message));
-        
-        // Вітання та small talk (на початку повідомлення)
-        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|дякую|спасибі|thanks|допобачення|до побачення|бувай|чо|що|як справи|як діла)/u', $lower)) {
-            return [
-                'intent'           => 'SMALL_TALK',
-                'normalized_query' => '',
-                'order_id'         => null,
-            ];
-        }
-
         $fallback = [
             'intent'           => 'PRODUCT_SEARCH',
             'normalized_query' => $message,

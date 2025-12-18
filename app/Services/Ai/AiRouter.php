@@ -18,7 +18,7 @@ class AiRouter
         $config        = config('services.openai', []);
         $this->model   = $config['model'] ?? 'gpt-4.1-mini';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
-        $this->apiKey  = $config['api_key'] ?? null;
+        $this->apiKey  = $config['key'] ?? null;
     }
 
     /**

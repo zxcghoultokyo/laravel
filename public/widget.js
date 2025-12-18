@@ -1,6 +1,8 @@
 (function() {
     'use strict';
 
+    console.log('AILure Chat: скрипт завантажено');
+
     // Чекаємо на завантаження DOM
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initWidget);
@@ -9,11 +11,15 @@
     }
 
     function initWidget() {
+        console.log('AILure Chat: ініціалізація віджета...');
+        
         const container = document.getElementById('ailure-chat');
         if (!container) {
             console.error('AILure Chat: контейнер #ailure-chat не знайдено');
             return;
         }
+
+        console.log('AILure Chat: контейнер знайдено');
 
         const token = container.dataset.token;
         if (!token) {
@@ -21,19 +27,30 @@
             return;
         }
 
+        console.log('AILure Chat: токен отримано, завантаження налаштувань...');
+
         // Отримуємо налаштування віджета з сервера
-        fetch('/api/widget/settings', {
+        const apiUrl = window.location.origin.includes('aimbot.laravel.cloud') 
+            ? 'https://aimbot.laravel.cloud/api/widget/settings'
+            : '/api/widget/settings';
+
+        fetch(apiUrl, {
             headers: {
                 'X-Widget-Token': token,
                 'Content-Type': 'application/json'
             }
         })
-        .then(res => res.json())
+        .then(res => {
+            console.log('AILure Chat: відповідь від сервера отримано', res.status);
+            return res.json();
+        })
         .then(settings => {
+            console.log('AILure Chat: налаштування завантажено', settings);
             renderWidget(container, settings, token);
         })
         .catch(err => {
             console.error('AILure Chat: помилка завантаження налаштувань', err);
+            console.log('AILure Chat: використовуються дефолтні налаштування');
             // Рендеримо з дефолтними налаштуваннями
             renderWidget(container, getDefaultSettings(), token);
         });
@@ -53,11 +70,15 @@
     }
 
     function renderWidget(container, settings, token) {
+        console.log('AILure Chat: рендеринг віджета...', settings);
+        
         if (!settings.enabled) {
+            console.log('AILure Chat: віджет вимкнено в налаштуваннях');
             return;
         }
 
         const sessionId = getOrCreateSessionId();
+        console.log('AILure Chat: session_id:', sessionId);
 
         // Створюємо HTML структуру
         container.innerHTML = `
@@ -229,8 +250,13 @@
             // Показуємо індикатор завантаження
             const loader = addLoader();
 
+            // Визначаємо URL API
+            const chatApiUrl = window.location.origin.includes('aimbot.laravel.cloud')
+                ? 'https://aimbot.laravel.cloud/api/chat'
+                : '/api/chat';
+
             // Відправляємо на сервер
-            fetch('/api/chat', {
+            fetch(chatApiUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

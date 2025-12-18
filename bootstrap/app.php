@@ -44,7 +44,10 @@ return Application::configure(basePath: dirname(__DIR__))
             ->onFailure(fn () => \Log::error('IndexProductsToMeiliJob failed'));
     })
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // Додаємо CORS для віджета
+        $middleware->alias([
+            'widget.cors' => \App\Http\Middleware\WidgetCors::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

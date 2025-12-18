@@ -11,8 +11,18 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+// OPTIONS для CORS preflight
+Route::options('/chat', function () {
+    return response('', 200);
+})->middleware('widget.cors');
+
+Route::options('/widget/settings', function () {
+    return response('', 200);
+})->middleware('widget.cors');
+
 // AI-чат — БЕЗ use ChatController, прямо повний namespace
-Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle']);
+Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle'])
+    ->middleware('widget.cors');
 
 // Віджет налаштування
 Route::get('/widget/settings', function () {
@@ -40,7 +50,7 @@ Route::get('/widget/settings', function () {
         'input_placeholder' => $settings->input_placeholder,
         'consent_notice' => $settings->consent_notice,
     ]);
-});
+})->middleware('widget.cors');
 
 // Статус замовлення по order_id
 Route::post('/order-status', [OrderStatusController::class, 'show']);

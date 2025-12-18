@@ -324,6 +324,7 @@
         const messages = document.getElementById('ailure-messages');
 
         let isOpen = false; // ЗАВЖДИ закритий на старті
+        let hasShownWelcome = false; // Чи показано вітальне повідомлення
 
         function openWidget() {
             isOpen = true;
@@ -331,6 +332,12 @@
             overlay.style.display = 'block';
             toggle.style.display = 'none';
             if (input) input.focus();
+            
+            // Показуємо вітальне повідомлення тільки при ПЕРШОМУ відкритті
+            if (!hasShownWelcome && savedMessages.length === 0) {
+                addMessage(settings.welcome_message, 'assistant', true);
+                hasShownWelcome = true;
+            }
         }
 
         function closeWidget() {
@@ -351,8 +358,9 @@
             }
         });
 
-        // Відновлюємо історію або показуємо вітальне повідомлення
+        // Відновлюємо історію (БЕЗ автоматичного відкриття)
         if (savedMessages.length > 0) {
+            hasShownWelcome = true; // Якщо є історія - вітальне повідомлення вже було
             savedMessages.forEach(msg => {
                 if (msg.role === 'user') {
                     addMessage(msg.content, 'user', false);
@@ -362,9 +370,8 @@
                     addProducts(msg.products, false);
                 }
             });
-        } else {
-            addMessage(settings.welcome_message, 'assistant', true);
         }
+
         send.addEventListener('click', sendMessage);
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {

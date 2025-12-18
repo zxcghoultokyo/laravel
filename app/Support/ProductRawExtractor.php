@@ -12,6 +12,20 @@ class ProductRawExtractor
      */
     public static function description(array $raw, string $lang = 'ua', array $parentRaw = []): string
     {
+        $val = self::descriptionHtml($raw, $lang, $parentRaw);
+
+        // чистимо html
+        $val = strip_tags($val);
+        $val = preg_replace('/\s+/u', ' ', $val) ?: '';
+
+        return trim($val);
+    }
+
+    /**
+     * Те ж саме, але зберігаємо HTML (для евристичного парсингу характеристик).
+     */
+    private static function descriptionHtml(array $raw, string $lang = 'ua', array $parentRaw = []): string
+    {
         // Horoshop формат: description.ua / description.ru
         $candidates = [
             "description.{$lang}",
@@ -39,28 +53,22 @@ class ProductRawExtractor
         }
 
         if ($val === '' && $parentRaw) {
-            return self::description($parentRaw, $lang, []);
+            return self::descriptionHtml($parentRaw, $lang, []);
         }
 
-        // чистимо html
-        $val = strip_tags($val);
-        $val = preg_replace('/\s+/u', ' ', $val) ?: '';
-
-        return trim($val);
+        return (string) $val;
     }
 
     /**
      * Витягнути характеристики у вигляді ["Матеріал" => "Cordura", ...]
-     * і повернути:
-     *  - assoc map
-     *  - flatten string для індексації/LLM
+     * і повернути асоціативний масив.
      */
     public static function attributes(array $raw, string $lang = 'ua', array $parentRaw = []): array
     {
         // Horoshop формат: characteristics як об'єкт {"material": {...}, "weight": {...}}
         $out = [];
 
-        // 1. Horoshop characteristics (основний формат)
+        // 1) characteristics (основний формат)
         $chars = Arr::get($raw, 'characteristics');
         if (is_array($chars)) {
             foreach ($chars as $key => $charData) {
@@ -68,11 +76,9 @@ class ProductRawExtractor
                     // опис обробляємо окремо
                     continue;
                 }
-                // Може бути: {"id": 0, "value": "текст"} або {"ru": "...", "ua": "..."}
-                $name = ucfirst(str_replace('_', ' ', $key)); // material → Material
+                $name = ucfirst(str_replace('_', ' ', (string) $key));
 
                 if (is_array($charData)) {
-                    // Спробувати витягнути value
                     $value = self::pickLang($charData['value'] ?? null, $lang)
                         ?: self::pickLang($charData, $lang)
                         ?: ($charData['value'] ?? null);
@@ -86,7 +92,7 @@ class ProductRawExtractor
             }
         }
 
-        // 2. select (варіативні атрибути)
+        // 2) select (варіативні атрибути)
         $select = Arr::get($raw, 'select');
         if (is_array($select)) {
             foreach ($select as $key => $val) {
@@ -98,7 +104,7 @@ class ProductRawExtractor
             }
         }
 
-        // 3. params (простий map)
+        // 3) params (простий map)
         $params = Arr::get($raw, 'params');
         if (is_array($params)) {
             foreach ($params as $k => $v) {
@@ -112,7 +118,7 @@ class ProductRawExtractor
             }
         }
 
-        // 4. Fallback: properties (якщо є інший формат)
+        // 4) properties (альтернативний формат)
         $props = Arr::get($raw, 'properties');
         if (is_array($props)) {
             foreach ($props as $p) {
@@ -125,17 +131,25 @@ class ProductRawExtractor
             }
         }
 
-        // Якщо нічого не зібрали — спробувати з батьківського
+        // 5) Якщо нічого не зібрали — спробувати з батьківського
         if (! $out && $parentRaw) {
-            return self::attributes($parentRaw, $lang, []);
+            $out = self::attributes($parentRaw, $lang, []);
         }
 
-        // обрізати шум/надто довгі значення
+        // 6) Якщо все ще порожньо — спробувати евристично витягти з опису (HTML/текст)
+        if (! $out) {
+            $descHtml = self::descriptionHtml($raw, $lang, $parentRaw);
+            $heur = self::parseAttributesFromDescription($descHtml);
+            if ($heur) {
+                $out = $heur;
+            }
+        }
+
+        // Пост-обробка: фільтрація шуму та обрізання довгих значень
         foreach ($out as $k => $v) {
             $k2 = mb_strtolower(trim($k));
             if (mb_strlen($k2) < 2) {
                 unset($out[$k]);
-
                 continue;
             }
             if (mb_strlen($v) > 300) {
@@ -165,7 +179,6 @@ class ProductRawExtractor
     {
         if (is_array($val)) {
             $x = $val[$lang] ?? $val['ua'] ?? $val['ru'] ?? null;
-
             return is_string($x) ? trim($x) : null;
         }
 
@@ -185,5 +198,90 @@ class ProductRawExtractor
         }
 
         return '';
+    }
+
+    /**
+     * Евристичний парсер key:value з опису. Працює по простим правилам:
+     * - замінює <br>, <li>, </p> на переноси
+     * - шукає рядки з двокрапкою
+     * - фільтрує занадто довгі/шумні ключі та значення
+     */
+    private static function parseAttributesFromDescription(string $html): array
+    {
+        $text = $html;
+        if ($text === '') {
+            return [];
+        }
+
+        // Нормалізуємо розмітку до рядків
+        $replacements = [
+            '/<\s*br\s*\/?\s*>/iu' => "\n",
+            '/<\s*li\b[^>]*>/iu' => "\n- ",
+            '/<\/(p|div|li|tr)\s*>/iu' => "\n",
+            '/<\s*td\b[^>]*>/iu' => ' ',
+            '/<\s*th\b[^>]*>/iu' => ' ',
+        ];
+        foreach ($replacements as $rx => $rep) {
+            $text = preg_replace($rx, $rep, $text) ?? $text;
+        }
+        $text = strip_tags($text);
+
+        // Уніфікуємо пробіли та переносимо за роздільниками
+        $text = preg_replace('/[\t\r]+/u', ' ', $text) ?? $text;
+        $text = preg_replace('/\s*;\s*/u', ";\n", $text) ?? $text;
+        $text = preg_replace('/\s*\|\s*/u', " | ", $text) ?? $text;
+        $text = preg_replace('/\s*\n\s*/u', "\n", $text) ?? $text;
+
+        $lines = array_filter(array_map('trim', explode("\n", $text)));
+        $out = [];
+
+        $maxPairs = 12;
+        foreach ($lines as $line) {
+            // Вимагаємо наявність двокрапки як роздільника
+            if (mb_strpos($line, ':') === false) {
+                continue;
+            }
+            [$k, $v] = array_map('trim', explode(':', $line, 2));
+            if ($k === '' || $v === '') {
+                continue;
+            }
+
+            // Фільтри якості ключа
+            if (mb_strlen($k) < 2 || mb_strlen($k) > 40) {
+                continue;
+            }
+            // Не брати типові службові слова
+            $kl = mb_strtolower($k);
+            if (preg_match('/opis|опис/iu', $kl)) {
+                continue;
+            }
+            // Не брати рядки де ключ схожий на ціле речення (більше 7 слів)
+            if (count(preg_split('/\s+/u', $k)) > 7) {
+                continue;
+            }
+
+            // Фільтри якості значення
+            if (mb_strlen($v) > 120) {
+                $v = mb_substr($v, 0, 120);
+            }
+            if ($v === '' || $v === '-') {
+                continue;
+            }
+
+            // Уніфікуємо пробіли в значенні
+            $v = preg_replace('/\s+/u', ' ', $v) ?: $v;
+
+            $out[$k] = trim($v);
+            if (count($out) >= $maxPairs) {
+                break;
+            }
+        }
+
+        // Якщо зібрали менш ніж 2 — вважаємо шумом
+        if (count($out) < 2) {
+            return [];
+        }
+
+        return $out;
     }
 }

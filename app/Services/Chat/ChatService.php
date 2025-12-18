@@ -598,27 +598,31 @@ class ChatService
         if ($norm === '') {
             return false;
         }
-    
+
         $forcePhrases = [
             'будь що', 'що завгодно', 'похер', 'пофіг', 'пофиг',
             'не задавай питання', 'не питай', 'просто покажи', 'покажи варіанти',
             'any', 'anything', 'whatever',
             'чисто', 'окремо', 'саме', 'тільки', 'одразу', 'только',
+        ];
+
+        foreach ($forcePhrases as $p) {
+            if (mb_stripos($norm, $p) !== false) {
                 return true;
             }
         }
-    
+
         // якщо юзер пише дуже коротко (1-2 слова) і в сесії вже був product_search — краще показати, ніж допитувати
         if (mb_strlen($norm) <= 10 && ($sessionContext['last_intent'] ?? null) === 'product_search') {
             return true;
         }
-    
+
         return false;
     }
 
-    protected function loadSearchState(string $sessionKey): array
+    protected function initSearchState(): array
     {
-        return Cache::get('chat_search_' . $sessionKey, [
+        return [
             'topic'         => null,
             'category_key'  => null,
             'filters'       => [
@@ -627,10 +631,15 @@ class ChatService
                 'camo'       => null,   // multicam / pixel / olive ...
                 'color'      => null,
             ],
-            'negative_terms'=> [],      // що НЕ показувати (панелі/підсумки/комплекти...)
-            'shown_ids'     => [],      // щоб не повторювати одне й те саме
+            'negative_terms'=> [],      // що НЕ показувати
+            'shown_ids'     => [],      // щоб не повторювати
             'last_question' => null,    // щоб не дрочити тим самим
-        ]);
+        ];
+    }
+
+    protected function loadSearchState(string $sessionKey): array
+    {
+        return Cache::get('chat_search_' . $sessionKey, $this->initSearchState());
     }
 
     protected function saveSearchState(string $sessionKey, array $state): void

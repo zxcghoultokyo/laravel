@@ -14,6 +14,34 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 // AI-чат — БЕЗ use ChatController, прямо повний namespace
 Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle']);
 
+// Віджет налаштування
+Route::get('/widget/settings', function () {
+    $settings = \App\Models\WidgetSettings::first();
+    if (!$settings) {
+        return response()->json([
+            'enabled' => true,
+            'primary_color' => '#2563eb',
+            'text_color' => '#ffffff',
+            'position' => 'right',
+            'border_radius' => 12,
+            'welcome_message' => 'Вітаю! 👋 Я AILure асистент. Чим можу допомогти?',
+            'input_placeholder' => 'Напишіть повідомлення...',
+            'consent_notice' => null,
+        ]);
+    }
+    
+    return response()->json([
+        'enabled' => $settings->enabled,
+        'primary_color' => $settings->primary_color,
+        'text_color' => $settings->text_color,
+        'position' => $settings->position,
+        'border_radius' => $settings->border_radius,
+        'welcome_message' => $settings->welcome_message,
+        'input_placeholder' => $settings->input_placeholder,
+        'consent_notice' => $settings->consent_notice,
+    ]);
+});
+
 // Статус замовлення по order_id
 Route::post('/order-status', [OrderStatusController::class, 'show']);
 

@@ -9,6 +9,7 @@ use App\Services\Ai\ProductIndexBuilder;
 class BuildProductAiIndex extends Command
 {
     protected $signature = 'products:build-ai-index {--limit=0 : Max products to process} {--only-missing : Only products without AI index}';
+    protected $aliases = ['build:product-ai-index'];
 
     protected $description = 'Build or rebuild AI index for products';
 

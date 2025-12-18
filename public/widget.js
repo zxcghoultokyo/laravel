@@ -401,6 +401,7 @@
         }
 
         function addMessage(text, role, save = true) {
+            const s = window.ailureSettings || { primary_color: '#2563eb' };
             const div = document.createElement('div');
             div.className = `ailure-message ailure-${role}`;
             div.style.cssText = `
@@ -412,7 +413,7 @@
 
             const bubble = document.createElement('div');
             bubble.style.cssText = `
-                background: ${role === 'user' ? settings.primary_color : 'white'};
+                background: ${role === 'user' ? s.primary_color : 'white'};
                 color: ${role === 'user' ? 'white' : '#374151'};
                 padding: 12px 16px;
                 border-radius: ${role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
@@ -420,7 +421,7 @@
                 font-size: 14px;
                 line-height: 1.6;
                 white-space: pre-wrap;
-                box-shadow: ${role === 'user' ? '0 2px 8px ' + settings.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
+                box-shadow: ${role === 'user' ? '0 2px 8px ' + s.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
             `;
             bubble.textContent = text;
             div.appendChild(bubble);
@@ -428,12 +429,13 @@
             messages.scrollTop = messages.scrollHeight;
 
             if (save) {
-                saveMessage(sessionId, save = true, { role, content: text });
+                saveMessage(sessionId, { role, content: text });
             }
             messages.scrollTop = messages.scrollHeight;
         }
 
-        function addProducts(products) {
+        function addProducts(products, save = true) {
+            const s = window.ailureSettings || { primary_color: '#2563eb' };
             const container = document.createElement('div');
             container.style.cssText = 'margin-bottom: 12px;';
             
@@ -455,7 +457,7 @@
                 card.onmouseover = () => {
                     card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
                     card.style.transform = 'translateY(-2px)';
-                    card.style.borderColor = settings.primary_color;
+                    card.style.borderColor = s.primary_color;
                 };
                 card.onmouseout = () => {
                     card.style.boxShadow = 'none';
@@ -470,7 +472,7 @@
                         ` : ''}
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
-                            <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
+                            <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
                         </div>
                     </div>
                 `;

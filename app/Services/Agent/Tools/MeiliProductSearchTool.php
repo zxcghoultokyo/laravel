@@ -79,7 +79,20 @@ class MeiliProductSearchTool
             
             // Ensure ai_product_type is set and filter out obvious accessories
             $filtered = [];
-            $accessoryKeywords = ['ремін', 'ремен', 'strap', 'sling', 'плечов', 'одноточков', 'двоточков', 'кріплен', 'harness', 'панел', 'cummerbund', 'камбербанд', 'shoulder', 'панель', 'ліхтар', 'ліхтарик', 'навушник', 'гарнітур', 'кавер', 'чохол', 'адаптер', 'кронштейн', 'кріплення'];
+            $accessoryKeywords = [
+                // Straps/webbing/harness
+                'ремін', 'ремен', 'strap', 'sling', 'плечов', 'одноточков', 'двоточков', 'кріплен', 'harness', 'shoulder', 'камбербанд', 'cummerbund',
+                // Panels/covers/pouches
+                'панел', 'панель', 'чохол', 'кавер', 'сумка', 'підсумок', 'pouch', 'cover', 'panel',
+                // Lights/electronics
+                'ліхтар', 'ліхтарик', 'навушник', 'гарнітур', 'flashlight', 'headset',
+                // Adapters/mounts/hardware
+                'адаптер', 'кронштейн', 'кріплення', 'рейка', 'пряжка', 'затискач', 'mount', 'adapter', 'rail', 'buckle', 'clip',
+                // Modular components
+                'модуль', 'кишеня', 'module', 'pocket', 'compartment',
+                // Caps/accessories
+                'кап', 'камера', 'банд', '护',
+            ];
             
             foreach ($hits as &$hit) {
                 if (empty($hit['ai_product_type'])) {

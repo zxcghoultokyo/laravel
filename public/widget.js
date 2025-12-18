@@ -215,12 +215,12 @@
                         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     ">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 20px;">
-                                🤖
+                            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700;">
+                                A
                             </div>
                             <div style="display: flex; flex-direction: column;">
                                 <span style="font-weight: 600; font-size: 15px;">AILure Асистент</span>
-                                <span style="font-size: 12px; opacity: 0.9;">Зазвичай відповідаємо за хвилину</span>
+                                <span style="font-size: 12px; opacity: 0.9;">Завжди онлайн</span>
                             </div>
                         </div>
                         <button id="ailure-close" style="
@@ -476,14 +476,14 @@
                         </div>
                     </div>
                 `;
-
-            if (save) {
-                saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
-            }
                 container.appendChild(card);
             });
 
             messages.appendChild(container);
+            
+            if (save) {
+                saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
+            }
             messages.scrollTop = messages.scrollHeight;
         }
 

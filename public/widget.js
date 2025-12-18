@@ -325,8 +325,11 @@
 
         let isOpen = false; // ЗАВЖДИ закритий на старті
         let hasShownWelcome = false; // Чи показано вітальне повідомлення
+        
+        console.log('AILure Chat: початковий стан - isOpen:', isOpen, 'savedMessages:', savedMessages.length);
 
         function openWidget() {
+            console.log('AILure Chat: openWidget викликано');
             isOpen = true;
             chatWindow.style.display = 'flex';
             overlay.style.display = 'block';
@@ -335,12 +338,14 @@
             
             // Показуємо вітальне повідомлення тільки при ПЕРШОМУ відкритті
             if (!hasShownWelcome && savedMessages.length === 0) {
+                console.log('AILure Chat: додаємо вітальне повідомлення');
                 addMessage(settings.welcome_message, 'assistant', true);
                 hasShownWelcome = true;
             }
         }
 
         function closeWidget() {
+            console.log('AILure Chat: closeWidget викликано');
             isOpen = false;
             chatWindow.style.display = 'none';
             overlay.style.display = 'none';
@@ -360,6 +365,7 @@
 
         // Відновлюємо історію (БЕЗ автоматичного відкриття)
         if (savedMessages.length > 0) {
+            console.log('AILure Chat: відновлюємо історію, кількість повідомлень:', savedMessages.length);
             hasShownWelcome = true; // Якщо є історія - вітальне повідомлення вже було
             savedMessages.forEach(msg => {
                 if (msg.role === 'user') {
@@ -370,7 +376,11 @@
                     addProducts(msg.products, false);
                 }
             });
+        } else {
+            console.log('AILure Chat: немає збереженої історії');
         }
+        
+        console.log('AILure Chat: перевіряємо стан після відновлення - chatWindow.style.display:', chatWindow.style.display);
 
         send.addEventListener('click', sendMessage);
         input.addEventListener('keypress', (e) => {
@@ -431,6 +441,7 @@
         }
 
         function addMessage(text, role, save = true) {
+            console.log('AILure Chat: addMessage викликано -', role, ':', text.substring(0, 50));
             const s = window.ailureSettings || { primary_color: '#2563eb' };
             const div = document.createElement('div');
             div.className = `ailure-message ailure-${role}`;
@@ -456,6 +467,7 @@
             bubble.textContent = text;
             div.appendChild(bubble);
             messages.appendChild(div);
+            console.log('AILure Chat: повідомлення додано до DOM');
             messages.scrollTop = messages.scrollHeight;
 
             if (save) {

@@ -308,6 +308,29 @@ class AgentOrchestrator
     }
 
     /**
+     * Check if products have real diversity worth asking questions about
+     */
+    private function hasProductDiversity(array $products): bool
+    {
+        if (count($products) < 3) {
+            return false; // Too few to ask questions
+        }
+
+        $categories = array_unique(array_column($products, 'category_path'));
+        $colors = array_filter(array_unique(array_column($products, 'color')));
+        $prices = array_column($products, 'price');
+        
+        $priceRange = !empty($prices) ? (max($prices) - min($prices)) : 0;
+
+        // Don't ask if: 1 category + ≤2 colors + price range <1000
+        if (count($categories) === 1 && count($colors) <= 2 && $priceRange < 1000) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Handle no results scenario
      */
     private function handleNoResults(string $originalMessage, string $searchQuery): array

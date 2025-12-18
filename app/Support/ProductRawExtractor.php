@@ -18,6 +18,11 @@ class ProductRawExtractor
             'description.ua',
             'description.ru',
             'description',
+            // Деякі проєкти кладуть опис у characteristics.opisanie
+            "characteristics.opisanie.{$lang}",
+            'characteristics.opisanie.ua',
+            'characteristics.opisanie.ru',
+            'characteristics.opisanie',
             "short_description.{$lang}",
             'short_description.ua',
             'short_description.ru',
@@ -55,6 +60,10 @@ class ProductRawExtractor
         $chars = Arr::get($raw, 'characteristics');
         if (is_array($chars)) {
             foreach ($chars as $key => $charData) {
+                if ($key === 'opisanie') {
+                    // опис обробляємо окремо
+                    continue;
+                }
                 // Може бути: {"id": 0, "value": "текст"} або {"ru": "...", "ua": "..."}
                 $name = ucfirst(str_replace('_', ' ', $key)); // material → Material
 

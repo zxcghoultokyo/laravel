@@ -54,14 +54,11 @@ class ProductService
 
             Log::info('Horoshop sync request', $payload);
 
+            // HoroshopClient::request вже кидає RuntimeException для статусів EXCEPTION/ERROR,
+            // тому тут отримаємо безпосередньо payload з ключем "products".
             $response = $this->client->request('catalog/export', $payload);
 
-            if (($response['status'] ?? '') !== 'OK') {
-                Log::warning('Horoshop sync status not OK', $response);
-                break;
-            }
-
-            $products = Arr::get($response, 'response.products', []);
+            $products = Arr::get($response, 'products', []);
 
             if (empty($products)) {
                 Log::info('Horoshop sync: no more products, break');

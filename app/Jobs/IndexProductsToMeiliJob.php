@@ -17,7 +17,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
     /**
      * Backward-compat: старі job-и могли серіалізувати "chunk".
      */
-    public ?int $chunkSize = null;
+    public int $chunkSize = 500;
     public ?int $chunk = null;
 
     public function __construct(int $chunkSize = 500)
@@ -29,7 +29,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
     protected function effectiveChunkSize(): int
     {
         // якщо прийшла стара job з "chunk"
-        $size = $this->chunkSize ?? $this->chunk ?? 500;
+        $size = $this->chunk ?? $this->chunkSize;
         return max(50, (int) $size);
     }
 

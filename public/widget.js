@@ -3,6 +3,20 @@
 
     console.log('AILure Chat: скрипт завантажено');
 
+    // Допоміжна функція для зміни яскравості кольору
+    function adjustBrightness(color, amount) {
+        const usePound = color[0] === '#';
+        const col = usePound ? color.slice(1) : color;
+        const num = parseInt(col, 16);
+        let r = (num >> 16) + amount;
+        let g = ((num >> 8) & 0x00FF) + amount;
+        let b = (num & 0x0000FF) + amount;
+        r = Math.max(Math.min(255, r), 0);
+        g = Math.max(Math.min(255, g), 0);
+        b = Math.max(Math.min(255, b), 0);
+        return (usePound ? '#' : '') + (r << 16 | g << 8 | b).toString(16).padStart(6, '0');
+    }
+
     // Чекаємо на завантаження DOM
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initWidget);
@@ -63,7 +77,8 @@
             welcome_message: 'Вітаю! 👋 Я AILure асистент. Чим можу допомогти?',
             input_placeholder: 'Напишіть повідомлення...',
             consent_notice: null,
-            enabled: true
+            enabled: true,
+            start_state: 'closed'
         };
     }
 
@@ -73,6 +88,70 @@
         if (!settings.enabled) {
             console.log('AILure Chat: віджет вимкнено в налаштуваннях');
             return;
+        }
+
+        // Зберігаємо settings глобально для доступу з функцій
+        window.ailureSettings = settings;
+
+        // Додаємо CSS анімації
+        if (!document.getElementById('ailure-animations')) {
+            const style = document.createElement('style');
+            style.id = 'ailure-animations';
+            style.textContent = `
+                @keyframes fadeInUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                @keyframes ailure-pulse {
+                    0%, 80%, 100% { opacity: 0.3; }
+                    40% { opacity: 1; }
+                }
+                .ailure-messages::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .ailure-messages::-webkit-scrollbar-track {
+                    background: #f1f1f1;
+                }
+                .ailure-messages::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 3px;
+                }
+                .ailure-messages::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                }
+                @media (max-width: 480px) {
+                    .ailure-widget {
+                        position: fixed !important;
+                        bottom: 0 !important;
+                        left: 0 !important;
+                        right: 0 !important;
+                        width: 100% !important;
+                    }
+                    .ailure-window {
+                        position: fixed !important;
+                        bottom: 0 !important;
+                        left: 0 !important;
+                        right: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        height: 100vh !important;
+                        max-height: 100vh !important;
+                        border-radius: 0 !important;
+                    }
+                    .ailure-toggle {
+                        position: fixed !important;
+                        bottom: 20px !important;
+                        right: 20px !important;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
         }
 
         const sessionId = getOrCreateSessionId();
@@ -88,7 +167,7 @@
                 bottom: 20px;
                 ${settings.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
                 z-index: 9999;
-                font-family: system-ui, -apple-system, sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             ">
                 <!-- Кнопка відкриття -->
                 <button id="ailure-toggle" class="ailure-toggle" style="
@@ -96,54 +175,66 @@
                     height: 60px;
                     border-radius: 50%;
                     background: ${settings.primary_color};
-                    color: ${settings.text_color};
+                    color: white;
                     border: none;
                     cursor: pointer;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    font-size: 24px;
-                    transition: transform 0.2s;
-                " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                    font-size: 28px;
+                    transition: all 0.3s ease;
+                " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
                     💬
                 </button>
-${settings.start_state === 'open' ? 'flex' : 'none'}
+
                 <!-- Віконце чату -->
                 <div id="ailure-window" class="ailure-window" style="
                     display: none;
-                    position: absolute;
-                    bottom: 70px;
-                    ${settings.position === 'right' ? 'right: 0;' : 'left: 0;'}
-                    width: 380px;
-                    max-height: 600px;
+                    position: fixed;
+                    bottom: 90px;
+                    ${settings.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                    width: min(400px, calc(100vw - 40px));
+                    max-width: 400px;
+                    height: min(600px, calc(100vh - 120px));
                     background: white;
                     border-radius: ${settings.border_radius}px;
-                    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+                    box-shadow: 0 12px 48px rgba(0,0,0,0.25);
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
                 ">
                     <!-- Header -->
                     <div class="ailure-header" style="
-                        background: ${settings.primary_color};
-                        color: ${settings.text_color};
-                        padding: 16px;
+                        background: linear-gradient(135deg, ${settings.primary_color} 0%, ${adjustBrightness(settings.primary_color, -15)} 100%);
+                        color: white;
+                        padding: 20px 16px;
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     ">
-                        <span style="font-weight: 600;">AILure Асистент</span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                                🤖
+                            </div>
+                            <div style="display: flex; flex-direction: column;">
+                                <span style="font-weight: 600; font-size: 15px;">AILure Асистент</span>
+                                <span style="font-size: 12px; opacity: 0.9;">Зазвичай відповідаємо за хвилину</span>
+                            </div>
+                        </div>
                         <button id="ailure-close" style="
-                            background: transparent;
+                            background: rgba(255,255,255,0.2);
                             border: none;
-                            color: ${settings.text_color};
-                            font-size: 20px;
+                            color: white;
+                            font-size: 18px;
                             cursor: pointer;
-                            padding: 0;
-                            width: 24px;
-                            height: 24px;
-                        ">✕</button>
+                            padding: 4px;
+                            width: 28px;
+                            height: 28px;
+                            border-radius: 50%;
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">✕</button>
                     </div>
 
                     <!-- Messages -->
@@ -152,16 +243,22 @@ ${settings.start_state === 'open' ? 'flex' : 'none'}
                         overflow-y: auto;
                         padding: 16px;
                         background: #f9fafb;
-                        max-height: 450px;
+                        min-height: 300px;
                     ">
                     </div>
 
                     <!-- Input -->
                     <div class="ailure-input-container" style="
-                        padding: 12px;
+                        padding: 16px;
                         background: white;
                         border-top: 1px solid #e5e7eb;
+                        box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
                     ">
+                        ${settings.consent_notice ? `
+                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
+                            ${settings.consent_notice}
+                        </div>
+                        ` : ''}
                         <div style="display: flex; gap: 8px;">
                             <input 
                                 type="text" 
@@ -169,27 +266,35 @@ ${settings.start_state === 'open' ? 'flex' : 'none'}
                                 placeholder="${settings.input_placeholder}"
                                 style="
                                     flex: 1;
-                                    padding: 10px 12px;
-                                    border: 1px solid #d1d5db;
-                                    border-radius: 8px;
+                                    padding: 12px 16px;
+                                    border: 1.5px solid #d1d5db;
+                                    border-radius: 24px;
                                     font-size: 14px;
                                     outline: none;
+                                    transition: all 0.2s;
                                 "
+                                onfocus="this.style.borderColor='${settings.primary_color}'; this.style.boxShadow='0 0 0 3px ${settings.primary_color}20'"
+                                onblur="this.style.borderColor='#d1d5db'; this.style.boxShadow='none'"
                             >
                             <button id="ailure-send" style="
                                 background: ${settings.primary_color};
-                                color: ${settings.text_color};
+                                color: white;
                                 border: none;
-                                padding: 10px 16px;
-                                border-radius: 8px;
+                                padding: 0;
+                                width: 44px;
+                                height: 44px;
+                                border-radius: 50%;
                                 cursor: pointer;
                                 font-size: 18px;
-                                transition: opacity 0.2s;
-                            " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                                transition: all 0.2s;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                box-shadow: 0 2px 8px ${settings.primary_color}40;
+                            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                                 ➤
                             </button>
                         </div>
-                        ${settings.consent_notice ? `<p style="margin-top: 8px; font-size: 11px; color: #6b7280;">${settings.consent_notice}</p>` : ''}
                     </div>
                 </div>
             </div>
@@ -203,7 +308,7 @@ ${settings.start_state === 'open' ? 'flex' : 'none'}
         const send = document.getElementById('ailure-send');
         const messages = document.getElementById('ailure-messages');
 
-        let isOpen = false;
+        let isOpen = settings.start_state === 'open' || false;
 
         toggle.addEventListener('click', () => {
             isOpen = !isOpen;
@@ -217,7 +322,11 @@ ${settings.start_state === 'open' ? 'flex' : 'none'}
             isOpen = false;
             window.style.display = 'none';
         });
-settings.start_state === 'open';
+
+        // Встановлюємо початковий стан вікна
+        if (isOpen) {
+            window.style.display = 'flex';
+        }
 
         // Відновлюємо історію або показуємо вітальне повідомлення
         if (savedMessages.length > 0) {
@@ -298,18 +407,20 @@ settings.start_state === 'open';
                 margin-bottom: 12px;
                 display: flex;
                 justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'};
+                animation: fadeInUp 0.3s ease-out;
             `;
 
             const bubble = document.createElement('div');
             bubble.style.cssText = `
-                background: ${role === 'user' ? settings.primary_color : '#e5e7eb'};
-                color: ${role === 'user' ? settings.text_color : '#1f2937'};
-                padding: 10px 14px;
-                border-radius: 12px;
-                max-width: 80%;
+                background: ${role === 'user' ? settings.primary_color : 'white'};
+                color: ${role === 'user' ? 'white' : '#374151'};
+                padding: 12px 16px;
+                border-radius: ${role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
+                max-width: 75%;
                 font-size: 14px;
-                line-height: 1.4;
+                line-height: 1.6;
                 white-space: pre-wrap;
+                box-shadow: ${role === 'user' ? '0 2px 8px ' + settings.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
             `;
             bubble.textContent = text;
             div.appendChild(bubble);
@@ -334,24 +445,32 @@ settings.start_state === 'open';
                     display: block;
                     background: white;
                     border: 1px solid #e5e7eb;
-                    border-radius: 8px;
+                    border-radius: 12px;
                     padding: 12px;
                     margin-bottom: 8px;
                     text-decoration: none;
                     color: inherit;
-                    transition: box-shadow 0.2s;
+                    transition: all 0.2s;
                 `;
-                card.onmouseover = () => card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                card.onmouseout = () => card.style.boxShadow = 'none';
+                card.onmouseover = () => {
+                    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                    card.style.transform = 'translateY(-2px)';
+                    card.style.borderColor = settings.primary_color;
+                };
+                card.onmouseout = () => {
+                    card.style.boxShadow = 'none';
+                    card.style.transform = 'translateY(0)';
+                    card.style.borderColor = '#e5e7eb';
+                };
 
                 card.innerHTML = `
                     <div style="display: flex; gap: 12px;">
                         ${product.images && product.images[0] ? `
-                            <img src="${product.images[0]}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" />
+                            <img src="${product.images[0]}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" />
                         ` : ''}
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">${product.title}</div>
-                            <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 15px;">${product.price} ₴</div>
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
+                            <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
                         </div>
                     </div>
                 `;
@@ -369,9 +488,9 @@ settings.start_state === 'open';
         function addLoader() {
             const div = document.createElement('div');
             div.className = 'ailure-loader';
-            div.style.cssText = 'margin-bottom: 12px; display: flex; justify-content: flex-start;';
+            div.style.cssText = 'margin-bottom: 16px; display: flex; justify-content: flex-start;';
             div.innerHTML = `
-                <div style="background: #e5e7eb; padding: 10px 14px; border-radius: 12px;">
+                <div style="background: white; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                     <span style="display: inline-block; animation: ailure-pulse 1.4s infinite;">●</span>
                     <span style="display: inline-block; animation: ailure-pulse 1.4s 0.2s infinite;">●</span>
                     <span style="display: inline-block; animation: ailure-pulse 1.4s 0.4s infinite;">●</span>

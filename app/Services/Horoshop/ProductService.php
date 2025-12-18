@@ -16,18 +16,19 @@ use Illuminate\Support\Facades\Log;
 class ProductService
 {
     protected HoroshopClient $client;
+
     protected AiRouter $aiRouter;
 
     public function __construct(HoroshopClient $client, AiRouter $aiRouter)
     {
-        $this->client   = $client;
+        $this->client = $client;
         $this->aiRouter = $aiRouter;
     }
 
     /**
      * Синхронізація товарів із Horoshop у локальну БД.
      *
-     * @param int $limit Максимальна кількість товарів за один запит
+     * @param  int  $limit  Максимальна кількість товарів за один запит
      */
     public function syncFromHoroshop(int $limit = 200): void
     {
@@ -35,12 +36,20 @@ class ProductService
 
         do {
             $payload = [
-                'expr'  => [
+                'expr' => [
                     // можна звузити по parent, display_in_showcase тощо, якщо треба
                     'display_in_showcase' => 1,
                 ],
                 'limit' => $limit,
-                'offset'=> $offset,
+                'offset' => $offset,
+                'includedParams' => [
+                    'title', 'article', 'parent_article', 'price', 'price_old',
+                    'parent', 'images', 'slug', 'link', 'presence', 'quantity',
+                    'display_in_showcase', 'popularity', 'color', 'brand',
+                    'description', 'characteristics', 'short_description',
+                    'seo_title', 'seo_keywords', 'seo_description',
+                    'we_recommended', 'icons',
+                ],
             ];
 
             Log::info('Horoshop sync request', $payload);
@@ -90,27 +99,27 @@ class ProductService
         $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
 
         $product->fill([
-            'article'        => $article,
+            'article' => $article,
             'parent_article' => $item['parent_article'] ?? null,
-            'title'          => $title,
-            'title_json'     => $item['title'] ?? null,
-            'price'          => $item['price'] ?? 0,
-            'price_old'      => $item['price_old'] ?? 0,
-            'category_path'  => $item['parent']['value'] ?? null,
-            'slug'           => $item['slug'] ?? null,
-            'link'           => $item['link'] ?? null,
-            'images'         => $item['images'] ?? [],
-            'raw'            => $item,
-            'presence'       => Arr::get($item, 'presence.value.ua')
+            'title' => $title,
+            'title_json' => $item['title'] ?? null,
+            'price' => $item['price'] ?? 0,
+            'price_old' => $item['price_old'] ?? 0,
+            'category_path' => $item['parent']['value'] ?? null,
+            'slug' => $item['slug'] ?? null,
+            'link' => $item['link'] ?? null,
+            'images' => $item['images'] ?? [],
+            'raw' => $item,
+            'presence' => Arr::get($item, 'presence.value.ua')
                                    ?? Arr::get($item, 'presence.value.ru')
                                    ?? null,
-            'quantity'       => $item['quantity'] ?? 0,
+            'quantity' => $item['quantity'] ?? 0,
             'brand' => $brand,
-            'popularity'     => $item['popularity'] ?? 0,
+            'popularity' => $item['popularity'] ?? 0,
             'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
-            'in_stock'            => $this->isInStock($item),
-            'color'               => Arr::get($item, 'color.value.ua')
+            'in_stock' => $this->isInStock($item),
+            'color' => Arr::get($item, 'color.value.ua')
                                         ?? Arr::get($item, 'color.value.ru')
                                         ?? null,
         ]);
@@ -162,7 +171,7 @@ class ProductService
         $query = Product::query()
             ->where('display_in_showcase', true)
             ->where('in_stock', true)
-            ->where('category_path', 'LIKE', '%' . $needle . '%')
+            ->where('category_path', 'LIKE', '%'.$needle.'%')
             ->orderByDesc('popularity')
             ->limit($limit);
 
@@ -222,17 +231,17 @@ class ProductService
         return mb_strtolower($searchIndex);
     }
 
-   /**
- * Розширення запиту з урахуванням доменних синонімів та колірних синонімів.
- * (product_tags поки не розширюємо extra_keywords, бо їх немає в таблиці)
- */
+    /**
+     * Розширення запиту з урахуванням доменних синонімів та колірних синонімів.
+     * (product_tags поки не розширюємо extra_keywords, бо їх немає в таблиці)
+     */
     protected function expandQueryWithDomainSynonyms(string $query, string $language = 'uk'): string
     {
         $baseTokens = preg_split('/\s+/u', $query) ?: [];
-        $baseTokens = array_values(array_filter($baseTokens, fn($t) => $t !== ''));
-    
+        $baseTokens = array_values(array_filter($baseTokens, fn ($t) => $t !== ''));
+
         $expandedTokens = $baseTokens;
-    
+
         // 1) product_synonyms: synonym -> product_type (канонічний “токен”)
         $synonyms = ProductSynonym::query()
             ->whereIn('synonym', $baseTokens)
@@ -241,15 +250,15 @@ class ProductService
             })
             ->where('is_active', true)
             ->get();
-    
+
         foreach ($synonyms as $syn) {
             // додаємо канонічний product_type як “розширення”
             $canonical = $syn->product_type ?? null;
-            if (is_string($canonical) && $canonical !== '' && !in_array($canonical, $expandedTokens, true)) {
+            if (is_string($canonical) && $canonical !== '' && ! in_array($canonical, $expandedTokens, true)) {
                 $expandedTokens[] = $canonical;
             }
         }
-    
+
         // 2) color_synonyms: synonym -> color_group (канонічний колір)
         $colors = ColorSynonym::query()
             ->whereIn('synonym', $baseTokens)
@@ -258,37 +267,37 @@ class ProductService
             })
             ->where('is_active', true)
             ->get();
-    
+
         foreach ($colors as $colorSyn) {
             $canonicalColor = $colorSyn->color_group ?? null;
-            if (is_string($canonicalColor) && $canonicalColor !== '' && !in_array($canonicalColor, $expandedTokens, true)) {
+            if (is_string($canonicalColor) && $canonicalColor !== '' && ! in_array($canonicalColor, $expandedTokens, true)) {
                 $expandedTokens[] = $canonicalColor;
             }
         }
-    
+
         // 3) product_tags: просто підсилюємо збіг якщо токен є тегом (name/slug)
         // (без extra_keywords, бо їх немає в таблиці)
         $tags = ProductTag::query()
             ->whereIn('slug', $baseTokens)
             ->orWhereIn('name', $baseTokens)
             ->get();
-    
+
         foreach ($tags as $tag) {
             // додамо slug як стабільний токен
             $slug = $tag->slug ?? null;
-            if (is_string($slug) && $slug !== '' && !in_array($slug, $expandedTokens, true)) {
+            if (is_string($slug) && $slug !== '' && ! in_array($slug, $expandedTokens, true)) {
                 $expandedTokens[] = $slug;
             }
         }
-    
+
         $expanded = implode(' ', $expandedTokens);
-    
+
         Log::info('ProductService::expandQueryWithDomainSynonyms', [
-            'input'    => $query,
-            'tokens'   => $baseTokens,
+            'input' => $query,
+            'tokens' => $baseTokens,
             'expanded' => $expanded,
         ]);
-    
+
         return $expanded;
     }
 
@@ -298,67 +307,68 @@ class ProductService
     public function searchByText(string $rawQuery, ?int $categoryId = null, string $language = 'uk'): array
     {
         Log::info('ProductService::searchByText', [
-            'raw_query'   => $rawQuery,
+            'raw_query' => $rawQuery,
             'category_id' => $categoryId,
-            'language'    => $language,
+            'language' => $language,
         ]);
-    
+
         // 1) базова нормалізація
         $normalized = mb_strtolower(trim($rawQuery));
         if ($normalized === '') {
             return [];
         }
-    
+
         // 2) Парсимо запит (синоніми, ціни, сигнали)
         /** @var \App\Services\Search\SearchQueryParser $parser */
         $parser = app(\App\Services\Search\SearchQueryParser::class);
         $parsed = $parser->parse($rawQuery, $language, null);
-    
+
         if (($parsed['normalized'] ?? '') === '') {
             return [];
         }
-    
+
         // 3) AI intent (типи товарів, must-have, але НЕ фільтруємо тут)
         $parsed['ai_intent'] = $this->detectProductTypes(
             (string) ($parsed['normalized'] ?? $normalized)
         );
-    
+
         /** @var \App\Services\Search\ProductSearchEngine $engine */
         $engine = app(\App\Services\Search\ProductSearchEngine::class);
-    
+
         // ⚠️ важливо: беремо БАГАТО кандидатів
         $candidatesLimit = 50;
         $finalLimit = 10;
-    
+
         $rows = $engine->search($parsed, $categoryId, limit: $candidatesLimit);
-    
+
         if ($rows->isEmpty()) {
             Log::info('ProductService::searchByText no results', [
                 'normalized' => $parsed['normalized'],
             ]);
+
             return [];
         }
-    
+
         // 4) Готуємо кандидатів для AI rerank
         $candidates = $rows->map(function (array $row) {
             /** @var \App\Models\Product $p */
             $p = $row['product'];
-    
+
             return [
-                'id'                   => (int) $p->id,
-                'title'                => (string) $p->title,
-                'category_path'        => (string) $p->category_path,
-                'price'                => (float) ($p->price ?? 0),
-                'in_stock'             => (int) ((bool) $p->in_stock),
-                'display_in_showcase'  => (int) ((bool) $p->display_in_showcase),
-                'product_type'         => (string) ($p->product_type ?? ''),
-                'ai_product_type'      => (string) optional($p->aiIndex)->product_type,
+                'id' => (int) $p->id,
+                'title' => (string) $p->title,
+                'category_path' => (string) $p->category_path,
+                'price' => (float) ($p->price ?? 0),
+                'in_stock' => (int) ((bool) $p->in_stock),
+                'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
+                'product_type' => (string) ($p->product_type ?? ''),
+                'ai_product_type' => (string) optional($p->aiIndex)->product_type,
             ];
         })->values()->all();
-    
+
         // session_id — звідки тобі зручно (header / request / context)
         $sessionId = request()->header('X-Session-Id');
-    
+
         // 5) AI rerank (головна магія)
         $reranked = $this->aiRouter->rerankProductCandidates(
             $rawQuery,
@@ -366,53 +376,54 @@ class ProductService
             $sessionId,
             $finalLimit
         );
-    
+
         // 6) Якщо AI каже "мало релевантного" → 1 refined пошук
         if (
             count($reranked['chosen_ids']) < 3
-            && !empty($reranked['refined_query'])
+            && ! empty($reranked['refined_query'])
         ) {
             Log::info('ProductService::searchByText refined search', [
                 'refined_query' => $reranked['refined_query'],
             ]);
-    
+
             $parsed2 = $parsed;
             $parsed2['normalized'] = (string) $reranked['refined_query'];
-    
+
             $rows2 = $engine->search($parsed2, $categoryId, limit: $candidatesLimit);
-    
+
             if ($rows2->isNotEmpty()) {
                 $candidates2 = $rows2->map(function (array $row) {
                     $p = $row['product'];
+
                     return [
-                        'id'                   => (int) $p->id,
-                        'title'                => (string) $p->title,
-                        'category_path'        => (string) $p->category_path,
-                        'price'                => (float) ($p->price ?? 0),
-                        'in_stock'             => (int) ((bool) $p->in_stock),
-                        'display_in_showcase'  => (int) ((bool) $p->display_in_showcase),
-                        'product_type'         => (string) ($p->product_type ?? ''),
-                        'ai_product_type'      => (string) optional($p->aiIndex)->product_type,
+                        'id' => (int) $p->id,
+                        'title' => (string) $p->title,
+                        'category_path' => (string) $p->category_path,
+                        'price' => (float) ($p->price ?? 0),
+                        'in_stock' => (int) ((bool) $p->in_stock),
+                        'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
+                        'product_type' => (string) ($p->product_type ?? ''),
+                        'ai_product_type' => (string) optional($p->aiIndex)->product_type,
                     ];
                 })->values()->all();
-    
+
                 $reranked = $this->aiRouter->rerankProductCandidates(
                     $rawQuery,
                     $candidates2,
                     $sessionId,
                     $finalLimit
                 );
-    
+
                 $rows = $rows2;
             }
         }
-    
+
         // 7) Фінальна збірка по chosen_ids
         $chosenIds = $reranked['chosen_ids'] ?? [];
-    
-        if (!empty($chosenIds)) {
+
+        if (! empty($chosenIds)) {
             $rowMap = $rows->keyBy(fn ($row) => (int) $row['product']->id);
-    
+
             $rows = collect($chosenIds)
                 ->map(fn ($id) => $rowMap->get((int) $id))
                 ->filter()
@@ -421,10 +432,10 @@ class ProductService
             // fallback — перші N
             $rows = $rows->take($finalLimit);
         }
-    
+
         // 8) Дедуп (варіації / однакові товари)
         $deduped = $this->deduplicateProducts($rows);
-    
+
         // 9) Нормалізація під API
         return $deduped
             ->take($finalLimit)
@@ -433,6 +444,7 @@ class ProductService
             })
             ->all();
     }
+
     /**
      * Вирізаємо цінові обмеження з тексту.
      */
@@ -473,7 +485,7 @@ class ProductService
             ->with('aiIndex');
 
         $q->where('display_in_showcase', true)
-          ->where('in_stock', true);
+            ->where('in_stock', true);
 
         if ($categoryId !== null) {
             $q->where('category_id', $categoryId);
@@ -489,16 +501,16 @@ class ProductService
         if ($tokens) {
             $q->where(function (Builder $q) use ($tokens) {
                 foreach ($tokens as $token) {
-                    $like = '%' . $token . '%';
+                    $like = '%'.$token.'%';
 
                     $q->orWhere('search_index', 'LIKE', $like)
-                      ->orWhere('title', 'LIKE', $like)
-                      ->orWhere('category_path', 'LIKE', $like)
-                      ->orWhere('color', 'LIKE', $like)
-                      ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
-                        $ai->where('product_type', 'LIKE', $like)
-                           ->orWhere('ai_category', 'LIKE', $like);
-                    });
+                        ->orWhere('title', 'LIKE', $like)
+                        ->orWhere('category_path', 'LIKE', $like)
+                        ->orWhere('color', 'LIKE', $like)
+                        ->orWhereHas('aiIndex', function (Builder $ai) use ($like) {
+                            $ai->where('product_type', 'LIKE', $like)
+                                ->orWhere('ai_category', 'LIKE', $like);
+                        });
                 }
             });
         }
@@ -519,7 +531,7 @@ class ProductService
     {
         $query = mb_strtolower($query);
         $queryTokens = preg_split('/\s+/u', $query) ?: [];
-        $queryTokens = array_values(array_filter($queryTokens, fn($t) => $t !== ''));
+        $queryTokens = array_values(array_filter($queryTokens, fn ($t) => $t !== ''));
 
         $primaryNorm = $queryTokens[0] ?? '';
 
@@ -533,6 +545,7 @@ class ProductService
             if ($aiIndex) {
                 $product->setRelation('aiIndex', $aiIndex);
             }
+
             return $product;
         });
 
@@ -549,7 +562,7 @@ class ProductService
         }
 
         return $candidates->map(function (Product $product) use (
-            $query,
+
             $queryTokens,
             $productTypeTokens,
             $mustHaveKeywords,
@@ -557,7 +570,7 @@ class ProductService
         ) {
             $title = mb_strtolower($product->title ?? '');
             $index = mb_strtolower($product->search_index ?? '');
-            $cats  = mb_strtolower($product->category_path ?? '');
+            $cats = mb_strtolower($product->category_path ?? '');
 
             $aiChunk = '';
             if ($product->relationLoaded('aiIndex') && $product->aiIndex) {
@@ -572,7 +585,7 @@ class ProductService
                 $aiChunk = mb_strtolower(implode(' ', array_filter($aiChunkParts)));
             }
 
-            $haystack = $title . ' ' . $index . ' ' . $cats . ' ' . $aiChunk;
+            $haystack = $title.' '.$index.' '.$cats.' '.$aiChunk;
 
             $baseScore = 0.0;
 
@@ -613,9 +626,9 @@ class ProductService
                 $equipmentPenalty = $this->getAccessoryPenalty($haystack, $productTypeTokens);
             }
 
-            $colorBonus      = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
-            $categoryBonus   = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
-            $popularityVal   = (int) ($product->popularity ?? 0);
+            $colorBonus = $this->getColorMatchBonus($queryTokens, $product->color ?? null);
+            $categoryBonus = $this->getCategoryMatchBonus($queryTokens, $product->category_path ?? null);
+            $popularityVal = (int) ($product->popularity ?? 0);
             $popularityBonus = $this->getPopularityBonus($popularityVal);
 
             $titlePenalty = 0.0;
@@ -626,15 +639,15 @@ class ProductService
             $score = $baseScore - $titlePenalty - $mustHavePenalty - $equipmentPenalty + $colorBonus + $categoryBonus + $popularityBonus;
 
             $flags = [
-                'missing_product_type'   => false,
-                'missing_must_have'      => ! empty($mustHaveKeywords) && ($mustHavePenalty > 0),
-                'possible_accessory_only'=> $equipmentPenalty > 0,
+                'missing_product_type' => false,
+                'missing_must_have' => ! empty($mustHaveKeywords) && ($mustHavePenalty > 0),
+                'possible_accessory_only' => $equipmentPenalty > 0,
             ];
 
             return [
                 'product' => $product,
-                'score'   => $score,
-                'flags'   => $flags,
+                'score' => $score,
+                'flags' => $flags,
             ];
         });
     }
@@ -661,26 +674,27 @@ class ProductService
     protected function deduplicateProducts(Collection $scored): Collection
     {
         $seen = [];
-    
+
         return $scored->filter(function (array $row) use (&$seen) {
             /** @var Product $p */
             $p = $row['product'];
-    
+
             $parent = (string) ($p->parent_article ?? '');
             $article = (string) ($p->article ?? '');
-    
+
             // ✅ головне: варіанти з одним parent_article — це один “товар” для чату
             $key = $parent !== '' ? $parent : $article;
-    
+
             if ($key === '') {
                 return false;
             }
-    
+
             if (isset($seen[$key])) {
                 return false;
             }
-    
+
             $seen[$key] = true;
+
             return true;
         })->values();
     }
@@ -698,9 +712,9 @@ class ProductService
 
         if (! is_array($result)) {
             return [
-                'product_types'      => [],
+                'product_types' => [],
                 'must_have_keywords' => [],
-                'fallback_types'     => [],
+                'fallback_types' => [],
             ];
         }
 
@@ -711,14 +725,14 @@ class ProductService
 
             return array_values(array_filter(
                 $value,
-                fn($v) => is_string($v) && $v !== ''
+                fn ($v) => is_string($v) && $v !== ''
             ));
         };
 
         return [
-            'product_types'      => $normalize($result['product_types']      ?? []),
+            'product_types' => $normalize($result['product_types'] ?? []),
             'must_have_keywords' => $normalize($result['must_have_keywords'] ?? []),
-            'fallback_types'     => $normalize($result['fallback_types']     ?? []),
+            'fallback_types' => $normalize($result['fallback_types'] ?? []),
         ];
     }
 
@@ -868,62 +882,62 @@ class ProductService
                 // Спробуємо знаходити САМЕ турнікети, а не підсумки
                 $q->where(function (Builder $q) {
                     $q->where('search_index', 'LIKE', '%турнікет%')
-                      ->orWhere('search_index', 'LIKE', '%джгут%')
-                      ->orWhere('search_index', 'LIKE', '%жгут%')
-                      ->orWhere('search_index', 'LIKE', '%tourniquet%')
-                      ->orWhere('title', 'LIKE', '%турнікет%')
-                      ->orWhere('title', 'LIKE', '%джгут%')
-                      ->orWhere('title', 'LIKE', '%жгут%');
+                        ->orWhere('search_index', 'LIKE', '%джгут%')
+                        ->orWhere('search_index', 'LIKE', '%жгут%')
+                        ->orWhere('search_index', 'LIKE', '%tourniquet%')
+                        ->orWhere('title', 'LIKE', '%турнікет%')
+                        ->orWhere('title', 'LIKE', '%джгут%')
+                        ->orWhere('title', 'LIKE', '%жгут%');
                 })
-                ->where(function (Builder $q) {
-                    // Відрізаємо підсумки/підсумки під турнікет
-                    $q->where('title', 'NOT LIKE', '%підсумок%')
-                      ->where('category_path', 'NOT LIKE', '%підсумк%')
-                      ->where('search_index', 'NOT LIKE', '%підсумок%')
-                      ->where('search_index', 'NOT LIKE', '%pouch%');
-                });
+                    ->where(function (Builder $q) {
+                        // Відрізаємо підсумки/підсумки під турнікет
+                        $q->where('title', 'NOT LIKE', '%підсумок%')
+                            ->where('category_path', 'NOT LIKE', '%підсумк%')
+                            ->where('search_index', 'NOT LIKE', '%підсумок%')
+                            ->where('search_index', 'NOT LIKE', '%pouch%');
+                    });
                 break;
 
             case 'ifak_kits':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%аптечк%')
-                      ->orWhere('category_path', 'LIKE', '%тактична медицина%')
-                      ->orWhere('title', 'LIKE', '%аптечк%')
-                      ->orWhere('search_index', 'LIKE', '%ifak%')
-                      ->orWhere('search_index', 'LIKE', '%іфак%');
+                        ->orWhere('category_path', 'LIKE', '%тактична медицина%')
+                        ->orWhere('title', 'LIKE', '%аптечк%')
+                        ->orWhere('search_index', 'LIKE', '%ifak%')
+                        ->orWhere('search_index', 'LIKE', '%іфак%');
                 });
                 break;
 
             case 'helmets':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%шолом%')
-                      ->orWhere('category_path', 'LIKE', '%каска%')
-                      ->orWhere('title', 'LIKE', '%шолом%')
-                      ->orWhere('title', 'LIKE', '%каска%')
-                      ->orWhere('search_index', 'LIKE', '%helmet%');
+                        ->orWhere('category_path', 'LIKE', '%каска%')
+                        ->orWhere('title', 'LIKE', '%шолом%')
+                        ->orWhere('title', 'LIKE', '%каска%')
+                        ->orWhere('search_index', 'LIKE', '%helmet%');
                 });
                 break;
 
             case 'plate_carriers':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%плитоноск%')
-                      ->orWhere('category_path', 'LIKE', '%розгрузк%')
-                      ->orWhere('title', 'LIKE', '%плитоноск%')
-                      ->orWhere('title', 'LIKE', '%розгрузк%')
-                      ->orWhere('search_index', 'LIKE', '%plate carrier%');
+                        ->orWhere('category_path', 'LIKE', '%розгрузк%')
+                        ->orWhere('title', 'LIKE', '%плитоноск%')
+                        ->orWhere('title', 'LIKE', '%розгрузк%')
+                        ->orWhere('search_index', 'LIKE', '%plate carrier%');
                 });
                 break;
 
             case 'plates':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%плити%')
-                      ->orWhere('category_path', 'LIKE', '%бронеплити%')
-                      ->orWhere('category_path', 'LIKE', '%бронезахист%')
-                      ->orWhere('title', 'LIKE', '%плита%')
-                      ->orWhere('title', 'LIKE', '%бронеплита%')
-                      ->orWhere('search_index', 'LIKE', '%sapi%')
-                      ->orWhere('search_index', 'LIKE', '%esapi%')
-                      ->orWhere('search_index', 'LIKE', '%armor plate%');
+                        ->orWhere('category_path', 'LIKE', '%бронеплити%')
+                        ->orWhere('category_path', 'LIKE', '%бронезахист%')
+                        ->orWhere('title', 'LIKE', '%плита%')
+                        ->orWhere('title', 'LIKE', '%бронеплита%')
+                        ->orWhere('search_index', 'LIKE', '%sapi%')
+                        ->orWhere('search_index', 'LIKE', '%esapi%')
+                        ->orWhere('search_index', 'LIKE', '%armor plate%');
                 });
                 break;
 
@@ -931,36 +945,36 @@ class ProductService
                 // Теплі/зимові куртки, парки, фліси, lvl7
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%куртк%')
-                      ->orWhere('category_path', 'LIKE', '%парка%')
-                      ->orWhere('category_path', 'LIKE', '%фліс%')
-                      ->orWhere('title', 'LIKE', '%куртк%')
-                      ->orWhere('title', 'LIKE', '%парка%')
-                      ->orWhere('title', 'LIKE', '%фліс%')
-                      ->orWhere('search_index', 'LIKE', '%куртк%')
-                      ->orWhere('search_index', 'LIKE', '%парка%')
-                      ->orWhere('search_index', 'LIKE', '%fleece%')
-                      ->orWhere('search_index', 'LIKE', '%lvl7%')
-                      ->orWhere('search_index', 'LIKE', '%level 7%');
+                        ->orWhere('category_path', 'LIKE', '%парка%')
+                        ->orWhere('category_path', 'LIKE', '%фліс%')
+                        ->orWhere('title', 'LIKE', '%куртк%')
+                        ->orWhere('title', 'LIKE', '%парка%')
+                        ->orWhere('title', 'LIKE', '%фліс%')
+                        ->orWhere('search_index', 'LIKE', '%куртк%')
+                        ->orWhere('search_index', 'LIKE', '%парка%')
+                        ->orWhere('search_index', 'LIKE', '%fleece%')
+                        ->orWhere('search_index', 'LIKE', '%lvl7%')
+                        ->orWhere('search_index', 'LIKE', '%level 7%');
                 })
-                ->where(function (Builder $q) {
-                    // Відрізаємо штани, комбези тощо
-                    $q->where('title', 'NOT LIKE', '%штани%')
-                      ->where('title', 'NOT LIKE', '%брюки%')
-                      ->where('title', 'NOT LIKE', '%trousers%')
-                      ->where('category_path', 'NOT LIKE', '%штани%')
-                      ->where('category_path', 'NOT LIKE', '%брюки%')
-                      ->where('category_path', 'NOT LIKE', '%trousers%');
-                });
+                    ->where(function (Builder $q) {
+                        // Відрізаємо штани, комбези тощо
+                        $q->where('title', 'NOT LIKE', '%штани%')
+                            ->where('title', 'NOT LIKE', '%брюки%')
+                            ->where('title', 'NOT LIKE', '%trousers%')
+                            ->where('category_path', 'NOT LIKE', '%штани%')
+                            ->where('category_path', 'NOT LIKE', '%брюки%')
+                            ->where('category_path', 'NOT LIKE', '%trousers%');
+                    });
                 break;
 
             case 'tactical_medicine':
                 $q->where(function (Builder $q) {
                     $q->where('category_path', 'LIKE', '%тактична медицина%')
-                      ->orWhere('category_path', 'LIKE', '%медичн%')
-                      ->orWhere('title', 'LIKE', '%турнікет%')
-                      ->orWhere('title', 'LIKE', '%аптечк%')
-                      ->orWhere('search_index', 'LIKE', '%ifak%')
-                      ->orWhere('search_index', 'LIKE', '%іфак%');
+                        ->orWhere('category_path', 'LIKE', '%медичн%')
+                        ->orWhere('title', 'LIKE', '%турнікет%')
+                        ->orWhere('title', 'LIKE', '%аптечк%')
+                        ->orWhere('search_index', 'LIKE', '%ifak%')
+                        ->orWhere('search_index', 'LIKE', '%іфак%');
                 });
                 break;
 
@@ -992,22 +1006,22 @@ class ProductService
     public function normalizeProductForApi(Product $product): array
     {
         return [
-            'id'             => $product->id,
-            'article'        => $product->article,
+            'id' => $product->id,
+            'article' => $product->article,
             'parent_article' => $product->parent_article,
-            'title'          => $product->title,
-            'title_json'     => $product->title_json,
-            'price'          => (float) ($product->price ?? 0),
-            'price_old'      => (float) ($product->price_old ?? 0),
-            'category_path'  => $product->category_path,
-            'slug'           => $product->slug,
-            'link'           => $product->link,
-            'images'         => $product->images ?? [],
-            'presence'       => $product->presence,
-            'quantity'       => (int) ($product->quantity ?? 0),
-            'in_stock'       => (bool) ($product->in_stock ?? false),
-            'color'          => $product->color,
-            'popularity'     => (int) ($product->popularity ?? 0),
+            'title' => $product->title,
+            'title_json' => $product->title_json,
+            'price' => (float) ($product->price ?? 0),
+            'price_old' => (float) ($product->price_old ?? 0),
+            'category_path' => $product->category_path,
+            'slug' => $product->slug,
+            'link' => $product->link,
+            'images' => $product->images ?? [],
+            'presence' => $product->presence,
+            'quantity' => (int) ($product->quantity ?? 0),
+            'in_stock' => (bool) ($product->in_stock ?? false),
+            'color' => $product->color,
+            'popularity' => (int) ($product->popularity ?? 0),
         ];
     }
 
@@ -1064,10 +1078,11 @@ class ProductService
             foreach ($keywords as $kw) {
                 if (mb_stripos($norm, $kw) !== false) {
                     Log::info('ProductService::detectCategoryKeyFromText matched', [
-                        'text'         => $text,
+                        'text' => $text,
                         'category_key' => $categoryKey,
-                        'keyword'      => $kw,
+                        'keyword' => $kw,
                     ]);
+
                     return $categoryKey;
                 }
             }
@@ -1075,6 +1090,7 @@ class ProductService
 
         return null;
     }
+
     public function getPopularProducts(int $limit = 3): array
     {
         return Product::query()
@@ -1086,9 +1102,9 @@ class ProductService
             ->map(fn (Product $p) => $this->normalizeProductForApi($p))
             ->all();
     }
+
     public function detectProductTypesPublic(string $query): array
     {
         return $this->detectProductTypes($query);
     }
-
 }

@@ -12,17 +12,16 @@ class ProductRawExtractor
      */
     public static function description(array $raw, string $lang = 'ua'): string
     {
-        // Типові варіанти ключів (Horoshop може відрізнятися по проєктах)
+        // Horoshop формат: description.ua / description.ru
         $candidates = [
-            "description.$lang",
-            "description_{$lang}",
-            "desc.$lang",
-            "text.$lang",
+            "description.{$lang}",
             'description.ua',
             'description.ru',
             'description',
-            'desc',
-            'text',
+            "short_description.{$lang}",
+            'short_description.ua',
+            'short_description.ru',
+            'short_description',
         ];
 
         $val = '';
@@ -49,13 +48,32 @@ class ProductRawExtractor
      */
     public static function attributes(array $raw, string $lang = 'ua'): array
     {
-        // Найчастіші структури:
-        // 1) properties: [{name:{ua:..}, value:{ua:..}}]
-        // 2) characteristics: [{title:{ua:..}, values:[{title:{ua:..}}]}]
-        // 3) params: { "Матеріал": "..." } — інколи
-
+        // Horoshop формат: characteristics як об'єкт {"material": {...}, "weight": {...}}
         $out = [];
 
+        // 1. Horoshop characteristics (основний формат)
+        $chars = Arr::get($raw, 'characteristics');
+        if (is_array($chars)) {
+            foreach ($chars as $key => $charData) {
+                // Може бути: {"id": 0, "value": "текст"} або {"ru": "...", "ua": "..."}
+                $name = ucfirst(str_replace('_', ' ', $key)); // material → Material
+
+                if (is_array($charData)) {
+                    // Спробувати витягнути value
+                    $value = self::pickLang($charData['value'] ?? null, $lang)
+                        ?: self::pickLang($charData, $lang)
+                        ?: ($charData['value'] ?? null);
+
+                    if (is_string($value) && trim($value) !== '') {
+                        $out[trim($name)] = trim($value);
+                    }
+                } elseif (is_string($charData) || is_numeric($charData)) {
+                    $out[trim($name)] = trim((string) $charData);
+                }
+            }
+        }
+
+        // 2. Fallback: properties (якщо є інший формат)
         $props = Arr::get($raw, 'properties');
         if (is_array($props)) {
             foreach ($props as $p) {
@@ -64,42 +82,6 @@ class ProductRawExtractor
 
                 if ($name && $value) {
                     $out[trim($name)] = trim(self::asText($value));
-                }
-            }
-        }
-
-        $chars = Arr::get($raw, 'characteristics');
-        if (is_array($chars)) {
-            foreach ($chars as $c) {
-                $name = self::pickLang($c['title'] ?? null, $lang) ?: (is_string($c['title'] ?? null) ? $c['title'] : null);
-                $vals = $c['values'] ?? null;
-                if (! $name || ! is_array($vals)) {
-                    continue;
-                }
-
-                $vTexts = [];
-                foreach ($vals as $v) {
-                    $vt = self::pickLang($v['title'] ?? null, $lang) ?: (is_string($v['title'] ?? null) ? $v['title'] : null);
-                    if ($vt) {
-                        $vTexts[] = trim($vt);
-                    }
-                }
-
-                if ($vTexts) {
-                    $out[trim($name)] = implode(', ', array_unique($vTexts));
-                }
-            }
-        }
-
-        $params = Arr::get($raw, 'params');
-        if (is_array($params)) {
-            foreach ($params as $k => $v) {
-                if (! is_string($k)) {
-                    continue;
-                }
-                $vText = self::asText($v);
-                if ($vText !== '') {
-                    $out[trim($k)] = trim($vText);
                 }
             }
         }

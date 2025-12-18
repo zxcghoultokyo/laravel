@@ -10,7 +10,7 @@ class ProductRawExtractor
      * Спроба витягнути опис з Horoshop raw.
      * Повертає короткий plain text (без HTML).
      */
-    public static function description(array $raw, string $lang = 'ua'): string
+    public static function description(array $raw, string $lang = 'ua', array $parentRaw = []): string
     {
         // Horoshop формат: description.ua / description.ru
         $candidates = [
@@ -38,6 +38,10 @@ class ProductRawExtractor
             }
         }
 
+        if ($val === '' && $parentRaw) {
+            return self::description($parentRaw, $lang, []);
+        }
+
         // чистимо html
         $val = strip_tags($val);
         $val = preg_replace('/\s+/u', ' ', $val) ?: '';
@@ -51,7 +55,7 @@ class ProductRawExtractor
      *  - assoc map
      *  - flatten string для індексації/LLM
      */
-    public static function attributes(array $raw, string $lang = 'ua'): array
+    public static function attributes(array $raw, string $lang = 'ua', array $parentRaw = []): array
     {
         // Horoshop формат: characteristics як об'єкт {"material": {...}, "weight": {...}}
         $out = [];
@@ -82,7 +86,33 @@ class ProductRawExtractor
             }
         }
 
-        // 2. Fallback: properties (якщо є інший формат)
+        // 2. select (варіативні атрибути)
+        $select = Arr::get($raw, 'select');
+        if (is_array($select)) {
+            foreach ($select as $key => $val) {
+                $name = ucfirst(str_replace('_', ' ', (string) $key));
+                $v = self::pickLang($val, $lang) ?: self::asText($val);
+                if (is_string($v) && trim($v) !== '') {
+                    $out[trim($name)] = trim($v);
+                }
+            }
+        }
+
+        // 3. params (простий map)
+        $params = Arr::get($raw, 'params');
+        if (is_array($params)) {
+            foreach ($params as $k => $v) {
+                if (! is_string($k)) {
+                    continue;
+                }
+                $vText = self::asText($v);
+                if ($vText !== '') {
+                    $out[trim($k)] = trim($vText);
+                }
+            }
+        }
+
+        // 4. Fallback: properties (якщо є інший формат)
         $props = Arr::get($raw, 'properties');
         if (is_array($props)) {
             foreach ($props as $p) {
@@ -93,6 +123,11 @@ class ProductRawExtractor
                     $out[trim($name)] = trim(self::asText($value));
                 }
             }
+        }
+
+        // Якщо нічого не зібрали — спробувати з батьківського
+        if (! $out && $parentRaw) {
+            return self::attributes($parentRaw, $lang, []);
         }
 
         // обрізати шум/надто довгі значення
@@ -111,9 +146,9 @@ class ProductRawExtractor
         return $out;
     }
 
-    public static function attributesText(array $raw, string $lang = 'ua'): string
+    public static function attributesText(array $raw, string $lang = 'ua', array $parentRaw = []): string
     {
-        $attrs = self::attributes($raw, $lang);
+        $attrs = self::attributes($raw, $lang, $parentRaw);
         if (! $attrs) {
             return '';
         }

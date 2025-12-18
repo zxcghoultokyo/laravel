@@ -67,13 +67,30 @@ class IndexProductsToMeiliJob implements ShouldQueue
             ->chunk($chunkSize, function ($products) use ($index) {
                 $docs = [];
 
+                // Підтягнемо raw батьківських товарів для fallback
+                $parentArticles = $products->pluck('parent_article')->filter()->unique()->all();
+                $parentRawMap = [];
+                if ($parentArticles) {
+                    Product::query()
+                        ->whereIn('article', $parentArticles)
+                        ->get(['article', 'raw'])
+                        ->each(function ($parent) use (&$parentRawMap) {
+                            $parentRawMap[$parent->article] = is_array($parent->raw ?? null) ? $parent->raw : (array) ($parent->raw ?? []);
+                        });
+                }
+
                 foreach ($products as $p) {
                     $lang = 'ua';
                     $raw = is_array($p->raw ?? null) ? $p->raw : (array) ($p->raw ?? []);
+                    $parentRaw = [];
+                    $parentArticle = (string) ($p->parent_article ?? '');
+                    if ($parentArticle !== '' && isset($parentRawMap[$parentArticle])) {
+                        $parentRaw = $parentRawMap[$parentArticle];
+                    }
 
-                    $desc = ProductRawExtractor::description($raw, $lang);
-                    $attrsText = ProductRawExtractor::attributesText($raw, $lang);
-                    $attrsMap = ProductRawExtractor::attributes($raw, $lang);
+                    $desc = ProductRawExtractor::description($raw, $lang, $parentRaw);
+                    $attrsText = ProductRawExtractor::attributesText($raw, $lang, $parentRaw);
+                    $attrsMap = ProductRawExtractor::attributes($raw, $lang, $parentRaw);
 
                     $docs[] = [
                         'id' => (int) $p->id,

@@ -34,6 +34,9 @@ class WidgetSettings extends Model
             if (! $model->api_token) {
                 $model->api_token = bin2hex(random_bytes(32));
             }
+            if (! $model->welcome_message) {
+                $model->welcome_message = 'Вітаю! 👋 Я AILure Асистент. Напишіть, що шукаєте.';
+            }
         });
     }
 }

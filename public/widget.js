@@ -276,12 +276,12 @@ settings.start_state === 'open';
                     saveSessionId(data.session_id);
                 }
 
-                // Додаємо відповідь, true);
+                // Додаємо відповідь
+                addMessage(data.text || 'Вибачте, сталася помилка', 'assistant', true);
 
                 // Якщо є товари - показуємо їх
                 if (data.data && data.data.products && data.data.products.length > 0) {
-                    addProducts(data.data.products, trues && data.data.products.length > 0) {
-                    addProducts(data.data.products);
+                    addProducts(data.data.products, true);
                 }
             })
             .catch(err => {
@@ -290,7 +290,8 @@ settings.start_state === 'open';
                 console.error('AILure Chat:', err);
             });
         }
-, save = true) {
+
+        function addMessage(text, role, save = true) {
             const div = document.createElement('div');
             div.className = `ailure-message ailure-${role}`;
             div.style.cssText = `

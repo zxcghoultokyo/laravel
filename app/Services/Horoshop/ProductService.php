@@ -47,6 +47,7 @@ class ProductService
                     'parent', 'images', 'slug', 'link', 'presence', 'quantity',
                     'display_in_showcase', 'popularity', 'color', 'brand',
                     'description', 'characteristics', 'short_description',
+                    'select', 'params',
                     'seo_title', 'seo_keywords', 'seo_description',
                     'we_recommended', 'icons',
                 ],

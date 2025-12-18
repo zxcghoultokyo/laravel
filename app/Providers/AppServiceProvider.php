@@ -25,7 +25,10 @@ class AppServiceProvider extends ServiceProvider
                 $config['password'] ?? '',
             );
         });
-
+        // MeiliClient
+        $this->app->singleton(\App\Services\Search\MeiliClient::class, function ($app) {
+            return new \App\Services\Search\MeiliClient();
+        });
         // HoroshopService (обгортка над клієнтом, якщо він у тебе є)
         $this->app->singleton(HoroshopService::class, function ($app) {
             return new HoroshopService(
@@ -61,6 +64,36 @@ class AppServiceProvider extends ServiceProvider
         // AI Recommender (якщо використовується)
         $this->app->singleton(AiRecommender::class, function ($app) {
             return new AiRecommender();
+        });
+
+        // Agent Orchestrator Tools
+        $this->app->singleton(\App\Services\Agent\Tools\MeiliProductSearchTool::class, function ($app) {
+            return new \App\Services\Agent\Tools\MeiliProductSearchTool(
+                $app->make(\App\Services\Search\MeiliClient::class)
+            );
+        });
+
+        $this->app->singleton(\App\Services\Agent\Tools\ProductDetailsTool::class, function ($app) {
+            return new \App\Services\Agent\Tools\ProductDetailsTool();
+        });
+
+        $this->app->singleton(\App\Services\Agent\Tools\DeduperTool::class, function ($app) {
+            return new \App\Services\Agent\Tools\DeduperTool();
+        });
+
+        $this->app->singleton(\App\Services\Agent\Tools\AccessoryFilterTool::class, function ($app) {
+            return new \App\Services\Agent\Tools\AccessoryFilterTool();
+        });
+
+        // Agent Orchestrator
+        $this->app->singleton(\App\Services\Agent\AgentOrchestrator::class, function ($app) {
+            return new \App\Services\Agent\AgentOrchestrator(
+                $app->make(\App\Services\Ai\AiRouter::class),
+                $app->make(\App\Services\Agent\Tools\MeiliProductSearchTool::class),
+                $app->make(\App\Services\Agent\Tools\ProductDetailsTool::class),
+                $app->make(\App\Services\Agent\Tools\DeduperTool::class),
+                $app->make(\App\Services\Agent\Tools\AccessoryFilterTool::class)
+            );
         });
     }
 

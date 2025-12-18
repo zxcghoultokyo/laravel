@@ -4,6 +4,7 @@ namespace App\Services\Chat;
 
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Services\Agent\AgentOrchestrator;
 use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Support\Arr;
@@ -16,6 +17,7 @@ class ChatService
     public function __construct(
         protected AiRouter $aiRouter,
         protected ProductService $productService,
+        protected AgentOrchestrator $agentOrchestrator,
     ) {
     }
 
@@ -48,6 +50,61 @@ class ChatService
 
         // Логуємо повідомлення користувача
         $this->logUserMessage($sessionId, $normalizedMessage);
+
+        // НОВИЙ ПІДХІД: Використовуємо AgentOrchestrator
+        // Він сам вирішує: показувати товари, уточнювати, шукати статус замовлення тощо
+        try {
+            $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $sessionContext);
+            
+            // Формуємо відповідь у форматі очікуваному фронтом
+            $response = [
+                'type'       => 'products', // або text, залежно від наявності products
+                'text'       => $agentResult['message'] ?? '',
+                'products'   => $agentResult['products'] ?? [],
+                'session_id' => $sessionId,
+                'meta'       => $agentResult['meta'] ?? [],
+            ];
+            
+            // Якщо немає товарів - тип text
+            if (empty($response['products'])) {
+                $response['type'] = 'text';
+            }
+            
+            // Оновлюємо контекст сесії
+            $this->saveSessionContext($sessionKey, [
+                'last_intent'       => $agentResult['meta']['intent'] ?? 'unknown',
+                'last_query'        => $normalizedMessage,
+                'last_refined_query' => $agentResult['meta']['refined_query'] ?? null,
+                'ambiguous'         => $agentResult['meta']['ambiguous'] ?? false,
+                'last_chosen_ids'   => $agentResult['meta']['chosen_ids'] ?? [],
+            ]);
+            
+            Log::info('ChatService::AgentOrchestrator response', [
+                'response' => $response,
+            ]);
+            
+            // Логуємо відповідь асистента з метаданими
+            $this->logAssistantMessage($sessionId, $response, $agentResult['meta'] ?? []);
+            
+            return $response;
+            
+        } catch (\Exception $e) {
+            Log::error('ChatService::AgentOrchestrator error', [
+                'error'   => $e->getMessage(),
+                'message' => $normalizedMessage,
+                'trace'   => $e->getTraceAsString(),
+            ]);
+            
+            // Fallback на стару логіку якщо щось пішло не так
+            return $this->handleMessageLegacy($normalizedMessage, $sessionId, $sessionKey, $sessionContext);
+        }
+    }
+    
+    /**
+     * Legacy обробка повідомлень (fallback якщо AgentOrchestrator не працює)
+     */
+    protected function handleMessageLegacy(string $normalizedMessage, string $sessionId, string $sessionKey, array $sessionContext): array
+    {
 
         // 1. Простий rule-based хендлер на чисті категорії (турнікети, шоломи, плитоноски)
         $quickCategoryResponse = $this->handleQuickCategoryShortcuts($normalizedMessage, $sessionKey);
@@ -805,7 +862,7 @@ class ChatService
     /**
      * Логування відповіді асистента до БД.
      */
-    protected function logAssistantMessage(string $sessionId, array $response): void
+    protected function logAssistantMessage(string $sessionId, array $response, array $agentMeta = []): void
     {
         try {
             Log::info('logAssistantMessage called', ['session_id' => $sessionId]);
@@ -816,11 +873,15 @@ class ChatService
                 return;
             }
 
+            // Мета-дані з AgentOrchestrator мають пріоритет
             $meta = [
-                'intent' => $response['intent'] ?? null,
-                'products_shown' => isset($response['data']['products']) ? count($response['data']['products']) : 0,
-                'normalized_query' => $response['data']['normalized_query'] ?? null,
-                'filters' => $response['data']['filters'] ?? null,
+                'intent'            => $agentMeta['intent'] ?? $response['intent'] ?? 'unknown',
+                'ambiguous'         => $agentMeta['ambiguous'] ?? false,
+                'chosen_ids'        => $agentMeta['chosen_ids'] ?? [],
+                'refined_query'     => $agentMeta['refined_query'] ?? null,
+                'filters'           => $agentMeta['filters'] ?? [],
+                'search_debug'      => $agentMeta['search_debug'] ?? [],
+                'products_shown'    => count($response['products'] ?? []),
             ];
 
             ChatMessage::create([
@@ -834,7 +895,7 @@ class ChatService
 
             $session->increment('messages_count');
             $session->update([
-                'last_intent' => $response['intent'] ?? 'unknown',
+                'last_intent' => $meta['intent'],
                 'last_message_at' => now(),
             ]);
         } catch (\Exception $e) {

@@ -14,64 +14,71 @@ class IndexProductsToMeiliJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $chunkSize;
+    /**
+     * Backward-compat: старі job-и могли серіалізувати "chunk".
+     */
+    public ?int $chunkSize = null;
+    public ?int $chunk = null;
 
     public function __construct(int $chunkSize = 500)
     {
-        $this->chunkSize = max(50, $chunkSize);
+        $this->chunkSize = max(50, (int) $chunkSize);
         $this->onQueue('meili');
+    }
+
+    protected function effectiveChunkSize(): int
+    {
+        // якщо прийшла стара job з "chunk"
+        $size = $this->chunkSize ?? $this->chunk ?? 500;
+        return max(50, (int) $size);
     }
 
     public function handle(MeiliClient $meili): void
     {
         $index = $meili->productsIndex();
+        $chunkSize = $this->effectiveChunkSize();
 
         Product::query()
             ->with('aiIndex')
             ->orderBy('id')
-            ->chunk($this->chunkSize, function ($products) use ($index) {
+            ->chunk($chunkSize, function ($products) use ($index) {
                 $docs = [];
 
                 foreach ($products as $p) {
                     $docs[] = [
                         'id' => (int) $p->id,
 
-                        // для дедупу варіантів/розмірів
                         'article'        => (string) ($p->article ?? ''),
                         'parent_article' => (string) ($p->parent_article ?? ''),
 
-                        // текст
-                        'title'        => (string) ($p->title ?? ''),
-                        'category_path'=> (string) ($p->category_path ?? ''),
-                        'brand'        => (string) ($p->brand ?? ''),
-                        'color'        => (string) ($p->color ?? ''),
+                        'title'         => (string) ($p->title ?? ''),
+                        'category_path' => (string) ($p->category_path ?? ''),
+                        'brand'         => (string) ($p->brand ?? ''),   // ок: є колонка, але зараз всюди null — це норм
+                        'color'         => (string) ($p->color ?? ''),
 
-                        // “широкий” індексний рядок (синоніми/категорії/опис)
                         'search_index' => (string) ($p->search_index ?? ''),
 
-                        // сток/вітрина
                         'in_stock'            => (int) ((bool) $p->in_stock),
                         'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
                         'quantity'            => (int) ($p->quantity ?? 0),
                         'presence_raw'        => (string) ($p->presence ?? ''),
 
-                        // ціни
-                        'price'     => (int) ($p->price ?? 0),
-                        'price_old' => (int) ($p->price_old ?? 0),
+                        // ⚠️ В products price/price_old decimal(10,2) — як int ти втрачаєш копійки.
+                        // Якщо ок — залишай. Якщо ні:
+                        'price'     => (float) ($p->price ?? 0),
+                        'price_old' => (float) ($p->price_old ?? 0),
 
-                        // бізнес-сигнали
-                        'we_recommended'       => (int) ((bool) $p->we_recommended),
-                        'popularity'           => (int) ($p->popularity ?? 0),
-                        'orders_count'         => (int) ($p->orders_count ?? 0),
-                        'views_count'          => (int) ($p->views_count ?? 0),
-                        'added_to_cart_count'  => (int) ($p->added_to_cart_count ?? 0),
-                        'updated_at_ts'        => (int) ($p->updated_at_ts ?? 0),
+                        'we_recommended'      => (int) ((bool) $p->we_recommended),
+                        'popularity'          => (int) ($p->popularity ?? 0),
+                        'orders_count'        => (int) ($p->orders_count ?? 0),
+                        'views_count'         => (int) ($p->views_count ?? 0),
+                        'added_to_cart_count' => (int) ($p->added_to_cart_count ?? 0),
 
-                        // AI класифікація (для “плити” != “бронежилет”)
+                        // ✅ замість неіснуючого updated_at_ts
+                        'updated_at_ts' => $p->updated_at ? $p->updated_at->getTimestamp() : 0,
+
                         'ai_product_type' => (string) (($p->aiIndex->product_type ?? '') ?: ''),
                         'ai_category'     => (string) (($p->aiIndex->ai_category ?? '') ?: ''),
-                        'camo_group'      => (string) ($p->camo_group ?? ''),
-                        'category_id'     => (int) ($p->category_id ?? 0),
                     ];
                 }
 

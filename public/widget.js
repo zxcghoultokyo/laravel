@@ -78,6 +78,9 @@
         const sessionId = getOrCreateSessionId();
         console.log('AILure Chat: session_id:', sessionId);
 
+        // Завантажуємо збережені повідомлення
+        const savedMessages = loadMessages(sessionId);
+
         // Створюємо HTML структуру
         container.innerHTML = `
             <div class="ailure-widget" style="
@@ -105,7 +108,7 @@
                 " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
                     💬
                 </button>
-
+${settings.start_state === 'open' ? 'flex' : 'none'}
                 <!-- Віконце чату -->
                 <div id="ailure-window" class="ailure-window" style="
                     display: none;
@@ -151,20 +154,6 @@
                         background: #f9fafb;
                         max-height: 450px;
                     ">
-                        <div class="ailure-message ailure-assistant" style="
-                            margin-bottom: 12px;
-                            display: flex;
-                            justify-content: flex-start;
-                        ">
-                            <div style="
-                                background: #e5e7eb;
-                                padding: 10px 14px;
-                                border-radius: 12px;
-                                max-width: 80%;
-                                font-size: 14px;
-                                line-height: 1.4;
-                            ">${settings.welcome_message}</div>
-                        </div>
                     </div>
 
                     <!-- Input -->
@@ -228,7 +217,22 @@
             isOpen = false;
             window.style.display = 'none';
         });
+settings.start_state === 'open';
 
+        // Відновлюємо історію або показуємо вітальне повідомлення
+        if (savedMessages.length > 0) {
+            savedMessages.forEach(msg => {
+                if (msg.role === 'user') {
+                    addMessage(msg.content, 'user', false);
+                } else if (msg.role === 'assistant') {
+                    addMessage(msg.content, 'assistant', false);
+                } else if (msg.role === 'products' && msg.products) {
+                    addProducts(msg.products, false);
+                }
+            });
+        } else {
+            addMessage(settings.welcome_message, 'assistant', true);
+        }
         send.addEventListener('click', sendMessage);
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -272,11 +276,11 @@
                     saveSessionId(data.session_id);
                 }
 
-                // Додаємо відповідь
-                addMessage(data.text || 'Вибачте, сталася помилка', 'assistant');
+                // Додаємо відповідь, true);
 
                 // Якщо є товари - показуємо їх
                 if (data.data && data.data.products && data.data.products.length > 0) {
+                    addProducts(data.data.products, trues && data.data.products.length > 0) {
                     addProducts(data.data.products);
                 }
             })
@@ -286,8 +290,7 @@
                 console.error('AILure Chat:', err);
             });
         }
-
-        function addMessage(text, role) {
+, save = true) {
             const div = document.createElement('div');
             div.className = `ailure-message ailure-${role}`;
             div.style.cssText = `
@@ -310,6 +313,11 @@
             bubble.textContent = text;
             div.appendChild(bubble);
             messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+
+            if (save) {
+                saveMessage(sessionId, save = true, { role, content: text });
+            }
             messages.scrollTop = messages.scrollHeight;
         }
 
@@ -346,6 +354,10 @@
                         </div>
                     </div>
                 `;
+
+            if (save) {
+                saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
+            }
                 container.appendChild(card);
             });
 
@@ -392,6 +404,22 @@
         function getOrCreateSessionId() {
             let sessionId = localStorage.getItem('ailure_session_id');
             if (!sessionId) {
+
+        function saveMessage(sessionId, message) {
+            const key = `ailure_messages_${sessionId}`;
+            const messages = JSON.parse(localStorage.getItem(key) || '[]');
+            messages.push(message);
+            // Зберігаємо максимум 50 повідомлень
+            if (messages.length > 50) {
+                messages.shift();
+            }
+            localStorage.setItem(key, JSON.stringify(messages));
+        }
+
+        function loadMessages(sessionId) {
+            const key = `ailure_messages_${sessionId}`;
+            return JSON.parse(localStorage.getItem(key) || '[]');
+        }
                 sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('ailure_session_id', sessionId);
             }

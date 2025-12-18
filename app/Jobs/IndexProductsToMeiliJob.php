@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Services\Search\MeiliClient;
+use App\Support\ProductRawExtractor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,6 +19,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
      * Backward-compat: старі job-и могли серіалізувати "chunk".
      */
     public int $chunkSize = 500;
+
     public ?int $chunk = null;
 
     public function __construct(int $chunkSize = 500)
@@ -30,6 +32,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
     {
         // якщо прийшла стара job з "chunk"
         $size = $this->chunk ?? $this->chunkSize;
+
         return max(50, (int) $size);
     }
 
@@ -42,8 +45,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'display_in_showcase'
+                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'display_in_showcase',
                 ])),
+                'searchableAttributes' => [
+                    'title',
+                    'search_index',
+                    'description',
+                    'attributes_text',
+                    'category_path',
+                    'brand',
+                    'color',
+                ],
             ]);
         } catch (\Throwable $e) {
             // non-fatal: settings update may be async or already set
@@ -56,46 +68,57 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 $docs = [];
 
                 foreach ($products as $p) {
+                    $lang = 'ua';
+                    $raw = is_array($p->raw ?? null) ? $p->raw : (array) ($p->raw ?? []);
+
+                    $desc = ProductRawExtractor::description($raw, $lang);
+                    $attrsText = ProductRawExtractor::attributesText($raw, $lang);
+                    $attrsMap = ProductRawExtractor::attributes($raw, $lang);
+
                     $docs[] = [
                         'id' => (int) $p->id,
 
-                        'article'        => (string) ($p->article ?? ''),
+                        'article' => (string) ($p->article ?? ''),
                         'parent_article' => (string) ($p->parent_article ?? ''),
 
-                        'title'         => (string) ($p->title ?? ''),
+                        'title' => (string) ($p->title ?? ''),
                         'category_path' => (string) ($p->category_path ?? ''),
-                        'brand'         => (string) ($p->brand ?? ''),   // ок: є колонка, але зараз всюди null — це норм
-                        'color'         => (string) ($p->color ?? ''),
+                        'brand' => (string) ($p->brand ?? ''),
+                        'color' => (string) ($p->color ?? ''),
 
                         'search_index' => (string) ($p->search_index ?? ''),
 
-                        'in_stock'            => (int) ((bool) $p->in_stock),
+                        'description' => $desc,
+                        'attributes_text' => $attrsText,
+                        'attrs' => $attrsMap,
+
+                        'in_stock' => (int) ((bool) $p->in_stock),
                         'display_in_showcase' => (int) ((bool) $p->display_in_showcase),
-                        'quantity'            => (int) ($p->quantity ?? 0),
-                        'presence_raw'        => (string) ($p->presence ?? ''),
+                        'quantity' => (int) ($p->quantity ?? 0),
+                        'presence_raw' => (string) ($p->presence ?? ''),
 
                         // ⚠️ В products price/price_old decimal(10,2) — як int ти втрачаєш копійки.
                         // Якщо ок — залишай. Якщо ні:
-                        'price'     => (float) ($p->price ?? 0),
+                        'price' => (float) ($p->price ?? 0),
                         'price_old' => (float) ($p->price_old ?? 0),
 
-                        'we_recommended'      => (int) ((bool) $p->we_recommended),
-                        'popularity'          => (int) ($p->popularity ?? 0),
-                        'orders_count'        => (int) ($p->orders_count ?? 0),
-                        'views_count'         => (int) ($p->views_count ?? 0),
+                        'we_recommended' => (int) ((bool) $p->we_recommended),
+                        'popularity' => (int) ($p->popularity ?? 0),
+                        'orders_count' => (int) ($p->orders_count ?? 0),
+                        'views_count' => (int) ($p->views_count ?? 0),
                         'added_to_cart_count' => (int) ($p->added_to_cart_count ?? 0),
 
                         // ✅ замість неіснуючого updated_at_ts
                         'updated_at_ts' => $p->updated_at ? $p->updated_at->getTimestamp() : 0,
 
-                        'ai_product_type' => ($p->aiIndex->product_type ?? null) ? (string) $p->aiIndex->product_type : null,
-                        'ai_category'     => ($p->aiIndex->ai_category ?? null) ? (string) $p->aiIndex->ai_category : null,
-                        'has_ai_type'     => ($p->aiIndex->product_type ?? null) ? 1 : 0,
+                        'ai_product_type' => is_string($p->aiIndex->product_type ?? null) ? trim($p->aiIndex->product_type) : '',
+                        'ai_category' => is_string($p->aiIndex->ai_category ?? null) ? trim($p->aiIndex->ai_category) : '',
+                        'has_ai_type' => ($p->aiIndex->product_type ?? null) ? 1 : 0,
                         'has_ai_category' => ($p->aiIndex->ai_category ?? null) ? 1 : 0,
                     ];
                 }
 
-                if (!empty($docs)) {
+                if (! empty($docs)) {
                     $index->addDocuments($docs);
                 }
             });

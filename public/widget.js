@@ -153,9 +153,6 @@
                         right: 20px !important;
                         z-index: 10000 !important;
                     }
-                    #ailure-overlay {
-                        display: block !important;
-                    }
                 }
             `;
             document.head.appendChild(style);

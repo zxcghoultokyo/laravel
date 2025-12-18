@@ -285,8 +285,20 @@ class AgentOrchestrator
      */
     private function handleNoResults(string $originalMessage, string $searchQuery): array
     {
+        // Пропонуємо популярні категорії
+        $suggestions = [
+            'Спробуйте:',
+            '• Плитоноски та розвантажки',
+            '• Тактичні каски та шоломи',
+            '• Куртки та форма',
+            '• Черевики та взуття',
+            '• Рюкзаки та сумки',
+        ];
+        
+        $suggestionText = "\n\n" . implode("\n", $suggestions);
+        
         return [
-            'message' => "Вибачте, не знайшов товарів за запитом «{$searchQuery}». Спробуйте інші ключові слова або опишіть що саме вам потрібно.",
+            'message' => "Вибачте, не знайшов товарів за запитом «{$searchQuery}».{$suggestionText}\n\nАбо опишіть детальніше що саме вам потрібно.",
             'products' => [],
             'meta' => [
                 'intent' => 'product_search',

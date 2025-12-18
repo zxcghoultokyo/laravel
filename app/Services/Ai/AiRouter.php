@@ -26,6 +26,18 @@ class AiRouter
      */
     public function classify(string $message): array
     {
+        // Quick rule-based classification для простих випадків
+        $lower = mb_strtolower(trim($message));
+        
+        // Вітання та small talk
+        if (preg_match('/^(привіт|привет|hi|hello|добрий день|здравствуйте|вітаю|слава україні|героям слава)$/ui', $lower)) {
+            return [
+                'intent'           => 'SMALL_TALK',
+                'normalized_query' => '',
+                'order_id'         => null,
+            ];
+        }
+
         $fallback = [
             'intent'           => 'PRODUCT_SEARCH',
             'normalized_query' => $message,
@@ -38,14 +50,21 @@ class AiRouter
         }
 
         $prompt = "
-Ти — AI-роутер для e-commerce чату.
-Визнач намір користувача та нормалізуй текст для подальших дій.
+Ти — AI-роутер для інтернет-магазину тактичного спорядження.
+Визнач намір користувача та нормалізуй запит.
 
-Поверни JSON рівно у такому форматі:
+ВАЖЛИВО:
+- PRODUCT_SEARCH: пошук товарів (плитоноска, каска, куртка, тактичні черевики і т.д.)
+- ORDER_STATUS: запит про замовлення (де моє замовлення, статус, трекінг)
+- FAQ: загальні питання (доставка, оплата, повернення, контакти)
+- SMALL_TALK: вітання, дякую, допобачення
+- FALLBACK: неясний запит
+
+Поверни JSON:
 {
   \"intent\": \"PRODUCT_SEARCH | ORDER_STATUS | FAQ | SMALL_TALK | FALLBACK\",
-  \"normalized_query\": \"ключові слова для пошуку/дії\",
-  \"order_id\": null або номер замовлення (якщо є у тексті)
+  \"normalized_query\": \"ключові слова для пошуку (тільки для PRODUCT_SEARCH)\",
+  \"order_id\": null або номер замовлення
 }
 
 Текст: \"{$message}\"

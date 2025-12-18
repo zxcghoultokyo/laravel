@@ -38,6 +38,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
         $index = $meili->productsIndex();
         $chunkSize = $this->effectiveChunkSize();
 
+        // Ensure filterable attributes for AI flags exist (idempotent)
+        try {
+            $index->updateSettings([
+                'filterableAttributes' => array_values(array_unique([
+                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'display_in_showcase'
+                ])),
+            ]);
+        } catch (\Throwable $e) {
+            // non-fatal: settings update may be async or already set
+        }
+
         Product::query()
             ->with('aiIndex')
             ->orderBy('id')
@@ -77,8 +88,10 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         // ✅ замість неіснуючого updated_at_ts
                         'updated_at_ts' => $p->updated_at ? $p->updated_at->getTimestamp() : 0,
 
-                        'ai_product_type' => (string) (($p->aiIndex->product_type ?? '') ?: ''),
-                        'ai_category'     => (string) (($p->aiIndex->ai_category ?? '') ?: ''),
+                        'ai_product_type' => ($p->aiIndex->product_type ?? null) ? (string) $p->aiIndex->product_type : null,
+                        'ai_category'     => ($p->aiIndex->ai_category ?? null) ? (string) $p->aiIndex->ai_category : null,
+                        'has_ai_type'     => ($p->aiIndex->product_type ?? null) ? 1 : 0,
+                        'has_ai_category' => ($p->aiIndex->ai_category ?? null) ? 1 : 0,
                     ];
                 }
 

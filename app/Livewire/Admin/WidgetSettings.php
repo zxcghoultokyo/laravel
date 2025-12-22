@@ -3,6 +3,8 @@
 namespace App\Livewire\Admin;
 
 use App\Models\WidgetSettings as WidgetSettingsModel;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Carbon;
 use Livewire\Component;
 
 class WidgetSettings extends Component
@@ -33,6 +35,9 @@ class WidgetSettings extends Component
     public $faq_contacts_text = '';
     public $faq_about_url = 'https://contractor.kiev.ua/pro-nas/';
     public $faq_about_text = '';
+    public $faq_last_ingest_at = null;
+    public $can_fetch_now = true;
+    public $next_fetch_time = null;
 
     public function mount()
     {
@@ -51,6 +56,19 @@ class WidgetSettings extends Component
                 'faq_contacts_url','faq_contacts_text',
                 'faq_about_url','faq_about_text'
             ]));
+        }
+
+        // Load last ingest time from cache and compute availability
+        $key = $this->getIngestCacheKey();
+        $last = Cache::get($key);
+        if ($last) {
+            $this->faq_last_ingest_at = $last;
+            $lastAt = Carbon::parse($last);
+            $hours = $lastAt->diffInHours(now());
+            $this->can_fetch_now = $hours >= 24;
+            $this->next_fetch_time = $lastAt->copy()->addHours(24)->format('Y-m-d H:i');
+        } else {
+            $this->can_fetch_now = true;
         }
     }
 
@@ -108,15 +126,8 @@ class WidgetSettings extends Component
             ]
         );
 
-        // Auto-ingest FAQ content if URLs provided
-        try {
-            $service = app(\App\Services\Support\FaqContentIngestService::class);
-            $service->ingest($settings);
-            session()->flash('message', 'Налаштування збережено! (FAQ імпортовано)');
-        } catch (\Throwable $e) {
-            // Non-fatal: show message but do not break save
-            session()->flash('message', 'Налаштування збережено! (Імпорт FAQ: ' . $e->getMessage() . ')');
-        }
+        // Manual-only: do NOT auto-ingest on save
+        session()->flash('message', 'Налаштування збережено!');
     }
 
     public function regenerateToken()
@@ -138,6 +149,21 @@ class WidgetSettings extends Component
             return;
         }
 
+        // Rate limit: once per 24 hours
+        $key = $this->getIngestCacheKey();
+        $last = Cache::get($key);
+        if ($last) {
+            $lastAt = Carbon::parse($last);
+            if ($lastAt->diffInHours(now()) < 24) {
+                $next = $lastAt->copy()->addHours(24)->format('Y-m-d H:i');
+                $this->faq_last_ingest_at = $last;
+                $this->can_fetch_now = false;
+                $this->next_fetch_time = $next;
+                session()->flash('message', 'Оновлення доступне лише раз на день. Наступна спроба: ' . $next);
+                return;
+            }
+        }
+
         try {
             $service = app(\App\Services\Support\FaqContentIngestService::class);
             $service->ingest($settings);
@@ -147,10 +173,22 @@ class WidgetSettings extends Component
             $this->faq_contacts_text = $settings->faq_contacts_text;
             $this->faq_about_text = $settings->faq_about_text;
 
-            session()->flash('message', 'FAQ контент перезавантажено з сторінок!');
+            // Store last ingest time in cache and update state
+            $nowIso = now()->toISOString();
+            Cache::put($key, $nowIso, 60 * 60 * 24 * 365); // keep record ~1 year
+            $this->faq_last_ingest_at = $nowIso;
+            $this->can_fetch_now = false;
+            $this->next_fetch_time = now()->addDay()->format('Y-m-d H:i');
+
+            session()->flash('message', 'FAQ контент перезавантажено з сторінок! (доступно не частіше 1 разу на день)');
         } catch (\Throwable $e) {
             session()->flash('message', 'Помилка імпорту FAQ: ' . $e->getMessage());
         }
+    }
+
+    private function getIngestCacheKey(): string
+    {
+        return 'faq_ingest_last_' . ($this->domain ?: 'default');
     }
 
     public function render()

@@ -159,10 +159,13 @@
                     </div>
 
                     <div class="mt-4">
-                        <button type="button" wire:click="fetchFaqNow" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                        <button type="button" wire:click="fetchFaqNow" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60" @if(!$can_fetch_now) disabled @endif>
                             Оновити FAQ з сторінок зараз
                         </button>
-                        <p class="mt-2 text-xs text-gray-500">Перепарсить вказані URL-и і оновить тексти нижче.</p>
+                        <p class="mt-2 text-xs text-gray-500">Перепарсить вказані URL-и і оновить тексти нижче. Доступно не частіше 1 разу на день.</p>
+                        @if($faq_last_ingest_at)
+                        <p class="mt-1 text-xs text-gray-500">Останнє оновлення: {{ $faq_last_ingest_at }} @if($next_fetch_time) | Наступне доступне: {{ $next_fetch_time }} @endif</p>
+                        @endif
                     </div>
                 </div>
 

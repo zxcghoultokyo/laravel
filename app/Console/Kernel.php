@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Jobs\GenerateCategoryScenariosJob;
 use App\Jobs\GenerateCategoryScriptsJob;
 use App\Jobs\SyncHoroshopProductsJob;
+use App\Jobs\SyncBrandsJob;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -21,6 +22,10 @@ class Kernel extends ConsoleKernel
     {
         $schedule->job(new SyncHoroshopProductsJob())
             ->dailyAt('03:00');
+
+        // Sync brands after products sync (with 30min delay)
+        $schedule->job(new SyncBrandsJob())
+            ->dailyAt('03:30');
 
         $schedule->job(new GenerateCategoryScenariosJob())
             ->dailyAt('04:00');

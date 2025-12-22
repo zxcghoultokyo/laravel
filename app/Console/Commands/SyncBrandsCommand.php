@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\SyncBrandsJob;
 use App\Models\Brand;
 use App\Models\Product;
 use Illuminate\Console\Command;
@@ -14,7 +15,7 @@ class SyncBrandsCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'brands:sync {--force : Force sync even if brands exist}';
+    protected $signature = 'brands:sync {--async : Run as background job}';
 
     /**
      * The console command description.
@@ -28,6 +29,13 @@ class SyncBrandsCommand extends Command
      */
     public function handle()
     {
+        // Check if should run async
+        if ($this->option('async')) {
+            SyncBrandsJob::dispatch();
+            $this->info('✓ Brand sync job dispatched to queue');
+            return Command::SUCCESS;
+        }
+        
         $this->info('Starting brands sync...');
         
         // Get unique brands from products with counts

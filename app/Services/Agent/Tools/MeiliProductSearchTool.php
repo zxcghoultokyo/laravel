@@ -359,12 +359,24 @@ class MeiliProductSearchTool
     {
         $builder = Product::query()->where('in_stock', true);
         
-        // Text search in title
+        // Text search: extract keywords from query and search by EACH keyword
         if (!empty($query)) {
-            $builder->where(function($q) use ($query) {
-                $q->whereRaw('LOWER(title) LIKE ?', ['%' . mb_strtolower($query) . '%'])
-                  ->orWhereRaw('LOWER(search_index) LIKE ?', ['%' . mb_strtolower($query) . '%']);
-            });
+            // Split query into keywords, filter out small words
+            $keywords = array_filter(
+                preg_split('/\s+/', mb_strtolower(trim($query))),
+                fn($w) => strlen($w) > 1
+            );
+            
+            if (!empty($keywords)) {
+                // Search for ANY keyword match (OR logic, like Meili)
+                $builder->where(function($q) use ($keywords) {
+                    foreach ($keywords as $keyword) {
+                        $likePattern = '%' . $keyword . '%';
+                        $q->orWhereRaw('LOWER(title) LIKE ?', [$likePattern])
+                          ->orWhereRaw('LOWER(search_index) LIKE ?', [$likePattern]);
+                    }
+                });
+            }
         }
         
         // Budget filters
@@ -375,12 +387,25 @@ class MeiliProductSearchTool
             $builder->where('price', '<=', $filters['budget_max']);
         }
         
-        // Order by popularity
-        $builder->orderBy('popularity', 'desc');
+        // Color filter (if present)
+        if (!empty($filters['color'])) {
+            $builder->where(function($q) use ($filters) {
+                $color = mb_strtolower($filters['color']);
+                $q->whereRaw('LOWER(color) = ?', [$color])
+                  ->orWhereRaw('LOWER(brand) LIKE ?', ['%' . $color . '%']);
+            });
+        }
+        
+        // Order by popularity & stock
+        $builder->orderBy('popularity', 'desc')
+                ->orderBy('quantity', 'desc');
         
         $products = $builder->limit($limit)->get();
         
-        Log::info('MeiliProductSearchTool: Eloquent fallback found', ['count' => $products->count()]);
+        Log::info('MeiliProductSearchTool: Eloquent fallback found', [
+            'count' => $products->count(),
+            'keywords' => $keywords ?? []
+        ]);
         
         // Map to same format as Meilisearch
         return $products->map(function($product) {

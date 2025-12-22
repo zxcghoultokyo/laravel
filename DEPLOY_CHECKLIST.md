@@ -10,15 +10,37 @@
 - [x] Filter extraction (budget, color)
 
 ### 2. Env змінні (на Laravel Cloud)
-Перевір що є:
+Перевір що є (повний список):
 ```bash
-OPENAI_API_KEY=sk-...
+# Обов'язкові
+APP_KEY=base64:...
+
+# OpenAI
+OPENAI_API_KEY=sk-proj-...
 OPENAI_MODEL=gpt-5.1
 OPENAI_BASE_URL=https://api.openai.com/v1
 
-MEILI_ENABLED=true
-MEILI_HOST=http://meilisearch:7700
+# Meilisearch (ВАЖЛИВО: якщо MEILI_ENABLED=0, то Eloquent fallback)
+MEILI_ENABLED=1
+MEILI_HOST=https://meilisearch-aimbot.fly.dev
 MEILI_MASTER_KEY=...
+MEILI_INDEX_PRODUCTS=products
+
+# Horoshop (тактична платформа)
+HOROSHOP_DOMAIN=https://contractor.kiev.ua
+HOROSHOP_API_LOGIN=owner
+HOROSHOP_API_PASSWORD=...
+
+# Cache & Queue
+CACHE_DRIVER=file
+CACHE_STORE=file
+QUEUE_CONNECTION=database
+
+# Admin
+ADMIN_JOBS_TOKEN=...
+
+# Логування
+LOG_CHANNEL=stderr
 ```
 
 ### 3. Команди для запуску на production

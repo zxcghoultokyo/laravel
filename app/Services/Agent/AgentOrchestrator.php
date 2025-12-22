@@ -847,6 +847,15 @@ SYS;
 Ти генеруєш структуровану пораду: 1) Коротка рамка (1–2 речення). 2) 3 ролі товарів (бюджетний / збалансований / посилений) з назвами, цінами, 1–2 фактами. 3) Один CTA: впевненість якщо даних досить, або уточнення (бюджет/умови) якщо потрібно звузити.
 
 Вихід: українською, без Markdown/емодзі, спершу список, потім CTA.
+PROMPT;
+
+        try {
+            $reply = $this->aiRouter->callOpenAI($prompt, 0.4, 500);
+            $reply = trim($reply);
+
+            // Detect CTA type for session memory
+            $lr = mb_strtolower($reply);
+            $ctaType = null;
             if (str_contains($lr, 'звужу') || str_contains($lr, 'підкажи') || str_contains($lr, 'скаж')) {
                 $ctaType = 'clarification';
             } elseif (str_contains($lr, 'радив') || str_contains($lr, 'логічніше') || str_contains($lr, 'рекоменд')) {

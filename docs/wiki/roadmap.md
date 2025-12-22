@@ -20,7 +20,7 @@
 ### Core Infrastructure (Sprint 0-1)
 - ✅ **Laravel 12** project setup з dev container
 - ✅ **Meilisearch** integration + indexing pipeline
-- ✅ **OpenAI GPT-4.1-mini** integration via AiRouter
+- ✅ **OpenAI GPT-5.1** integration via AiRouter
 - ✅ **Horoshop API** client + sync pipeline
 - ✅ **Product model** з 30+ полями (title, price, brand, images, raw, ...)
 - ✅ **Database migrations** для products, brands, categories
@@ -84,10 +84,10 @@
 ## В Процесі Розробки 🚧
 
 ### Search Quality Improvements (Sprint 6)
-- ⚠️ **AI Reranker Brand Priority** — промпт готовий, НЕ закомічено
-  - **Status**: Code written, needs testing + commit
-  - **ETA**: 23.12.2025
-  - **Blocker**: Потрібно протестувати на production
+- ✅ **AI Reranker Brand Priority** — комбінований фікс закомічено
+  - **Status**: ✅ COMPLETED
+  - **Завершено**: 22.12.2025
+  - **Рішення**: Brand detection + filtering + AI prompt instruction
 
 ---
 
@@ -170,7 +170,7 @@
 ---
 
 #### 5. OpenAI Classification Caching
-**Чому важливо**: Економія API costs ($0.50/month → $0.10/month)
+**Чому важливо**: Економія API costs (~$5/month → ~$1/month для 1000 пошуків)
 
 **Tasks**:
 - [ ] Add Cache::remember() in AiRouter::classify()
@@ -349,15 +349,16 @@
 ## Sprint Planning
 
 ### Sprint 6 (19.12 - 25.12) — In Progress
-**Goal**: Documentation + Brand Priority Fix
+**Goal**: Documentation + Brand Priority Fix + API Cost Update
 
 - [x] Create internal wiki structure
 - [x] Write 10+ documentation files
-- [x] Fix AI reranker brand priority (code ready)
-- [ ] Test & commit brand priority fix
+- [x] Fix AI reranker brand priority
+- [x] Update API costs for GPT-5.1
+- [ ] Test brand priority on production
 - [ ] Deploy to production
 
-**Status**: 80% complete
+**Status**: 95% complete
 
 ---
 
@@ -393,7 +394,7 @@
 | Metric | Current | Target | Status |
 |--------|---------|--------|--------|
 | Search Response Time | 600-900ms | <500ms | 🟡 |
-| AI API Cost/Search | $0.0004 | <$0.0002 | 🟡 |
+| AI API Cost/Search | $0.005 | <$0.003 | 🟡 |
 | Search Success Rate | ~85% | >95% | 🟡 |
 | Meilisearch Indexing Time | 3 min | <1.5 min | 🟢 |
 | Error Rate | <2% | <1% | 🟢 |

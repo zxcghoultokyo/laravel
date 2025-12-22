@@ -12,14 +12,14 @@
 **Contractor AI Shop** — інтелектуальна система продажу тактичного військового спорядження для ЗСУ з AI-асистентом для пошуку товарів.
 
 ### Ключові особливості
-- 🤖 **AI-асистент** — ChatGPT-4.1-mini для класифікації запитів і пошуку
+- 🤖 **AI-асистент** — GPT-5.1 для класифікації запитів і пошуку
 - 🔍 **Meilisearch** — швидкий нечіткий пошук (typo tolerance, фільтри, бустинг)
 - 🏗️ **Agent-based Architecture** — оркестратор + інструменти (tools pattern)
 - 🛡️ **Tactical Focus** — спеціалізація на військовому екіпіруванні
 
 ### Стек Технологій
 - **Backend**: Laravel 12, PHP 8.3
-- **AI**: OpenAI GPT-4.1-mini
+- **AI**: OpenAI GPT-5.1
 - **Search**: Meilisearch 1.5+
 - **Frontend**: Vanilla JS widget (public/widget.js)
 - **Database**: MySQL/PostgreSQL + Eloquent ORM

@@ -61,7 +61,7 @@
           │ API Calls                │ API Calls
           ↓                          ↓
 ┌─────────────────────┐    ┌───────────────────────────┐
-│  OpenAI GPT-4.1     │    │  Horoshop E-Commerce API  │
+│  OpenAI GPT-5.1     │    │  Horoshop E-Commerce API  │
 │  • Intent classify  │    │  • Product catalog sync   │
 │  • Query normalize  │    │  • Order status           │
 │  • AI reranking     │    │  • Inventory data         │
@@ -161,7 +161,7 @@ handle($message, $context)
 1. **MeiliProductSearchTool** — Meilisearch query + brand detection
 2. **DeduperTool** — Remove variant duplicates (by parent_article)
 3. **AccessoryFilterTool** — Downrank/remove accessories
-4. **AiRerankTool** — AI-powered relevance scoring (GPT-4.1)
+4. **AiRerankTool** — AI-powered relevance scoring (GPT-5.1)
 5. **ProductDetailsTool** — Fetch full product cards from DB
 
 ---
@@ -229,7 +229,7 @@ handle($message, $context)
     │
     ├─ Step 4: AiRerankTool::rerank()
     │   ├─ Build prompt with 8 candidates
-    │   ├─ OpenAI call (GPT-4.1-mini)
+    │   ├─ OpenAI call (GPT-5.1)
     │   └─ Return top 5 relevant (AI decides)
     │
     └─ Step 5: ProductDetailsTool::getCards(5 IDs)
@@ -298,7 +298,7 @@ handle($message, $context)
 - **Cache**: Redis / Laravel Cache
 - **Queue**: Laravel Queue (database driver)
 - **Search**: Meilisearch 1.5+
-- **AI**: OpenAI GPT-4.1-mini
+- **AI**: OpenAI GPT-5.1
 
 ### Frontend
 - **Widget**: Vanilla JavaScript (ES6+)

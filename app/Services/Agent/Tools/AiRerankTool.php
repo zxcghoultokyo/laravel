@@ -21,7 +21,23 @@ class AiRerankTool
         }
 
         try {
-            $prompt = $this->buildRerankPrompt($candidates, $query, $filters);
+            // Detect brand from query
+            $detectedBrand = $this->detectBrandFromQuery($query, $candidates);
+            
+            // If explicit brand query (e.g., "hoffmann", "атака") — filter strictly
+            if ($detectedBrand && $this->isExplicitBrandQuery($query, $detectedBrand)) {
+                $beforeCount = count($candidates);
+                $candidates = $this->filterByBrand($candidates, $detectedBrand);
+                
+                Log::info('AiRerankTool: explicit brand filter applied', [
+                    'brand' => $detectedBrand,
+                    'before' => $beforeCount,
+                    'after' => count($candidates),
+                    'query' => $query,
+                ]);
+            }
+            
+            $prompt = $this->buildRerankPrompt($candidates, $query, $filters, $detectedBrand);
             $response = $this->aiRouter->callOpenAI($prompt, 0.3);
             
             $result = json_decode($response, true);
@@ -54,6 +70,7 @@ class AiRerankTool
                 'reranked_count' => count($reranked),
                 'chosen_ids' => $chosenIds,
                 'ai_selected' => count($chosenIds),
+                'detected_brand' => $detectedBrand ?? 'none',
             ]);
             
             return $reranked;
@@ -66,7 +83,7 @@ class AiRerankTool
         }
     }
 
-    private function buildRerankPrompt(array $candidates, string $query, array $filters): string
+    private function buildRerankPrompt(array $candidates, string $query, array $filters, ?string $detectedBrand = null): string
     {
         $candidatesList = [];
         foreach (array_slice($candidates, 0, 40) as $idx => $c) {
@@ -75,10 +92,13 @@ class AiRerankTool
                 $categoryPath = implode(' > ', $categoryPath);
             }
             
+            $brand = $c['brand'] ?? 'N/A';
+            
             $candidatesList[] = sprintf(
-                "ID %d: %s | %s грн | %s | Popular: %d | Stock: %s",
+                "ID %d: %s | Бренд: %s | %s грн | %s | Popular: %d | Stock: %s",
                 $c['id'],
                 $c['title'],
+                $brand,
                 $c['price'],
                 $categoryPath,
                 $c['popularity'] ?? 0,
@@ -93,6 +113,21 @@ class AiRerankTool
         if (!empty($filters['color'])) {
             $filterDesc .= "Колір: {$filters['color']}. ";
         }
+        
+        // Brand-specific instruction
+        $brandInstruction = '';
+        if ($detectedBrand) {
+            $brandInstruction = <<<BRAND
+
+🔴 КРИТИЧНО ВАЖЛИВО — БРЕНД:
+Запит містить бренд "{$detectedBrand}" → показувати ТІЛЬКИ товари бренду "{$detectedBrand}"!
+- Бренд МАЄ АБСОЛЮТНИЙ ПРІОРИТЕТ над popularity
+- Якщо товар НЕ бренду "{$detectedBrand}" → НЕ додавай його в chosen_ids
+- Сортуй товари "{$detectedBrand}" по релевантності всередині бренду
+- Ігноруй popularity якщо бренд не співпадає
+
+BRAND;
+        }
 
         return <<<PROMPT
 Ти — AI-експерт магазину Contractor (тактичне військове спорядження).
@@ -104,6 +139,7 @@ class AiRerankTool
 
 Кандидати ({count($candidates)} товарів):
 {implode("\n", $candidatesList)}
+{$brandInstruction}
 
 ДУЖЕ ВАЖЛИВО:
 - Якщо товар має в назві "ремінь", "плечовий", "одноточков", "двоточков", "слінг", "камбербанд", "панел", "кріплення", "адаптер", "ліхтарик", "ліхтар", "навушник", "гарнітур", "кавер", "чохол" — ЦЕ АКСЕСУАР, показувати ТІЛЬКИ якщо немає основних товарів
@@ -147,5 +183,78 @@ PROMPT;
             }
         }
         return null;
+    }
+    
+    /**
+     * Detect brand from query by checking if any candidate brand appears in query
+     */
+    private function detectBrandFromQuery(string $query, array $candidates): ?string
+    {
+        $query = mb_strtolower(trim($query));
+        
+        // Collect unique brands from candidates
+        $brands = [];
+        foreach ($candidates as $c) {
+            if (!empty($c['brand'])) {
+                $brands[$c['brand']] = mb_strtolower($c['brand']);
+            }
+        }
+        
+        // Check if any brand appears in query
+        foreach ($brands as $originalBrand => $brandLower) {
+            if (str_contains($query, $brandLower)) {
+                return $originalBrand; // Return original case
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Check if query is EXPLICITLY about a brand (brand is main keyword)
+     * Examples: "hoffmann", "атака плитоноска" → true
+     * Counter: "плитоноска зелена" → false (no brand)
+     */
+    private function isExplicitBrandQuery(string $query, string $brand): bool
+    {
+        $query = mb_strtolower(trim($query));
+        $brand = mb_strtolower($brand);
+        
+        // Query IS the brand (e.g., "hoffmann")
+        if ($query === $brand) {
+            return true;
+        }
+        
+        // Query starts with brand (e.g., "hoffmann патчі")
+        if (str_starts_with($query, $brand)) {
+            return true;
+        }
+        
+        // Query ends with brand (e.g., "патчі hoffmann")
+        if (str_ends_with($query, $brand)) {
+            return true;
+        }
+        
+        // Brand is standalone word in query (surrounded by spaces)
+        if (preg_match('/\b' . preg_quote($brand, '/') . '\b/ui', $query)) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Filter candidates to keep only specified brand
+     */
+    private function filterByBrand(array $candidates, string $brand): array
+    {
+        $brandLower = mb_strtolower($brand);
+        
+        return array_values(array_filter($candidates, function($c) use ($brandLower) {
+            if (empty($c['brand'])) {
+                return false;
+            }
+            return mb_strtolower($c['brand']) === $brandLower;
+        }));
     }
 }

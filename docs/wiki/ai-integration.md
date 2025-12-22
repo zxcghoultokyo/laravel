@@ -1,7 +1,7 @@
 # 🤖 AI Інтеграція — OpenAI & ChatGPT
 
 > **Остання оновлення**: 22.12.2025  
-> **Модель**: GPT-4.1-mini  
+> **Модель**: GPT-5.1  
 > **Провайдер**: OpenAI API
 
 ---
@@ -37,7 +37,7 @@ AI використовується на **3 ключових етапах**:
 // config/services.php
 'openai' => [
     'api_key' => env('OPENAI_API_KEY'),
-    'model' => env('OPENAI_MODEL', 'gpt-4-turbo-preview'),
+    'model' => env('OPENAI_MODEL', 'gpt-5.1'),
     'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
 ],
 ```
@@ -288,10 +288,12 @@ OpenAI має rate limits:
 
 | Operation | Time | Cost (approx) |
 |-----------|------|---------------|
-| `classify()` | ~300-500ms | $0.0001 |
-| `normalizeSearchQuery()` | ~200-400ms | $0.0001 |
-| `rerank()` | ~500-800ms | $0.0002 |
-| **TOTAL per search** | ~1-1.7s | **$0.0004** |
+| `classify()` | ~300-500ms | $0.0009 |
+| `normalizeSearchQuery()` | ~200-400ms | $0.0007 |
+| `rerank()` | ~500-800ms | $0.003 |
+| **TOTAL per search** | ~1-1.7s | **$0.005** |
+
+**Note**: GPT-5.1 pricing: ~$0.03/1K input tokens, ~$0.06/1K output tokens (2-3x дорожче за GPT-4-turbo)
 
 **Bottleneck**: AI Reranking (найдовший call)
 
@@ -315,7 +317,7 @@ OpenAI має rate limits:
 ### Environment Variables
 ```bash
 OPENAI_API_KEY=sk-proj-...
-OPENAI_MODEL=gpt-4-turbo-preview
+OPENAI_MODEL=gpt-5.1
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 

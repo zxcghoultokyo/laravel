@@ -60,7 +60,7 @@ User Message
     ↓ ~20-25 products
 ┌──────────────────────────────────────┐
 │  Step 4: AiRerankTool                │
-│  • AI relevance scoring (GPT-4.1)    │
+│  • AI relevance scoring (GPT-5.1)    │
 │  • Dynamic limit (3-10 products)     │
 │  • Quality over quantity             │
 └──────────────────────────────────────┘

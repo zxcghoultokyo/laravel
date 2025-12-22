@@ -153,7 +153,7 @@ php artisan agent:smoke
 1. **Налаштувати OpenAI**:
    ```bash
    OPENAI_API_KEY=sk-...
-   OPENAI_MODEL=gpt-4
+   OPENAI_MODEL=gpt-5.1
    OPENAI_BASE_URL=https://api.openai.com/v1
    ```
 

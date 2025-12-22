@@ -27,6 +27,15 @@ class WidgetSettings extends Model
         'horoshop_domain',
         'horoshop_api_login',
         'horoshop_api_password',
+        'enable_faq_custom_content',
+        'faq_payment_delivery_url',
+        'faq_payment_delivery_text',
+        'faq_returns_url',
+        'faq_returns_text',
+        'faq_contacts_url',
+        'faq_contacts_text',
+        'faq_about_url',
+        'faq_about_text',
     ];
 
     protected $casts = [
@@ -34,6 +43,7 @@ class WidgetSettings extends Model
         'border_radius' => 'integer',
         'enable_delivery_tracking' => 'boolean',
         'enable_faq_from_horoshop' => 'boolean',
+        'enable_faq_custom_content' => 'boolean',
     ];
 
     protected static function boot()

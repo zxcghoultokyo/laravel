@@ -24,6 +24,15 @@ class WidgetSettings extends Component
     public $enable_delivery_tracking = true;
     public $enable_faq_from_horoshop = true;
     public $horoshop_domain = '';
+    public $enable_faq_custom_content = true;
+    public $faq_payment_delivery_url = 'https://contractor.kiev.ua/oplata-i-dostavka/';
+    public $faq_payment_delivery_text = '';
+    public $faq_returns_url = 'https://contractor.kiev.ua/obmin-ta-povernennya/';
+    public $faq_returns_text = '';
+    public $faq_contacts_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/';
+    public $faq_contacts_text = '';
+    public $faq_about_url = 'https://contractor.kiev.ua/pro-nas/';
+    public $faq_about_text = '';
 
     public function mount()
     {
@@ -35,7 +44,12 @@ class WidgetSettings extends Component
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
-                'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain'
+                'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain',
+                'enable_faq_custom_content',
+                'faq_payment_delivery_url','faq_payment_delivery_text',
+                'faq_returns_url','faq_returns_text',
+                'faq_contacts_url','faq_contacts_text',
+                'faq_about_url','faq_about_text'
             ]));
         }
     }
@@ -54,6 +68,14 @@ class WidgetSettings extends Component
             'callback_form_url' => 'required|url|max:255',
             'nova_poshta_tracking_url' => 'required|url|max:255',
             'horoshop_domain' => 'nullable|url|max:255',
+            'faq_payment_delivery_url' => 'nullable|url|max:255',
+            'faq_returns_url' => 'nullable|url|max:255',
+            'faq_contacts_url' => 'nullable|url|max:255',
+            'faq_about_url' => 'nullable|url|max:255',
+            'faq_payment_delivery_text' => 'nullable|string|max:2000',
+            'faq_returns_text' => 'nullable|string|max:2000',
+            'faq_contacts_text' => 'nullable|string|max:2000',
+            'faq_about_text' => 'nullable|string|max:2000',
         ]);
 
         WidgetSettingsModel::updateOrCreate(
@@ -74,6 +96,15 @@ class WidgetSettings extends Component
                 'enable_delivery_tracking' => $this->enable_delivery_tracking,
                 'enable_faq_from_horoshop' => $this->enable_faq_from_horoshop,
                 'horoshop_domain' => $this->horoshop_domain,
+                'enable_faq_custom_content' => $this->enable_faq_custom_content,
+                'faq_payment_delivery_url' => $this->faq_payment_delivery_url,
+                'faq_payment_delivery_text' => $this->faq_payment_delivery_text,
+                'faq_returns_url' => $this->faq_returns_url,
+                'faq_returns_text' => $this->faq_returns_text,
+                'faq_contacts_url' => $this->faq_contacts_url,
+                'faq_contacts_text' => $this->faq_contacts_text,
+                'faq_about_url' => $this->faq_about_url,
+                'faq_about_text' => $this->faq_about_text,
             ]
         );
 

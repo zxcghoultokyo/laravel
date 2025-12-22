@@ -119,6 +119,46 @@
                     </div>
                 </div>
 
+                <!-- FAQ налаштування -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">FAQ налаштування</h3>
+
+                    <div class="flex items-center space-x-3 mb-4">
+                        <input type="checkbox" wire:model.live="enable_faq_custom_content" id="enable_faq_custom_content" class="rounded border-gray-300">
+                        <label for="enable_faq_custom_content" class="text-sm text-gray-700">Використовувати власний контент для FAQ</label>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">Оплата і доставка — URL</label>
+                            <input type="url" wire:model.live="faq_payment_delivery_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/oplata-i-dostavka/">
+                            <label class="block text-sm font-medium text-gray-700">Оплата і доставка — Текст (до 2000 символів)</label>
+                            <textarea wire:model.live="faq_payment_delivery_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">Обмін та повернення — URL</label>
+                            <input type="url" wire:model.live="faq_returns_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/obmin-ta-povernennya/">
+                            <label class="block text-sm font-medium text-gray-700">Обмін та повернення — Текст</label>
+                            <textarea wire:model.live="faq_returns_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">Контактна інформація — URL</label>
+                            <input type="url" wire:model.live="faq_contacts_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/kontaktna-informatsiya/">
+                            <label class="block text-sm font-medium text-gray-700">Контактна інформація — Текст</label>
+                            <textarea wire:model.live="faq_contacts_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        </div>
+
+                        <div class="space-y-3">
+                            <label class="block text-sm font-medium text-gray-700">Про нас — URL</label>
+                            <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/pro-nas/">
+                            <label class="block text-sm font-medium text-gray-700">Про нас — Текст</label>
+                            <textarea wire:model.live="faq_about_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- API Token -->
                 <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">API Токен</h3>

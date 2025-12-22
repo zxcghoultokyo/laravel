@@ -490,15 +490,66 @@ class AgentOrchestrator
      */
     private function handleFaq(string $message, array $plan, array $context): array
     {
-        $pages = $this->horoshopDataService->getFaqPages(0);
-        if (empty($pages)) {
+        $settings = WidgetSettings::first();
+        $useHoroshop = ($settings?->enable_faq_from_horoshop ?? false) === true;
+        $useCustom = ($settings?->enable_faq_custom_content ?? false) === true;
+
+        $lowerMessage = mb_strtolower($message);
+
+        // If custom FAQ enabled, try to answer directly by keywords
+        if ($useCustom) {
+            $map = [
+                'оплата' => ['text' => $settings?->faq_payment_delivery_text, 'url' => $settings?->faq_payment_delivery_url, 'title' => 'Оплата і доставка'],
+                'доставка' => ['text' => $settings?->faq_payment_delivery_text, 'url' => $settings?->faq_payment_delivery_url, 'title' => 'Оплата і доставка'],
+                'повернення' => ['text' => $settings?->faq_returns_text, 'url' => $settings?->faq_returns_url, 'title' => 'Обмін та повернення'],
+                'обмін' => ['text' => $settings?->faq_returns_text, 'url' => $settings?->faq_returns_url, 'title' => 'Обмін та повернення'],
+                'контакти' => ['text' => $settings?->faq_contacts_text, 'url' => $settings?->faq_contacts_url, 'title' => 'Контактна інформація'],
+                'про нас' => ['text' => $settings?->faq_about_text, 'url' => $settings?->faq_about_url, 'title' => 'Про нас'],
+            ];
+
+            foreach ($map as $keyword => $info) {
+                if (str_contains($lowerMessage, $keyword)) {
+                    $parts = [];
+                    if (!empty($info['text'])) {
+                        $parts[] = $info['text'];
+                    }
+                    if (!empty($info['url'])) {
+                        $parts[] = 'Посилання: ' . $info['url'];
+                    }
+                    $msg = !empty($parts) ? implode("\n\n", $parts) : ('Сторінка: ' . $info['title']);
+                    return [
+                        'message' => $msg,
+                        'products' => [],
+                        'meta' => ['intent' => 'faq', 'topic' => $keyword],
+                    ];
+                }
+            }
+        }
+
+        // Otherwise, use Horoshop pages if enabled
+        $pages = $useHoroshop ? $this->horoshopDataService->getFaqPages(0) : [];
+        if ($useHoroshop && empty($pages)) {
             return [
                 'message' => "Поки не вдалось отримати FAQ. Напишіть, що цікавить: доставка, оплата чи повернення — і я відповім вручну.",
                 'products' => [],
                 'meta' => ['intent' => 'faq', 'pages' => []],
             ];
         }
-        $lowerMessage = mb_strtolower($message);
+        if (!$useHoroshop) {
+            // If neither custom matched nor horoshop used, show list of available custom links
+            $links = [];
+            if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
+            if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
+            if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
+            if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
+            if (!empty($links)) {
+                return [
+                    'message' => "Ось корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links)),
+                    'products' => [],
+                    'meta' => ['intent' => 'faq', 'pages' => []],
+                ];
+            }
+        }
 
         $settings = WidgetSettings::first();
         $domain = $settings?->horoshop_domain ? rtrim($settings->horoshop_domain, '/') : null;

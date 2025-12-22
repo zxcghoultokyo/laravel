@@ -4,12 +4,15 @@ namespace App\Services\Agent\Tools;
 
 use App\Models\Product;
 use App\Services\Search\MeiliClient;
+use App\Services\Search\BrandDetectionService;
 use Illuminate\Support\Facades\Log;
 
 class MeiliProductSearchTool
 {
-    public function __construct(private MeiliClient $meiliClient)
-    {}
+    public function __construct(
+        private MeiliClient $meiliClient,
+        private BrandDetectionService $brandDetection
+    ) {}
 
     /**
      * Search products in Meilisearch
@@ -21,7 +24,8 @@ class MeiliProductSearchTool
             $index = $this->meiliClient->client()->index('products');
             
             // Detect brand in query and enhance search
-            $enhancedQuery = $this->enhanceQueryWithBrand($query);
+            $brandInfo = $this->brandDetection->detectBrand($query);
+            $enhancedQuery = $brandInfo['enhanced_query'];
             
             // Build filter string
             $filterParts = [];
@@ -72,6 +76,8 @@ class MeiliProductSearchTool
             
             Log::info('MeiliProductSearchTool: searching', [
                 'original_query' => $query,
+                'is_brand_search' => $brandInfo['is_brand'],
+                'detected_brand' => $brandInfo['brand'],
                 'enhanced_query' => $enhancedQuery,
                 'filter' => $filterString,
                 'limit' => $limit
@@ -108,57 +114,6 @@ class MeiliProductSearchTool
             // Fallback to Eloquent search
             return $this->eloquentFallback($query, $filters, $limit);
         }
-    }
-
-    /**
-     * Enhance query with brand detection
-     * Recognizes brand names and adds them to search query multiple times for boosting
-     */
-    private function enhanceQueryWithBrand(string $query): string
-    {
-        $queryLower = mb_strtolower($query);
-        
-        // Remove "бренд" prefix
-        $queryClean = preg_replace('/^бренд\s+/u', '', $queryLower);
-        
-        // Known brands (expand as needed)
-        $brandMap = [
-            'атака' => 'АТАКА',
-            'ataka' => 'АТАКА',
-            'а.т.а.к.а' => 'АТАКА',
-            'абрамс' => 'Abrams',
-            'abrams' => 'Abrams',
-            'хоффман' => 'Hoffmann',
-            'hoffman' => 'Hoffmann',
-            'hoffmann' => 'Hoffmann',
-            'елмон' => 'ELMON',
-            'elmon' => 'ELMON',
-            'ragnarok' => 'RAGNAROK',
-            'рагнарок' => 'RAGNAROK',
-            'condor' => 'Condor',
-            'кондор' => 'Condor',
-            '5.11' => '5.11',
-            'саломан' => 'Salomon',
-            'salomon' => 'Salomon',
-            'kombat' => 'KOMBAT',
-            'комбат' => 'KOMBAT',
-            'карінтія' => 'Carinthia',
-            'carinthia' => 'Carinthia',
-        ];
-        
-        // Check if query is a brand name
-        foreach ($brandMap as $search => $brand) {
-            if ($queryClean === $search || str_contains($queryClean, ' ' . $search . ' ') || str_starts_with($queryClean, $search . ' ') || str_ends_with($queryClean, ' ' . $search)) {
-                // Boost brand by repeating it in query (Meili ranks by term frequency)
-                Log::info('MeiliProductSearchTool: brand detected', [
-                    'original' => $query,
-                    'brand' => $brand
-                ]);
-                return $brand . ' ' . $brand . ' ' . $brand . ' ' . $queryClean;
-            }
-        }
-        
-        return $query;
     }
 
     /**

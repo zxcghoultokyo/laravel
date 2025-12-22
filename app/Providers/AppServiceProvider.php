@@ -29,6 +29,12 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Search\MeiliClient::class, function ($app) {
             return new \App\Services\Search\MeiliClient();
         });
+        
+        // BrandDetectionService
+        $this->app->singleton(\App\Services\Search\BrandDetectionService::class, function ($app) {
+            return new \App\Services\Search\BrandDetectionService();
+        });
+        
         // HoroshopService (обгортка над клієнтом, якщо він у тебе є)
         $this->app->singleton(HoroshopService::class, function ($app) {
             return new HoroshopService(
@@ -69,7 +75,8 @@ class AppServiceProvider extends ServiceProvider
         // Agent Orchestrator Tools
         $this->app->singleton(\App\Services\Agent\Tools\MeiliProductSearchTool::class, function ($app) {
             return new \App\Services\Agent\Tools\MeiliProductSearchTool(
-                $app->make(\App\Services\Search\MeiliClient::class)
+                $app->make(\App\Services\Search\MeiliClient::class),
+                $app->make(\App\Services\Search\BrandDetectionService::class)
             );
         });
 

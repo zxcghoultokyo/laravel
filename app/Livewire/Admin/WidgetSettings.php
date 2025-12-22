@@ -23,6 +23,7 @@ class WidgetSettings extends Component
     public $nova_poshta_tracking_url = 'https://tracking.novaposhta.ua/';
     public $enable_delivery_tracking = true;
     public $enable_faq_from_horoshop = true;
+    public $horoshop_domain = '';
 
     public function mount()
     {
@@ -34,7 +35,7 @@ class WidgetSettings extends Component
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
-                'enable_delivery_tracking', 'enable_faq_from_horoshop'
+                'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain'
             ]));
         }
     }
@@ -52,6 +53,7 @@ class WidgetSettings extends Component
             'shop_phone' => 'required|string|max:50',
             'callback_form_url' => 'required|url|max:255',
             'nova_poshta_tracking_url' => 'required|url|max:255',
+            'horoshop_domain' => 'nullable|url|max:255',
         ]);
 
         WidgetSettingsModel::updateOrCreate(
@@ -71,6 +73,7 @@ class WidgetSettings extends Component
                 'nova_poshta_tracking_url' => $this->nova_poshta_tracking_url,
                 'enable_delivery_tracking' => $this->enable_delivery_tracking,
                 'enable_faq_from_horoshop' => $this->enable_faq_from_horoshop,
+                'horoshop_domain' => $this->horoshop_domain,
             ]
         );
 

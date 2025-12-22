@@ -12,6 +12,7 @@ use App\Services\Agent\Tools\AiRerankTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Horoshop\HoroshopDataService;
+use App\Models\WidgetSettings;
 use Illuminate\Support\Facades\Log;
 
 class AgentOrchestrator
@@ -492,6 +493,9 @@ class AgentOrchestrator
         $pages = $this->horoshopDataService->getFaqPages(0);
         $lowerMessage = mb_strtolower($message);
 
+        $settings = WidgetSettings::first();
+        $domain = $settings?->horoshop_domain ? rtrim($settings->horoshop_domain, '/') : null;
+
         // Простий пошук по title ua/ru
         $matched = [];
         foreach ($pages as $page) {
@@ -505,9 +509,13 @@ class AgentOrchestrator
         $top = array_slice($matched ?: $pages, 0, 5);
 
         $lines = [];
+        $enriched = [];
         foreach ($top as $page) {
             $title = $page['title']['ua'] ?? ($page['title']['ru'] ?? 'Сторінка');
-            $lines[] = "• {$title}";
+            $url = $domain ? $domain . '/page/' . ($page['id'] ?? '') : null;
+            $lines[] = $url ? "• {$title} — {$url}" : "• {$title}";
+            $page['url'] = $url;
+            $enriched[] = $page;
         }
 
         $messageOut = "Ось корисні сторінки: \n" . implode("\n", $lines);
@@ -517,7 +525,7 @@ class AgentOrchestrator
             'products' => [],
             'meta' => [
                 'intent' => 'faq',
-                'pages' => $top,
+                'pages' => $enriched,
             ],
         ];
     }

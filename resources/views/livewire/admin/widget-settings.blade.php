@@ -110,6 +110,12 @@
                             <input type="checkbox" wire:model.live="enable_faq_from_horoshop" id="enable_faq_from_horoshop" class="rounded border-gray-300">
                             <label for="enable_faq_from_horoshop" class="text-sm text-gray-700">Показувати FAQ сторінки з Horoshop</label>
                         </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Домен Horoshop (для формування посилань на FAQ)</label>
+                            <input type="url" wire:model.live="horoshop_domain" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255" placeholder="https://contractor.kiev.ua">
+                            <p class="mt-1 text-xs text-gray-500">Використовується для побудови прямих лінків типу /page/{id}</p>
+                        </div>
                     </div>
                 </div>
 

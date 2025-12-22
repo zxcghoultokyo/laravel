@@ -71,14 +71,15 @@ class ChatService
 
             // Спеціальні типи
             if ($intent === 'order_status') {
-                $response['type'] = 'order_status';
+                // Фронт ще не підтримує спеціальний тип, тому лишаємо text + data
+                $response['type'] = 'text';
                 $response['data'] = [
                     'orders' => $agentResult['meta']['orders'] ?? [],
                     'criteria' => $agentResult['meta']['criteria'] ?? [],
                     'found' => $agentResult['meta']['found'] ?? 0,
                 ];
             } elseif ($intent === 'faq') {
-                $response['type'] = 'faq';
+                $response['type'] = 'text';
                 $response['data'] = [
                     'pages' => $agentResult['meta']['pages'] ?? [],
                 ];

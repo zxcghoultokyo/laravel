@@ -51,6 +51,12 @@ class MeiliProductSearchTool
             //     $filterParts[] = "camo = '{$filters['camo']}'";
             // }
             
+            // If explicit brand search — strictly filter by brand in Meili
+            if (!empty($brandInfo['is_brand']) && !empty($brandInfo['brand'])) {
+                $brandValue = str_replace("'", "\\'", (string) $brandInfo['brand']);
+                $filterParts[] = "brand = '{$brandValue}'";
+            }
+
             $filterString = implode(' AND ', $filterParts);
             
             $searchParams = [

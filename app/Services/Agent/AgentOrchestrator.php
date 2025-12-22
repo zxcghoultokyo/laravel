@@ -75,6 +75,11 @@ class AgentOrchestrator
         $filters = [];
         $ambiguous = false;
         
+        // Fast-path: if user message clearly contains a brand word, force product search
+        if ($this->containsBrandWord($message)) {
+            $intent = 'productsearch';
+        }
+
         if ($intent === 'productsearch') {
             $normalized = $this->aiRouter->normalizeSearchQuery($message);
             
@@ -90,6 +95,7 @@ class AgentOrchestrator
             try {
                 if ($this->containsBrandWord($message)) {
                     $searchQuery = $message;
+                    $ambiguous = false;
                     Log::info('AgentOrchestrator: brand detected, preserving original query', [
                         'query' => $message
                     ]);

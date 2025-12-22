@@ -78,14 +78,14 @@
 
     function appendMessage(text, side = 'user') {
         const wrapper = document.createElement('div');
-        wrapper.className = 'flex ' + (side === 'user' ? 'justify-end' : 'justify-start');
+        wrapper.className = 'flex message-appear ' + (side === 'user' ? 'justify-end' : 'justify-start');
 
         const bubble = document.createElement('div');
         bubble.className =
             'max-w-[80%] rounded-lg px-4 py-2.5 text-sm ' +
             (side === 'user'
-                ? 'bg-gray-900 text-white'
-                : 'bg-white border border-gray-200 text-gray-900');
+                ? 'bg-gray-900 text-white shadow-md'
+                : 'bg-white border border-gray-200 text-gray-900 shadow-sm');
 
         bubble.innerHTML = text.replace(/\n/g, '<br>');
         wrapper.appendChild(bubble);
@@ -96,16 +96,38 @@
 
     function appendBotHtml(html) {
         const wrapper = document.createElement('div');
-        wrapper.className = 'flex justify-start';
+        wrapper.className = 'flex justify-start message-appear';
 
         const bubble = document.createElement('div');
-        bubble.className = 'max-w-[90%] rounded-lg px-4 py-3 bg-white border border-gray-200 text-sm';
+        bubble.className = 'max-w-[90%] rounded-lg px-4 py-3 bg-white border border-gray-200 text-sm shadow-sm';
 
         bubble.innerHTML = html;
         wrapper.appendChild(bubble);
         chatMessages.appendChild(wrapper);
 
         chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+        const wrapper = document.createElement('div');
+        wrapper.id = 'typing-indicator';
+        wrapper.className = 'flex justify-start';
+        wrapper.innerHTML = `
+            <div class="bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+                <span style="display: inline-block; animation: typingDot 1.4s infinite;">●</span>
+                <span style="display: inline-block; animation: typingDot 1.4s 0.2s infinite;">●</span>
+                <span style="display: inline-block; animation: typingDot 1.4s 0.4s infinite;">●</span>
+            </div>
+        `;
+        chatMessages.appendChild(wrapper);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
     }
 
     function renderBotReply(payload) {
@@ -140,7 +162,7 @@
 
                 html += `
                     <a href="${link}" target="_blank"
-                       class="flex items-start gap-3 bg-gray-50 rounded-lg p-3 hover:bg-gray-100 transition border border-gray-200">
+                       class="flex items-start gap-3 bg-gray-50 rounded-lg p-3 transition-all duration-200 border border-gray-200 hover:shadow-md hover:-translate-y-0.5 hover:border-gray-900">
                         <div class="w-16 h-16 flex-shrink-0 bg-white rounded overflow-hidden border border-gray-200">
                             ${image 
                                 ? `<img src="${image}" alt="${title}" class="w-full h-full object-cover">`
@@ -176,8 +198,12 @@
 
         appendMessage(text, 'user');
         chatInput.value = '';
+        chatInput.disabled = true;
 
         const sessionId = getOrCreateSessionId();
+
+        // Show typing indicator
+        showTypingIndicator();
 
         try {
             const response = await fetch('/api/chat', {
@@ -192,6 +218,8 @@
                 }),
             });
 
+            removeTypingIndicator();
+
             if (!response.ok) {
                 appendMessage('Помилка сервера: ' + response.status, 'bot');
                 return;
@@ -201,21 +229,42 @@
             renderBotReply(payload);
         } catch (err) {
             console.error(err);
+            removeTypingIndicator();
             appendMessage('Помилка з\'єднання з сервером 😔', 'bot');
+        } finally {
+            chatInput.disabled = false;
+            chatInput.focus();
         }
     });
 
+    // Анімації та стилі
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes typingDot {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+        .message-appear {
+            animation: fadeInUp 0.3s ease-out;
+        }
+    `;
+    document.head.appendChild(style);
+
     window.addEventListener('DOMContentLoaded', () => {
         getOrCreateSessionId();
-        const welcomeText = `Вітаю! 👋 Я Ailure Асістент.
+        const welcomeText = `Вітаю! 👋 Я AI-консультант.
 
-Напиши, що саме шукаєш і для чого (для себе, авто, укриття) — тоді зможу підібрати відповідні варіанти або підказати, на що звернути увагу при виборі.
-
-Приклади запитів:
-
-1) Потрібна плитоноска для патрулювання
-2) Чи ти маєш на увазі бронепластини для захисту техніки, авто, укриття?
-3) Є айсік, виміряй клас захисту (типу 4-й, 5-й), вага, розмір, бюджет?`;
+Можу дізнатись статус твого замовлення, розповім все про магазин (години роботи, адресу, контакти) та допоможу підібрати тактичне спорядження.`;
         
         appendMessage(welcomeText, 'bot');
     });

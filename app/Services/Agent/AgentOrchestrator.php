@@ -491,8 +491,8 @@ class AgentOrchestrator
     private function handleFaq(string $message, array $plan, array $context): array
     {
         $settings = WidgetSettings::first();
-        // Default to using custom content if not explicitly disabled
-        $useHoroshop = ($settings?->enable_faq_from_horoshop ?? false) === true;
+        // Disable Horoshop FAQ/pages: use ONLY admin custom content
+        $useHoroshop = false;
         $useCustom = ($settings?->enable_faq_custom_content ?? true) === true;
 
         $lowerMessage = mb_strtolower($message);
@@ -527,108 +527,25 @@ class AgentOrchestrator
             }
         }
 
-        // Direct answers via Horoshop data when available
-        $isDelivery = str_contains($lowerMessage, 'доставка');
-        $isPayment  = str_contains($lowerMessage, 'оплата');
-
-        if ($isDelivery) {
-            $opts = $this->horoshopDataService->getDeliveryOptions();
-            if (!empty($opts)) {
-                $enabled = array_values(array_filter($opts, fn($o) => ($o['enabled'] ?? false) === true));
-                if (!empty($enabled)) {
-                    $lines = [];
-                    foreach ($enabled as $o) {
-                        $title = $o['title']['ua'] ?? ($o['title']['ru'] ?? 'Варіант доставки');
-                        $note  = ($o['by_carrier'] ?? false) ? ' (за тарифами перевізника)' : '';
-                        $lines[] = '• ' . $title . $note;
-                    }
-                    return [
-                        'message' => "Варіанти доставки:\n" . implode("\n", $lines),
-                        'products' => [],
-                        'meta' => ['intent' => 'faq', 'topic' => 'доставка'],
-                    ];
-                }
-            }
-        }
-
-        if ($isPayment) {
-            $pay = $this->horoshopDataService->getPaymentOptions();
-            if (!empty($pay)) {
-                $enabled = array_values(array_filter($pay, fn($p) => ($p['enabled'] ?? false) === true));
-                if (!empty($enabled)) {
-                    $lines = [];
-                    foreach ($enabled as $p) {
-                        $title = $p['title']['ua'] ?? ($p['title']['ru'] ?? 'Варіант оплати');
-                        $lines[] = '• ' . $title;
-                    }
-                    return [
-                        'message' => "Варіанти оплати:\n" . implode("\n", $lines),
-                        'products' => [],
-                        'meta' => ['intent' => 'faq', 'topic' => 'оплата'],
-                    ];
-                }
-            }
-        }
-
-        // Otherwise, use Horoshop pages if enabled
-        $pages = $useHoroshop ? $this->horoshopDataService->getFaqPages(0) : [];
-        if ($useHoroshop && empty($pages)) {
+        // Show list of available custom links if no keyword matched
+        $links = [];
+        if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
+        if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
+        if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
+        if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
+        if (!empty($links)) {
             return [
-                'message' => "Поки не вдалось отримати FAQ. Напишіть, що цікавить: доставка, оплата чи повернення — і я відповім вручну.",
+                'message' => "Ось корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links)),
                 'products' => [],
-                'meta' => ['intent' => 'faq', 'pages' => []],
+                'meta' => ['intent' => 'faq'],
             ];
         }
-        if (!$useHoroshop) {
-            // If neither custom matched nor horoshop used, show list of available custom links
-            $links = [];
-            if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
-            if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
-            if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
-            if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
-            if (!empty($links)) {
-                return [
-                    'message' => "Ось корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links)),
-                    'products' => [],
-                    'meta' => ['intent' => 'faq', 'pages' => []],
-                ];
-            }
-        }
 
-        $settings = WidgetSettings::first();
-        $domain = $settings?->horoshop_domain ? rtrim($settings->horoshop_domain, '/') : null;
-
-        // Простий пошук по title ua/ru
-        $matched = [];
-        foreach ($pages as $page) {
-            $titleUa = mb_strtolower($page['title']['ua'] ?? '');
-            $titleRu = mb_strtolower($page['title']['ru'] ?? '');
-            if ((strlen($titleUa) && str_contains($titleUa, $lowerMessage)) || (strlen($titleRu) && str_contains($titleRu, $lowerMessage))) {
-                $matched[] = $page;
-            }
-        }
-
-        $top = array_slice($matched ?: $pages, 0, 5);
-
-        $lines = [];
-        $enriched = [];
-        foreach ($top as $page) {
-            $title = $page['title']['ua'] ?? ($page['title']['ru'] ?? 'Сторінка');
-            $url = $domain ? $domain . '/page/' . ($page['id'] ?? '') : null;
-            $lines[] = $url ? "• {$title} — {$url}" : "• {$title}";
-            $page['url'] = $url;
-            $enriched[] = $page;
-        }
-
-        $messageOut = "Ось корисні сторінки: \n" . implode("\n", $lines);
-
+        // Final fallback: prompt user
         return [
-            'message' => $messageOut,
+            'message' => 'Напишіть, що шукаєте... (доставка, оплата, повернення, контакти)',
             'products' => [],
-            'meta' => [
-                'intent' => 'faq',
-                'pages' => $enriched,
-            ],
+            'meta' => ['intent' => 'faq'],
         ];
     }
 

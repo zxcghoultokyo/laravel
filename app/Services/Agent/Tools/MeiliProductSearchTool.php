@@ -213,6 +213,7 @@ class MeiliProductSearchTool
             } else {
                 $mainProducts[] = $hit;
             }
+        }
         
         Log::info('MeiliProductSearchTool: categorized products', [
             'main' => count($mainProducts),

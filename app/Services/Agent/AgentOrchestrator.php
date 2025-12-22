@@ -497,7 +497,7 @@ class AgentOrchestrator
 
         $lowerMessage = mb_strtolower($message);
 
-        // If custom FAQ enabled, try to answer directly by keywords
+        // If custom FAQ enabled, try to answer directly by keywords (via AI summarization of ingested content)
         if ($useCustom) {
             $map = [
                 'оплата' => ['text' => $settings?->faq_payment_delivery_text, 'url' => $settings?->faq_payment_delivery_url, 'title' => 'Оплата і доставка'],
@@ -510,20 +510,94 @@ class AgentOrchestrator
 
             foreach ($map as $keyword => $info) {
                 if (str_contains($lowerMessage, $keyword)) {
-                    $parts = [];
-                    if (!empty($info['text'])) {
-                        $parts[] = $info['text'];
+                    $contextText = trim((string) ($info['text'] ?? ''));
+                    $url = $info['url'] ?? null;
+                    if (!empty($contextText)) {
+                        try {
+                            $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                "Контекст (з FAQ сторінки магазину):\n" .
+                                $contextText . "\n\n" .
+                                "Завдання: коротко і чітко поясни відповідь українською, без Markdown, емодзі та виділень. " .
+                                "Перелічуй варіанти та ключові умови простими рядками. Обмеження довжини: до 1200 символів.";
+
+                            $reply = $this->aiRouter->callOpenAI($prompt, 0.2, 700);
+                            $reply = trim($reply);
+                            if (empty($reply)) {
+                                $reply = mb_substr($contextText, 0, 1000);
+                            } elseif (mb_strlen($reply) > 1600) {
+                                $reply = mb_substr($reply, 0, 1600);
+                            }
+
+                            if (!empty($url)) {
+                                $reply .= "\n\nПосилання: " . $url;
+                            }
+
+                            return [
+                                'message' => $reply,
+                                'products' => [],
+                                'meta' => ['intent' => 'faq', 'topic' => $keyword],
+                            ];
+                        } catch (\Throwable $e) {
+                            $fallback = !empty($url) ? ($info['title'] . ": " . $url) : ($info['title'] ?? 'FAQ');
+                            return [
+                                'message' => $fallback,
+                                'products' => [],
+                                'meta' => ['intent' => 'faq', 'topic' => $keyword, 'error' => 'ai-failed'],
+                            ];
+                        }
                     }
-                    if (!empty($info['url'])) {
-                        $parts[] = 'Посилання: ' . $info['url'];
-                    }
-                    $msg = !empty($parts) ? implode("\n\n", $parts) : ('Сторінка: ' . $info['title']);
+                    // No ingested text – return link or title
+                    $fallback = !empty($url) ? ($info['title'] . ": " . $url) : ($info['title'] ?? 'FAQ');
                     return [
-                        'message' => $msg,
+                        'message' => $fallback,
                         'products' => [],
-                        'meta' => ['intent' => 'faq', 'topic' => $keyword],
+                        'meta' => ['intent' => 'faq', 'topic' => $keyword, 'empty' => true],
                     ];
                 }
+            }
+        }
+
+        // If no keyword matched but we have ingested texts, provide a concise AI summary
+        $allTexts = array_filter([
+            trim((string) ($settings?->faq_payment_delivery_text ?? '')),
+            trim((string) ($settings?->faq_returns_text ?? '')),
+            trim((string) ($settings?->faq_contacts_text ?? '')),
+            trim((string) ($settings?->faq_about_text ?? '')),
+        ], fn($t) => !empty($t));
+
+        if (!empty($allTexts)) {
+            $joined = implode("\n\n---\n\n", array_map(fn($t) => mb_substr($t, 0, 2000), $allTexts));
+            try {
+                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                    "Контекст (витяги з FAQ сторінок магазину):\n" .
+                    $joined . "\n\n" .
+                    "Сформуй корисну відповідь українською без Markdown/емодзі: коротко поясни релевантну інформацію (доставка, оплата, повернення, контакти) простими рядками. Макс 1200 символів.";
+
+                $reply = $this->aiRouter->callOpenAI($prompt, 0.25, 700);
+                $reply = trim($reply);
+                if (empty($reply)) {
+                    $reply = mb_substr($joined, 0, 1000);
+                } elseif (mb_strlen($reply) > 1600) {
+                    $reply = mb_substr($reply, 0, 1600);
+                }
+
+                // Append known links for reference
+                $links = [];
+                if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
+                if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
+                if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
+                if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
+                if (!empty($links)) {
+                    $reply .= "\n\nОсь корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links));
+                }
+
+                return [
+                    'message' => $reply,
+                    'products' => [],
+                    'meta' => ['intent' => 'faq', 'topic' => 'general'],
+                ];
+            } catch (\Throwable $e) {
+                // fall through to link listing
             }
         }
 

@@ -108,8 +108,15 @@ class WidgetSettings extends Component
             ]
         );
 
-        // Disable auto-ingest of external FAQ pages; rely on admin custom content only
-        session()->flash('message', 'Налаштування збережено!');
+        // Auto-ingest FAQ content if URLs provided
+        try {
+            $service = app(\App\Services\Support\FaqContentIngestService::class);
+            $service->ingest($settings);
+            session()->flash('message', 'Налаштування збережено! (FAQ імпортовано)');
+        } catch (\Throwable $e) {
+            // Non-fatal: show message but do not break save
+            session()->flash('message', 'Налаштування збережено! (Імпорт FAQ: ' . $e->getMessage() . ')');
+        }
     }
 
     public function regenerateToken()

@@ -415,6 +415,18 @@ class AgentOrchestrator
         // Parse query for order criteria
         $criteria = $this->orderSearchService->parseQuery($message);
 
+        $settings = WidgetSettings::first();
+        $supportLine = $this->buildSupportLine($settings);
+
+        // If user is angry/rude, de-escalate politely
+        if ($this->isAngry($message)) {
+            return [
+                'message' => "Я бот і хочу допомогти. Напишіть номер замовлення, і я перевірю статус. " . ($supportLine ?: ''),
+                'products' => [],
+                'meta' => ['intent' => 'order_status', 'angry' => true],
+            ];
+        }
+
         // If user described a problem, return support contacts immediately
         if ($this->deliveryTrackingService->isProblemReport($message)) {
             $issue = $this->deliveryTrackingService->getIssueResolutionInfo();
@@ -430,29 +442,45 @@ class AgentOrchestrator
 
         if (empty($criteria)) {
             return [
-                'message' => "Щоб перевірити статус, вкажіть номер замовлення або телефон, або email.",
+                'message' => "Щоб перевірити статус замовлення, напишіть, будь ласка, номер замовлення. Наприклад: статус 12345",
                 'products' => [],
                 'meta' => ['intent' => 'order_status', 'ambiguous' => true],
             ];
         }
 
         $criteria['limit'] = $plan['order_limit'] ?? 5;
-        $searchResult = $this->orderSearchService->search($criteria);
 
-        if (($searchResult['total'] ?? 0) === 0) {
-            $issue = $this->deliveryTrackingService->getIssueResolutionInfo();
+        try {
+            $searchResult = $this->orderSearchService->search($criteria);
+        } catch (\Throwable $e) {
             return [
-                'message' => "Не знайшов замовлення за цими даними. " . $issue['message'],
+                'message' => "Дякую. Ви питаєте про замовлення №" . ($criteria['order_id'] ?? '...') . ". Наразі я ще не маю прямого доступу до статусів. " . ($supportLine ?: ''),
                 'products' => [],
-                'meta' => [
-                    'intent' => 'order_status',
-                    'found' => 0,
-                    'criteria' => $criteria,
-                ],
+                'meta' => ['intent' => 'order_status', 'error' => 'search_failed'],
             ];
         }
 
-        $orders = $searchResult['orders'];
+        $total = $searchResult['total'] ?? 0;
+        $orders = $searchResult['orders'] ?? [];
+        $searchType = $searchResult['search_type'] ?? 'none';
+        $orderIdText = $criteria['order_id'] ?? null;
+
+        // MVP / no integration scenario
+        if ($total === 0 && $searchType === 'none') {
+            return [
+                'message' => "Дякую. Ви питаєте про замовлення №" . ($orderIdText ?? '...') . ". Наразі я ще не маю прямого доступу до статусів замовлень. " . ($supportLine ?: ''),
+                'products' => [],
+                'meta' => ['intent' => 'order_status', 'found' => 0, 'no_integration' => true, 'criteria' => $criteria],
+            ];
+        }
+
+        if ($total === 0) {
+            return [
+                'message' => "Не вдалося знайти замовлення №" . ($orderIdText ?? '...') . ". Перевірте номер або зверніться до служби підтримки. " . ($supportLine ?: ''),
+                'products' => [],
+                'meta' => ['intent' => 'order_status', 'found' => 0, 'criteria' => $criteria],
+            ];
+        }
 
         // Enrich with delivery tracking info
         $orders = array_map(function ($order) {
@@ -465,16 +493,27 @@ class AgentOrchestrator
         $delivery = $first['delivery_tracking'] ?? [];
 
         $msgParts = [];
-        if (!empty($delivery['tracking_url']) && !empty($delivery['nova_poshta_ttn'])) {
-            $msgParts[] = "ТТН: {$delivery['nova_poshta_ttn']}\nВідстежити: {$delivery['tracking_url']}";
+        $orderIdOut = $first['id'] ?? ($orderIdText ?? '');
+
+        if ($orderIdOut !== '') {
+            $msgParts[] = "Замовлення №{$orderIdOut}";
         }
-        if (!empty($delivery['status'])) {
-            $msgParts[] = "Статус: {$delivery['status']}";
-        }
-        if (empty($msgParts)) {
-            $msgParts[] = "Знайшов {$searchResult['total']} замовлень. Статус доставки наразі недоступний.";
+
+        $statusText = $delivery['status'] ?? null;
+        $ttn = $delivery['nova_poshta_ttn'] ?? null;
+        $tracking = $delivery['tracking_url'] ?? null;
+
+        if (!empty($ttn)) {
+            $msgParts[] = "Замовлення відправлено\nТТН: {$ttn}" . (!empty($tracking) ? "\nВідстежити: {$tracking}" : '');
+        } elseif (!empty($statusText)) {
+            $msgParts[] = "Статус: {$statusText}";
+            if (mb_stripos($statusText, 'достав') !== false) {
+                $msgParts[] = "Якщо все отримали — дякуємо! Якщо є питання — напишіть, підкажу що робити.";
+            } elseif (mb_stripos($statusText, 'оброб') !== false || mb_stripos($statusText, 'processing') !== false) {
+                $msgParts[] = "Готуємо до відправки. Після відправки надішлю ТТН.";
+            }
         } else {
-            $msgParts[] = "Знайшов {$searchResult['total']} замовлень.";
+            $msgParts[] = "Статус зараз недоступний.";
         }
 
         $msgParts[] = "Якщо треба — можу перевірити інше замовлення. Напишіть номер або телефон.";
@@ -489,6 +528,34 @@ class AgentOrchestrator
                 'criteria' => $criteria,
             ],
         ];
+    }
+
+    private function buildSupportLine(?WidgetSettings $settings): string
+    {
+        $parts = [];
+        if (!empty($settings?->shop_phone)) {
+            $parts[] = 'Телефон: ' . $settings->shop_phone;
+        }
+        if (!empty($settings?->callback_form_url)) {
+            $parts[] = 'Заявка: ' . $settings->callback_form_url;
+        }
+        return implode(' | ', $parts);
+    }
+
+    private function isAngry(string $message): bool
+    {
+        $keywords = [
+            'де моя посилка', 'скільки можна', 'ви знущаєтесь', 'обман', 'шахрай', 'лохотрон',
+            'мошен', 'кинули', 'ненормальні', 'дурні', 'погано', 'ненавид', 'гнів', 'злость',
+            'дебіл', 'придур', 'туп', 'fuck', 'shit', 'idiot'
+        ];
+        $m = mb_strtolower($message);
+        foreach ($keywords as $kw) {
+            if (str_contains($m, $kw)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -18,6 +18,11 @@ class WidgetSettings extends Component
     public $consent_notice = '';
     public $enabled = true;
     public $api_token = '';
+    public $shop_phone = '+380 63 631 9919';
+    public $callback_form_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/#callback';
+    public $nova_poshta_tracking_url = 'https://tracking.novaposhta.ua/';
+    public $enable_delivery_tracking = true;
+    public $enable_faq_from_horoshop = true;
 
     public function mount()
     {
@@ -27,7 +32,9 @@ class WidgetSettings extends Component
             $this->fill($settings->only([
                 'primary_color', 'text_color', 'position', 'start_state',
                 'border_radius', 'welcome_message', 'input_placeholder',
-                'consent_notice', 'enabled', 'api_token'
+                'consent_notice', 'enabled', 'api_token',
+                'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
+                'enable_delivery_tracking', 'enable_faq_from_horoshop'
             ]));
         }
     }
@@ -42,6 +49,9 @@ class WidgetSettings extends Component
             'border_radius' => 'required|integer|min:0|max:50',
             'welcome_message' => 'required|string|max:500',
             'input_placeholder' => 'required|string|max:200',
+            'shop_phone' => 'required|string|max:50',
+            'callback_form_url' => 'required|url|max:255',
+            'nova_poshta_tracking_url' => 'required|url|max:255',
         ]);
 
         WidgetSettingsModel::updateOrCreate(
@@ -56,6 +66,11 @@ class WidgetSettings extends Component
                 'input_placeholder' => $this->input_placeholder,
                 'consent_notice' => $this->consent_notice,
                 'enabled' => $this->enabled,
+                'shop_phone' => $this->shop_phone,
+                'callback_form_url' => $this->callback_form_url,
+                'nova_poshta_tracking_url' => $this->nova_poshta_tracking_url,
+                'enable_delivery_tracking' => $this->enable_delivery_tracking,
+                'enable_faq_from_horoshop' => $this->enable_faq_from_horoshop,
             ]
         );
 

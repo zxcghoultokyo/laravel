@@ -132,7 +132,10 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(\App\Services\Agent\Tools\ProductDetailsTool::class),
                 $app->make(\App\Services\Agent\Tools\DeduperTool::class),
                 $app->make(\App\Services\Agent\Tools\AccessoryFilterTool::class),
-                $app->make(\App\Services\Agent\Tools\AiRerankTool::class)
+                $app->make(\App\Services\Agent\Tools\AiRerankTool::class),
+                $app->make(\App\Services\Horoshop\OrderSearchService::class),
+                $app->make(\App\Services\Horoshop\DeliveryTrackingService::class),
+                $app->make(\App\Services\Horoshop\HoroshopDataService::class)
             );
         });
     }

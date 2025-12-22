@@ -81,6 +81,38 @@
                     </div>
                 </div>
 
+                <!-- Контакти та доставка -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Контакти та доставка</h3>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Телефон для зворотного зв'язку</label>
+                            <input type="text" wire:model.live="shop_phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="50">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Посилання на форму зворотного зв'язку</label>
+                            <input type="url" wire:model.live="callback_form_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Посилання на трекінг Нової Пошти</label>
+                            <input type="url" wire:model.live="nova_poshta_tracking_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
+                        </div>
+
+                        <div class="flex items-center space-x-3">
+                            <input type="checkbox" wire:model.live="enable_delivery_tracking" id="enable_delivery_tracking" class="rounded border-gray-300">
+                            <label for="enable_delivery_tracking" class="text-sm text-gray-700">Увімкнути відображення статусу доставки / ТТН</label>
+                        </div>
+
+                        <div class="flex items-center space-x-3">
+                            <input type="checkbox" wire:model.live="enable_faq_from_horoshop" id="enable_faq_from_horoshop" class="rounded border-gray-300">
+                            <label for="enable_faq_from_horoshop" class="text-sm text-gray-700">Показувати FAQ сторінки з Horoshop</label>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- API Token -->
                 <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">API Токен</h3>

@@ -56,9 +56,11 @@ class ChatService
         try {
             $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $sessionContext);
             
+            $intent = $agentResult['meta']['intent'] ?? null;
+
             // Формуємо відповідь у форматі очікуваному фронтом
             $response = [
-                'type'       => 'products', // або text, залежно від наявності products
+                'type'       => 'products',
                 'text'       => $agentResult['message'] ?? '',
                 'data'       => [
                     'products' => $agentResult['products'] ?? [],
@@ -66,9 +68,21 @@ class ChatService
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],
             ];
-            
-            // Якщо немає товарів - тип text
-            if (empty($agentResult['products'])) {
+
+            // Спеціальні типи
+            if ($intent === 'order_status') {
+                $response['type'] = 'order_status';
+                $response['data'] = [
+                    'orders' => $agentResult['meta']['orders'] ?? [],
+                    'criteria' => $agentResult['meta']['criteria'] ?? [],
+                    'found' => $agentResult['meta']['found'] ?? 0,
+                ];
+            } elseif ($intent === 'faq') {
+                $response['type'] = 'faq';
+                $response['data'] = [
+                    'pages' => $agentResult['meta']['pages'] ?? [],
+                ];
+            } elseif (empty($agentResult['products'])) {
                 $response['type'] = 'text';
             }
             

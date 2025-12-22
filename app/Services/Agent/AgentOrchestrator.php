@@ -9,6 +9,9 @@ use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Agent\Tools\DeduperTool;
 use App\Services\Agent\Tools\AccessoryFilterTool;
 use App\Services\Agent\Tools\AiRerankTool;
+use App\Services\Horoshop\OrderSearchService;
+use App\Services\Horoshop\DeliveryTrackingService;
+use App\Services\Horoshop\HoroshopDataService;
 use Illuminate\Support\Facades\Log;
 
 class AgentOrchestrator
@@ -19,7 +22,10 @@ class AgentOrchestrator
         private ProductDetailsTool $detailsTool,
         private DeduperTool $deduperTool,
         private AccessoryFilterTool $accessoryFilterTool,
-        private AiRerankTool $rerankTool
+        private AiRerankTool $rerankTool,
+        private OrderSearchService $orderSearchService,
+        private DeliveryTrackingService $deliveryTrackingService,
+        private HoroshopDataService $horoshopDataService,
     ) {}
 
     /**
@@ -405,24 +411,76 @@ class AgentOrchestrator
      */
     private function handleOrderStatus(string $message, array $plan, array $context): array
     {
-        // Extract order number from message
-        preg_match('/\d{3,}/', $message, $matches);
-        $orderNumber = $matches[0] ?? null;
-        
-        if (!$orderNumber) {
+        // Parse query for order criteria
+        $criteria = $this->orderSearchService->parseQuery($message);
+
+        // If user described a problem, return support contacts immediately
+        if ($this->deliveryTrackingService->isProblemReport($message)) {
+            $issue = $this->deliveryTrackingService->getIssueResolutionInfo();
             return [
-                'message' => "Щоб перевірити статус замовлення, напишіть, будь ласка, номер замовлення (наприклад, «статус 12345»).",
+                'message' => $issue['message'],
+                'products' => [],
+                'meta' => [
+                    'intent' => 'order_status',
+                    'order_issue' => true,
+                ],
+            ];
+        }
+
+        if (empty($criteria)) {
+            return [
+                'message' => "Щоб перевірити статус, вкажіть номер замовлення або телефон, або email.",
                 'products' => [],
                 'meta' => ['intent' => 'order_status', 'ambiguous' => true],
             ];
         }
-        
-        // Here should be real order lookup via HoroshopClient
-        // For now, placeholder response
+
+        $criteria['limit'] = $plan['order_limit'] ?? 5;
+        $searchResult = $this->orderSearchService->search($criteria);
+
+        if (($searchResult['total'] ?? 0) === 0) {
+            $issue = $this->deliveryTrackingService->getIssueResolutionInfo();
+            return [
+                'message' => "Не знайшов замовлення за цими даними. " . $issue['message'],
+                'products' => [],
+                'meta' => [
+                    'intent' => 'order_status',
+                    'found' => 0,
+                    'criteria' => $criteria,
+                ],
+            ];
+        }
+
+        $orders = $searchResult['orders'];
+
+        // Enrich with delivery tracking info
+        $orders = array_map(function ($order) {
+            $delivery = $this->deliveryTrackingService->formatDeliveryInfo($order);
+            $order['delivery_tracking'] = $delivery;
+            return $order;
+        }, $orders);
+
+        $first = $orders[0];
+        $delivery = $first['delivery_tracking'] ?? [];
+        $msgParts = [];
+
+        if (!empty($delivery['tracking_url']) && !empty($delivery['nova_poshta_ttn'])) {
+            $msgParts[] = "🚚 ТТН: **{$delivery['nova_poshta_ttn']}**. Відстежити: {$delivery['tracking_url']}";
+        } elseif (!empty($delivery['status'])) {
+            $msgParts[] = "📦 Статус: **{$delivery['status']}**";
+        }
+
+        $msgParts[] = "Знайшов {$searchResult['total']} замовлень.";
+
         return [
-            'message' => "На жаль, я поки не можу перевірити статус замовлення #{$orderNumber}. Зверніться, будь ласка, до служби підтримки за номером телефону або email.",
+            'message' => implode("\n\n", $msgParts),
             'products' => [],
-            'meta' => ['intent' => 'order_status', 'order_number' => $orderNumber],
+            'meta' => [
+                'intent' => 'order_status',
+                'found' => $searchResult['total'],
+                'orders' => $orders,
+                'criteria' => $criteria,
+            ],
         ];
     }
 
@@ -431,29 +489,36 @@ class AgentOrchestrator
      */
     private function handleFaq(string $message, array $plan, array $context): array
     {
-        // Simple FAQ responses - should be moved to database
-        $faqResponses = [
-            'доставка' => "Доставка здійснюється Новою Поштою по всій Україні. Термін доставки 1-3 дні. Вартість згідно тарифів перевізника.",
-            'оплата' => "Оплата: накладений платіж, оплата на карту, готівка при самовивозі.",
-            'повернення' => "Повернення товару протягом 14 днів згідно Закону про захист прав споживачів.",
-        ];
-        
+        $pages = $this->horoshopDataService->getFaqPages(0);
         $lowerMessage = mb_strtolower($message);
-        
-        foreach ($faqResponses as $keyword => $response) {
-            if (str_contains($lowerMessage, $keyword)) {
-                return [
-                    'message' => $response,
-                    'products' => [],
-                    'meta' => ['intent' => 'faq', 'topic' => $keyword],
-                ];
+
+        // Простий пошук по title ua/ru
+        $matched = [];
+        foreach ($pages as $page) {
+            $titleUa = mb_strtolower($page['title']['ua'] ?? '');
+            $titleRu = mb_strtolower($page['title']['ru'] ?? '');
+            if ((strlen($titleUa) && str_contains($titleUa, $lowerMessage)) || (strlen($titleRu) && str_contains($titleRu, $lowerMessage))) {
+                $matched[] = $page;
             }
         }
-        
+
+        $top = array_slice($matched ?: $pages, 0, 5);
+
+        $lines = [];
+        foreach ($top as $page) {
+            $title = $page['title']['ua'] ?? ($page['title']['ru'] ?? 'Сторінка');
+            $lines[] = "• {$title}";
+        }
+
+        $messageOut = "Ось корисні сторінки: \n" . implode("\n", $lines);
+
         return [
-            'message' => "Якщо у вас є питання щодо доставки, оплати чи повернення — напишіть конкретніше. Або зверніться до підтримки.",
+            'message' => $messageOut,
             'products' => [],
-            'meta' => ['intent' => 'faq', 'ambiguous' => true],
+            'meta' => [
+                'intent' => 'faq',
+                'pages' => $top,
+            ],
         ];
     }
 

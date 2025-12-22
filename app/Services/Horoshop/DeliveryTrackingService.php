@@ -29,8 +29,10 @@ class DeliveryTrackingService
      */
     public function formatDeliveryInfo(array $order): array
     {
-        $deliveryData = $order['delivery_data'] ?? [];
-        $status = $order['stat_status'] ?? null;
+        // Support both raw Horoshop response and normalized order from OrderService
+        $raw = $order['_raw'] ?? $order;
+        $deliveryData = $order['delivery']['data'] ?? ($order['delivery_data'] ?? ($raw['delivery_data'] ?? []));
+        $status = $order['status_code'] ?? ($raw['stat_status'] ?? null);
         
         // TTN з Nova Poshta
         $novaPoshta = $this->extractNovaPoshta($deliveryData);
@@ -50,10 +52,11 @@ class DeliveryTrackingService
             'other_ttn' => $otherTtn,
             'status' => $deliveryStatus,
             'delivery_type' => $this->getDeliveryType($deliveryData),
+            'delivery_data' => $deliveryData,
         ];
         
         if (!empty($novaPoshta) && $settings) {
-            $result['tracking_url'] = "{$settings->nova_poshta_tracking_url}#{$novaPoshta}";
+            $result['tracking_url'] = rtrim($settings->nova_poshta_tracking_url, '/') . "#{$novaPoshta}";
             $result['message'] = "🚚 Ваше замовлення відправлено!\n\n"
                 . "Номер відправлення (ТТН): **{$novaPoshta}**\n\n"
                 . "Перевірити статус доставки можна на сайті Нової Пошти:\n"
@@ -164,6 +167,11 @@ class DeliveryTrackingService
             'cancelled' => 'Скасовано',
             'returned' => 'Повернено',
             'completed' => 'Завершено',
+            1 => 'новий',
+            2 => 'в обробці',
+            3 => 'доставлено',
+            4 => 'не доставлено',
+            6 => 'доставляється',
         ];
         
         return $statusMap[$status] ?? $status;

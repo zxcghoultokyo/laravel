@@ -13,6 +13,7 @@ use App\Services\Horoshop\OrderSearchService;
 use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Horoshop\HoroshopDataService;
 use App\Models\WidgetSettings;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class AgentOrchestrator
@@ -171,6 +172,9 @@ class AgentOrchestrator
      */
     private function handleProductSearch(string $originalMessage, array $plan, array $context): array
     {
+        $sessionId = $context['session_id'] ?? null;
+        $sessionContext = $this->loadSessionContext($sessionId);
+
         $searchQuery = $plan['search_query'] ?? $originalMessage;
         $filters = $plan['filters'] ?? [];
         
@@ -240,8 +244,16 @@ class AgentOrchestrator
         // Collect articles for debug
         $chosenArticles = array_column($products, 'article');
         
-        // Step 5: Generate response message
-        $message = $this->generateProductMessage($products, $originalMessage, $plan);
+        // Step 5: Generate response message via intent-specific narrative
+        $message = $this->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
+
+        // Persist lightweight session context
+        $this->saveSessionContext($sessionId, [
+            'last_category' => $this->guessCategoryFromProducts($products),
+            'last_budget_min' => $filters['budget_min'] ?? null,
+            'last_budget_max' => $filters['budget_max'] ?? null,
+            'shown_products' => array_column($products, 'id'),
+        ]);
         
         // Step 6: Add follow-up question if ambiguous (AFTER products)
         if ($plan['ambiguous'] && count($products) > 5) {
@@ -264,51 +276,6 @@ class AgentOrchestrator
                 'search_debug' => $debug,
             ],
         ];
-    }
-
-    /**
-     * Handle "яку краще взяти?" style questions
-     * Show products + explain 3 best options
-     */
-    private function generateProductMessage(array $products, string $originalMessage, array $plan): string
-    {
-        $isAdviceRequest = $this->isAdviceRequest($originalMessage);
-        
-        if ($isAdviceRequest && count($products) >= 3) {
-            // Use AI to explain top 3 options
-            return $this->explainTopOptions($products, $originalMessage);
-        }
-        
-        // Standard response
-        $count = count($products);
-        $categoryHint = $this->guessCategoryFromProducts($products);
-        
-        if ($categoryHint) {
-            return "Ось, що маємо по категорії «{$categoryHint}» 👇";
-        }
-        
-        return "Ось варіанти 👇";
-    }
-
-    /**
-     * Explain top 3 products with pros/cons
-     */
-    private function explainTopOptions(array $products, string $originalMessage): string
-    {
-        $top3 = array_slice($products, 0, 3);
-        
-        $options = [];
-        $labels = ['A', 'B', 'C'];
-        
-        foreach ($top3 as $idx => $product) {
-            $label = $labels[$idx] ?? ($idx + 1);
-            $options[] = "({$label}) {$product['title']} — {$product['price']} ₴";
-        }
-        
-        $explanation = "Ось 3 найкращі варіанти:\n\n" . implode("\n", $options);
-        $explanation .= "\n\nВибирай за бюджетом і характеристиками 👇";
-        
-        return $explanation;
     }
 
     /**
@@ -798,6 +765,338 @@ class AgentOrchestrator
         ];
     }
 
+    /**
+     * AI narrative for product responses with intent-specific structure.
+     */
+    private function buildProductNarrative(array $products, string $originalMessage, array $filters, array $sessionContext, ?string $sessionId): string
+    {
+        $productsForPrompt = array_slice($products, 0, 5);
+        if (empty($productsForPrompt)) {
+            return "Ось варіанти";
+        }
+
+        $flow = $this->detectProductFlow($originalMessage);
+
+        // For comparison/details/followup, use deterministic fallbacks (no LLM needed)
+        if ($flow !== 'discovery') {
+            $categoryHint = $this->guessCategoryFromProducts($productsForPrompt) ?? '';
+            $fallback = $this->buildFallbackNarrative($productsForPrompt, $flow, $categoryHint, $filters, $originalMessage);
+            if (!empty($fallback)) {
+                return $fallback;
+            }
+        }
+
+        // For discovery, use LLM to generate thoughtful narrative
+        $sessionBlock = json_encode([
+            'last_category' => $sessionContext['last_category'] ?? null,
+            'last_budget_min' => $sessionContext['last_budget_min'] ?? null,
+            'last_budget_max' => $sessionContext['last_budget_max'] ?? null,
+            'shown_products' => $sessionContext['shown_products'] ?? [],
+            'rejected_products' => $sessionContext['rejected_products'] ?? [],
+            'last_cta_type' => $sessionContext['last_cta_type'] ?? null,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $productsBlock = json_encode(array_map(function ($p) {
+            return [
+                'id' => $p['id'] ?? null,
+                'title' => $p['title'] ?? '',
+                'price' => $p['price'] ?? null,
+                'category_path' => $p['category_path'] ?? '',
+                'ai_product_type' => $p['ai_product_type'] ?? null,
+                'description' => mb_substr((string)($p['description'] ?? ''), 0, 500),
+                'characteristics' => $p['characteristics'] ?? [],
+                'raw' => $p['raw'] ?? null,
+            ];
+        }, $productsForPrompt), JSON_UNESCAPED_UNICODE);
+
+        // Override category hint by message if explicit
+        $categoryHint = $this->guessCategoryFromProducts($productsForPrompt) ?? '';
+        $messageCategory = $this->detectCategoryFromMessage($originalMessage);
+        if ($messageCategory) { $categoryHint = $messageCategory; }
+
+        $system = <<<SYS
+Ти — AI-консультант e-commerce (тактичне спорядження, але універсально для Horoshop).
+Правила: тільки факти з наданих товарів (title, price, description, characteristics, raw). Якщо даних нема — скажи "у характеристиках не вказано, не буду стверджувати". Спершу товари/ролі, потім коротке пояснення, потім ОДИН CTA. Ролі замість SKU (бюджетний / збалансований / посилений). Не вигадуй, не посилайся на популярність. Без Markdown/емодзі. 1 CTA, не повторюй той самий тип CTA поспіль.
+SYS;
+
+        $instructions = [
+            'discovery' => "Флоу: Product Discovery. 1) Рамка 1–2 речення що врахував. 2) 3 ролі: роль + товар + ціна + 1–2 факти. 3) CTA: впевненість якщо даних досить, або уточнення (бюджет/умови) якщо даних мало. Пояснення після списку.",
+            'comparison' => "Флоу: Product Comparison. Короткий висновок у чому різниця; 3–5 фактів різниць (вага/матеріал/клас/сумісність/комплектація); CTA-впевненість або пропозиція сценарію. Тільки факти.",
+            'details' => "Флоу: Product Details. 1–2 речення що це; 3 релевантні характеристики з наданих; CTA-продовження (порівняти або показати аксесуари).",
+            'followup' => "Флоу: Product Followup (аксесуари/completion). Навіщо це корисно; 2–3 сумісні доповнення з коротким поясненням; фраза 'не обов’язково, але зручніше'; CTA-продовження (показати сумісні).",
+        ];
+
+        $flowInstruction = $instructions[$flow] ?? $instructions['discovery'];
+
+        $budgetMin = $filters['budget_min'] ?? '-';
+        $budgetMax = $filters['budget_max'] ?? '-';
+        $color = $filters['color'] ?? '-';
+
+        $prompt = <<<PROMPT
+{$system}
+
+Поточний флоу: PRODUCT_DISCOVERY
+Категорія (припущення): {$categoryHint}
+Фільтри: {$budgetMin} / {$budgetMax} грн, колір {$color}
+Контекст сесії: {$sessionBlock}
+Повідомлення користувача: "{$originalMessage}"
+
+Дані товарів (JSON):
+{$productsBlock}
+
+Ти генеруєш структуровану пораду: 1) Коротка рамка (1–2 речення). 2) 3 ролі товарів (бюджетний / збалансований / посилений) з назвами, цінами, 1–2 фактами. 3) Один CTA: впевненість якщо даних досить, або уточнення (бюджет/умови) якщо потрібно звузити.
+
+Вихід: українською, без Markdown/емодзі, спершу список, потім CTA.
+            if (str_contains($lr, 'звужу') || str_contains($lr, 'підкажи') || str_contains($lr, 'скаж')) {
+                $ctaType = 'clarification';
+            } elseif (str_contains($lr, 'радив') || str_contains($lr, 'логічніше') || str_contains($lr, 'рекоменд')) {
+                $ctaType = 'confidence';
+            } elseif (str_contains($lr, 'порівняти') || str_contains($lr, 'показати')) {
+                $ctaType = 'continuation';
+            }
+
+            if ($sessionId && $ctaType) {
+                $this->saveSessionContext($sessionId, ['last_cta_type' => $ctaType]);
+            }
+
+            if (!empty($reply)) {
+                return $reply;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('buildProductNarrative: AI failed', ['error' => $e->getMessage()]);
+        }
+
+        // Deterministic fallback if AI unavailable/empty
+        $fallback = $this->buildFallbackNarrative($productsForPrompt, $flow, $categoryHint, $filters, $originalMessage);
+        if (!empty($fallback)) {
+            return $fallback;
+        }
+
+        $categoryHint = $this->guessCategoryFromProducts($productsForPrompt);
+        if ($categoryHint) {
+            return "Ось, що маємо по категорії «{$categoryHint}»";
+        }
+
+        return "Ось варіанти";
+    }
+
+    private function buildFallbackNarrative(array $products, string $flow, ?string $categoryHint, array $filters, string $originalMessage): string
+    {
+        $top = array_slice($products, 0, 3);
+        $lines = [];
+        $cta = '';
+
+        if ($flow === 'discovery') {
+            // Price-ordered roles
+            usort($top, fn($a, $b) => ($a['price'] ?? 0) <=> ($b['price'] ?? 0));
+            $roleLabels = ['Бюджетний', 'Збалансований', 'Посилений'];
+            foreach ($top as $idx => $p) {
+                $role = $roleLabels[$idx] ?? 'Варіант';
+                $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
+                $title = $p['title'] ?? 'Товар';
+                $lines[] = "- {$role}: {$title} — {$price}";
+            }
+
+            $cta = isset($filters['budget_max'])
+                ? "Можу лишити тільки варіанти до {$filters['budget_max']} грн — показати?"
+                : "Підкажи бюджет або умови використання — звужу до одного варіанту.";
+            $frame = $categoryHint ? "Ось варіанти у категорії «{$categoryHint}»:" : "Ось 3 варіанти:";
+            return $frame . "\n" . implode("\n", $lines) . "\n" . $cta;
+        }
+
+        if ($flow === 'comparison' && count($top) >= 2) {
+            [$a, $b] = $this->pickComparisonPair($products, $originalMessage);
+            
+            $titleA = $a['title'] ?? 'Товар A';
+            $titleB = $b['title'] ?? 'Товар B';
+            $priceA = isset($a['price']) ? round((float)$a['price']) . ' ₴' : '?';
+            $priceB = isset($b['price']) ? round((float)$b['price']) . ' ₴' : '?';
+            
+            $diffs = [];
+            // Extract key differences from characteristics/description
+            $charA = $this->formatCharacteristics($a['characteristics'] ?? [], 2);
+            $charB = $this->formatCharacteristics($b['characteristics'] ?? [], 2);
+            if ($charA) { $diffs[] = "A: " . str_replace("\n", ", ", $charA); }
+            if ($charB) { $diffs[] = "B: " . str_replace("\n", ", ", $charB); }
+            
+            $block = "{$titleA} — {$priceA} vs {$titleB} — {$priceB}";
+            if (!empty($diffs)) {
+                $block .= "\n" . implode("\n", $diffs);
+            }
+            
+            $cta = "Що важливіше для твої задачі: ціна/легкість чи захист/надійність? Я підкажу, який варіант логічніший.";
+            return $block . "\n\n" . $cta;
+        }
+
+        if ($flow === 'details') {
+            if (empty($top)) {
+                return '';
+            }
+            $p = $top[0];
+            $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
+            $title = $p['title'] ?? 'Товар';
+            $desc = mb_substr((string)($p['description'] ?? ''), 0, 200);
+            $chars = $this->formatCharacteristics($p['characteristics'] ?? [], 3);
+            
+            $block = "{$title} — {$price}";
+            if ($desc) {
+                $block .= "\n" . $desc;
+            }
+            if ($chars) {
+                $block .= "\n" . $chars;
+            }
+            
+            $cta = "Можу порівняти з іншими варіантами або показати сумісні аксесуари — потрібно?";
+            return $block . "\n\n" . $cta;
+        }
+
+        if ($flow === 'followup') {
+            $category = $this->detectMainCategory($top[0] ?? []);
+            $suggestions = $this->buildAccessorySuggestions($category);
+            if (!empty($suggestions)) {
+                $cta = "Не обов’язково, але зручніше. Показати сумісні аксесуари?";
+                return implode("\n", $suggestions) . "\n\n" . $cta;
+            }
+            return '';
+        }
+
+
+        return '';
+    }
+
+    private function formatCharacteristics($characteristics): string
+    {
+        if (!is_array($characteristics) || empty($characteristics)) {
+            return '';
+        }
+
+        $out = [];
+        $count = 0;
+        foreach ($characteristics as $key => $value) {
+            if ($count >= 3) {
+                break;
+            }
+            if (is_string($key) && (is_string($value) || is_numeric($value))) {
+                $out[] = "• {$key}: {$value}";
+                $count++;
+                continue;
+            }
+            if (is_string($value)) {
+                $out[] = "• {$value}";
+                $count++;
+            }
+        }
+
+        return implode("\n", $out);
+    }
+
+
+    private function detectProductFlow(string $message): string
+    {
+        $m = mb_strtolower($message);
+
+        $comparisonKeywords = ['порівняй', 'чим різниця', 'чим відрізня', 'чим відрізняється', 'vs', 'відмінність', 'різниця'];
+        foreach ($comparisonKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                return 'comparison';
+            }
+        }
+
+        $followupKeywords = ['докупити', 'що ще потрібно', 'комплект', 'додатков', 'аксесуар', 'до цієї', 'сумісн'];
+        foreach ($followupKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                return 'followup';
+            }
+        }
+
+        $detailKeywords = ['що за', 'розкажи про', 'опис', 'характеристик', 'підійде', 'підходить'];
+        foreach ($detailKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                return 'details';
+            }
+        }
+
+        return 'discovery';
+    }
+    private function pickComparisonPair(array $products, string $message): array
+    {
+        $scores = [];
+        foreach ($products as $idx => $p) {
+            $scores[$idx] = $this->scoreProductByMessage($p, $message);
+        }
+        arsort($scores);
+        $indices = array_keys($scores);
+        $first = $products[$indices[0]] ?? ($products[0] ?? []);
+        $second = $products[$indices[1]] ?? ($products[1] ?? $first);
+        if (($first['id'] ?? null) === ($second['id'] ?? null) && isset($products[1])) {
+            $second = $products[1];
+        }
+        return [$first, $second];
+    }
+
+    private function scoreProductByMessage(array $product, string $message): int
+    {
+        $m = mb_strtolower($message);
+        $title = mb_strtolower((string)($product['title'] ?? ''));
+        $brand = mb_strtolower((string)($product['brand'] ?? ''));
+        $score = 0;
+        $tokens = preg_split('/[^a-zа-я0-9]+/ui', $m, -1, PREG_SPLIT_NO_EMPTY);
+        $tokens = array_filter($tokens, fn($t) => mb_strlen($t) >= 3);
+        $brandWords = array_map('mb_strtolower', $this->getBrandNames());
+        foreach ($tokens as $t) {
+            if (in_array($t, $brandWords, true)) {
+                if (!empty($brand) && str_contains($brand, $t)) { $score += 5; }
+            }
+            if (str_contains($title, $t)) { $score += 2; }
+        }
+        return $score;
+    }
+
+    private function buildAccessorySuggestions(string $category): array
+    {
+        $map = [
+            'plates' => [
+                '- Додати плитоноску: зручна посадка і швидке скидання',
+                '- Чохол/кавер для плити: захист від зносу',
+                '- Пакети/антишар: покращує комфорт під бронею',
+            ],
+            'plate-carriers' => [
+                '- Кишені/підсумки: для магазинів і медички',
+                '- Камербанд: краща стабілізація спорядження',
+                '- Плечові накладки: більше комфорту з навантаженням',
+            ],
+            'helmets' => [
+                '- Кріплення/релси: для ліхтарів і аксесуарів',
+                '- Амортизаційні накладки: комфорт і посадка',
+                '- Захист очей/візор: сумісні варіанти',
+            ],
+        ];
+        return $map[$category] ?? [];
+    }
+
+    private function loadSessionContext(?string $sessionId): array
+    {
+        if (!$sessionId) {
+            return [];
+        }
+
+        $key = "agent_ctx:{$sessionId}";
+        $ctx = Cache::get($key, []);
+        return is_array($ctx) ? $ctx : [];
+    }
+
+    private function saveSessionContext(?string $sessionId, array $data): void
+    {
+        if (!$sessionId) {
+            return;
+        }
+
+        $key = "agent_ctx:{$sessionId}";
+        $existing = $this->loadSessionContext($sessionId);
+        $merged = array_merge($existing, $data);
+        Cache::put($key, $merged, now()->addHours(6));
+    }
+
     // === Helper methods ===
 
     private function detectAmbiguity(string $message, string $searchQuery, array $filters): bool
@@ -812,20 +1111,6 @@ class AgentOrchestrator
                 }
             }
             return true;
-        }
-        
-        return false;
-    }
-
-    private function isAdviceRequest(string $message): bool
-    {
-        $adviceKeywords = ['яку', 'який', 'краще', 'порадь', 'підкажи', 'допоможи вибрати', 'що взяти'];
-        $lowerMessage = mb_strtolower($message);
-        
-        foreach ($adviceKeywords as $keyword) {
-            if (str_contains($lowerMessage, $keyword)) {
-                return true;
-            }
         }
         
         return false;
@@ -938,7 +1223,37 @@ class AgentOrchestrator
                 break;
             }
         }
+        // Size extraction (EU sizes 35-49)
+        if (preg_match('/(розмір|size)\s*(\d{2})/u', $lower, $m)) {
+            $size = (int) $m[2];
+            if ($size >= 35 && $size <= 49) {
+                $filters['size'] = $size;
+            }
+        }
+        // Standalone two-digit size in footwear context
+        if (!isset($filters['size'])) {
+            if (preg_match('/\b(\d{2})\b/u', $lower, $m)) {
+                $size = (int) $m[1];
+                $footwearWords = ['берц', 'черевик', 'взутт', 'ботин', 'boots'];
+                foreach ($footwearWords as $w) {
+                    if ($size >= 35 && $size <= 49 && str_contains($lower, $w)) {
+                        $filters['size'] = $size;
+                        break;
+                    }
+                }
+            }
+        }
         
         return $filters;
+    }
+
+    private function detectCategoryFromMessage(string $message): ?string
+    {
+        $m = mb_strtolower($message);
+        if (str_contains($m, 'плитоноск') || str_contains($m, 'carrier')) { return 'плитоноски'; }
+        if (str_contains($m, 'плит') || str_contains($m, 'sapi') || str_contains($m, 'esapi')) { return 'бронеплити'; }
+        if (str_contains($m, 'шолом') || str_contains($m, 'каск') || str_contains($m, 'helmet')) { return 'шоломи'; }
+        if (str_contains($m, 'берц') || str_contains($m, 'черевик') || str_contains($m, 'взутт') || str_contains($m, 'boot')) { return 'взуття'; }
+        return null;
     }
 }

@@ -113,6 +113,12 @@ class AiRerankTool
         if (!empty($filters['color'])) {
             $filterDesc .= "Колір: {$filters['color']}. ";
         }
+        if (!empty($filters['size'])) {
+            $filterDesc .= "Розмір: {$filters['size']}. ";
+        }
+        $qLower = mb_strtolower($query);
+        $platesQuery = (str_contains($qLower, 'sapi') || str_contains($qLower, 'esapi') || str_contains($qLower, 'плит') || str_contains($qLower, 'бронеплит'));
+        $footwearQuery = (str_contains($qLower, 'берц') || str_contains($qLower, 'черевик') || str_contains($qLower, 'взутт') || str_contains($qLower, 'boot'));
         
         // Brand-specific instruction
         $brandInstruction = '';
@@ -133,6 +139,28 @@ BRAND;
         $candidateCount = count($candidates);
         $candidateLines = implode("\n", $candidatesList);
 
+        $platesInstruction = '';
+        if ($platesQuery) {
+            $platesInstruction = <<<PLATES
+
+    🔴 ПЛИТИ: ЖОДНИХ БОКОВИХ ПЛИТ для запиту про SAPI/ESAPI/бронеплити.
+    - Бокові плити/side plates: розміри 15x15, 15x20, слова "бокова", "side" — це АКСЕСУАРИ → НЕ додавати, якщо є повнорозмірні плити.
+    - Чохли/кавери/панелі для плит — АКСЕСУАРИ → не вибирати, якщо є 3+ основних плити.
+    - Основні: повнорозмірні плити відповідного класу/форм-фактору.
+
+    PLATES;
+        }
+        $footwearInstruction = '';
+        if ($footwearQuery && !empty($filters['size'])) {
+            $footwearInstruction = <<<FOOT
+
+    🔵 ВЗУТТЯ: Пріоритет товарам з потрібним розміром у назві/характеристиках.
+    - Якщо видно розмір {$filters['size']} → став вище.
+    - Дуже великі/дуже малі (наприклад, 37, 50), якщо не збігаються з {$filters['size']} → відсунути.
+
+    FOOT;
+        }
+
         return <<<PROMPT
 Ти — AI-експерт магазину Contractor (тактичне військове спорядження).
 
@@ -144,6 +172,8 @@ BRAND;
 Кандидати ({$candidateCount} товарів):
 {$candidateLines}
 {$brandInstruction}
+{$platesInstruction}
+{$footwearInstruction}
 
 ДУЖЕ ВАЖЛИВО:
 - Якщо товар має в назві "ремінь", "плечовий", "одноточков", "двоточков", "слінг", "камбербанд", "панел", "кріплення", "адаптер", "ліхтарик", "ліхтар", "навушник", "гарнітур", "кавер", "чохол" — ЦЕ АКСЕСУАР, показувати ТІЛЬКИ якщо немає основних товарів

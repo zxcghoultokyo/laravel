@@ -106,6 +106,14 @@ class AccessoryFilterTool
         $title = mb_strtolower($product['title'] ?? '');
         $combined = $categoryPath . ' ' . $title;
 
+        // Detect side plates by dimensions or wording
+        $sidePlateHints = ['бокова', 'side', '15x15', '15х15', '15x20', '15х20'];
+        foreach ($sidePlateHints as $hint) {
+            if (str_contains($combined, $hint)) {
+                return 'plate-side';
+            }
+        }
+
         // Detect obvious accessory wording before main-type heuristics
         $carrierAccessoryHints = ['ремін', 'ремен', 'strap', 'sling', 'плечов', 'одноточков', 'двоточков', 'кріплен', 'harness', 'панел', 'cummerbund', 'камбербанд', 'shoulder', 'панель'];
         foreach ($carrierAccessoryHints as $hint) {
@@ -162,7 +170,7 @@ class AccessoryFilterTool
     private function isAccessoryOf(string $productType, string $primaryType): bool
     {
         $accessoryMap = [
-            'plates' => ['plate-accessory', 'pouches', 'plate-carriers', 'carrier-accessory'], // carriers/straps are accessories to plates
+            'plates' => ['plate-accessory', 'plate-side', 'pouches', 'plate-carriers', 'carrier-accessory'], // side plates and carriers are accessories to main plates in discovery
             'helmets' => ['helmet-accessory', 'pouches'],
             'plate-carriers' => ['pouches', 'plates', 'plate-accessory', 'carrier-accessory'],
             'vests' => ['pouches'],

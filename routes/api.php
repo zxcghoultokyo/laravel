@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\OrderStatusController;
+use App\Http\Controllers\Api\OrderSearchController;
 use App\Http\Controllers\Api\DebugProductsController;
 use App\Http\Controllers\Api\AdminJobsController;
 use App\Http\Controllers\Api\ProductSearchController;
@@ -31,6 +32,9 @@ Route::get('/widget/settings', [WidgetController::class, 'settings'])
 
 // Статус замовлення по order_id
 Route::post('/order-status', [OrderStatusController::class, 'show']);
+
+// Пошук замовлень за гнучкими критеріями
+Route::post('/orders/search', [OrderSearchController::class, 'search']);
 
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);

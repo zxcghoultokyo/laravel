@@ -6,6 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use App\Services\Horoshop\HoroshopClient;
 use App\Services\Horoshop\ProductService;
 use App\Services\Horoshop\OrderService;
+use App\Services\Horoshop\OrderSearchService;
 use App\Services\Horoshop\HoroshopService;
 use App\Services\Ai\AiRouter;
 use App\Services\Ai\AiRecommender;
@@ -54,6 +55,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(OrderService::class, function ($app) {
             return new OrderService(
                 $app->make(HoroshopClient::class),
+            );
+        });
+
+        // OrderSearchService
+        $this->app->singleton(OrderSearchService::class, function ($app) {
+            return new OrderSearchService(
+                $app->make(HoroshopClient::class),
+                $app->make(OrderService::class),
             );
         });
 

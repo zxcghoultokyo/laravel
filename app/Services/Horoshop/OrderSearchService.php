@@ -104,21 +104,21 @@ class OrderSearchService
     {
         $criteria = [];
 
-        // Extract order_id (digits, optionally with "замовлення/заказ" prefix)
-        if (preg_match('/(?:замовлення|заказ|order|№|#)\s*(\d{1,10})/ui', $message, $m)) {
-            $criteria['order_id'] = (int) $m[1];
-        }
-
-        // If still no order_id but message is just digits/number-like, grab it
-        if (empty($criteria['order_id']) && preg_match('/\b(\d{5,10})\b/u', $message, $m)) {
-            $criteria['order_id'] = (int) $m[1];
-        }
-
-        // Extract phone (various formats)
+        // Extract phone FIRST (various formats) - priority over bare digits
         if (preg_match('/(?:\+?38)?\s*\(?(\d{3})\)?\s*(\d{3})\s*[-.]?(\d{2})\s*[-.]?(\d{2})/u', $message, $m)) {
             // Normalize: +38XXXXXXXXXX
             $digits = $m[1] . $m[2] . $m[3] . $m[4];
             $criteria['phone'] = '+38' . $digits;
+        }
+
+        // Extract order_id (digits, optionally with "замовлення/заказ" prefix, fuzzy matching for typos)
+        if (preg_match('/(?:зам[оа][влу][лв]?ен[нь]?[яє]|заказ|order|№|#)\s*(\d{1,10})/ui', $message, $m)) {
+            $criteria['order_id'] = (int) $m[1];
+        }
+
+        // If still no order_id AND no phone but message has bare digits (5-10 digits), grab as order_id
+        if (empty($criteria['order_id']) && empty($criteria['phone']) && preg_match('/\b(\d{3,6})\b/u', $message, $m)) {
+            $criteria['order_id'] = (int) $m[1];
         }
 
         // Extract email

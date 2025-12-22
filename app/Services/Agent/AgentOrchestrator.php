@@ -505,15 +505,24 @@ class AgentOrchestrator
 
         if (!empty($ttn)) {
             $msgParts[] = "Замовлення відправлено\nТТН: {$ttn}" . (!empty($tracking) ? "\nВідстежити: {$tracking}" : '');
+            $msgParts[] = "Можете відстежити посилку у додатку або на сайті перевізника.";
         } elseif (!empty($statusText)) {
+            $statusLower = mb_strtolower($statusText);
             $msgParts[] = "Статус: {$statusText}";
-            if (mb_stripos($statusText, 'достав') !== false) {
-                $msgParts[] = "Якщо все отримали — дякуємо! Якщо є питання — напишіть, підкажу що робити.";
-            } elseif (mb_stripos($statusText, 'оброб') !== false || mb_stripos($statusText, 'processing') !== false) {
-                $msgParts[] = "Готуємо до відправки. Після відправки надішлю ТТН.";
+            
+            if (str_contains($statusLower, 'доставлено') || str_contains($statusLower, 'delivered')) {
+                $msgParts[] = "Якщо все отримали — дякуємо за покупку! Якщо є питання — напишіть.";
+            } elseif (str_contains($statusLower, 'не доставлено') || str_contains($statusLower, 'відміна') || str_contains($statusLower, 'скасов')) {
+                $msgParts[] = "Виникла проблема з доставкою. " . ($supportLine ?: 'Зв\'яжіться з підтримкою для уточнення.');
+            } elseif (str_contains($statusLower, 'новий') || str_contains($statusLower, 'new')) {
+                $msgParts[] = "Замовлення прийнято в обробку. Незабаром почнемо готувати до відправки.";
+            } elseif (str_contains($statusLower, 'оброб') || str_contains($statusLower, 'processing')) {
+                $msgParts[] = "Готуємо ваше замовлення до відправки. Після відправки ви отримаєте ТТН для відстеження.";
+            } elseif (str_contains($statusLower, 'доставляється') || str_contains($statusLower, 'в дорозі')) {
+                $msgParts[] = "Замовлення в дорозі. Очікуйте повідомлення від перевізника.";
             }
         } else {
-            $msgParts[] = "Статус зараз недоступний.";
+            $msgParts[] = "Статус доставки зараз недоступний. " . ($supportLine ?: '');
         }
 
         $msgParts[] = "Якщо треба — можу перевірити інше замовлення. Напишіть номер або телефон.";

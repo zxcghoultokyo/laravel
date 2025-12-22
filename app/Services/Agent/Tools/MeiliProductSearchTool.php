@@ -156,56 +156,49 @@ class MeiliProductSearchTool
         $mainProducts = [];
         $accessories = [];
         
-        $accessoryIndicators = [
-            // Carrier accessories
-            'чохл', 'чохол', 'cover', 'кавер',
-            'сумка', 'сумк', 'bag', 'напашник',
-            'модуль', 'module',
-            'кишен', 'pocket',
-            'панел', 'панель', 'panel',
-            'камбербанд', 'cummerbund',
-            'комплект чохл', 'комплект захист',
-            'плечов захист', 'плечевой защит',
-            'плечового захисту', 'shoulder',
-            // Mounts/adapters
-            'кріплен', 'mount', 'adapter', 'адаптер',
-            'кронштейн', 'рейка', 'пряжка',
-            'harness', 'затискач',
-            // Lights/electronics
-            'ліхтар', 'flashlight',
-            // Pouches (when not main search)
-            'підсумок', 'pouch',
-            // Other accessories
-            'ремінь', 'ремен', 'strap', 'sling',
-        ];
-        
         foreach ($hits as $hit) {
             $titleLower = mb_strtolower($hit['title'] ?? '');
             $categoryLower = mb_strtolower($hit['category_path'] ?? '');
             $combined = $titleLower . ' ' . $categoryLower;
             
-            $isAccessory = false;
+            // Strict accessory detection: these words ALWAYS mean accessory
+            $strictAccessoryWords = [
+                'камбербанд', 'cummerbund', 'каммербанд',
+                'кап ', ' кап', 'cap ', ' cap', // side caps
+                'комплект кап', 'комплект кріплень',
+                'чохол', 'чохл', 'cover', 'кавер',
+                'сумка', 'сумк', 'bag', 'напашник',
+                'кішень', 'кишен', 'pocket',
+                'кріплення ', 'кріплен ', 'mount ', 'mounting',
+                'платформа кріплен', 'адаптер кріплен',
+                'тримач ', 'holder ',
+                'планка пікатінн', 'picatinny rail',
+                'адаптер', 'adapter', 'переходник',
+                'рейка ', 'rail ',
+                'подушк', 'pad ', 'padding',
+                'накладк', 'overlay',
+                'ремінь', 'ремен', 'strap', 'sling',
+                'модуль ', 'module ',
+            ];
             
-            foreach ($accessoryIndicators as $indicator) {
-                if (str_contains($combined, $indicator)) {
-                    // Additional check: if it has main product words, might be main product with accessory in description
-                    $hasMainWords = str_contains($combined, 'плитоноск') || 
-                                   str_contains($combined, 'жилет') ||
-                                   str_contains($combined, 'шолом') ||
-                                   str_contains($combined, 'броня');
-                    
-                    // If title starts with accessory word AND has main word → it's an accessory
-                    // e.g. "Чохол для плитоноски", "Сумка напашник", "Модуль для жилету"
-                    if (str_starts_with($titleLower, explode(' ', $indicator)[0]) || 
-                        !$hasMainWords ||
-                        str_contains($titleLower, 'для ') ||
-                        str_contains($titleLower, ' для') ||
-                        str_contains($titleLower, 'під ') ||
-                        str_contains($titleLower, 'до ')) {
-                        $isAccessory = true;
-                        break;
-                    }
+            $isAccessory = false;
+            foreach ($strictAccessoryWords as $word) {
+                if (str_contains($combined, $word)) {
+                    $isAccessory = true;
+                    break;
                 }
+            }
+            
+            // Additional check: if title has "для/під/до" + main product → accessory
+            if (!$isAccessory && (
+                str_contains($titleLower, 'для плитоноск') ||
+                str_contains($titleLower, 'для шолом') ||
+                str_contains($titleLower, 'до плитоноск') ||
+                str_contains($titleLower, 'до шолом') ||
+                str_contains($titleLower, 'під шолом') ||
+                str_contains($titleLower, 'на шолом')
+            )) {
+                $isAccessory = true;
             }
             
             if ($isAccessory) {

@@ -491,8 +491,9 @@ class AgentOrchestrator
     private function handleFaq(string $message, array $plan, array $context): array
     {
         $settings = WidgetSettings::first();
+        // Default to using custom content if not explicitly disabled
         $useHoroshop = ($settings?->enable_faq_from_horoshop ?? false) === true;
-        $useCustom = ($settings?->enable_faq_custom_content ?? false) === true;
+        $useCustom = ($settings?->enable_faq_custom_content ?? true) === true;
 
         $lowerMessage = mb_strtolower($message);
 
@@ -521,6 +522,49 @@ class AgentOrchestrator
                         'message' => $msg,
                         'products' => [],
                         'meta' => ['intent' => 'faq', 'topic' => $keyword],
+                    ];
+                }
+            }
+        }
+
+        // Direct answers via Horoshop data when available
+        $isDelivery = str_contains($lowerMessage, 'доставка');
+        $isPayment  = str_contains($lowerMessage, 'оплата');
+
+        if ($isDelivery) {
+            $opts = $this->horoshopDataService->getDeliveryOptions();
+            if (!empty($opts)) {
+                $enabled = array_values(array_filter($opts, fn($o) => ($o['enabled'] ?? false) === true));
+                if (!empty($enabled)) {
+                    $lines = [];
+                    foreach ($enabled as $o) {
+                        $title = $o['title']['ua'] ?? ($o['title']['ru'] ?? 'Варіант доставки');
+                        $note  = ($o['by_carrier'] ?? false) ? ' (за тарифами перевізника)' : '';
+                        $lines[] = '• ' . $title . $note;
+                    }
+                    return [
+                        'message' => "Варіанти доставки:\n" . implode("\n", $lines),
+                        'products' => [],
+                        'meta' => ['intent' => 'faq', 'topic' => 'доставка'],
+                    ];
+                }
+            }
+        }
+
+        if ($isPayment) {
+            $pay = $this->horoshopDataService->getPaymentOptions();
+            if (!empty($pay)) {
+                $enabled = array_values(array_filter($pay, fn($p) => ($p['enabled'] ?? false) === true));
+                if (!empty($enabled)) {
+                    $lines = [];
+                    foreach ($enabled as $p) {
+                        $title = $p['title']['ua'] ?? ($p['title']['ru'] ?? 'Варіант оплати');
+                        $lines[] = '• ' . $title;
+                    }
+                    return [
+                        'message' => "Варіанти оплати:\n" . implode("\n", $lines),
+                        'products' => [],
+                        'meta' => ['intent' => 'faq', 'topic' => 'оплата'],
                     ];
                 }
             }

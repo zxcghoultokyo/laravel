@@ -119,6 +119,7 @@ class MeiliProductSearchTool
     /**
      * Context-aware accessory filtering
      * If user searches for specific gear (straps, pouches), don't filter them out
+     * Otherwise, REMOVE accessories if there are 3+ main products
      */
     private function filterAccessories(array $hits, string $query): array
     {
@@ -134,6 +135,9 @@ class MeiliProductSearchTool
             'аксесуар', 'accessory', 'комплектуючі',
             'ліхтар', 'flashlight',
             'адаптер', 'adapter', 'кріплення', 'mount',
+            'чохол', 'cover', 'кавер',
+            'сумка', 'bag', 'напашник',
+            'модуль', 'module',
         ];
         
         foreach ($accessorySearchTerms as $term) {
@@ -148,19 +152,31 @@ class MeiliProductSearchTool
         }
         
         // User is searching for main gear (plate carriers, helmets, etc.)
-        // Filter out accessories that are NOT the main product
-        $filtered = [];
-        $accessoryKeywords = [
-            // Straps/webbing (ONLY filter if attached to main gear)
-            'кріплен до', 'до плитоноски', 'до шолом', 'плечов ремінь', 'одноточков ремінь', 'двоточков ремінь',
-            // Panels/covers/pouches (generic accessories)
-            'панел', 'панель', 'чохол', 'кавер', 'кишеня',
-            // Lights/electronics (accessories, not main)
-            'ліхтар на', 'ліхтарик на', 'на шолом',
-            // Adapters/mounts (always accessories)
-            'адаптер', 'кронштейн', 'кріплення для', 'рейка', 'пряжка', 'затискач',
-            // Modular add-ons
-            'модуль для', 'комплект кріплень',
+        // Categorize products into main/accessory
+        $mainProducts = [];
+        $accessories = [];
+        
+        $accessoryIndicators = [
+            // Carrier accessories
+            'чохл', 'чохол', 'cover', 'кавер',
+            'сумка', 'сумк', 'bag', 'напашник',
+            'модуль', 'module',
+            'кишен', 'pocket',
+            'панел', 'панель', 'panel',
+            'камбербанд', 'cummerbund',
+            'комплект чохл', 'комплект захист',
+            'плечов захист', 'плечевой защит',
+            'плечового захисту', 'shoulder',
+            // Mounts/adapters
+            'кріплен', 'mount', 'adapter', 'адаптер',
+            'кронштейн', 'рейка', 'пряжка',
+            'harness', 'затискач',
+            // Lights/electronics
+            'ліхтар', 'flashlight',
+            // Pouches (when not main search)
+            'підсумок', 'pouch',
+            // Other accessories
+            'ремінь', 'ремен', 'strap', 'sling',
         ];
         
         foreach ($hits as $hit) {
@@ -170,24 +186,51 @@ class MeiliProductSearchTool
             
             $isAccessory = false;
             
-            foreach ($accessoryKeywords as $keyword) {
-                if (str_contains($combined, $keyword)) {
-                    $isAccessory = true;
-                    break;
+            foreach ($accessoryIndicators as $indicator) {
+                if (str_contains($combined, $indicator)) {
+                    // Additional check: if it has main product words, might be main product with accessory in description
+                    $hasMainWords = str_contains($combined, 'плитоноск') || 
+                                   str_contains($combined, 'жилет') ||
+                                   str_contains($combined, 'шолом') ||
+                                   str_contains($combined, 'броня');
+                    
+                    // If title starts with accessory word AND has main word → it's an accessory
+                    // e.g. "Чохол для плитоноски", "Сумка напашник", "Модуль для жилету"
+                    if (str_starts_with($titleLower, explode(' ', $indicator)[0]) || 
+                        !$hasMainWords ||
+                        str_contains($titleLower, 'для ') ||
+                        str_contains($titleLower, ' для') ||
+                        str_contains($titleLower, 'під ') ||
+                        str_contains($titleLower, 'до ')) {
+                        $isAccessory = true;
+                        break;
+                    }
                 }
             }
             
-            if (!$isAccessory) {
-                $filtered[] = $hit;
+            if ($isAccessory) {
+                $accessories[] = $hit;
+            } else {
+                $mainProducts[] = $hit;
             }
-        }
         
-        Log::info('MeiliProductSearchTool: filtered accessories', [
-            'before' => count($hits),
-            'after' => count($filtered)
+        Log::info('MeiliProductSearchTool: categorized products', [
+            'main' => count($mainProducts),
+            'accessories' => count($accessories),
+            'query' => $query
         ]);
         
-        return $filtered;
+        // If we have 3+ main products, EXCLUDE all accessories
+        if (count($mainProducts) >= 3) {
+            Log::info('MeiliProductSearchTool: removing accessories, enough main products', [
+                'main_count' => count($mainProducts),
+                'removed_accessories' => count($accessories)
+            ]);
+            return $mainProducts;
+        }
+        
+        // Otherwise return all (might need accessories to fill results)
+        return $hits;
     }
 
     /**

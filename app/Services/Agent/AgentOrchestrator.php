@@ -463,15 +463,21 @@ class AgentOrchestrator
 
         $first = $orders[0];
         $delivery = $first['delivery_tracking'] ?? [];
-        $msgParts = [];
 
+        $msgParts = [];
         if (!empty($delivery['tracking_url']) && !empty($delivery['nova_poshta_ttn'])) {
-            $msgParts[] = "🚚 ТТН: **{$delivery['nova_poshta_ttn']}**. Відстежити: {$delivery['tracking_url']}";
-        } elseif (!empty($delivery['status'])) {
-            $msgParts[] = "📦 Статус: **{$delivery['status']}**";
+            $msgParts[] = "ТТН: {$delivery['nova_poshta_ttn']}\nВідстежити: {$delivery['tracking_url']}";
+        }
+        if (!empty($delivery['status'])) {
+            $msgParts[] = "Статус: {$delivery['status']}";
+        }
+        if (empty($msgParts)) {
+            $msgParts[] = "Знайшов {$searchResult['total']} замовлень. Статус доставки наразі недоступний.";
+        } else {
+            $msgParts[] = "Знайшов {$searchResult['total']} замовлень.";
         }
 
-        $msgParts[] = "Знайшов {$searchResult['total']} замовлень.";
+        $msgParts[] = "Якщо треба — можу перевірити інше замовлення. Напишіть номер або телефон.";
 
         return [
             'message' => implode("\n\n", $msgParts),

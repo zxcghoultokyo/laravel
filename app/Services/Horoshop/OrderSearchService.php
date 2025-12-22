@@ -109,6 +109,11 @@ class OrderSearchService
             $criteria['order_id'] = (int) $m[1];
         }
 
+        // If still no order_id but message is just digits/number-like, grab it
+        if (empty($criteria['order_id']) && preg_match('/\b(\d{5,10})\b/u', $message, $m)) {
+            $criteria['order_id'] = (int) $m[1];
+        }
+
         // Extract phone (various formats)
         if (preg_match('/(?:\+?38)?\s*\(?(\d{3})\)?\s*(\d{3})\s*[-.]?(\d{2})\s*[-.]?(\d{2})/u', $message, $m)) {
             // Normalize: +38XXXXXXXXXX

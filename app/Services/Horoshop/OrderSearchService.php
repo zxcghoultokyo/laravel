@@ -179,6 +179,14 @@ class OrderSearchService
         $orderPhoneNorm = $this->normalizePhone($orderPhone);
         $searchPhoneNorm = $this->normalizePhone($searchPhone);
 
+        Log::debug('OrderSearchService: matchPhone', [
+            'order_id' => $order['id'] ?? 'N/A',
+            'order_phone_raw' => $orderPhone,
+            'order_phone_norm' => $orderPhoneNorm,
+            'search_phone_norm' => $searchPhoneNorm,
+            'match' => (str_contains($orderPhoneNorm, $searchPhoneNorm) || str_contains($searchPhoneNorm, $orderPhoneNorm)),
+        ]);
+
         return str_contains($orderPhoneNorm, $searchPhoneNorm) ||
                str_contains($searchPhoneNorm, $orderPhoneNorm);
     }

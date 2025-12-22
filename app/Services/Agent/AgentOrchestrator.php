@@ -475,8 +475,23 @@ class AgentOrchestrator
         }
 
         if ($total === 0) {
+            $searchedBy = [];
+            if (!empty($criteria['order_id'])) {
+                $searchedBy[] = "номером №{$criteria['order_id']}";
+            }
+            if (!empty($criteria['phone'])) {
+                $searchedBy[] = "телефоном {$criteria['phone']}";
+            }
+            if (!empty($criteria['name'])) {
+                $searchedBy[] = "ім'ям '{$criteria['name']}'";
+            }
+            if (!empty($criteria['email'])) {
+                $searchedBy[] = "email '{$criteria['email']}'";
+            }
+            $searchText = !empty($searchedBy) ? implode(' та ', $searchedBy) : 'вказаними параметрами';
+
             return [
-                'message' => "Не вдалося знайти замовлення №" . ($orderIdText ?? '...') . ". Перевірте номер або зверніться до служби підтримки. " . ($supportLine ?: ''),
+                'message' => "Не вдалося знайти замовлення за {$searchText}.\n\nПеревірте дані або вкажіть номер замовлення. " . ($supportLine ?: ''),
                 'products' => [],
                 'meta' => ['intent' => 'order_status', 'found' => 0, 'criteria' => $criteria],
             ];

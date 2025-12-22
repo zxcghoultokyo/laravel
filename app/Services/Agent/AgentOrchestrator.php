@@ -495,13 +495,17 @@ class AgentOrchestrator
         } elseif (!empty($statusText)) {
             $msgParts[] = "Статус: {$statusText}";
             
-            // Only special message for delivered status
-            if (str_contains(mb_strtolower($statusText), 'доставлено') || str_contains(mb_strtolower($statusText), 'delivered')) {
-                $msgParts[] = "Якщо все отримали — дякуємо за покупку!";
+            // Only thank for delivered
+            $statusLower = mb_strtolower($statusText);
+            if (str_contains($statusLower, 'доставлено') || str_contains($statusLower, 'delivered') || str_contains($statusLower, 'отримано')) {
+                $msgParts[] = "Дякуємо за покупку!";
+            } elseif (str_contains($statusLower, 'не доставлено') || str_contains($statusLower, 'неуспішн')) {
+                // For failed delivery, offer help
+                $msgParts[] = "Схоже, виникли труднощі з доставкою. " . ($supportLine ?: '');
+            } else {
+                // Generic help for in-progress/pending
+                $msgParts[] = "Якщо є питання — звертайтесь. " . ($supportLine ?: '');
             }
-            
-            // Generic help offer for all other statuses
-            $msgParts[] = "Якщо є питання — звертайтесь. " . ($supportLine ?: '');
         } else {
             $msgParts[] = "Статус доставки зараз недоступний. " . ($supportLine ?: '');
         }
@@ -803,7 +807,7 @@ class AgentOrchestrator
                 'price' => $p['price'] ?? null,
                 'category_path' => $p['category_path'] ?? '',
                 'ai_product_type' => $p['ai_product_type'] ?? null,
-                'description' => mb_substr((string)($p['description'] ?? ''), 0, 500),
+                'description' => mb_substr((string)($p['description'] ?? ''), 0, 600),
                 'characteristics' => $p['characteristics'] ?? [],
                 'raw' => $p['raw'] ?? null,
             ];
@@ -816,7 +820,7 @@ class AgentOrchestrator
 
         $system = <<<SYS
 Ти — AI-консультант e-commerce (тактичне спорядження, але універсально для Horoshop).
-Правила: тільки факти з наданих товарів (title, price, description, characteristics, raw). Якщо даних нема — скажи "у характеристиках не вказано, не буду стверджувати". Спершу товари/ролі, потім коротке пояснення, потім ОДИН CTA. Ролі замість SKU (бюджетний / збалансований / посилений). Не вигадуй, не посилайся на популярність. Без Markdown/емодзі. 1 CTA, не повторюй той самий тип CTA поспіль.
+Правила: тільки факти з наданих товарів (title, price, description, characteristics, raw). Дивись СПОЧАТКУ description, ПОТІМ characteristics. Якщо в description є інфо — використай її. Якщо даних справді нема ніде — скажи "не вказано". Спершу товари/ролі, потім коротке пояснення, потім ОДИН CTA. Ролі замість SKU (бюджетний / збалансований / посилений). Не вигадуй, не посилайся на популярність. Без Markdown/емодзі. 1 CTA, не повторюй той самий тип CTA поспіль.
 SYS;
 
         $instructions = [

@@ -273,6 +273,12 @@ class MeiliProductSearchTool
             'helmets' => ['шолом', 'каск', 'helmet'],
             'footwear' => ['берц', 'черевик', 'взутт', 'ботин', 'boots'],
         ];
+        
+        // Critical: if query mentions "бокові" or "side" explicitly, NOT main plates
+        if (str_contains($queryLower, 'бокові') || str_contains($queryLower, 'side') || str_contains($queryLower, '15x15') || str_contains($queryLower, '15x20')) {
+            return null; // Let side plates through accessory filter
+        }
+        
         foreach ($typeKeywords as $type => $keywords) {
             foreach ($keywords as $kw) {
                 if (str_contains($queryLower, $kw)) {
@@ -299,13 +305,19 @@ class MeiliProductSearchTool
     private function extractFootwearSizeFromText(string $text): ?int
     {
         $l = mb_strtolower($text);
+        // Explicit size patterns
         if (preg_match('/розмір\s*(\d{2})/u', $l, $m)) {
             $size = (int) $m[1];
             if ($size >= 35 && $size <= 49) { return $size; }
         }
-        if (preg_match('/\b(\d{2})\b/u', $l, $m)) {
+        // EU size patterns (most specific)
+        if (preg_match('/\beu\s*(\d{2})\b/u', $l, $m)) {
             $size = (int) $m[1];
             if ($size >= 35 && $size <= 49) { return $size; }
+        }
+        // Standalone two-digit as fallback (only if looks like EU size)
+        if (preg_match('/\b(3[5-9]|4[0-9])\b/u', $l, $m)) {
+            return (int) $m[1];
         }
         return null;
     }

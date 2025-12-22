@@ -125,27 +125,35 @@ class MeiliProductSearchTool
     {
         $queryLower = mb_strtolower($query);
         
-        // Detect if user is searching FOR accessories/specific gear
-        $accessorySearchTerms = [
-            'ремінь', 'ремен', 'слінг', 'sling', 'збройовий',
-            'пояс', 'belt', 'рпс',
-            'підсумок', 'pouch', 'підсумки',
-            'кишеня', 'pocket',
-            'панел', 'panel', 'камбербанд',
-            'аксесуар', 'accessory', 'комплектуючі',
-            'ліхтар', 'flashlight',
-            'адаптер', 'adapter', 'кріплення', 'mount',
-            'чохол', 'cover', 'кавер',
-            'сумка', 'bag', 'напашник',
-            'модуль', 'module',
+        // Detect if user is SPECIFICALLY searching for accessories (not just mentioning them)
+        // Must be primary search term, not just context word
+        $accessorySearchPatterns = [
+            // Primary accessory search (accessory word at start or standalone)
+            '/^ремінь/', '/^ремен/', '/^слінг/', '/^sling/',
+            '/^пояс/', '/^belt/',
+            '/^підсумок/', '/^pouch/',
+            '/^кишен/', '/^pocket/',
+            '/^панел/', '/^panel/', '/^камбербанд/',
+            '/^ліхтар/', '/^flashlight/',
+            '/^адаптер/', '/^adapter/', '/^кріплення/', '/^mount/',
+            '/^чохол/', '/^cover/', '/^кавер/',
+            '/^сумка/', '/^bag/', '/^напашник/',
+            '/^модуль/', '/^module/',
+            // Patterns with "для" (searching FOR accessory)
+            '/ремінь для/', '/ремен для/', '/sling for/',
+            '/панел для/', '/panel for/',
+            '/кріплення для/', '/mount for/', '/кріплення на/', '/mount on/',
+            '/чохол для/', '/cover for/',
+            '/сумка для/', '/bag for/',
+            '/адаптер для/', '/adapter for/',
         ];
         
-        foreach ($accessorySearchTerms as $term) {
-            if (str_contains($queryLower, $term)) {
+        foreach ($accessorySearchPatterns as $pattern) {
+            if (preg_match($pattern . 'u', $queryLower)) {
                 // User is searching FOR this type of gear, don't filter
                 Log::info('MeiliProductSearchTool: user searching for accessories, skipping filter', [
                     'query' => $query,
-                    'term' => $term
+                    'pattern' => $pattern
                 ]);
                 return $hits;
             }

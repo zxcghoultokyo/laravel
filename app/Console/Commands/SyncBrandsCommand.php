@@ -65,11 +65,14 @@ class SyncBrandsCommand extends Command
                 continue;
             }
             
-            $brand = Brand::firstOrNew(['name' => $brandName]);
+            // Normalize brand name variants (АТАКА = ATAKA = А.Т.А.К.А)
+            $normalizedName = $this->normalizeBrandName($brandName);
+            
+            $brand = Brand::firstOrNew(['name' => $normalizedName]);
             
             if ($brand->exists) {
-                // Update product count
-                $brand->product_count = $productCount;
+                // Update product count (accumulate if multiple variants)
+                $brand->product_count += $productCount;
                 $brand->save();
                 $updated++;
             } else {
@@ -80,18 +83,44 @@ class SyncBrandsCommand extends Command
                 $created++;
             }
             
-            $this->line("  {$brandName}: {$productCount} товарів");
+            if ($normalizedName !== $brandName) {
+                $this->line("  {$brandName} → {$normalizedName}: {$productCount} товарів (normalized)");
+            } else {
+                $this->line("  {$brandName}: {$productCount} товарів");
+            }
         }
         
-        $this->newLine();
-        $this->info("✓ Created: {$created} brands");
-        $this->info("✓ Updated: {$updated} brands");
-        $this->info("✓ Total: " . Brand::count() . " brands in database");
-        
-        // Clear cache
         \Illuminate\Support\Facades\Cache::forget('brands:all');
         $this->info("✓ Cache cleared");
         
         return Command::SUCCESS;
+    }
+    
+    /**
+     * Normalize brand name variants to canonical form
+     */
+    private function normalizeBrandName(string $name): string
+    {
+        $normalized = trim($name);
+        
+        // Map of variants to canonical names
+        $brandMap = [
+            'ATAKA' => 'АТАКА',
+            'ataka' => 'АТАКА',
+            'Ataka' => 'АТАКА',
+            'А.Т.А.К.А' => 'АТАКА',
+            'А.Т.А.К.А.' => 'АТАКА',
+            'Hoffmann Equipment' => 'HOFFMANN',
+            'hoffman' => 'HOFFMANN',
+            'Hoffman' => 'HOFFMANN',
+            'USA ARMY' => 'USA Army',
+            'usa army' => 'USA Army',
+            'KOMBAT' => 'KOMBAT UK',
+            'kombat' => 'KOMBAT UK',
+            'Salomon Forces' => 'Salomon',
+            'salomon' => 'Salomon',
+        ];
+        
+        return $brandMap[$normalized] ?? $normalized;
     }
 }

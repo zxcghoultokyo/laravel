@@ -54,11 +54,14 @@ class SyncBrandsJob implements ShouldQueue
                     continue;
                 }
                 
-                $brand = Brand::firstOrNew(['name' => $brandName]);
+                // Normalize brand name variants
+                $normalizedName = $this->normalizeBrandName($brandName);
+                
+                $brand = Brand::firstOrNew(['name' => $normalizedName]);
                 
                 if ($brand->exists) {
-                    // Update product count
-                    $brand->product_count = $productCount;
+                    // Update product count (accumulate if multiple variants)
+                    $brand->product_count += $productCount;
                     $brand->save();
                     $updated++;
                 } else {
@@ -87,5 +90,33 @@ class SyncBrandsJob implements ShouldQueue
             
             throw $e;
         }
+    }
+    
+    /**
+     * Normalize brand name variants to canonical form
+     */
+    private function normalizeBrandName(string $name): string
+    {
+        $normalized = trim($name);
+        
+        // Map of variants to canonical names
+        $brandMap = [
+            'ATAKA' => 'АТАКА',
+            'ataka' => 'АТАКА',
+            'Ataka' => 'АТАКА',
+            'А.Т.А.К.А' => 'АТАКА',
+            'А.Т.А.К.А.' => 'АТАКА',
+            'Hoffmann Equipment' => 'HOFFMANN',
+            'hoffman' => 'HOFFMANN',
+            'Hoffman' => 'HOFFMANN',
+            'USA ARMY' => 'USA Army',
+            'usa army' => 'USA Army',
+            'KOMBAT' => 'KOMBAT UK',
+            'kombat' => 'KOMBAT UK',
+            'Salomon Forces' => 'Salomon',
+            'salomon' => 'Salomon',
+        ];
+        
+        return $brandMap[$normalized] ?? $normalized;
     }
 }

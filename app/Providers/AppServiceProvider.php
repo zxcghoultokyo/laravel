@@ -9,6 +9,8 @@ use App\Services\Horoshop\OrderService;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Horoshop\HoroshopService;
 use App\Services\Ai\AiRouter;
+use App\Services\Horoshop\HoroshopDataService;
+use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
 
@@ -63,12 +65,27 @@ class AppServiceProvider extends ServiceProvider
             return new OrderSearchService(
                 $app->make(HoroshopClient::class),
                 $app->make(OrderService::class),
+                            $app->make(DeliveryTrackingService::class),
             );
         });
 
         // FAQ
         $this->app->singleton(FaqService::class, function ($app) {
             return new FaqService();
+        });
+
+        // HoroshopDataService
+        $this->app->singleton(HoroshopDataService::class, function ($app) {
+            return new HoroshopDataService(
+                $app->make(HoroshopClient::class),
+            );
+        });
+
+        // DeliveryTrackingService
+        $this->app->singleton(DeliveryTrackingService::class, function ($app) {
+            return new DeliveryTrackingService(
+                $app->make(HoroshopDataService::class),
+            );
         });
 
         // AI Router

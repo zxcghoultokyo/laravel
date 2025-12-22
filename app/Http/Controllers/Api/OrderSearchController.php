@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\Horoshop\OrderSearchService;
 use Illuminate\Http\Request;
+use App\Services\Horoshop\DeliveryTrackingService;
 
 class OrderSearchController extends Controller
 {
     public function __construct(
-        protected OrderSearchService $searchService
+        protected OrderSearchService $searchService,
+        protected DeliveryTrackingService $trackingService,
     ) {}
 
     /**
@@ -76,6 +78,14 @@ class OrderSearchController extends Controller
             1 => 'single_result',
             default => 'multiple_results',
         };
+        // Enrich orders with delivery tracking info
+        $enrichedOrders = array_map(function ($order) {
+            $deliveryInfo = $this->trackingService->formatDeliveryInfo($order);
+            return array_merge($order, [
+                'delivery_tracking' => $deliveryInfo,
+            ]);
+        }, $result['orders']);
+
 
         return response()->json([
             'type' => 'orders_search',
@@ -84,7 +94,7 @@ class OrderSearchController extends Controller
             'query' => $query,
             'criteria' => $criteria,
             'total' => $result['total'],
-            'orders' => $result['orders'],
+            'orders' => $enrichedOrders,
             'message' => $this->buildMessage($status, $result['total'], $result['search_type']),
         ]);
     }

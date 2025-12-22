@@ -19,11 +19,21 @@ class WidgetSettings extends Model
         'consent_notice',
         'enabled',
         'api_token',
+        'shop_phone',
+        'callback_form_url',
+        'nova_poshta_tracking_url',
+        'enable_delivery_tracking',
+        'enable_faq_from_horoshop',
+        'horoshop_domain',
+        'horoshop_api_login',
+        'horoshop_api_password',
     ];
 
     protected $casts = [
         'enabled' => 'boolean',
         'border_radius' => 'integer',
+        'enable_delivery_tracking' => 'boolean',
+        'enable_faq_from_horoshop' => 'boolean',
     ];
 
     protected static function boot()

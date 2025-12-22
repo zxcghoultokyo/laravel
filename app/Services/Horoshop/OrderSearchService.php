@@ -14,6 +14,7 @@ class OrderSearchService
     public function __construct(
         protected HoroshopClient $client,
         protected OrderService $orderService,
+        protected DeliveryTrackingService $trackingService,
     ) {}
 
     /**

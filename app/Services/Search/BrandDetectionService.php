@@ -2,6 +2,7 @@
 
 namespace App\Services\Search;
 
+use App\Models\Brand;
 use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,21 @@ class BrandDetectionService
     {
         return Cache::remember('brands:all', now()->addHours(24), function () {
             try {
+                // Try to get from brands table first
+                $brands = Brand::where('is_active', true)
+                    ->orderByDesc('product_count')
+                    ->pluck('name')
+                    ->toArray();
+                
+                if (!empty($brands)) {
+                    Log::info('BrandDetectionService: loaded brands from brands table', [
+                        'count' => count($brands),
+                    ]);
+                    return $brands;
+                }
+                
+                // Fallback to products.brand if brands table is empty
+                Log::warning('BrandDetectionService: brands table empty, using products.brand');
                 $brands = Product::whereNotNull('brand')
                     ->where('brand', '!=', '')
                     ->select('brand')
@@ -25,11 +41,17 @@ class BrandDetectionService
                     ->pluck('brand')
                     ->toArray();
                 
-                Log::info('BrandDetectionService: loaded brands from DB', [
-                    'count' => count($brands),
-                ]);
+                if (!empty($brands)) {
+                    Log::info('BrandDetectionService: loaded brands from products table', [
+                        'count' => count($brands),
+                    ]);
+                    return $brands;
+                }
                 
-                return $brands;
+                // Last resort: hardcoded list
+                Log::warning('BrandDetectionService: no brands in DB, using hardcoded list');
+                return $this->getHardcodedBrands();
+                
             } catch (\Exception $e) {
                 Log::error('BrandDetectionService: failed to load brands', [
                     'error' => $e->getMessage(),

@@ -159,7 +159,7 @@ class AgentOrchestrator
             'reranked' => count($filtered),
         ];
         
-        // Step 3.5: AI Re-ranking (intelligent relevance scoring)
+        // Step 3.5: AI Re-ranking (intelligent relevance scoring + dynamic limit)
         $startTime = microtime(true);
         $reranked = $this->rerankTool->rerank($filtered, $searchQuery, $filters, 10);
         $debug['steps'][] = [
@@ -167,12 +167,13 @@ class AgentOrchestrator
             'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             'before' => count($filtered),
             'after' => count($reranked),
+            'dynamic_limit' => count($reranked), // AI decided how many are relevant
         ];
         
-        // Step 4: Get top 10 products with full details
+        // Step 4: Get full details for AI-selected products (dynamic count)
         $startTime = microtime(true);
         $topIds = array_column($reranked, 'id');
-        $products = $this->detailsTool->getCards($topIds, 10);
+        $products = $this->detailsTool->getCards($topIds, count($topIds));
         $debug['steps'][] = [
             'step' => 'get_details',
             'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),

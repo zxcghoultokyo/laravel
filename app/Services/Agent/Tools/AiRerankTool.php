@@ -12,11 +12,11 @@ class AiRerankTool
 
     /**
      * Use AI to re-rank products based on query relevance
-     * Takes 40 candidates, returns top 10-15 most relevant
+     * Takes 40 candidates, returns top 3-10 most relevant (dynamic based on quality)
      */
     public function rerank(array $candidates, string $query, array $filters = [], int $limit = 10): array
     {
-        if (count($candidates) <= $limit) {
+        if (count($candidates) <= 3) {
             return $candidates; // No need to re-rank
         }
 
@@ -30,7 +30,7 @@ class AiRerankTool
                 Log::warning('AiRerankTool: Invalid AI response, using original order', [
                     'response' => $response
                 ]);
-                return array_slice($candidates, 0, $limit);
+                return array_slice($candidates, 0, min(3, count($candidates)));
             }
             
             // Reorder candidates based on AI choices
@@ -47,22 +47,16 @@ class AiRerankTool
                 }
             }
             
-            // Add remaining candidates (not chosen by AI) at the end
-            $chosenIdsSet = array_flip($chosenIds);
-            foreach ($candidates as $candidate) {
-                if (!isset($chosenIdsSet[$candidate['id']]) && count($reranked) < $limit) {
-                    $candidate['ai_score'] = 0;
-                    $reranked[] = $candidate;
-                }
-            }
+            // Don't add non-chosen candidates anymore — only show what AI selected
             
             Log::info('AiRerankTool: reranked', [
                 'original_count' => count($candidates),
                 'reranked_count' => count($reranked),
                 'chosen_ids' => $chosenIds,
+                'ai_selected' => count($chosenIds),
             ]);
             
-            return array_slice($reranked, 0, $limit);
+            return $reranked;
             
         } catch (\Exception $e) {
             Log::error('AiRerankTool: error, using original order', [
@@ -118,16 +112,23 @@ class AiRerankTool
 - ПРІОРИТЕТ: основні товари перші, аксесуари тільки на кінець
 
 Завдання:
-1. Обери ТОП-10 найрелевантніших товарів
-2. СПОЧАТКУ основні товари, ПОТІМ аксесуари
-3. Враховуй: якість/надійність, популярність, наявність
-4. Поверни JSON:
+1. Обери ТІЛЬКИ справді релевантні товари (від 3 до 10 шт)
+2. ЯКЩО є 3+ відмінних основних товарів → вибирай тільки їх (НЕ додавай нерелевантні для заповнення)
+3. СПОЧАТКУ основні товари, ПОТІМ аксесуари (якщо дуже релевантні)
+4. Враховуй: якість/надійність, популярність, наявність
+5. НЕ ДОДАВАЙ товари просто щоб було 10 шт — краще 4 релевантні ніж 4+6 випадкових
+
+Приклад: запит "шеврон Група крові"
+✅ ДОБРЕ: вибрати 4 шеврони з різними групами крові
+❌ ПОГАНО: додати шеврон "MED", патч "СБУ", прапор "НГУ" — вони НЕ про групу крові
+
+Поверни JSON:
 
 {
   "chosen_ids": [123, 456, 789, ...],
   "reasoning": {
-    "123": "Найпопулярніша модель, перевірена в бою",
-    "456": "Преміум якість, довговічність",
+    "123": "Група крові 4-, точна відповідність",
+    "456": "Група крові 4+, підходить",
     ...
   }
 }

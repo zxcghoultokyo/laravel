@@ -30,10 +30,10 @@ class FaqContentIngestService
 
             try {
                 $content = $this->fetchText($url);
-                if ($content) {
-                    // Limit size to avoid oversized prompts
-                    $updates[$textField] = mb_substr($content, 0, 4000);
-                }
+                        if ($content) {
+                            // Limit size to avoid oversized prompts
+                            $updates[$textField] = mb_substr($content, 0, 4000);
+                        }
             } catch (\Throwable $e) {
                 Log::warning('FaqContentIngestService: fetch failed', [
                     'url' => $url,
@@ -67,15 +67,15 @@ class FaqContentIngestService
         // Try to capture main/article content first
         $main = $this->extractFirst($html, ['main', 'article']);
         if ($main) {
-            return $this->htmlToText($main);
+            return $this->cleanText($this->htmlToText($main));
         }
         // Try common content containers
         $content = $this->extractByIdOrClass($html, ['content','page','article','post','entry','main']);
         if ($content) {
-            return $this->htmlToText($content);
+            return $this->cleanText($this->htmlToText($content));
         }
         // Fallback: whole page
-        return $this->htmlToText($html);
+        return $this->cleanText($this->htmlToText($html));
     }
 
     private function extractFirst(string $html, array $tags): ?string
@@ -114,5 +114,61 @@ class FaqContentIngestService
         $text = preg_replace('/\r?\n\s*\r?\n+/', "\n\n", $text) ?? $text;
         $text = preg_replace('/[ \t]+/', ' ', $text) ?? $text;
         return trim($text);
+    }
+
+    private function cleanText(string $text): string
+    {
+        // Remove common emojis/dingbats
+        $text = preg_replace('/[\x{2700}-\x{27BF}\x{1F300}-\x{1FAFF}]/u', '', $text) ?? $text;
+
+        $lines = preg_split('/\r?\n/', $text) ?: [];
+        $navKeywords = [
+            'головна','каталог','бренди','бронезахист','бронежилети','блог','політика конфіденційності',
+            'контактна інформація','про нас','оплата і доставка','обмін та повернення'
+        ];
+
+        $out = [];
+        foreach ($lines as $line) {
+            $l = trim($line);
+            if ($l === '') { // preserve single blank lines later
+                $out[] = '';
+                continue;
+            }
+            $lower = mb_strtolower($l);
+            // Remove pure navigation lines (exact match or short menu-like entries)
+            if (in_array($lower, $navKeywords, true)) {
+                continue;
+            }
+            // Remove lists that are just navigation clusters
+            if (preg_match('/^(головна|каталог|бренди|бронезахист|бронежилети|блог)(?:\s*[•\-–—]\s*(про нас|контактна інформація|оплата і доставка|обмін та повернення))*$/iu', $lower)) {
+                continue;
+            }
+            // Normalize bullets
+            $l = preg_replace('/^[\-–—\*]\s*/', '• ', $l) ?? $l;
+            $out[] = $l;
+        }
+
+        // Collapse excessive blank lines
+        $clean = [];
+        $prevBlank = false;
+        foreach ($out as $l) {
+            $isBlank = ($l === '');
+            if ($isBlank && $prevBlank) {
+                continue;
+            }
+            $clean[] = $l;
+            $prevBlank = $isBlank;
+        }
+
+        // Deduplicate adjacent identical lines
+        $final = [];
+        $last = null;
+        foreach ($clean as $l) {
+            if ($l === $last) { continue; }
+            $final[] = $l;
+            $last = $l;
+        }
+
+        return trim(implode("\n", $final));
     }
 }

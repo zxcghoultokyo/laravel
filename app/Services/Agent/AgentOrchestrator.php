@@ -514,14 +514,45 @@ class AgentOrchestrator
                     $url = $info['url'] ?? null;
                     if (!empty($contextText)) {
                         try {
-                            $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                "Контекст (з FAQ сторінки магазину, очищений від навігації):\n" .
-                                $contextText . "\n\n" .
-                                "Завдання: дайте структуровану відповідь українською БЕЗ Markdown/емодзі. " .
-                                "Секції: 'Оплата:' та 'Доставка:' (якщо релевантно). Для кожної — 2-5 лаконічних пунктів, простими рядками. " .
-                                "Ігноруйте елементи навігації/меню. Додавайте чіткі умови (терміни, спосіб, обмеження). Максимум 800 символів.";
+                            $topic = 'general';
+                            if ($keyword === 'доставка') { $topic = 'delivery'; }
+                            elseif ($keyword === 'оплата') { $topic = 'payment'; }
+                            elseif ($keyword === 'повернення' || $keyword === 'обмін') { $topic = 'returns'; }
+                            elseif ($keyword === 'контакти') { $topic = 'contacts'; }
 
-                            $reply = $this->aiRouter->callOpenAI($prompt, 0.2, 700);
+                            if ($topic === 'delivery') {
+                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
+                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про доставку.\n" .
+                                    "Включи рядками: хто доставляє; куди; терміни (якщо є); вартість (якщо згадано — наприклад, за тарифами перевізника).\n" .
+                                    "Завершуй одним простим CTA: 'Можу підібрати товар і перевірити наявність — написати?'.\n" .
+                                    "Не вигадуй фактів. Користуйся лише контекстом. Не посилайся на менеджерів/підтримку. Макс 500 символів.";
+                            } elseif ($topic === 'payment') {
+                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
+                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про оплату.\n" .
+                                    "Включи рядками: доступні способи оплати; що найчастіше використовують (якщо згадано); чи безпечно (лише якщо є в контексті).\n" .
+                                    "Завершуй CTA: 'Готові оформити? Можу підібрати товар — написати?'.\n" .
+                                    "Не вигадуй фактів. Не юридична мова. Макс 500 символів.";
+                            } elseif ($topic === 'returns') {
+                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
+                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про повернення.\n" .
+                                    "Включи рядками: чи можливе повернення; термін; ключові умови (1-3 пункти).\n" .
+                                    "Завершуй CTA: 'Потрібна допомога з поверненням — написати?'.\n" .
+                                    "Не вигадуй фактів. Макс 450 символів.";
+                            } elseif ($topic === 'contacts') {
+                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
+                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ з контактами (1-3 способи).\n" .
+                                    "Завершуй CTA: 'Написати тут?'. Макс 300 символів.";
+                            } else {
+                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
+                                    "Контекст (очищений):\n" . $contextText . "\n\n" .
+                                    "Дай коротку корисну відповідь одним блоком, без Markdown/емодзі, з CTA наприкінці. Макс 500 символів.";
+                            }
+
+                            $reply = $this->aiRouter->callOpenAI($prompt, 0.15, 350);
                             $reply = trim($reply);
                             if (empty($reply)) {
                                 $reply = mb_substr($contextText, 0, 1000);
@@ -570,12 +601,11 @@ class AgentOrchestrator
             $joined = implode("\n\n---\n\n", array_map(fn($t) => mb_substr($t, 0, 2000), $allTexts));
             try {
                 $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                    "Контекст (витяги з FAQ сторінок магазину, очищені):\n" .
-                    $joined . "\n\n" .
-                    "Сформуй корисну, структуровану відповідь українською БЕЗ Markdown/емодзі. " .
-                    "Секції за потреби: 'Оплата:', 'Доставка:', 'Повернення:', 'Контакти:'. У кожній — 2-5 чітких пунктів простими рядками. Макс 900 символів.";
+                    "Контекст (витяги з FAQ сторінок магазину, очищені):\n" . $joined . "\n\n" .
+                    "Визнач одну найрелевантнішу тему: 'Оплата' або 'Доставка' або 'Повернення' або 'Контакти'.\n" .
+                    "Відповідай ТІЛЬКИ по цій темі, коротко, без Markdown/емодзі, 3-5 рядків. Завершуй простим CTA. Макс 500 символів. Без вигадок — лише з контексту.";
 
-                $reply = $this->aiRouter->callOpenAI($prompt, 0.25, 700);
+                $reply = $this->aiRouter->callOpenAI($prompt, 0.15, 320);
                 $reply = trim($reply);
                 if (empty($reply)) {
                     $reply = mb_substr($joined, 0, 1000);
@@ -583,15 +613,14 @@ class AgentOrchestrator
                     $reply = mb_substr($reply, 0, 1600);
                 }
 
-                // Append known links for reference
-                $links = [];
-                if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
-                if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
-                if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
-                if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
-                if (!empty($links)) {
-                    $reply .= "\n\nОсь корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links));
-                }
+                // Append the single most relevant link if we can infer it from question
+                $link = null;
+                $lm = mb_strtolower($message);
+                if (str_contains($lm, 'достав')) { $link = $settings?->faq_payment_delivery_url; }
+                elseif (str_contains($lm, 'оплат')) { $link = $settings?->faq_payment_delivery_url; }
+                elseif (str_contains($lm, 'повернен') || str_contains($lm, 'обмін')) { $link = $settings?->faq_returns_url; }
+                elseif (str_contains($lm, 'контакт')) { $link = $settings?->faq_contacts_url; }
+                if (!empty($link)) { $reply .= "\n\nПосилання: " . $link; }
 
                 return [
                     'message' => $reply,

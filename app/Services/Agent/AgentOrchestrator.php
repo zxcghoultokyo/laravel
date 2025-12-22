@@ -529,10 +529,11 @@ class AgentOrchestrator
             $statusLower = mb_strtolower($statusText);
             $msgParts[] = "Статус: {$statusText}";
             
-            if (str_contains($statusLower, 'доставлено') || str_contains($statusLower, 'delivered')) {
-                $msgParts[] = "Якщо все отримали — дякуємо за покупку! Якщо є питання — напишіть.";
-            } elseif (str_contains($statusLower, 'не доставлено') || str_contains($statusLower, 'відміна') || str_contains($statusLower, 'скасов')) {
+            // Check NEGATIVE statuses FIRST (before positive ones)
+            if (str_contains($statusLower, 'не доставлено') || str_contains($statusLower, 'відміна') || str_contains($statusLower, 'скасов') || str_contains($statusLower, 'повернено')) {
                 $msgParts[] = "Виникла проблема з доставкою. " . ($supportLine ?: 'Зв\'яжіться з підтримкою для уточнення.');
+            } elseif (str_contains($statusLower, 'доставлено') || str_contains($statusLower, 'delivered')) {
+                $msgParts[] = "Якщо все отримали — дякуємо за покупку! Якщо є питання — напишіть.";
             } elseif (str_contains($statusLower, 'новий') || str_contains($statusLower, 'new')) {
                 $msgParts[] = "Замовлення прийнято в обробку. Незабаром почнемо готувати до відправки.";
             } elseif (str_contains($statusLower, 'оброб') || str_contains($statusLower, 'processing')) {

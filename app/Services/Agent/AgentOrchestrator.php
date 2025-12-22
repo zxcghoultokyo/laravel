@@ -491,6 +491,13 @@ class AgentOrchestrator
     private function handleFaq(string $message, array $plan, array $context): array
     {
         $pages = $this->horoshopDataService->getFaqPages(0);
+        if (empty($pages)) {
+            return [
+                'message' => "Поки не вдалось отримати FAQ. Напишіть, що цікавить: доставка, оплата чи повернення — і я відповім вручну.",
+                'products' => [],
+                'meta' => ['intent' => 'faq', 'pages' => []],
+            ];
+        }
         $lowerMessage = mb_strtolower($message);
 
         $settings = WidgetSettings::first();

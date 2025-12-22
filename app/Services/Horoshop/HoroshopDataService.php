@@ -32,15 +32,11 @@ class HoroshopDataService
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($parentId) {
             try {
-                $response = $this->client->request('POST', 'pages/export', [
+                $response = $this->client->request('pages/export', [
                     'parent' => $parentId,
                 ]);
 
-                if ($response['status'] !== 'OK' || empty($response['response']['pages'])) {
-                    return [];
-                }
-
-                return $response['response']['pages'] ?? [];
+                return $response['pages'] ?? [];
             } catch (\Exception $e) {
                 Log::warning('HoroshopDataService: Failed to fetch FAQ pages', [
                     'parent_id' => $parentId,
@@ -63,13 +59,9 @@ class HoroshopDataService
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
-                $response = $this->client->request('POST', 'delivery/export');
+                $response = $this->client->request('delivery/export');
 
-                if ($response['status'] !== 'OK' || empty($response['response']['delivery'])) {
-                    return [];
-                }
-
-                return $response['response']['delivery'] ?? [];
+                return $response['delivery'] ?? [];
             } catch (\Exception $e) {
                 Log::warning('HoroshopDataService: Failed to fetch delivery options', [
                     'error' => $e->getMessage(),
@@ -91,13 +83,9 @@ class HoroshopDataService
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
-                $response = $this->client->request('POST', 'delivery/exportTypes');
+                $response = $this->client->request('delivery/exportTypes');
 
-                if ($response['status'] !== 'OK' || empty($response['response']['deliveryTypes'])) {
-                    return [];
-                }
-
-                return $response['response']['deliveryTypes'] ?? [];
+                return $response['deliveryTypes'] ?? [];
             } catch (\Exception $e) {
                 Log::warning('HoroshopDataService: Failed to fetch delivery types', [
                     'error' => $e->getMessage(),
@@ -119,13 +107,9 @@ class HoroshopDataService
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
-                $response = $this->client->request('POST', 'payment/export');
+                $response = $this->client->request('payment/export');
 
-                if ($response['status'] !== 'OK' || empty($response['response']['payment'])) {
-                    return [];
-                }
-
-                return $response['response']['payment'] ?? [];
+                return $response['payment'] ?? [];
             } catch (\Exception $e) {
                 Log::warning('HoroshopDataService: Failed to fetch payment options', [
                     'error' => $e->getMessage(),
@@ -147,13 +131,9 @@ class HoroshopDataService
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
-                $response = $this->client->request('POST', 'payment/exportMethods');
+                $response = $this->client->request('payment/exportMethods');
 
-                if ($response['status'] !== 'OK' || empty($response['response']['paymentMethods'])) {
-                    return [];
-                }
-
-                return $response['response']['paymentMethods'] ?? [];
+                return $response['paymentMethods'] ?? [];
             } catch (\Exception $e) {
                 Log::warning('HoroshopDataService: Failed to fetch payment methods', [
                     'error' => $e->getMessage(),

@@ -35,6 +35,8 @@ class MeiliSetupProducts extends Command
             'category_id',
             'ai_product_type',
             'camo_group',
+            'brand',
+            'color',
         ]);
 
         // 3) які поля можна сортувати (sort в запиті)

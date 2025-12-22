@@ -57,14 +57,13 @@ class DeliveryTrackingService
         
         if (!empty($novaPoshta) && $settings) {
             $result['tracking_url'] = rtrim($settings->nova_poshta_tracking_url, '/') . "#{$novaPoshta}";
-            $result['message'] = "🚚 Ваше замовлення відправлено!\n\n"
-                . "Номер відправлення (ТТН): **{$novaPoshta}**\n\n"
-                . "Перевірити статус доставки можна на сайті Нової Пошти:\n"
-                . "[Відстежити замовлення]({$result['tracking_url']})";
+            $result['message'] = "Ваше замовлення відправлено.\n"
+                . "TTN: " . $novaPoshta . "\n"
+                . "Відстежити: " . $result['tracking_url'];
         } elseif ($deliveryStatus) {
-            $result['message'] = "📦 Статус замовлення: **{$deliveryStatus}**";
+            $result['message'] = "Статус замовлення: " . $deliveryStatus;
         } else {
-            $result['message'] = "🔄 Інформація про доставку поки не доступна";
+            $result['message'] = "Інформація про доставку поки не доступна";
         }
         
         return $result;
@@ -81,12 +80,10 @@ class DeliveryTrackingService
         
         return [
             'type' => 'order_issue',
-            'message' => "😞 На жаль, виникла проблема з вашим замовленням.\n\n"
-                . "Наша команда готова вам допомогти!\n\n"
-                . "**Способи зв'язку:**\n\n"
-                . "📞 Телефон: **{$settings->shop_phone}**\n\n"
-                . "[Форма зворотного зв'язку]({$settings->callback_form_url})\n\n"
-                . "Будь ласка, опишіть проблему, і ми швидко все вирішимо!",
+            'message' => "На жаль, виникла проблема з вашим замовленням.\n"
+                . "Ми готові допомогти.\n"
+                . "Телефон: " . ($settings->shop_phone ?? '') . "\n"
+                . "Форма зворотного зв'язку: " . ($settings->callback_form_url ?? ''),
             'phone' => $settings->shop_phone,
             'callback_url' => $settings->callback_form_url,
         ];

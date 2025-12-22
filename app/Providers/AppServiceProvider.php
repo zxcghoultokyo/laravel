@@ -13,6 +13,7 @@ use App\Services\Horoshop\HoroshopDataService;
 use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
+use App\Services\Support\FaqContentIngestService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -72,6 +73,11 @@ class AppServiceProvider extends ServiceProvider
         // FAQ
         $this->app->singleton(FaqService::class, function ($app) {
             return new FaqService();
+        });
+
+        // FAQ Content Ingest Service
+        $this->app->singleton(FaqContentIngestService::class, function ($app) {
+            return new FaqContentIngestService();
         });
 
         // HoroshopDataService

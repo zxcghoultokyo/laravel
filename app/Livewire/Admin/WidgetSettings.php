@@ -78,7 +78,7 @@ class WidgetSettings extends Component
             'faq_about_text' => 'nullable|string|max:2000',
         ]);
 
-        WidgetSettingsModel::updateOrCreate(
+        $settings = WidgetSettingsModel::updateOrCreate(
             ['domain' => $this->domain],
             [
                 'primary_color' => $this->primary_color,
@@ -108,7 +108,17 @@ class WidgetSettings extends Component
             ]
         );
 
-        session()->flash('message', 'Налаштування збережено!');
+        // Auto-ingest FAQ content if URLs provided
+        try {
+            $service = app(\App\Services\Support\FaqContentIngestService::class);
+            $service->ingest($settings);
+        } catch (\Throwable $e) {
+            // Non-fatal: show message but do not break save
+            session()->flash('message', 'Налаштування збережено! (Імпорт FAQ: ' . $e->getMessage() . ')');
+            return;
+        }
+
+        session()->flash('message', 'Налаштування збережено! (FAQ імпортовано)');
     }
 
     public function regenerateToken()

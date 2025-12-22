@@ -272,6 +272,7 @@ class MeiliProductSearchTool
                 'article' => $product->article,
                 'parent_article' => $product->parent_article,
                 'title' => $product->title,
+                'brand' => $product->brand,
                 'price' => $product->price,
                 'category_path' => $product->category_path,
                 'in_stock' => $product->in_stock,

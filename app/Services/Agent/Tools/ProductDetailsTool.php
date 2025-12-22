@@ -57,6 +57,7 @@ class ProductDetailsTool
                 'parent_article' => $product->parent_article,
                 'title' => $title,
                 'title_json' => $product->title_json,
+                'brand' => $product->brand,
                 'price' => $product->price,
                 'price_old' => $product->price_old,
                 'category_path' => $product->category_path,

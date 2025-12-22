@@ -3,6 +3,7 @@
 namespace App\Services\Agent;
 
 use App\Services\Ai\AiRouter;
+use App\Models\Brand;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Agent\Tools\DeduperTool;
@@ -85,6 +86,18 @@ class AgentOrchestrator
                 $filters = $normalized['filters'] ?? [];
             }
             
+            // Preserve brand terms: if message contains a known brand, override searchQuery with original
+            try {
+                if ($this->containsBrandWord($message)) {
+                    $searchQuery = $message;
+                    Log::info('AgentOrchestrator: brand detected, preserving original query', [
+                        'query' => $message
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AgentOrchestrator: brand detection failed', ['error' => $e->getMessage()]);
+            }
+
             // Extract filters from original message (budget, color, etc.)
             $filters = $this->extractFiltersFromMessage($message);
             
@@ -107,6 +120,36 @@ class AgentOrchestrator
             'ambiguous' => $ambiguous,
             'confidence' => $classification['confidence'] ?? 0.8,
         ];
+    }
+
+    /**
+     * Detect if the message contains any known brand word.
+     */
+    private function containsBrandWord(string $message): bool
+    {
+        $msg = mb_strtolower($message);
+        $brands = $this->getBrandNames();
+
+        foreach ($brands as $brand) {
+            $b = mb_strtolower($brand);
+            if (preg_match('/\b' . preg_quote($b, '/') . '\b/u', $msg) || str_contains($msg, $b)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function getBrandNames(): array
+    {
+        try {
+            $names = Brand::query()->pluck('name')->filter()->values()->all();
+            if (!empty($names)) {
+                return $names;
+            }
+        } catch (\Throwable $e) {
+            // Fallback list
+        }
+        return ['hoffmann', 'атака', 'ataka', 'mil-tec', 'miltec', 'avenger', 'condor', '5.11', '511'];
     }
 
     /**

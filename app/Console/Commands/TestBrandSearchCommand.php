@@ -7,11 +7,18 @@ use Illuminate\Console\Command;
 
 class TestBrandSearchCommand extends Command
 {
-    protected $signature = 'test:brand-search {query?}';
+    protected $signature = 'test:brand-search {query?} {--connection=}';
     protected $description = 'Test brand search functionality after brand priority fix';
 
     public function handle(AgentOrchestrator $orchestrator): int
     {
+        // Optionally override DB connection (e.g., --connection=mysql)
+        $conn = $this->option('connection');
+        if ($conn) {
+            config(['database.default' => $conn]);
+            $this->line("🔌 Using DB connection: {$conn}");
+        }
+
         $testCases = [
             'hoffmann',
             'атака',

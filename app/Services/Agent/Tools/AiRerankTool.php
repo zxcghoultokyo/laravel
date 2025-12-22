@@ -129,6 +129,10 @@ class AiRerankTool
 BRAND;
         }
 
+        // Precompute strings for heredoc interpolation
+        $candidateCount = count($candidates);
+        $candidateLines = implode("\n", $candidatesList);
+
         return <<<PROMPT
 Ти — AI-експерт магазину Contractor (тактичне військове спорядження).
 
@@ -137,8 +141,8 @@ BRAND;
 Запит користувача: "{$query}"
 {$filterDesc}
 
-Кандидати ({count($candidates)} товарів):
-{implode("\n", $candidatesList)}
+Кандидати ({$candidateCount} товарів):
+{$candidateLines}
 {$brandInstruction}
 
 ДУЖЕ ВАЖЛИВО:

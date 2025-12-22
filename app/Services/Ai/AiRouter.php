@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Product;
+use App\Models\Brand;
 
 class AiRouter
 {
@@ -16,7 +17,7 @@ class AiRouter
     public function __construct()
     {
         $config        = config('services.openai', []);
-        $this->model   = $config['model'] ?? 'gpt-4.1-mini';
+        $this->model   = $config['model'] ?? 'gpt-5.1';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         $this->apiKey  = $config['key'] ?? null;
     }
@@ -106,23 +107,40 @@ class AiRouter
             return $fallback;
         }
 
+        // If the query contains a known brand, avoid normalization to preserve brand terms
+        try {
+            if ($this->containsBrandWord($message)) {
+                Log::info('AiRouter::normalizeSearchQuery brand detected; preserving original', ['message' => $message]);
+                return $fallback;
+            }
+        } catch (\Throwable $e) {
+            // Non-blocking: proceed with AI normalization if brand detection fails
+            Log::warning('AiRouter::normalizeSearchQuery brand detection failed', ['error' => $e->getMessage()]);
+        }
+
         $prompt = "
-Ти — AI для магазину Contractor (тактичне військове спорядження).
+    Ти — AI для магазину Contractor (тактичне військове спорядження).
 
-Асортимент: бронежилети, шоломи, плитоноски, бронеплити, тактичний одяг (куртки, штани, берці), рюкзаки, підсумки, рукавиці, окуляри, екіпірування для військових.
+    Асортимент: бронежилети, шоломи, плитоноски, бронеплити, тактичний одяг (куртки, штани, берці), рюкзаки, підсумки, рукавиці, окуляри, екіпірування для військових.
 
-Завдання: нормалізуй запит користувача до ключових слів для пошуку.
+    Завдання: нормалізуй запит користувача до ключових слів для пошуку.
 
-Приклади:
-- 'дуже тепла куртка' → 'куртка зимова тактична утеплена'
-- 'броня' → 'бронежилет бронеплити плитоноска'
-- 'каска' → 'шолом тактичний балістичний'
-- 'берці' → 'черевики тактичні військові'
+    ВАЖЛИВО:
+    - Якщо запит містить БРЕНД (наприклад: hoffmann, атака, mil-tec, ataka, avenger, condor, 5.11) — ОБОВ'ЯЗКОВО залиш це слово у результаті без змін і транслітерацій.
+    - Не перекладай і не змінюй бренд-слова; збережи їх як є.
 
-Поверни 1-5 ключових слів/фраз. БЕЗ лапок, БЕЗ пояснень.
+    Приклади:
+    - 'дуже тепла куртка' → 'куртка зимова тактична утеплена'
+    - 'броня' → 'бронежилет бронеплити плитоноска'
+    - 'каска' → 'шолом тактичний балістичний'
+    - 'берці' → 'черевики тактичні військові'
+    - 'плитоноска атака' → 'плитоноска атака'
+    - 'патч hoffmann' → 'патч hoffmann'
 
-Запит: \"{$message}\"
-";
+    Поверни 1-5 ключових слів/фраз. БЕЗ лапок, БЕЗ пояснень.
+
+    Запит: \"{$message}\"
+    ";
 
         try {
             $response = Http::withToken($this->apiKey)
@@ -146,6 +164,44 @@ class AiRouter
             Log::error('AiRouter::normalizeSearchQuery exception: ' . $e->getMessage(), ['exception' => $e]);
             return $fallback;
         }
+    }
+
+    /**
+     * Detect if the message contains any known brand word.
+     */
+    protected function containsBrandWord(string $message): bool
+    {
+        $msg = mb_strtolower($message);
+        $brands = $this->getBrandNames();
+
+        foreach ($brands as $brand) {
+            $b = mb_strtolower($brand);
+            // Match as a word boundary or substring for short brands
+            if (preg_match('/\b' . preg_quote($b, '/') . '\b/u', $msg) || str_contains($msg, $b)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Cached list of brand names from DB (fallback to common known brands).
+     */
+    protected function getBrandNames(): array
+    {
+        return Cache::remember('ai_router_brand_names', now()->addHours(6), function () {
+            try {
+                $names = Brand::query()->pluck('name')->filter()->values()->all();
+                if (!empty($names)) {
+                    return $names;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AiRouter::getBrandNames failed to load from DB', ['error' => $e->getMessage()]);
+            }
+            // Fallback list of common brands seen in the catalog
+            return ['hoffmann', 'атака', 'ataka', 'mil-tec', 'miltec', 'avenger', 'condor', '5.11', '511'];
+        });
     }
 
     public function buildProductIndexData(Product $product): array
@@ -735,7 +791,7 @@ PROMPT;
                     ['role' => 'user', 'content' => $prompt],
                 ],
                 'temperature' => $temperature,
-                'max_tokens'  => $maxTokens,
+                'max_completion_tokens'  => $maxTokens,
             ]);
 
         $data = $response->json();

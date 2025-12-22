@@ -63,19 +63,61 @@ class OrderSearchService
 
         $filtered = $allOrders;
 
-        // Filter by phone
-        if (!empty($phone)) {
-            $filtered = array_filter($filtered, fn($o) => $this->matchPhone($o, $phone));
-        }
+        // Progressive search: try all criteria first, then relax if nothing found
+        $hasPhone = !empty($phone);
+        $hasName = !empty($name);
+        $hasEmail = !empty($email);
+        $criteriaCount = ($hasPhone ? 1 : 0) + ($hasName ? 1 : 0) + ($hasEmail ? 1 : 0);
 
-        // Filter by name
-        if (!empty($name)) {
-            $filtered = array_filter($filtered, fn($o) => $this->matchName($o, $name));
-        }
+        if ($criteriaCount > 1) {
+            // Try all criteria together first
+            $strictFiltered = $filtered;
+            if ($hasPhone) {
+                $strictFiltered = array_filter($strictFiltered, fn($o) => $this->matchPhone($o, $phone));
+            }
+            if ($hasName) {
+                $strictFiltered = array_filter($strictFiltered, fn($o) => $this->matchName($o, $name));
+            }
+            if ($hasEmail) {
+                $strictFiltered = array_filter($strictFiltered, fn($o) => $this->matchEmail($o, $email));
+            }
 
-        // Filter by email
-        if (!empty($email)) {
-            $filtered = array_filter($filtered, fn($o) => $this->matchEmail($o, $email));
+            if (!empty($strictFiltered)) {
+                $filtered = $strictFiltered;
+            } else {
+                // Nothing found with all criteria - try each individually
+                Log::info('OrderSearchService: strict search returned 0, relaxing to OR logic');
+                $relaxedFiltered = [];
+                if ($hasPhone) {
+                    $relaxedFiltered = array_merge($relaxedFiltered, array_filter($allOrders, fn($o) => $this->matchPhone($o, $phone)));
+                }
+                if ($hasName) {
+                    $relaxedFiltered = array_merge($relaxedFiltered, array_filter($allOrders, fn($o) => $this->matchName($o, $name)));
+                }
+                if ($hasEmail) {
+                    $relaxedFiltered = array_merge($relaxedFiltered, array_filter($allOrders, fn($o) => $this->matchEmail($o, $email)));
+                }
+                // Deduplicate by order ID
+                $uniqueOrders = [];
+                foreach ($relaxedFiltered as $order) {
+                    $id = $order['id'] ?? null;
+                    if ($id && !isset($uniqueOrders[$id])) {
+                        $uniqueOrders[$id] = $order;
+                    }
+                }
+                $filtered = array_values($uniqueOrders);
+            }
+        } else {
+            // Single criterion - just filter
+            if ($hasPhone) {
+                $filtered = array_filter($filtered, fn($o) => $this->matchPhone($o, $phone));
+            }
+            if ($hasName) {
+                $filtered = array_filter($filtered, fn($o) => $this->matchName($o, $name));
+            }
+            if ($hasEmail) {
+                $filtered = array_filter($filtered, fn($o) => $this->matchEmail($o, $email));
+            }
         }
 
         $filtered = array_values($filtered); // Reindex
@@ -126,12 +168,20 @@ class OrderSearchService
             $criteria['email'] = $m[0];
         }
 
-        // Extract name (anything that looks like a name: Cyrillic, capitalized)
-        // Pattern: word after "замовлення" or at the start
-        if (preg_match('/(?:замовлення|заказ|на імя|для)?\s*([А-Яа-я]{2,}\s?[А-Яа-я]{2,})/u', $message, $m)) {
-            $namePart = trim($m[1]);
-            // Don't overwrite if already extracted from structured patterns
-            if (empty($criteria['name'])) {
+        // Extract name (anything that looks like a name: Cyrillic, capitalized, 3+ chars)
+        // Pattern: capitalized Cyrillic word (not part of other words)
+        if (preg_match('/\b([А-ЯІЇЄҐ][а-яіїєґ]{2,})(?:\s+([А-ЯІЇЄҐ][а-яіїєґ]{2,}))?\b/u', $message, $m)) {
+            $namePart = trim($m[1] . (isset($m[2]) ? ' ' . $m[2] : ''));
+            // Exclude common keywords that aren't names
+            $excludeKeywords = ['Замовлення', 'Статус', 'Інформація', 'Доставка', 'Оплата', 'Повернення'];
+            $isExcluded = false;
+            foreach ($excludeKeywords as $kw) {
+                if (mb_stripos($namePart, $kw) !== false) {
+                    $isExcluded = true;
+                    break;
+                }
+            }
+            if (!$isExcluded && empty($criteria['name'])) {
                 $criteria['name'] = $namePart;
             }
         }

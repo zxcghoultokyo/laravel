@@ -129,6 +129,30 @@ class WidgetSettings extends Component
         }
     }
 
+    public function fetchFaqNow()
+    {
+        // Manually re-ingest FAQ content from configured URLs without changing other settings
+        $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
+        if (!$settings) {
+            session()->flash('message', 'Немає налаштувань для домену. Спершу збережіть форму.');
+            return;
+        }
+
+        try {
+            $service = app(\App\Services\Support\FaqContentIngestService::class);
+            $service->ingest($settings);
+            // Reload texts into component state (so user sees updates immediately)
+            $this->faq_payment_delivery_text = $settings->faq_payment_delivery_text;
+            $this->faq_returns_text = $settings->faq_returns_text;
+            $this->faq_contacts_text = $settings->faq_contacts_text;
+            $this->faq_about_text = $settings->faq_about_text;
+
+            session()->flash('message', 'FAQ контент перезавантажено з сторінок!');
+        } catch (\Throwable $e) {
+            session()->flash('message', 'Помилка імпорту FAQ: ' . $e->getMessage());
+        }
+    }
+
     public function render()
     {
         return view('livewire.admin.widget-settings')->layout('admin.layout');

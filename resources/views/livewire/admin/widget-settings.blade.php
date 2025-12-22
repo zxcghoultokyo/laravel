@@ -157,6 +157,13 @@
                             <textarea wire:model.live="faq_about_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
                         </div>
                     </div>
+
+                    <div class="mt-4">
+                        <button type="button" wire:click="fetchFaqNow" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                            Оновити FAQ з сторінок зараз
+                        </button>
+                        <p class="mt-2 text-xs text-gray-500">Перепарсить вказані URL-и і оновить тексти нижче.</p>
+                    </div>
                 </div>
 
                 <!-- API Token -->

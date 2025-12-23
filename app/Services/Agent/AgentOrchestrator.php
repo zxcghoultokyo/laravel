@@ -1430,7 +1430,7 @@ class AgentOrchestrator
 
         $chars = $p['characteristics'] ?? [];
         if (is_array($chars) && !empty($chars)) {
-            $charLines = $this->formatCharacteristics($chars, 4);
+            $charLines = $this->formatCharacteristics($chars, 6);
             if (!empty($charLines)) {
                 $lines[] = 'Характеристики:';
                 $lines[] = $charLines;
@@ -1439,12 +1439,62 @@ class AgentOrchestrator
 
         $desc = trim((string) ($p['description'] ?? ''));
         if ($desc !== '') {
-            $lines[] = 'Опис:';
-            $lines[] = mb_substr($desc, 0, 300) . (mb_strlen($desc) > 300 ? '…' : '');
+            $summary = $this->summarizeDescription($desc, 8, 900);
+            if ($summary !== '') {
+                $lines[] = 'З опису:';
+                $lines[] = $summary;
+            }
         }
 
         $lines[] = "\nПотрібно порівняти з іншим товаром або подивитися аксесуари?";
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Build a short bullet summary from product description without hallucinations.
+     */
+    private function summarizeDescription(string $desc, int $maxBullets = 6, int $maxChars = 900): string
+    {
+        $trimmed = trim($desc);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        // Cap length to avoid flooding chat
+        if (mb_strlen($trimmed) > $maxChars) {
+            $trimmed = mb_substr($trimmed, 0, $maxChars);
+        }
+
+        // Try newline-separated blocks first
+        $parts = preg_split('/[\r\n]+/u', $trimmed) ?: [];
+        $bullets = [];
+        foreach ($parts as $part) {
+            $clean = trim($part, " \t-•");
+            if ($clean === '') {
+                continue;
+            }
+            $bullets[] = '- ' . $clean;
+            if (count($bullets) >= $maxBullets) {
+                break;
+            }
+        }
+
+        // Fallback: split by sentences if no newline structure was found
+        if (empty($bullets)) {
+            $sentences = preg_split('/(?<=[.!?])\s+/u', $trimmed) ?: [];
+            foreach ($sentences as $s) {
+                $clean = trim($s, " \t-•");
+                if ($clean === '') {
+                    continue;
+                }
+                $bullets[] = '- ' . $clean;
+                if (count($bullets) >= $maxBullets) {
+                    break;
+                }
+            }
+        }
+
+        return implode("\n", $bullets);
     }
 }

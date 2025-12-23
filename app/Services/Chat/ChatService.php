@@ -54,7 +54,9 @@ class ChatService
         // НОВИЙ ПІДХІД: Використовуємо AgentOrchestrator
         // Він сам вирішує: показувати товари, уточнювати, шукати статус замовлення тощо
         try {
-            $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $sessionContext);
+            // Передаємо session_id у контексті для follow-up запитів
+            $contextWithSessionId = array_merge($sessionContext, ['session_id' => $sessionId]);
+            $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $contextWithSessionId);
             
             $intent = $agentResult['meta']['intent'] ?? null;
 

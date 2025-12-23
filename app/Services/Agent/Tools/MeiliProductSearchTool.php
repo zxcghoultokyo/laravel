@@ -391,8 +391,13 @@ class MeiliProductSearchTool
         if (!empty($filters['color'])) {
             $builder->where(function($q) use ($filters) {
                 $color = mb_strtolower($filters['color']);
+                // Try strict color match first
                 $q->whereRaw('LOWER(color) = ?', [$color])
-                  ->orWhereRaw('LOWER(brand) LIKE ?', ['%' . $color . '%']);
+                  // Brand sometimes stores camo keywords
+                  ->orWhereRaw('LOWER(brand) LIKE ?', ['%' . $color . '%'])
+                  // If color column empty, fall back to title/search_index keyword match
+                  ->orWhereRaw('LOWER(title) LIKE ?', ['%' . $color . '%'])
+                  ->orWhereRaw('LOWER(search_index) LIKE ?', ['%' . $color . '%']);
             });
         }
         

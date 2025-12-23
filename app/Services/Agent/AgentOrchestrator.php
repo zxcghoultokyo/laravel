@@ -195,7 +195,7 @@ class AgentOrchestrator
         ];
         
         if (empty($candidates)) {
-            return $this->handleNoResults($originalMessage, $searchQuery);
+            return $this->handleNoResults($originalMessage, $searchQuery, $filters);
         }
 
         // Step 2: Deduplicate by parent_article
@@ -358,7 +358,7 @@ class AgentOrchestrator
     /**
      * Handle no results scenario
      */
-    private function handleNoResults(string $originalMessage, string $searchQuery): array
+    private function handleNoResults(string $originalMessage, string $searchQuery, array $filters = []): array
     {
         return [
             'message' => "Вибачте, не знайшов товарів за запитом «{$searchQuery}». Спробуйте інші ключові слова або опишіть що саме вам потрібно.",
@@ -367,7 +367,7 @@ class AgentOrchestrator
                 'intent' => 'product_search',
                 'ambiguous' => false,
                 'refined_query' => $searchQuery,
-                'filters' => [],
+                'filters' => $filters,
                 'chosen_ids' => [],
                 'search_debug' => ['candidates_found' => 0],
             ],

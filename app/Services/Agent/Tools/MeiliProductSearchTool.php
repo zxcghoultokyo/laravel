@@ -30,8 +30,8 @@ class MeiliProductSearchTool
             // Build filter string
             $filterParts = [];
             
-            // Only include in-stock products
-            $filterParts[] = 'in_stock = true';
+            // Only include in-stock products (use 1, not true — Meili uses int)
+            $filterParts[] = 'in_stock = 1';
             
             // Budget filters
             if (!empty($filters['budget_min'])) {
@@ -92,6 +92,23 @@ class MeiliProductSearchTool
             
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
+            
+            // Retry without color filter if no hits (color may be null in index)
+            if (count($hits) === 0 && !empty($filters['color'])) {
+                Log::info('MeiliProductSearchTool: zero hits with color filter, retrying without color', [
+                    'filter' => $filterString,
+                ]);
+                $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color =') && !str_contains($f, 'camo_group ='));
+                $filterStringNoColor = implode(' AND ', $filterPartsNoColor);
+                if ($filterStringNoColor) {
+                    $searchParams['filter'] = $filterStringNoColor;
+                } else {
+                    unset($searchParams['filter']);
+                }
+                $result = $index->search($enhancedQuery, $searchParams);
+                $hits = $result->getHits();
+                Log::info('MeiliProductSearchTool: retry without color returned', ['count' => count($hits), 'filter' => $filterStringNoColor]);
+            }
             
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);
             

@@ -74,7 +74,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         Product::query()
             ->with('aiIndex')
             ->orderBy('id')
-            ->chunk($chunkSize, function ($products) use ($index, &$processedCount, $totalCount) {
+            ->chunk($chunkSize, function ($products) use ($index, $meili, &$processedCount, $totalCount) {
                 $docs = [];
 
                 // Підтягнемо raw батьківських товарів для fallback
@@ -148,10 +148,19 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 }
 
                 if (! empty($docs)) {
-                    $index->addDocuments($docs);
+                    $result = $index->addDocuments($docs);
+                    $taskId = $result['taskUid'] ?? $result['taskUid'] ?? null;
                     $processedCount += count($docs);
                     $percent = $totalCount > 0 ? round(($processedCount / $totalCount) * 100, 1) : 0;
                     echo "📤 Проіндексовано: {$processedCount}/{$totalCount} ({$percent}%)\n";
+
+                    if ($taskId !== null) {
+                        $task = $this->waitForTaskCompletion($meili, $taskId, 30);
+                        $status = $task['status'] ?? 'unknown';
+                        $err = $task['error'] ?? null;
+                        $tookMs = isset($task['duration']) ? $task['duration'] : null;
+                        echo "   • Task #{$taskId}: {$status}" . ($tookMs !== null ? " ({$tookMs})" : '') . ($err ? " — {$err}" : '') . "\n";
+                    }
                 }
             });
 
@@ -159,5 +168,32 @@ class IndexProductsToMeiliJob implements ShouldQueue
         echo "\n✅ Індексація завершена!\n";
         echo "📊 Оброблено товарів: {$processedCount}\n";
         echo "⏱️  Час виконання: {$duration} сек\n";
+    }
+
+    /**
+     * Poll Meili task status to show completion and duration.
+     */
+    protected function waitForTaskCompletion(MeiliClient $meili, int $taskId, int $timeoutSeconds = 30): array
+    {
+        $client = $meili->client();
+        $start = microtime(true);
+        $task = [];
+
+        while (true) {
+            $task = $client->getTask($taskId);
+            $status = $task['status'] ?? '';
+            if (in_array($status, ['succeeded', 'failed', 'canceled'], true)) {
+                break;
+            }
+
+            if (microtime(true) - $start > $timeoutSeconds) {
+                $task['status'] = $status ?: 'timeout';
+                break;
+            }
+
+            usleep(500_000); // 0.5s
+        }
+
+        return $task;
     }
 }

@@ -787,11 +787,16 @@ class AgentOrchestrator
     {
         // Sort by price ascending when available
         usort($products, fn($a, $b) => ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX));
-        $top = array_slice($products, 0, 3);
 
         $lines = [];
-        foreach ($top as $p) {
+        $seen = [];
+        foreach ($products as $p) {
             $title = trim((string) ($p['title'] ?? 'Товар'));
+            if ($title === '' || isset($seen[mb_strtolower($title)])) {
+                continue; // skip duplicates
+            }
+            $seen[mb_strtolower($title)] = true;
+
             $price = isset($p['price']) ? round((float) $p['price']) . ' ₴' : 'ціна не вказана';
 
             // Pick 1–2 real facts: category_path and short description if present
@@ -809,9 +814,17 @@ class AgentOrchestrator
             }
 
             $lines[] = "- {$title} — {$price}. " . implode(' / ', array_slice($facts, 0, 2));
+
+            if (count($lines) >= 3) {
+                break; // keep response short
+            }
         }
 
-        $cta = "Потрібно звузити за бюджетом/кольором чи показати ще?";
+        if (empty($lines)) {
+            return "Наразі немає товарів за цим запитом";
+        }
+
+        $cta = "Звузити за бюджетом чи кольором, або показати ще?";
 
         return implode("\n", $lines) . "\n" . $cta;
     }

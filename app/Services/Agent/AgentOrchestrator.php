@@ -1387,16 +1387,25 @@ class AgentOrchestrator
     }
 
     /**
-     * Handle follow-up request for details about last shown product
+     * Handle follow-up request for details about a product.
+     * First tries to find the product by name in the message (e.g., "розкажи про схід 24").
+     * Falls back to last shown product if no match found.
      */
     private function handleProductDetailsFollowUp(string $originalMessage, array $sessionContext): array
     {
-        $lastProduct = $sessionContext['last_shown_product'] ?? null;
-        if (!$lastProduct || empty($lastProduct['id'])) {
-            return $this->handleNoResults($originalMessage, $originalMessage);
+        // Step 1: Try to find product by name in message
+        $productId = $this->findProductIdByNameInMessage($originalMessage, $sessionContext);
+
+        // Step 2: Fallback to last shown product if not found by name
+        if (!$productId) {
+            $lastProduct = $sessionContext['last_shown_product'] ?? null;
+            if (!$lastProduct || empty($lastProduct['id'])) {
+                return $this->handleNoResults($originalMessage, $originalMessage);
+            }
+            $productId = $lastProduct['id'];
         }
 
-        $products = $this->detailsTool->getCards([$lastProduct['id']], 1);
+        $products = $this->detailsTool->getCards([$productId], 1);
         if (empty($products)) {
             return $this->handleNoResults($originalMessage, $originalMessage);
         }
@@ -1413,6 +1422,90 @@ class AgentOrchestrator
                 'chosen_ids' => [$product['id']],
             ],
         ];
+    }
+
+    /**
+     * Try to find product ID by matching title in message against last_chosen_ids.
+     * Example: "розкажи про схід 24" should find product with title containing "схід 24"
+     */
+    private function findProductIdByNameInMessage(string $message, array $sessionContext): ?int
+    {
+        $lastChosenIds = $sessionContext['last_chosen_ids'] ?? [];
+        if (empty($lastChosenIds)) {
+            return null;
+        }
+
+        try {
+            // Fetch all products from last_chosen_ids to search by title
+            $candidates = $this->detailsTool->getCards($lastChosenIds, count($lastChosenIds));
+            if (empty($candidates)) {
+                return null;
+            }
+
+            // Extract key terms from message (similar to query normalization)
+            $messageKeywords = $this->extractSearchTermsFromMessage($message);
+            if (empty($messageKeywords)) {
+                return null;
+            }
+
+            // Score each candidate: how many keywords match in title
+            $scored = [];
+            foreach ($candidates as $product) {
+                $title = mb_strtolower($product['title'] ?? '');
+                $matchCount = 0;
+                foreach ($messageKeywords as $kw) {
+                    if (str_contains($title, $kw)) {
+                        $matchCount++;
+                    }
+                }
+                if ($matchCount > 0) {
+                    $scored[] = [
+                        'id' => $product['id'],
+                        'title' => $product['title'],
+                        'matches' => $matchCount,
+                    ];
+                }
+            }
+
+            if (empty($scored)) {
+                return null;
+            }
+
+            // Return product with highest match count
+            usort($scored, function ($a, $b) {
+                return $b['matches'] - $a['matches'];
+            });
+
+            Log::info('AgentOrchestrator: found product by name', [
+                'message' => $message,
+                'matched_product' => $scored[0]['title'],
+                'match_count' => $scored[0]['matches'],
+            ]);
+
+            return $scored[0]['id'];
+        } catch (\Throwable $e) {
+            Log::warning('AgentOrchestrator: findProductIdByNameInMessage failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Extract key search terms from message (remove stop-words like "розкажи про", "опис")
+     */
+    private function extractSearchTermsFromMessage(string $message): array
+    {
+        $stopWords = ['розкажи', 'про', 'опис', 'що', 'за', 'характеристик', 'деталь', 'розмір', 'параметр', 'якої', 'для'];
+        $words = preg_split('/\s+/u', mb_strtolower(trim($message))) ?: [];
+        
+        $filtered = [];
+        foreach ($words as $word) {
+            $clean = preg_replace('/[^\p{L}\p{N}]/u', '', $word);
+            if (!empty($clean) && !in_array($clean, $stopWords) && mb_strlen($clean) > 1) {
+                $filtered[] = $clean;
+            }
+        }
+        
+        return $filtered;
     }
 
     /**

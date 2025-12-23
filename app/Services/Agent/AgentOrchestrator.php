@@ -175,6 +175,12 @@ class AgentOrchestrator
         $sessionId = $context['session_id'] ?? null;
         $sessionContext = $this->loadSessionContext($sessionId);
 
+        // Detect if this is a follow-up details request about the last product
+        if ($this->isDetailsFollowUp($originalMessage) && !empty($sessionContext['last_shown_product_id'])) {
+            // Return details of the last shown product instead of searching
+            return $this->handleProductDetailsFollowUp($originalMessage, $sessionContext);
+        }
+
         $searchQuery = $plan['search_query'] ?? $originalMessage;
         $filters = $plan['filters'] ?? [];
         
@@ -248,11 +254,20 @@ class AgentOrchestrator
         $message = $this->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
 
         // Persist lightweight session context
+        $lastProduct = !empty($products) ? $products[0] : null;
         $this->saveSessionContext($sessionId, [
             'last_category' => $this->guessCategoryFromProducts($products),
             'last_budget_min' => $filters['budget_min'] ?? null,
             'last_budget_max' => $filters['budget_max'] ?? null,
             'shown_products' => array_column($products, 'id'),
+            'last_shown_product_id' => $lastProduct['id'] ?? null,
+            'last_shown_product' => $lastProduct ? [
+                'id' => $lastProduct['id'],
+                'title' => $lastProduct['title'],
+                'article' => $lastProduct['article'],
+                'price' => $lastProduct['price'],
+                'category_path' => $lastProduct['category_path'],
+            ] : null,
         ]);
         
         // Step 6: Add follow-up question if ambiguous (AFTER products)
@@ -1179,7 +1194,7 @@ class AgentOrchestrator
             return [];
         }
 
-        $key = "agent_ctx:{$sessionId}";
+        $key = "chat_ctx_{$sessionId}";
         $ctx = Cache::get($key, []);
         return is_array($ctx) ? $ctx : [];
     }
@@ -1190,7 +1205,7 @@ class AgentOrchestrator
             return;
         }
 
-        $key = "agent_ctx:{$sessionId}";
+        $key = "chat_ctx_{$sessionId}";
         $existing = $this->loadSessionContext($sessionId);
         $merged = array_merge($existing, $data);
         Cache::put($key, $merged, now()->addHours(6));
@@ -1354,5 +1369,82 @@ class AgentOrchestrator
         if (str_contains($m, 'шолом') || str_contains($m, 'каск') || str_contains($m, 'helmet')) { return 'шоломи'; }
         if (str_contains($m, 'берц') || str_contains($m, 'черевик') || str_contains($m, 'взутт') || str_contains($m, 'boot')) { return 'взуття'; }
         return null;
+    }
+
+    /**
+     * Detect if message is a follow-up asking for details about the last product
+     */
+    private function isDetailsFollowUp(string $message): bool
+    {
+        $m = mb_strtolower($message);
+        $patterns = ['розкажи про', 'розкажи', 'опис', 'що за', 'характеристик', 'деталь', 'розмір', 'параметр'];
+        foreach ($patterns as $p) {
+            if (str_contains($m, $p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Handle follow-up request for details about last shown product
+     */
+    private function handleProductDetailsFollowUp(string $originalMessage, array $sessionContext): array
+    {
+        $lastProduct = $sessionContext['last_shown_product'] ?? null;
+        if (!$lastProduct || empty($lastProduct['id'])) {
+            return $this->handleNoResults($originalMessage, $originalMessage);
+        }
+
+        $products = $this->detailsTool->getCards([$lastProduct['id']], 1);
+        if (empty($products)) {
+            return $this->handleNoResults($originalMessage, $originalMessage);
+        }
+
+        $product = $products[0];
+        $message = $this->buildProductDetailMessage($product);
+
+        return [
+            'message' => $message,
+            'products' => $products,
+            'meta' => [
+                'intent' => 'product_details',
+                'is_followup' => true,
+                'chosen_ids' => [$product['id']],
+            ],
+        ];
+    }
+
+    /**
+     * Build detailed message about a single product
+     */
+    private function buildProductDetailMessage(array $p): string
+    {
+        $lines = [];
+        $lines[] = $p['title'];
+        $lines[] = $this->formatPrice($p['price'] ?? null);
+
+        if (!empty($p['category_path'])) {
+            $lines[] = 'Категорія: ' . $p['category_path'];
+        }
+
+        $chars = $p['characteristics'] ?? [];
+        if (is_array($chars) && !empty($chars)) {
+            $charLines = $this->formatCharacteristics($chars, 4);
+            if (!empty($charLines)) {
+                $lines[] = 'Характеристики:';
+                $lines[] = $charLines;
+            }
+        }
+
+        $desc = trim((string) ($p['description'] ?? ''));
+        if ($desc !== '') {
+            $lines[] = 'Опис:';
+            $lines[] = mb_substr($desc, 0, 300) . (mb_strlen($desc) > 300 ? '…' : '');
+        }
+
+        $lines[] = "\nПотрібно порівняти з іншим товаром або подивитися аксесуари?";
+
+        return implode("\n", $lines);
     }
 }

@@ -1425,35 +1425,72 @@ class AgentOrchestrator
     }
 
     /**
-     * Try to find product ID by matching title in message against last_chosen_ids.
+     * Try to find product ID by matching title in message.
+     * First checks last_chosen_ids, then searches Meili for product by name.
      * Example: "розкажи про схід 24" should find product with title containing "схід 24"
      */
     private function findProductIdByNameInMessage(string $message, array $sessionContext): ?int
     {
-        $lastChosenIds = $sessionContext['last_chosen_ids'] ?? [];
-        if (empty($lastChosenIds)) {
+        // Extract key terms from message
+        $messageKeywords = $this->extractSearchTermsFromMessage($message);
+        if (empty($messageKeywords)) {
+            Log::info('AgentOrchestrator: no keywords extracted from message', ['message' => $message]);
             return null;
         }
 
+        $searchQuery = implode(' ', $messageKeywords);
+        Log::info('AgentOrchestrator: searching product by name', ['message' => $message, 'search_query' => $searchQuery]);
+
+        // Step 1: Try last_chosen_ids first (fast path)
+        $lastChosenIds = $sessionContext['last_chosen_ids'] ?? [];
+        if (!empty($lastChosenIds)) {
+            $candidateId = $this->findProductInCandidates($lastChosenIds, $messageKeywords);
+            if ($candidateId) {
+                return $candidateId;
+            }
+        }
+
+        // Step 2: Search Meili for product by name (slower, but finds any product)
         try {
-            // Fetch all products from last_chosen_ids to search by title
-            $candidates = $this->detailsTool->getCards($lastChosenIds, count($lastChosenIds));
-            if (empty($candidates)) {
+            $results = $this->searchTool->search($searchQuery, [], 10);
+            if (!empty($results)) {
+                $candidateId = $this->findProductInCandidates(
+                    array_column($results, 'id'),
+                    $messageKeywords
+                );
+                if ($candidateId) {
+                    Log::info('AgentOrchestrator: found product via Meili search', [
+                        'search_query' => $searchQuery,
+                        'product_id' => $candidateId,
+                    ]);
+                    return $candidateId;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('AgentOrchestrator: Meili search failed in follow-up', ['error' => $e->getMessage()]);
+        }
+
+        Log::info('AgentOrchestrator: no product found by name', ['message' => $message, 'search_query' => $searchQuery]);
+        return null;
+    }
+
+    /**
+     * Helper: find product in candidate list by matching keywords in title
+     */
+    private function findProductInCandidates(array $candidateIds, array $keywords): ?int
+    {
+        try {
+            $products = $this->detailsTool->getCards($candidateIds, count($candidateIds));
+            if (empty($products)) {
                 return null;
             }
 
-            // Extract key terms from message (similar to query normalization)
-            $messageKeywords = $this->extractSearchTermsFromMessage($message);
-            if (empty($messageKeywords)) {
-                return null;
-            }
-
-            // Score each candidate: how many keywords match in title
+            // Score each product: count keyword matches in title
             $scored = [];
-            foreach ($candidates as $product) {
+            foreach ($products as $product) {
                 $title = mb_strtolower($product['title'] ?? '');
                 $matchCount = 0;
-                foreach ($messageKeywords as $kw) {
+                foreach ($keywords as $kw) {
                     if (str_contains($title, $kw)) {
                         $matchCount++;
                     }
@@ -1476,15 +1513,15 @@ class AgentOrchestrator
                 return $b['matches'] - $a['matches'];
             });
 
-            Log::info('AgentOrchestrator: found product by name', [
-                'message' => $message,
-                'matched_product' => $scored[0]['title'],
+            Log::info('AgentOrchestrator: matched product in candidates', [
+                'product_id' => $scored[0]['id'],
+                'product_title' => $scored[0]['title'],
                 'match_count' => $scored[0]['matches'],
             ]);
 
             return $scored[0]['id'];
         } catch (\Throwable $e) {
-            Log::warning('AgentOrchestrator: findProductIdByNameInMessage failed', ['error' => $e->getMessage()]);
+            Log::warning('AgentOrchestrator: findProductInCandidates failed', ['error' => $e->getMessage()]);
             return null;
         }
     }

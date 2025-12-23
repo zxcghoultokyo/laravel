@@ -774,123 +774,46 @@ class AgentOrchestrator
      */
     private function buildProductNarrative(array $products, string $originalMessage, array $filters, array $sessionContext, ?string $sessionId): string
     {
-        $productsForPrompt = array_slice($products, 0, 5);
+        $productsForPrompt = array_slice($products, 0, 4);
         if (empty($productsForPrompt)) {
             return "Ось варіанти";
         }
 
-        $flow = $this->detectProductFlow($originalMessage);
+        // Concise deterministic narrative: no LLM, no вигадки
+        return $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
+    }
 
-        // For comparison/details/followup, use deterministic fallbacks (no LLM needed)
-        if ($flow !== 'discovery') {
-            $categoryHint = $this->guessCategoryFromProducts($productsForPrompt) ?? '';
-            $fallback = $this->buildFallbackNarrative($productsForPrompt, $flow, $categoryHint, $filters, $originalMessage);
-            if (!empty($fallback)) {
-                return $fallback;
-            }
-        }
+    private function buildConciseNarrative(array $products, array $filters, string $originalMessage): string
+    {
+        // Sort by price ascending when available
+        usort($products, fn($a, $b) => ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX));
+        $top = array_slice($products, 0, 3);
 
-        // For discovery, use LLM to generate thoughtful narrative
-        $sessionBlock = json_encode([
-            'last_category' => $sessionContext['last_category'] ?? null,
-            'last_budget_min' => $sessionContext['last_budget_min'] ?? null,
-            'last_budget_max' => $sessionContext['last_budget_max'] ?? null,
-            'shown_products' => $sessionContext['shown_products'] ?? [],
-            'rejected_products' => $sessionContext['rejected_products'] ?? [],
-            'last_cta_type' => $sessionContext['last_cta_type'] ?? null,
-        ], JSON_UNESCAPED_UNICODE);
+        $lines = [];
+        foreach ($top as $p) {
+            $title = trim((string) ($p['title'] ?? 'Товар'));
+            $price = isset($p['price']) ? round((float) $p['price']) . ' ₴' : 'ціна не вказана';
 
-        $productsBlock = json_encode(array_map(function ($p) {
-            return [
-                'id' => $p['id'] ?? null,
-                'title' => $p['title'] ?? '',
-                'price' => $p['price'] ?? null,
-                'category_path' => $p['category_path'] ?? '',
-                'ai_product_type' => $p['ai_product_type'] ?? null,
-                'description' => mb_substr((string)($p['description'] ?? ''), 0, 600),
-                'characteristics' => $p['characteristics'] ?? [],
-                'raw' => $p['raw'] ?? null,
-            ];
-        }, $productsForPrompt), JSON_UNESCAPED_UNICODE);
+            // Pick 1–2 real facts: category_path and short description if present
+            $facts = [];
+            $cat = trim((string) ($p['category_path'] ?? ''));
+            if ($cat !== '') { $facts[] = $cat; }
 
-        // Override category hint by message if explicit
-        $categoryHint = $this->guessCategoryFromProducts($productsForPrompt) ?? '';
-        $messageCategory = $this->detectCategoryFromMessage($originalMessage);
-        if ($messageCategory) { $categoryHint = $messageCategory; }
-
-        $system = <<<SYS
-Ти — AI-консультант e-commerce (тактичне спорядження, але універсально для Horoshop).
-Правила: тільки факти з наданих товарів (title, price, description, characteristics, raw). Дивись СПОЧАТКУ description, ПОТІМ characteristics. Якщо в description є інфо — використай її. Якщо даних справді нема ніде — скажи "не вказано". Спершу товари/ролі, потім коротке пояснення, потім ОДИН CTA. Ролі замість SKU (бюджетний / збалансований / посилений). Не вигадуй, не посилайся на популярність. Без Markdown/емодзі. 1 CTA, не повторюй той самий тип CTA поспіль.
-SYS;
-
-        $instructions = [
-            'discovery' => "Флоу: Product Discovery. 1) Рамка 1–2 речення що врахував. 2) 3 ролі: роль + товар + ціна + 1–2 факти. 3) CTA: впевненість якщо даних досить, або уточнення (бюджет/умови) якщо даних мало. Пояснення після списку.",
-            'comparison' => "Флоу: Product Comparison. Короткий висновок у чому різниця; 3–5 фактів різниць (вага/матеріал/клас/сумісність/комплектація); CTA-впевненість або пропозиція сценарію. Тільки факти.",
-            'details' => "Флоу: Product Details. 1–2 речення що це; 3 релевантні характеристики з наданих; CTA-продовження (порівняти або показати аксесуари).",
-            'followup' => "Флоу: Product Followup (аксесуари/completion). Навіщо це корисно; 2–3 сумісні доповнення з коротким поясненням; фраза 'не обов’язково, але зручніше'; CTA-продовження (показати сумісні).",
-        ];
-
-        $flowInstruction = $instructions[$flow] ?? $instructions['discovery'];
-
-        $budgetMin = $filters['budget_min'] ?? '-';
-        $budgetMax = $filters['budget_max'] ?? '-';
-        $color = $filters['color'] ?? '-';
-
-        $prompt = <<<PROMPT
-{$system}
-
-Поточний флоу: PRODUCT_DISCOVERY
-Категорія (припущення): {$categoryHint}
-Фільтри: {$budgetMin} / {$budgetMax} грн, колір {$color}
-Контекст сесії: {$sessionBlock}
-Повідомлення користувача: "{$originalMessage}"
-
-Дані товарів (JSON):
-{$productsBlock}
-
-Ти генеруєш структуровану пораду: 1) Коротка рамка (1–2 речення). 2) 3 ролі товарів (бюджетний / збалансований / посилений) з назвами, цінами, 1–2 фактами. 3) Один CTA: впевненість якщо даних досить, або уточнення (бюджет/умови) якщо потрібно звузити.
-
-Вихід: українською, без Markdown/емодзі, спершу список, потім CTA.
-PROMPT;
-
-        try {
-            $reply = $this->aiRouter->callOpenAI($prompt, 0.4, 500);
-            $reply = trim($reply);
-
-            // Detect CTA type for session memory
-            $lr = mb_strtolower($reply);
-            $ctaType = null;
-            if (str_contains($lr, 'звужу') || str_contains($lr, 'підкажи') || str_contains($lr, 'скаж')) {
-                $ctaType = 'clarification';
-            } elseif (str_contains($lr, 'радив') || str_contains($lr, 'логічніше') || str_contains($lr, 'рекоменд')) {
-                $ctaType = 'confidence';
-            } elseif (str_contains($lr, 'порівняти') || str_contains($lr, 'показати')) {
-                $ctaType = 'continuation';
+            $desc = trim((string) ($p['description'] ?? ''));
+            if ($desc !== '') {
+                $facts[] = mb_substr($desc, 0, 90) . (mb_strlen($desc) > 90 ? '…' : '');
             }
 
-            if ($sessionId && $ctaType) {
-                $this->saveSessionContext($sessionId, ['last_cta_type' => $ctaType]);
+            if (empty($facts)) {
+                $facts[] = 'деталі не вказано';
             }
 
-            if (!empty($reply)) {
-                return $reply;
-            }
-        } catch (\Throwable $e) {
-            Log::warning('buildProductNarrative: AI failed', ['error' => $e->getMessage()]);
+            $lines[] = "- {$title} — {$price}. " . implode(' / ', array_slice($facts, 0, 2));
         }
 
-        // Deterministic fallback if AI unavailable/empty
-        $fallback = $this->buildFallbackNarrative($productsForPrompt, $flow, $categoryHint, $filters, $originalMessage);
-        if (!empty($fallback)) {
-            return $fallback;
-        }
+        $cta = "Потрібно звузити за бюджетом/кольором чи показати ще?";
 
-        $categoryHint = $this->guessCategoryFromProducts($productsForPrompt);
-        if ($categoryHint) {
-            return "Ось, що маємо по категорії «{$categoryHint}»";
-        }
-
-        return "Ось варіанти";
+        return implode("\n", $lines) . "\n" . $cta;
     }
 
     private function buildFallbackNarrative(array $products, string $flow, ?string $categoryHint, array $filters, string $originalMessage): string

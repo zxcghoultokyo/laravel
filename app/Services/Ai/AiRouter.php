@@ -97,84 +97,102 @@ class AiRouter
 
     /**
      * AI-нормалізація тексту для пошуку товарів.
+     * Витягує ключові терміни і ознаки (колір, паттерн) з природної мови,
+     * видаляючи стоп-фрази типу "привіт", "допоможи", "підібрати".
      */
     public function normalizeSearchQuery(string $message): string
     {
-        $fallback = $message;
-
-        if (empty($this->apiKey)) {
-            Log::warning('AiRouter::normalizeSearchQuery called without OPENAI_API_KEY');
-            return $fallback;
+        // Спочатку спробуємо просту очистку: витягнути ключові слова + ознаки (цвіт/паттерн)
+        $cleaned = $this->extractKeywordsFromMessage($message);
+        
+        // Якщо очистка видала щось змістовне (не просто вихідне повідомлення), повернемо його
+        if ($cleaned !== $message && !empty($cleaned)) {
+            Log::info('AiRouter::normalizeSearchQuery extracted keywords', ['original' => $message, 'cleaned' => $cleaned]);
+            return $cleaned;
         }
 
-        // If the query contains a known brand, avoid normalization to preserve brand terms
-        try {
-            if ($this->containsBrandWord($message)) {
-                Log::info('AiRouter::normalizeSearchQuery brand detected; preserving original', ['message' => $message]);
-                return $fallback;
-            }
-        } catch (\Throwable $e) {
-            // Non-blocking: proceed with AI normalization if brand detection fails
-            Log::warning('AiRouter::normalizeSearchQuery brand detection failed', ['error' => $e->getMessage()]);
-        }
-
-        // If query is already specific (contains clear product type), preserve it
-        $lowerMsg = mb_strtolower($message);
-        $specificTerms = ['плитоноск', 'бронеплит', 'шолом', 'каск', 'берц', 'куртк', 'штан', 'рюкзак', 'підсумок', 'рукавиц', 'окуляр', 'helmet', 'plate', 'carrier', 'boots'];
-        foreach ($specificTerms as $term) {
-            if (str_contains($lowerMsg, $term)) {
-                Log::info('AiRouter::normalizeSearchQuery specific term detected; preserving query', ['message' => $message]);
-                return $fallback;
-            }
-        }
-
-        $prompt = "
-    Ти — AI для магазину Contractor (тактичне військове спорядження).
-
-    Асортимент: бронежилети, шоломи, плитоноски, бронеплити, тактичний одяг (куртки, штани, берці), рюкзаки, підсумки, рукавиці, окуляри, екіпірування для військових.
-
-    Завдання: нормалізуй запит користувача до 1-2 ОСНОВНИХ ключових слів для пошуку. НЕ додавай синоніми.
-
-    ВАЖЛИВО:
-    - Якщо запит містить БРЕНД — залиш його без змін.
-    - НЕ розширюй запит синонімами (наприклад, для 'плитоноска' НЕ додавай 'розгрузка').
-    - Залишай найпростіший варіант для Meilisearch.
-
-    Приклади:
-    - 'дуже тепла куртка' → 'куртка зимова'
-    - 'броня' → 'бронежилет'
-    - 'каска' → 'шолом'
-    - 'берці' → 'черевики'
-    - 'плитоноска атака' → 'плитоноска атака'
-
-    Поверни 1-2 слова. БЕЗ лапок, БЕЗ пояснень.
-
-    Запит: \"{$message}\"
-    ";
-
-        try {
-            $response = Http::withToken($this->apiKey)
-                ->post($this->baseUrl . '/chat/completions', [
-                    'model'       => $this->model,
-                    'messages'    => [
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'temperature' => 0.2,
-                ]);
-
-            $data = $response->json();
-
-            if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
-                Log::error('AiRouter::normalizeSearchQuery invalid OpenAI response', ['data' => $data]);
-                return $fallback;
-            }
-
-            return trim((string) $data['choices'][0]['message']['content']);
-        } catch (\Throwable $e) {
-            Log::error('AiRouter::normalizeSearchQuery exception: ' . $e->getMessage(), ['exception' => $e]);
-            return $fallback;
-        }
+        // Fallback: якщо очистка не допомогла, поверни оригіналь
+        return $message;
     }
+
+    /**
+     * Витягує ключові терміни й ознаки з запиту користувача.
+     * Видаляє стоп-фрази: привіт, допоможи, підібрати, показати, порівняй, тощо.
+     * Залишає продукти, кольори, бренди, паттерни.
+     */
+    protected function extractKeywordsFromMessage(string $message): string
+    {
+        $lowerMsg = mb_strtolower($message);
+        
+        // Списки стоп-слів (фрази, які не несуть змісту для пошуку)
+        $stopWords = [
+            'привіт', 'привіт,', 'привет', 'привет,', 'hi', 'hello',
+            'допоможи', 'помоги', 'допоміж', 'допоміжи',
+            'підібрати', 'подобрать', 'порекомендуй', 'рекомендуй',
+            'показати', 'показать', 'знайти', 'найти',
+            'какой', 'какая', 'який', 'яка', 'какие', 'які',
+            'или', 'або', 'чи',
+            'тобто', 'це', 'того', 'щоб', 'для', 'у', 'в', 'з', 'до', 'на', 'що',
+            'ще', 'еще', 'більше', 'больше', 'ще раз', 'еще раз',
+        ];
+        
+        // Списки ключових продуктів, кольорів, паттернів, брендів для збереження
+        $keywordPatterns = [
+            // Продукти
+            'плитоноск', 'бронеплит', 'шолом', 'каск', 'берц', 'куртк', 'штан',
+            'жилет', 'рюкзак', 'підсумок', 'рукавиц', 'окуляр', 'взуття', 'черевик',
+            'helmet', 'plate', 'carrier', 'armor', 'jacket', 'pants', 'boots',
+            
+            // Кольори/паттерни (найважливіші для пошуку плитоносок)
+            'чорн', 'черн', 'білий', 'белый', 'сірий', 'серый', 'зелен', 'коричнев',
+            'олив', 'койот', 'пісок', 'песок', 'мультикам', 'мультикам',
+            'пікселі', 'пиксел', 'цифра', 'digital', 'camouflage', 'camo',
+            'khaki', 'tan', 'brown', 'green', 'black', 'white', 'grey', 'gray',
+            
+            // Специфічні моделі (бренди/артикули)
+            'crye', 'ops', 'spiritus', 'haley', 'ferro', 'mayflower',
+        ];
+        
+        // Розбиваємо на слова та фільтруємо
+        $words = preg_split('/\s+/u', trim($lowerMsg));
+        $filtered = [];
+        
+        foreach ($words as $word) {
+            // Пропускаємо пусті слова
+            if (empty(trim($word))) {
+                continue;
+            }
+            
+            // Видаляємо пунктуацію, але зберігаємо дефіси (для "crye-precision" тощо)
+            $cleaned = preg_replace('/[^\p{L}\p{N}\-]/u', '', $word);
+            if (empty($cleaned)) {
+                continue;
+            }
+            
+            // Пропускаємо чисті стоп-слова
+            if (in_array($cleaned, $stopWords)) {
+                continue;
+            }
+            
+            // Зберігаємо слова, які матчать ключові паттерни
+            $isKeyword = false;
+            foreach ($keywordPatterns as $pattern) {
+                if (str_contains($cleaned, $pattern)) {
+                    $isKeyword = true;
+                    break;
+                }
+            }
+            
+            if ($isKeyword) {
+                $filtered[] = $cleaned;
+            }
+        }
+        
+        // Повертаємо об'єднаний результат
+        return implode(' ', $filtered);
+    }
+
+
 
     /**
      * Detect if the message contains any known brand word.

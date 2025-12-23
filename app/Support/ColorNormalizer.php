@@ -15,7 +15,11 @@ class ColorNormalizer
         if ($v === '') return null;
 
         $map = [
-            'multicam' => ['multicam', 'мультикам', 'мультикаму', 'мультікам', 'multicamo', 'multi-cam'],
+            'multicam' => [
+                'multicam', 'мультикам', 'мультикаму', 'мультікам', 'multicamo', 'multi-cam',
+                'mc', 'mcb', 'mctp', 'mtb', 'mtp',
+                'multicam tropic', 'multicam black', 'multicam arid', 'multicam tropic', 'multicam black',
+            ],
             'black'    => ['black', 'чорний', 'чорна', 'чорне', 'черный', 'чёрный', 'чёрна'],
             'olive'    => ['olive', 'олива', 'оливковий', 'оливковая', 'оливкове', 'оливковий'],
             'coyote'   => ['coyote', 'койот', 'койоті', 'coyote brown', 'coyotebrown'],

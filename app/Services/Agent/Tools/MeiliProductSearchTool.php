@@ -41,22 +41,10 @@ class MeiliProductSearchTool
                 $filterParts[] = "price <= {$filters['budget_max']}";
             }
             
-            // Color filter: prefer normalized field, fallback to legacy `color` values (different locales/cases)
+            // Color filter: strictly by normalized field
             if (!empty($filters['color'])) {
                 $canonical = strtolower((string) $filters['color']);
-                // normalized field first
-                $clauses = ["color_norm = '{$canonical}'"];
-                // include common literal variants for legacy `color` values
-                try {
-                    $variants = \App\Support\ColorNormalizer::literalVariants($canonical);
-                } catch (\Throwable $e) {
-                    $variants = [$canonical];
-                }
-                foreach ($variants as $v) {
-                    $vv = str_replace("'", "\\'", (string) $v);
-                    $clauses[] = "color = '{$vv}'";
-                }
-                $filterParts[] = '(' . implode(' OR ', $clauses) . ')';
+                $filterParts[] = "color_norm = '{$canonical}'";
             }
             
             // Camo filter (would need to be in products table)
@@ -105,12 +93,12 @@ class MeiliProductSearchTool
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
             
-            // Retry without color filter if no hits (color fields may not match)
+            // Retry without color filter if no hits (color_norm mismatch)
             if (count($hits) === 0 && !empty($filters['color'])) {
-                Log::info('MeiliProductSearchTool: zero hits with color filter, retrying without color', [
+                Log::info('MeiliProductSearchTool: zero hits with color_norm filter, retrying without color', [
                     'filter' => $filterString,
                 ]);
-                $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color =') && !str_contains($f, 'color_norm ='));
+                $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color_norm ='));
                 $filterStringNoColor = implode(' AND ', $filterPartsNoColor);
                 if ($filterStringNoColor) {
                     $searchParams['filter'] = $filterStringNoColor;

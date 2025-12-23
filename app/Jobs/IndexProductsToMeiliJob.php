@@ -142,8 +142,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'ai_category' => is_string($p->aiIndex->ai_category ?? null) ? trim($p->aiIndex->ai_category) : '',
                         'has_ai_type' => (bool) ($p->aiIndex->product_type ?? null),
                         'has_ai_category' => (bool) ($p->aiIndex->ai_category ?? null),
-                        // Normalized fields for robust filtering
-                        'color_norm' => ColorNormalizer::toNorm((string) ($p->color ?? '')) ?? '',
+                        // Normalized fields for robust filtering (use null instead of empty string)
+                        'color_norm' => ColorNormalizer::toNorm((string) ($p->color ?? '')),
                     ];
                 }
 

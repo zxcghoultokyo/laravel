@@ -41,10 +41,10 @@ class MeiliProductSearchTool
                 $filterParts[] = "price <= {$filters['budget_max']}";
             }
             
-            // Color/Camo filter: support datasets that use either 'color' or 'camo'
+            // Color/Camo filter: support datasets that use either 'color' or 'camo_group'
             if (!empty($filters['color'])) {
                 $val = str_replace("'", "\\'", (string) $filters['color']);
-                $filterParts[] = "(color = '{$val}' OR camo = '{$val}')";
+                $filterParts[] = "(color = '{$val}' OR camo_group = '{$val}')";
             }
             
             // Camo filter (would need to be in products table)

@@ -20,6 +20,23 @@ class AiRerankTool
             return $candidates; // No need to re-rank
         }
 
+        // Pre-filter: if query contains specific product model names, prioritize exact matches
+        $exactMatches = $this->findExactTitleMatches($candidates, $query);
+        if (!empty($exactMatches)) {
+            Log::info('AiRerankTool: exact title matches found', [
+                'query' => $query,
+                'exact_matches' => count($exactMatches),
+            ]);
+            // If we have enough exact matches, return them without AI
+            if (count($exactMatches) >= 2) {
+                return array_slice($exactMatches, 0, min(5, count($exactMatches)));
+            }
+            // Otherwise, prioritize exact matches in candidates before AI re-ranking
+            $candidates = array_merge($exactMatches, array_filter($candidates, function ($c) use ($exactMatches) {
+                return !in_array($c['id'] ?? null, array_column($exactMatches, 'id'));
+            }));
+        }
+
         try {
             // Detect brand from query
             $detectedBrand = $this->detectBrandFromQuery($query, $candidates);
@@ -81,6 +98,43 @@ class AiRerankTool
             ]);
             return array_slice($candidates, 0, $limit);
         }
+    }
+
+    /**
+     * Find candidates whose title contains significant tokens from the query
+     * E.g., query="схід 24" should match "Плитоноска 'Схід 24' Піксель"
+     */
+    private function findExactTitleMatches(array $candidates, string $query): array
+    {
+        // Extract significant words from query (3+ chars, skip common words)
+        $tokens = preg_split('/[\s\p{P}]+/u', mb_strtolower($query), -1, PREG_SPLIT_NO_EMPTY);
+        $tokens = array_filter($tokens, fn($t) => mb_strlen($t) >= 2);
+        $commonWords = ['для', 'від', 'до', 'та', 'або', 'що', 'як', 'коли', 'де', 'у', 'в'];
+        $tokens = array_filter($tokens, fn($t) => !in_array($t, $commonWords));
+        
+        if (empty($tokens)) {
+            return [];
+        }
+
+        $exactMatches = [];
+        foreach ($candidates as $c) {
+            $title = mb_strtolower($c['title'] ?? '');
+            $matchCount = 0;
+            foreach ($tokens as $token) {
+                if (str_contains($title, $token)) {
+                    $matchCount++;
+                }
+            }
+            // If at least 50% of query tokens found in title, it's a match
+            if ($matchCount >= ceil(count($tokens) * 0.5)) {
+                $c['_match_score'] = $matchCount / count($tokens);
+                $exactMatches[] = $c;
+            }
+        }
+        
+        // Sort by match score descending
+        usort($exactMatches, fn($a, $b) => ($b['_match_score'] ?? 0) <=> ($a['_match_score'] ?? 0));
+        return $exactMatches;
     }
 
     private function buildRerankPrompt(array $candidates, string $query, array $filters, ?string $detectedBrand = null): string

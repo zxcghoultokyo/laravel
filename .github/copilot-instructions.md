@@ -1,154 +1,72 @@
-# Copilot Instructions for AI Coding Agents
+# Copilot Instructions (AI Coding Agents)
 
-## Project Overview
-This is a Laravel 12 e-commerce application for a tactical equipment store with AI-powered product search, chat interface, and integration with the Horoshop platform. The system uses OpenAI for intent classification and query normalization.
+Purpose: make agents productive fast in this Laravel 12 AI‑commerce backend. Keep to existing patterns and use the services layer.
 
-## Architecture Patterns
+Big Picture
+- Core logic lives in services: [app/Services](app/Services) (Ai, Agent, Chat, Search, Horoshop, Catalog).
+- Chat flow: quick rules → `AiRouter::classify()` → Agent Orchestrator → normalized response.
+- Data sources: Horoshop → MySQL (`products.raw`) → AI enrichment (`product_ai_index`) → Meilisearch indexing.
+- Fallbacks everywhere: if OpenAI or Meili are off, keyword parsing and Eloquent search kick in.
 
-### Service-Based Architecture
-- **Service Layer**: Core business logic separated into namespace-organized services in `app/Services/`
-  - `Ai/`: AI routing, recommendations, product indexing, scenario handlers
-  - `Chat/`: Conversation flow, session management, multi-intent handling
-  - `Search/`: Product search engine, query parsing, ranking
-  - `Horoshop/`: External platform integration (sync, orders, products)
-  - `Catalog/`: Category management
+Key Components
+- `ChatService`: orchestrates chat/session and formatting. [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php)
+- `AiRouter`: OpenAI classification/normalization/rerank with safe fallbacks. [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php)
+- `AgentOrchestrator`: plan‑execute‑respond for `product_search`. [app/Services/Agent/AgentOrchestrator.php](app/Services/Agent/AgentOrchestrator.php)
+- Agent tools: Meili search, details, dedupe, accessory filter, AI rerank. [app/Services/Agent/Tools](app/Services/Agent/Tools)
+- `SearchQueryParser`: price/color parsing, synonyms. [app/Services/Search/SearchQueryParser.php](app/Services/Search/SearchQueryParser.php)
+- Catalog index/aliases: [app/Services/Catalog/CategoryIndexService.php](app/Services/Catalog/CategoryIndexService.php)
 
-### Intent-Driven Conversation Flow
-The chat system (`ChatService`) uses intent classification to route user messages:
-1. **Quick Rules**: Pattern-based shortcuts for common queries (categories, shortcuts)
-2. **AI Routing** (`AiRouter::classify()`): OpenAI classifies intent (PRODUCT_SEARCH, ORDER_STATUS, FAQ, SMALL_TALK, FALLBACK)
-3. **Handler Dispatch**: Specific handlers process each intent type
-4. **Response Normalization**: Standardized JSON response format with `type`, `text`, `data`, `session_id`
+API & Contract
+- Primary endpoint: POST /api/chat → [app/Http/Controllers/Api/ChatController.php](app/Http/Controllers/Api/ChatController.php)
+- Response format is normalized: `{ type: 'text|products', text, products?, session_id, meta? }`.
+- Other endpoints: order status/search, debug, admin jobs in [routes/api.php](routes/api.php).
 
-**Key Files**: 
-- [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php#L1) — main orchestrator
-- [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php#L1) — OpenAI integration
+Data & Models
+- `Product` stores raw vendor payload in `raw` (JSON) and `search_index`. [app/Models/Product.php](app/Models/Product.php)
+- `ProductAiIndex` adds `ai_product_type`, `ai_category`, `keywords`. [app/Models/ProductAiIndex.php](app/Models/ProductAiIndex.php)
+- `Category` and `CategoryAlias` support path normalization and alias mapping. [app/Models](app/Models)
+- Meili documents are built from real DB fields (no invented columns).
 
-### Eloquent Models & Relationships
-- `Product`: Main product entity with JSON arrays (title_json, images, raw), search_index, popularity metrics
-- `Category`: Hierarchical categories with path normalization (path_norm, slug)
-- `CategoryAlias`: Maps alternative category names to canonical Category
-- `Scenario`: Generated from product combinations, drives AI recommendations
-- `ProductTag`, `ProductSynonym`, `ColorSynonym`: Enrichment layers for search
+Jobs & Queues
+- Meili indexing: [app/Jobs/IndexProductsToMeiliJob.php](app/Jobs/IndexProductsToMeiliJob.php) (supports legacy `chunk`).
+- Category scenarios/scripts and index rebuild jobs live in [app/Jobs](app/Jobs).
+- Queue runs alongside dev server; production uses `meili,default` queues.
 
-**Pattern**: Models use Eloquent casts for type safety (`json`, `boolean`, `integer`, `array`)
+Config & Env
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt‑5.1), `OPENAI_BASE_URL`. See [config/services.php](config/services.php).
+- Meili: `MEILI_ENABLED`, `MEILI_HOST`, `MEILI_MASTER_KEY`, index name in [config/meilisearch.php](config/meilisearch.php).
+- Horoshop: `HOROSHOP_DOMAIN`, `HOROSHOP_API_LOGIN`, `HOROSHOP_API_PASSWORD`.
 
-### Background Jobs & Queue Processing
-- `GenerateCategoryScenariosJob`: Builds scenario data from product combinations
-- `GenerateCategoryScriptsJob`: AI-generates product recommendation scripts per category
-- `RebuildCategoryIndexJob`: Rebuilds search indices
-- `SyncHoroshopProductsJob`: Syncs external product data
+Developer Workflows
+- Dev loop: `composer run dev` (PHP server, queue listener, logs, Vite).
+- Tests: `composer run test` (SQLite in‑memory). Quick agent smoke: `php test-agent.php`.
+- Useful: `php artisan pail` (logs), `php artisan queue:work --queue=meili,default --tries=1`.
 
-**Setup**: Uses Laravel queue system with Composer script `composer run dev` running queue listener concurrently
+Conventions & Patterns
+- Services registered as singletons in [app/Providers/AppServiceProvider.php](app/Providers/AppServiceProvider.php).
+- Session context stored by `ChatService` keyed by `session_id` (cache).
+- Prefer service methods over facades; keep controller thin and returns normalized payloads.
+- If Meili disabled, fall back to Eloquent LIKE with filters; if OpenAI fails, use keyword extraction.
 
-## Critical Development Workflows
+When Adding Features
+- Put business logic in a new service in the correct domain (e.g., `app/Services/Search/*`).
+- Add API routes in [routes/api.php](routes/api.php) and a controller in [app/Http/Controllers/Api](app/Http/Controllers/Api).
+- Extend jobs in [app/Jobs](app/Jobs) for background work; stay idempotent and consider legacy payloads.
+- Update config under [config](config) and guard with env fallbacks.
 
-### Local Development
-```bash
-composer run dev
-```
-Starts concurrently:
-- PHP development server
-- Queue listener (--tries=1 for dev)
-- Log tail (pail)
-- Vite build watcher
+References
+- High‑level overview: [README.md](README.md). Agent details: [AGENT_ORCHESTRATOR.md](AGENT_ORCHESTRATOR.md). Examples: [docs/CHAT_EXAMPLES.md](docs/CHAT_EXAMPLES.md).
 
-### Testing
-```bash
-composer run test
-```
-Clears config, then runs PHPUnit (Unit + Feature suites). Uses SQLite in-memory database for speed.
+Meili Documents (example)
+- Built in [app/Jobs/IndexProductsToMeiliJob.php](app/Jobs/IndexProductsToMeiliJob.php); settings set `filterableAttributes` and `searchableAttributes` idempotently.
+- Fields: id, article, parent_article, title, category_path, brand, color, search_index, description, attributes_text, attrs, in_stock, display_in_showcase, quantity, presence_raw, price, price_old, we_recommended, popularity, orders_count, views_count, added_to_cart_count, updated_at_ts, ai_product_type, ai_category, has_ai_type, has_ai_category.
+- Sources: DB columns from `products` + `aiIndex` relation; description/attributes via [app/Support/ProductRawExtractor.php](app/Support/ProductRawExtractor.php) with parent fallback.
+- Minimal doc shape:
+	{ id, title, category_path, price, in_stock, ai_product_type, updated_at_ts }
 
-### Code Quality
-- **Linting**: `laravel/pint` (PSR-12 standard)
-- **Testing Framework**: PHPUnit 11.5+
-- **Frontend**: Vite + Tailwind CSS 4 + Laravel plugin
-
-## Project-Specific Conventions
-
-### API Response Standardization
-All chat/response endpoints return:
-```json
-{
-  "type": "text|products|order_status|...",
-  "text": "human-readable message",
-  "data": { "...": "structured data" },
-  "session_id": "uuid-for-session-tracking"
-}
-```
-See [app/Http/Controllers/Api/ChatController.php](app/Http/Controllers/Api/ChatController.php#L1) for pattern.
-
-### Session Management
-- Sessions tracked via UUID in `session_id`
-- Context stored in Laravel Cache using session key pattern
-- Fallback: Generate UUID client-side if not provided
-- See `ChatService::loadSessionContext()` / `saveSessionContext()`
-
-### AI Integration Pattern
-- **AiRouter**: Central service for all OpenAI calls
-- **Configuration**: Uses `config('services.openai')` with env vars: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`
-- **Error Handling**: Always provides fallbacks (defaults to keyword extraction) if API fails
-- **Prompts**: Multi-intent classification, query normalization stored in method strings
-
-### Horoshop Integration
-- `HoroshopClient`: Low-level HTTP wrapper
-- `ProductService`: Orchestrates product sync with AiRouter for smart categorization
-- `OrderService`: Handles order status queries
-- **Config**: `HOROSHOP_DOMAIN`, `HOROSHOP_API_LOGIN`, `HOROSHOP_API_PASSWORD` in env
-
-**Dependency Injection**: Registered as singletons in [app/Providers/AppServiceProvider.php](app/Providers/AppServiceProvider.php#L1)
-
-### Database & Migrations
-- **Strategy**: Forward-compatible migrations; old ones often have version numbers (2025_12_10...)
-- **Naming**: Descriptive: `alter_search_index_in_products`, `upd_product_synonyms_table`
-- **Casts**: Leverage Eloquent casts for JSON/array fields to avoid string manipulation
-
-## Integration Points & External Dependencies
-
-### OpenAI API
-- Endpoint: configurable (default: https://api.openai.com/v1)
-- Model: configurable (default: gpt-5.1)
-- Used by: `AiRouter`, `ProductIndexBuilder`, scenario generation
-- Rate limits & costs: Monitor in logs, implement caching where possible (ProductIndexBuilder uses Cache)
-
-### Horoshop Platform
-- **Sync Direction**: Horoshop → Laravel (products, orders)
-- **Data Flow**: Horoshop raw responses stored as-is in `Product.raw` JSON field
-- **Reliability**: Implements retry logic; see AdminJobsController for manual triggers
-
-### Laravel Service Container
-- All services registered as singletons in AppServiceProvider
-- Constructor injection used consistently
-- Facade access available but not preferred (use injected services)
-
-## Frontend Integration
-- **Entry Point**: [resources/js/app.js](resources/js/app.js) + [resources/css/app.css](resources/css/app.css)
-- **Build Tool**: Vite 7 with Laravel plugin
-- **Styling**: Tailwind CSS 4 via @tailwindcss/vite
-- **API Client**: Axios included in package.json
-- **Watch Ignored**: Storage framework views (to prevent rebuilds)
-
-## Key Commands & Helpers
-- `php artisan test` — run tests
-- `php artisan queue:listen` — listen for background jobs
-- `php artisan pail` — tail logs in real-time
-- `npm run dev` — Vite watch mode
-- `npm run build` — Production Vite build
-- Admin endpoints: `/admin/jobs/sync-horoshop`, `/admin/jobs/rebuild-category-index`
-
-## File Structure Rules
-- **Controllers**: `app/Http/Controllers/Api/*.php` (API-only currently)
-- **Services**: `app/Services/{Domain}/*.php` (business logic isolated)
-- **Models**: `app/Models/*.php` (Eloquent entities)
-- **Jobs**: `app/Jobs/*.php` (queued background work)
-- **Config**: `config/*.php` (env-driven, read-only at runtime)
-- **Routes**: `routes/api.php` (primary), `routes/console.php` (CLI)
-- **Migrations**: `database/migrations/*.php` (timestamped naming)
-
-## When Adding New Features
-1. **Business Logic**: Create in `app/Services/{Domain}/NewService.php`
-2. **External Data**: Add model in `app/Models/New.php` with appropriate casts
-3. **Background Work**: Extend base Job class, register in AppServiceProvider if needed
-4. **API Endpoint**: Add route in `routes/api.php`, controller in `app/Http/Controllers/Api/`
-5. **Configuration**: Add to `config/services.php` with env fallbacks
-6. **Testing**: Place Feature tests in `tests/Feature/`, Unit tests in `tests/Unit/`
+Session Search State
+- Cache keys: ctx `chat_ctx_{buildSessionKey(session_id)}`; search `chat_search_{buildSessionKey(session_id)}`.
+- State fields: `category_key`, `filters` (budget_min/max, camo, color), `negative_terms`, `shown_ids`, `last_question`.
+- Methods: load/save ctx — `loadSessionContext()`, `saveSessionContext()`; search — `loadSearchState()`, `saveSearchState()`, `mergeSearchState()` in [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php).
+- UX helpers: follow‑up detection `isFollowupMoreRequest()`; force show `shouldForceShowProducts()`; shown ids appended after each product reply.
+- Defaults: when `category_key==='plate_carriers'` — auto add negatives (e.g., "панель", "pouch", "cummerbund").

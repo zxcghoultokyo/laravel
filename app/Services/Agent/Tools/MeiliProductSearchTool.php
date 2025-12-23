@@ -30,8 +30,8 @@ class MeiliProductSearchTool
             // Build filter string
             $filterParts = [];
             
-            // Only include in-stock products (use 1, not true — Meili uses int)
-            $filterParts[] = 'in_stock = 1';
+            // Only include in-stock products
+            $filterParts[] = 'in_stock = true';
             
             // Budget filters
             if (!empty($filters['budget_min'])) {
@@ -41,10 +41,22 @@ class MeiliProductSearchTool
                 $filterParts[] = "price <= {$filters['budget_max']}";
             }
             
-            // Color/Camo filter: support datasets that use either 'color' or 'camo_group'
+            // Color filter: prefer normalized field, fallback to legacy `color` values (different locales/cases)
             if (!empty($filters['color'])) {
-                $val = str_replace("'", "\\'", (string) $filters['color']);
-                $filterParts[] = "(color = '{$val}' OR camo_group = '{$val}')";
+                $canonical = strtolower((string) $filters['color']);
+                // normalized field first
+                $clauses = ["color_norm = '{$canonical}'"];
+                // include common literal variants for legacy `color` values
+                try {
+                    $variants = \App\Support\ColorNormalizer::literalVariants($canonical);
+                } catch (\Throwable $e) {
+                    $variants = [$canonical];
+                }
+                foreach ($variants as $v) {
+                    $vv = str_replace("'", "\\'", (string) $v);
+                    $clauses[] = "color = '{$vv}'";
+                }
+                $filterParts[] = '(' . implode(' OR ', $clauses) . ')';
             }
             
             // Camo filter (would need to be in products table)
@@ -93,12 +105,12 @@ class MeiliProductSearchTool
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
             
-            // Retry without color filter if no hits (color may be null in index)
+            // Retry without color filter if no hits (color fields may not match)
             if (count($hits) === 0 && !empty($filters['color'])) {
                 Log::info('MeiliProductSearchTool: zero hits with color filter, retrying without color', [
                     'filter' => $filterString,
                 ]);
-                $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color =') && !str_contains($f, 'camo_group ='));
+                $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color =') && !str_contains($f, 'color_norm ='));
                 $filterStringNoColor = implode(' AND ', $filterPartsNoColor);
                 if ($filterStringNoColor) {
                     $searchParams['filter'] = $filterStringNoColor;

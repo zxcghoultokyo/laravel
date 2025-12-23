@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Product;
 use App\Services\Search\MeiliClient;
 use App\Support\ProductRawExtractor;
+use App\Support\ColorNormalizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -53,7 +54,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'in_stock', 'quantity', 'display_in_showcase',
+                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'in_stock', 'quantity', 'display_in_showcase',
                 ])),
                 'searchableAttributes' => [
                     'title',
@@ -141,6 +142,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'ai_category' => is_string($p->aiIndex->ai_category ?? null) ? trim($p->aiIndex->ai_category) : '',
                         'has_ai_type' => (bool) ($p->aiIndex->product_type ?? null),
                         'has_ai_category' => (bool) ($p->aiIndex->ai_category ?? null),
+                        // Normalized fields for robust filtering
+                        'color_norm' => ColorNormalizer::toNorm((string) ($p->color ?? '')) ?? '',
                     ];
                 }
 

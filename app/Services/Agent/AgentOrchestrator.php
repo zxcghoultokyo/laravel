@@ -814,14 +814,27 @@ class AgentOrchestrator
 
         $titleA = trim((string) ($a['title'] ?? 'Товар A'));
         $titleB = trim((string) ($b['title'] ?? 'Товар B'));
-        $priceA = isset($a['price']) ? round((float)$a['price']) . ' ₴' : 'ціна не вказана';
-        $priceB = isset($b['price']) ? round((float)$b['price']) . ' ₴' : 'ціна не вказана';
+        $priceA = $this->formatPrice($a['price'] ?? null);
+        $priceB = $this->formatPrice($b['price'] ?? null);
         $catA = trim((string) ($a['category_path'] ?? ''));
         $catB = trim((string) ($b['category_path'] ?? ''));
 
         $lines = [];
         $lines[] = "1) {$titleA} — {$priceA}" . ($catA ? " ({$catA})" : '');
+        $factsA = $this->formatProductFacts($a);
+        if (!empty($factsA)) {
+            $lines[] = '   Факти: ' . implode('; ', $factsA);
+        }
         $lines[] = "2) {$titleB} — {$priceB}" . ($catB ? " ({$catB})" : '');
+        $factsB = $this->formatProductFacts($b);
+        if (!empty($factsB)) {
+            $lines[] = '   Факти: ' . implode('; ', $factsB);
+        }
+
+        $diffs = $this->formatComparisonDiffs($a, $b);
+        if (!empty($diffs)) {
+            $lines[] = 'Різниця: ' . implode('; ', $diffs);
+        }
 
         $cta = "Потрібно іншу пару для порівняння або показати сумісні аксесуари?";
         return implode("\n", $lines) . "\n" . $cta;
@@ -957,7 +970,7 @@ class AgentOrchestrator
         return '';
     }
 
-    private function formatCharacteristics($characteristics): string
+    private function formatCharacteristics($characteristics, int $limit = 3): string
     {
         if (!is_array($characteristics) || empty($characteristics)) {
             return '';
@@ -966,7 +979,7 @@ class AgentOrchestrator
         $out = [];
         $count = 0;
         foreach ($characteristics as $key => $value) {
-            if ($count >= 3) {
+            if ($count >= $limit) {
                 break;
             }
             if (is_string($key) && (is_string($value) || is_numeric($value))) {
@@ -1010,6 +1023,99 @@ class AgentOrchestrator
         }
 
         return 'discovery';
+    }
+
+    private function formatComparisonDiffs(array $a, array $b): array
+    {
+        $diffs = [];
+
+        $levelA = $this->extractLevel($a);
+        $levelB = $this->extractLevel($b);
+        if ($levelA && $levelB && $levelA !== $levelB) {
+            $diffs[] = "Рівень: {$levelA} vs {$levelB}";
+        }
+
+        $brandA = trim((string) ($a['brand'] ?? ''));
+        $brandB = trim((string) ($b['brand'] ?? ''));
+        if ($brandA && $brandB && mb_strtolower($brandA) !== mb_strtolower($brandB)) {
+            $diffs[] = "Бренд: {$brandA} vs {$brandB}";
+        }
+
+        $catA = trim((string) ($a['category_path'] ?? ''));
+        $catB = trim((string) ($b['category_path'] ?? ''));
+        if ($catA && $catB && mb_strtolower($catA) !== mb_strtolower($catB)) {
+            $diffs[] = "Категорія: {$catA} vs {$catB}";
+        }
+
+        $colorA = trim((string) ($a['color'] ?? ''));
+        $colorB = trim((string) ($b['color'] ?? ''));
+        if ($colorA && $colorB && mb_strtolower($colorA) !== mb_strtolower($colorB)) {
+            $diffs[] = "Колір: {$colorA} vs {$colorB}";
+        }
+
+        $priceA = $a['price'] ?? null;
+        $priceB = $b['price'] ?? null;
+        if (is_numeric($priceA) && is_numeric($priceB) && (float)$priceA !== (float)$priceB) {
+            $diff = round(abs((float)$priceA - (float)$priceB));
+            $diffs[] = "Ціна: {$this->formatPrice($priceA)} vs {$this->formatPrice($priceB)} (різниця ~{$diff} ₴)";
+        }
+
+        return array_slice($diffs, 0, 3);
+    }
+
+    private function formatProductFacts(array $p, int $limit = 2): array
+    {
+        $facts = [];
+
+        $level = $this->extractLevel($p);
+        if ($level) {
+            $facts[] = "Level: {$level}";
+        }
+
+        $chars = $p['characteristics'] ?? [];
+        if (is_array($chars) && !empty($chars)) {
+            foreach ($chars as $k => $v) {
+                if (count($facts) >= $limit) { break; }
+                if (!is_string($k) || $k === '' || $v === null) { continue; }
+                $vText = is_scalar($v) ? (string) $v : '';
+                if ($vText === '') { continue; }
+                $facts[] = trim($k) . ': ' . trim($vText);
+            }
+        }
+
+        if (count($facts) < $limit) {
+            $desc = trim((string) ($p['description'] ?? ''));
+            if ($desc !== '') {
+                $facts[] = mb_substr($desc, 0, 80) . (mb_strlen($desc) > 80 ? '…' : '');
+            }
+        }
+
+        return array_slice($facts, 0, $limit);
+    }
+
+    private function extractLevel(array $product): ?string
+    {
+        $haystack = mb_strtolower(trim((string) (($product['title'] ?? '') . ' ' . ($product['category_path'] ?? ''))));
+        if ($haystack === '') {
+            return null;
+        }
+
+        if (preg_match('/level\s*([1-9])/iu', $haystack, $m)) {
+            return 'Level ' . $m[1];
+        }
+
+        return null;
+    }
+
+    private function formatPrice($price): string
+    {
+        if ($price === null || $price === '') {
+            return 'ціна не вказана';
+        }
+        if (!is_numeric($price)) {
+            return 'ціна не вказана';
+        }
+        return round((float)$price) . ' ₴';
     }
     private function pickComparisonPair(array $products, string $message): array
     {

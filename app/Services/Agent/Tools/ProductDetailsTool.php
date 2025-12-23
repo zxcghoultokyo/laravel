@@ -4,6 +4,7 @@ namespace App\Services\Agent\Tools;
 
 use App\Models\Product;
 use Illuminate\Support\Facades\Log;
+use App\Support\ProductRawExtractor;
 
 class ProductDetailsTool
 {
@@ -24,6 +25,20 @@ class ProductDetailsTool
         $products = Product::whereIn('id', $ids)
             ->where('in_stock', true)
             ->get();
+
+        // Prefetch parent raw payloads to reuse for description/characteristics fallbacks
+        $parentArticles = $products->pluck('parent_article')->filter()->unique()->all();
+        $parentRawMap = [];
+        if ($parentArticles) {
+            Product::query()
+                ->whereIn('article', $parentArticles)
+                ->get(['article', 'raw'])
+                ->each(function ($parent) use (&$parentRawMap) {
+                    $parentRawMap[$parent->article] = is_array($parent->raw ?? null)
+                        ? $parent->raw
+                        : (array) ($parent->raw ?? []);
+                });
+        }
         
         // Maintain order from $ids
         $productsById = $products->keyBy('id');
@@ -51,6 +66,13 @@ class ProductDetailsTool
                 $title = $product->title_json['ua'];
             }
             
+            $raw = is_array($product->raw ?? null) ? $product->raw : (array) ($product->raw ?? []);
+            $parentRaw = [];
+            $parentArticle = (string) ($product->parent_article ?? '');
+            if ($parentArticle !== '' && isset($parentRawMap[$parentArticle])) {
+                $parentRaw = $parentRawMap[$parentArticle];
+            }
+
             return [
                 'id' => $product->id,
                 'article' => $product->article,
@@ -70,6 +92,9 @@ class ProductDetailsTool
                 'color' => $product->color,
                 'popularity' => $product->popularity,
                 'ai_product_type' => $product->ai_product_type ?? '__unknown__',
+                // Enriched fields for narratives (purely from stored data)
+                'description' => ProductRawExtractor::description($raw, 'ua', $parentRaw),
+                'characteristics' => ProductRawExtractor::attributes($raw, 'ua', $parentRaw),
             ];
         })->toArray();
     }

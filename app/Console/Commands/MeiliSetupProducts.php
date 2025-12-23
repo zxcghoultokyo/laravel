@@ -32,11 +32,11 @@ class MeiliSetupProducts extends Command
             'in_stock',
             'display_in_showcase',
             'price',
-            'category_id',
             'ai_product_type',
-            'camo_group',
             'brand',
             'color',
+            'color_norm',
+            'quantity',
         ]);
 
         // 3) які поля можна сортувати (sort в запиті)

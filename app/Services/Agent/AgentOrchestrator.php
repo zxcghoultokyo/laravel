@@ -1388,142 +1388,94 @@ class AgentOrchestrator
 
     /**
      * Handle follow-up request for details about a product.
-     * First tries to find the product by name in the message (e.g., "розкажи про схід 24").
-     * Falls back to last shown product if no match found.
+     * Searches Meilisearch by product name mentioned in message.
+     * Example: "розкажи про схід 24" → search "схід 24" → verify 80%+ match → show details
      */
     private function handleProductDetailsFollowUp(string $originalMessage, array $sessionContext): array
     {
-        // Step 1: Try to find product by name in message
-        $productId = $this->findProductIdByNameInMessage($originalMessage, $sessionContext);
-
-        // Step 2: Fallback to last shown product if not found by name
-        if (!$productId) {
-            $lastProduct = $sessionContext['last_shown_product'] ?? null;
-            if (!$lastProduct || empty($lastProduct['id'])) {
-                return $this->handleNoResults($originalMessage, $originalMessage);
-            }
-            $productId = $lastProduct['id'];
-        }
-
-        $products = $this->detailsTool->getCards([$productId], 1);
-        if (empty($products)) {
+        // Extract search keywords from message (e.g., "розкажи про схід 24" → "схід 24")
+        $messageKeywords = $this->extractSearchTermsFromMessage($originalMessage);
+        if (empty($messageKeywords)) {
             return $this->handleNoResults($originalMessage, $originalMessage);
         }
 
-        $product = $products[0];
-        $message = $this->buildProductDetailMessage($product);
-
-        return [
-            'message' => $message,
-            'products' => $products,
-            'meta' => [
-                'intent' => 'product_details',
-                'is_followup' => true,
-                'chosen_ids' => [$product['id']],
-            ],
-        ];
-    }
-
-    /**
-     * Try to find product ID by matching title in message.
-     * First checks last_chosen_ids, then searches Meili for product by name.
-     * Example: "розкажи про схід 24" should find product with title containing "схід 24"
-     */
-    private function findProductIdByNameInMessage(string $message, array $sessionContext): ?int
-    {
-        // Extract key terms from message
-        $messageKeywords = $this->extractSearchTermsFromMessage($message);
-        if (empty($messageKeywords)) {
-            Log::info('AgentOrchestrator: no keywords extracted from message', ['message' => $message]);
-            return null;
-        }
-
         $searchQuery = implode(' ', $messageKeywords);
-        Log::info('AgentOrchestrator: searching product by name', ['message' => $message, 'search_query' => $searchQuery]);
-
-        // Step 1: Try last_chosen_ids first (fast path)
-        $lastChosenIds = $sessionContext['last_chosen_ids'] ?? [];
-        if (!empty($lastChosenIds)) {
-            $candidateId = $this->findProductInCandidates($lastChosenIds, $messageKeywords);
-            if ($candidateId) {
-                return $candidateId;
-            }
-        }
-
-        // Step 2: Search Meili for product by name (slower, but finds any product)
+        
+        // Search Meilisearch for product by name
         try {
-            $results = $this->searchTool->search($searchQuery, [], 10);
-            if (!empty($results)) {
-                $candidateId = $this->findProductInCandidates(
-                    array_column($results, 'id'),
-                    $messageKeywords
-                );
-                if ($candidateId) {
-                    Log::info('AgentOrchestrator: found product via Meili search', [
-                        'search_query' => $searchQuery,
-                        'product_id' => $candidateId,
-                    ]);
-                    return $candidateId;
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('AgentOrchestrator: Meili search failed in follow-up', ['error' => $e->getMessage()]);
-        }
-
-        Log::info('AgentOrchestrator: no product found by name', ['message' => $message, 'search_query' => $searchQuery]);
-        return null;
-    }
-
-    /**
-     * Helper: find product in candidate list by matching keywords in title
-     */
-    private function findProductInCandidates(array $candidateIds, array $keywords): ?int
-    {
-        try {
-            $products = $this->detailsTool->getCards($candidateIds, count($candidateIds));
-            if (empty($products)) {
-                return null;
+            $results = $this->searchTool->search($searchQuery, [], 5);
+            if (empty($results)) {
+                return $this->handleNoResults($originalMessage, $searchQuery);
             }
 
-            // Score each product: count keyword matches in title
-            $scored = [];
-            foreach ($products as $product) {
-                $title = mb_strtolower($product['title'] ?? '');
-                $matchCount = 0;
-                foreach ($keywords as $kw) {
-                    if (str_contains($title, $kw)) {
-                        $matchCount++;
-                    }
-                }
-                if ($matchCount > 0) {
-                    $scored[] = [
-                        'id' => $product['id'],
-                        'title' => $product['title'],
-                        'matches' => $matchCount,
-                    ];
-                }
-            }
-
-            if (empty($scored)) {
-                return null;
-            }
-
-            // Return product with highest match count
-            usort($scored, function ($a, $b) {
-                return $b['matches'] - $a['matches'];
-            });
-
-            Log::info('AgentOrchestrator: matched product in candidates', [
-                'product_id' => $scored[0]['id'],
-                'product_title' => $scored[0]['title'],
-                'match_count' => $scored[0]['matches'],
+            // Take top result
+            $topResult = $results[0];
+            
+            // Confidence check: does the title contain enough keywords?
+            $confidence = $this->calculateTitleMatchConfidence($topResult['title'] ?? '', $messageKeywords);
+            
+            Log::info('AgentOrchestrator: follow-up product match', [
+                'query_keywords' => $messageKeywords,
+                'found_title' => $topResult['title'],
+                'confidence' => $confidence,
             ]);
 
-            return $scored[0]['id'];
+            // Require 80%+ match confidence
+            if ($confidence < 0.8) {
+                Log::info('AgentOrchestrator: confidence too low, rejecting match', [
+                    'confidence' => $confidence,
+                    'threshold' => 0.8,
+                ]);
+                return $this->handleNoResults($originalMessage, $searchQuery);
+            }
+
+            // Fetch full product details
+            $products = $this->detailsTool->getCards([$topResult['id']], 1);
+            if (empty($products)) {
+                return $this->handleNoResults($originalMessage, $searchQuery);
+            }
+
+            $product = $products[0];
+            $message = $this->buildProductDetailMessage($product);
+
+            return [
+                'message' => $message,
+                'products' => $products,
+                'meta' => [
+                    'intent' => 'product_details',
+                    'is_followup' => true,
+                    'confidence' => $confidence,
+                    'chosen_ids' => [$product['id']],
+                ],
+            ];
         } catch (\Throwable $e) {
-            Log::warning('AgentOrchestrator: findProductInCandidates failed', ['error' => $e->getMessage()]);
-            return null;
+            Log::warning('AgentOrchestrator: follow-up search failed', ['error' => $e->getMessage()]);
+            return $this->handleNoResults($originalMessage, $searchQuery ?? $originalMessage);
         }
+    }
+
+    /**
+     * Calculate confidence that product title matches the keywords.
+     * Returns 0.0 to 1.0 where 1.0 = all keywords found.
+     * Example: title="Плитоноска Схід 24", keywords=["схід", "24"] → 1.0
+     * Example: title="Плитоноска НАТО", keywords=["схід", "24"] → 0.0
+     */
+    private function calculateTitleMatchConfidence(string $title, array $keywords): float
+    {
+        if (empty($keywords)) {
+            return 0.0;
+        }
+
+        $titleLower = mb_strtolower($title);
+        $matches = 0;
+
+        foreach ($keywords as $kw) {
+            if (str_contains($titleLower, $kw)) {
+                $matches++;
+            }
+        }
+
+        return $matches / count($keywords);
     }
 
     /**

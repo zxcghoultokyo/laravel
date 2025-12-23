@@ -779,8 +779,52 @@ class AgentOrchestrator
             return "Ось варіанти";
         }
 
+        $flow = $this->detectProductFlow($originalMessage);
+
+        if ($flow === 'comparison') {
+            return $this->buildComparisonNarrative($productsForPrompt, $originalMessage);
+        }
+
         // Concise deterministic narrative: no LLM, no вигадки
         return $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
+    }
+
+    private function buildComparisonNarrative(array $products, string $originalMessage): string
+    {
+        // Dedup by title and pick best matching pair
+        $uniq = [];
+        foreach ($products as $p) {
+            $title = trim((string) ($p['title'] ?? ''));
+            if ($title === '') { continue; }
+            $key = mb_strtolower($title);
+            if (isset($uniq[$key])) { continue; }
+            $uniq[$key] = $p;
+        }
+        $products = array_values($uniq);
+        if (count($products) === 1) {
+            // nothing to compare, fall back to single-line output
+            $p = $products[0];
+            $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
+            $cat = trim((string) ($p['category_path'] ?? ''));
+            $line = ($p['title'] ?? 'Товар') . ' — ' . $price . ($cat ? " ({$cat})" : '');
+            return $line . "\n" . "Потрібно показати альтернативу для порівняння?";
+        }
+
+        [$a, $b] = $this->pickComparisonPair($products, $originalMessage);
+
+        $titleA = trim((string) ($a['title'] ?? 'Товар A'));
+        $titleB = trim((string) ($b['title'] ?? 'Товар B'));
+        $priceA = isset($a['price']) ? round((float)$a['price']) . ' ₴' : 'ціна не вказана';
+        $priceB = isset($b['price']) ? round((float)$b['price']) . ' ₴' : 'ціна не вказана';
+        $catA = trim((string) ($a['category_path'] ?? ''));
+        $catB = trim((string) ($b['category_path'] ?? ''));
+
+        $lines = [];
+        $lines[] = "1) {$titleA} — {$priceA}" . ($catA ? " ({$catA})" : '');
+        $lines[] = "2) {$titleB} — {$priceB}" . ($catB ? " ({$catB})" : '');
+
+        $cta = "Потрібно іншу пару для порівняння або показати сумісні аксесуари?";
+        return implode("\n", $lines) . "\n" . $cta;
     }
 
     private function buildConciseNarrative(array $products, array $filters, string $originalMessage): string

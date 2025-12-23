@@ -1420,11 +1420,11 @@ class AgentOrchestrator
                 'confidence' => $confidence,
             ]);
 
-            // Require 80%+ match confidence
-            if ($confidence < 0.8) {
+            // Require 60%+ match confidence
+            if ($confidence < 0.6) {
                 Log::info('AgentOrchestrator: confidence too low, rejecting match', [
                     'confidence' => $confidence,
-                    'threshold' => 0.8,
+                    'threshold' => 0.6,
                 ]);
                 return $this->handleNoResults($originalMessage, $searchQuery);
             }
@@ -1456,9 +1456,9 @@ class AgentOrchestrator
 
     /**
      * Calculate confidence that product title matches the keywords.
-     * Returns 0.0 to 1.0 where 1.0 = all keywords found.
-     * Example: title="Плитоноска Схід 24", keywords=["схід", "24"] → 1.0
-     * Example: title="Плитоноска НАТО", keywords=["схід", "24"] → 0.0
+     * 1) First checks for exact substring match of search query → 100%
+     * 2) Then filters generic terms and counts specific keyword matches
+     * Returns 0.0 to 1.0 where 1.0 = perfect match
      */
     private function calculateTitleMatchConfidence(string $title, array $keywords): float
     {
@@ -1467,15 +1467,48 @@ class AgentOrchestrator
         }
 
         $titleLower = mb_strtolower($title);
-        $matches = 0;
-
+        
+        // Step 1: Exact substring check - if all non-generic keywords appear as continuous substring → 100%
+        $genericTerms = [
+            'плитоноск', 'шолом', 'каск', 'берц', 'черевик', 'куртк', 'штан',
+            'жилет', 'рюкзак', 'підсумок', 'рукавиц', 'окуляр', 'взутт',
+            'helmet', 'plate', 'carrier', 'armor', 'jacket', 'pants', 'boots',
+        ];
+        
+        $specificKeywords = [];
         foreach ($keywords as $kw) {
+            $isGeneric = false;
+            foreach ($genericTerms as $generic) {
+                if (str_contains($kw, $generic) || str_contains($generic, $kw)) {
+                    $isGeneric = true;
+                    break;
+                }
+            }
+            if (!$isGeneric) {
+                $specificKeywords[] = $kw;
+            }
+        }
+
+        // If user searches for generic category only (e.g., "плитоноска"), any product matches
+        if (empty($specificKeywords)) {
+            return 1.0;
+        }
+
+        // Check if all specific keywords appear as substring
+        $queryPhrase = implode(' ', $specificKeywords);
+        if (str_contains($titleLower, $queryPhrase)) {
+            return 1.0;
+        }
+
+        // Step 2: Token-based match - count how many specific keywords found
+        $matches = 0;
+        foreach ($specificKeywords as $kw) {
             if (str_contains($titleLower, $kw)) {
                 $matches++;
             }
         }
 
-        return $matches / count($keywords);
+        return $matches / count($specificKeywords);
     }
 
     /**

@@ -97,44 +97,88 @@ class AiRouter
 
     /**
     * AI-нормалізація тексту для пошуку товарів.
-    * Прибирає службові слова, але зберігає всі інформативні токени (моделі, цифри, латиницю/кирилицю).
+     * Використовує AI для витягування суті запиту без хардкодених правил.
      */
     public function normalizeSearchQuery(string $message): string
     {
-        // Спочатку спробуємо просту очистку: прибрати стоп-слова, залишити всі інформативні токени
-        $cleaned = $this->extractKeywordsFromMessage($message);
-        
-        // Якщо очистка видала щось змістовне (не просто вихідне повідомлення), повернемо його
-        if ($cleaned !== $message && !empty($cleaned)) {
-            Log::info('AiRouter::normalizeSearchQuery extracted keywords', ['original' => $message, 'cleaned' => $cleaned]);
-            return $cleaned;
+        $fallback = $message;
+
+        if (empty($this->apiKey)) {
+            Log::warning('AiRouter::normalizeSearchQuery called without OPENAI_API_KEY, using fallback');
+            return $this->extractKeywordsFromMessage($message);
         }
 
-        // Fallback: якщо очистка не допомогла, поверни оригіналь
-        return $message;
+        $prompt = "
+Ти — асистент пошуку для магазину військового спорядження.
+
+Завдання: витягни з запиту користувача ТІЛЬКИ ключові пошукові терміни для Meilisearch.
+
+Правила:
+- Прибери службові фрази (привіт, допоможи, розкажи, покажи, про)
+- Залиш ВСІ інформативні слова: назви товарів, моделі, цифри, кольори, бренди
+- НЕ додавай нічого від себе, НЕ розширюй синонімами
+- Повертай ТІЛЬКИ очищений запит, без лапок, без пояснень
+
+Приклади:
+'Привіт, допоможи підібрати плитоноску в пікселі' → 'плитоноску пікселі'
+'розкажи про плитоноску схід 24' → 'плитоноску схід 24'
+'покажи мультикам берці 43 розмір' → 'мультикам берці 43'
+'шолом ballistic crye' → 'шолом ballistic crye'
+
+Запит: \"{$message}\"
+";
+
+        try {
+            $response = Http::timeout(3)->withToken($this->apiKey)
+                ->post($this->baseUrl . '/chat/completions', [
+                    'model'       => $this->model,
+                    'messages'    => [
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature' => 0.1,
+                    'max_tokens' => 50,
+                ]);
+
+            $data = $response->json();
+
+            if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
+                Log::warning('AiRouter::normalizeSearchQuery invalid response, using fallback');
+                return $this->extractKeywordsFromMessage($message);
+            }
+
+            $cleaned = trim((string) $data['choices'][0]['message']['content']);
+            
+            // Sanity check: якщо AI повернув порожнє або дуже довге — fallback
+            if (empty($cleaned) || mb_strlen($cleaned) > mb_strlen($message) * 1.5) {
+                Log::warning('AiRouter::normalizeSearchQuery suspicious output, using fallback', ['cleaned' => $cleaned]);
+                return $this->extractKeywordsFromMessage($message);
+            }
+
+            Log::info('AiRouter::normalizeSearchQuery AI normalized', ['original' => $message, 'cleaned' => $cleaned]);
+            return $cleaned;
+            
+        } catch (\Throwable $e) {
+            Log::warning('AiRouter::normalizeSearchQuery exception: ' . $e->getMessage());
+            return $this->extractKeywordsFromMessage($message);
+        }
     }
 
     /**
-     * Витягує інформативні токени з запиту користувача.
-     * Видаляє стоп-фрази (привіт, допоможи, підібрати, показати, порівняй, тощо),
-     * але залишає всі осмислені слова/моделі/цифри (мінімум 2 символи або містять цифру).
+     * Fallback витягування ключових слів (коли AI недоступний).
+     * Прибирає тільки базові стоп-слова, зберігає все інше.
      */
     protected function extractKeywordsFromMessage(string $message): string
     {
         $lowerMsg = mb_strtolower($message);
         
-        // Списки стоп-слів (фрази, які не несуть змісту для пошуку)
+        // Мінімальний список стоп-слів для fallback (коли AI не працює)
         $stopWords = [
-            'привіт', 'привіт,', 'привет', 'привет,', 'hi', 'hello',
-            'допоможи', 'помоги', 'допоміж', 'допоміжи',
-            'підібрати', 'подобрать', 'порекомендуй', 'рекомендуй',
-            'показати', 'показать', 'знайти', 'найти',
-            'розкажи', 'розповідай', 'розповедь', 'скажи', 'скажи', 'tell', 'describe', 'opиши',
-            'какой', 'какая', 'який', 'яка', 'какие', 'quali',
-            'или', 'або', 'чи',
-            'тобто', 'це', 'того', 'щоб', 'для', 'у', 'в', 'з', 'до', 'на', 'що',
-            'ще', 'еще', 'більше', 'больше', 'ще раз', 'еще раз',
-            'про', 'про', 'about', 'про',
+            'привіт', 'привет', 'hi', 'hello',
+            'допоможи', 'помоги',
+            'підібрати', 'подобрать',
+            'показати', 'показать',
+            'розкажи', 'скажи',
+            'про', 'about',
         ];
         
         // Розбиваємо на слова та фільтруємо
@@ -142,29 +186,26 @@ class AiRouter
         $filtered = [];
         
         foreach ($words as $word) {
-            // Пропускаємо пусті слова
             if (empty(trim($word))) {
                 continue;
             }
             
-            // Видаляємо пунктуацію, але зберігаємо дефіси (для "crye-precision" тощо)
             $cleaned = preg_replace('/[^\p{L}\p{N}\-]/u', '', $word);
             if (empty($cleaned)) {
                 continue;
             }
             
-            // Пропускаємо чисті стоп-слова
+            // Пропускаємо базові стоп-слова
             if (in_array($cleaned, $stopWords)) {
                 continue;
             }
             
-            // Залишаємо інформативні токени: містять цифри АБО довжина >= 2
+            // Залишаємо токени: містять цифри АБО довжина >= 2
             if (preg_match('/\d/', $cleaned) || mb_strlen($cleaned) >= 2) {
                 $filtered[] = $cleaned;
             }
         }
         
-        // Повертаємо об'єднаний результат
         return implode(' ', $filtered);
     }
 

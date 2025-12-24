@@ -1531,19 +1531,82 @@ class AgentOrchestrator
     }
 
     /**
-     * Build detailed message about a single product
+     * Build detailed message about a single product using AI for natural formatting.
+     * AI works ONLY with real data from product (no hallucinations).
      */
     private function buildProductDetailMessage(array $p): string
     {
-        $lines = [];
-        $lines[] = $p['title'];
-        $lines[] = $this->formatPrice($p['price'] ?? null);
+        $title = $p['title'] ?? 'Товар';
+        $price = $this->formatPrice($p['price'] ?? null);
+        $category = $p['category_path'] ?? '';
+        $chars = $p['characteristics'] ?? [];
+        $desc = trim((string) ($p['description'] ?? ''));
 
-        if (!empty($p['category_path'])) {
-            $lines[] = 'Категорія: ' . $p['category_path'];
+        // Try AI formatting for natural language
+        try {
+            $config = config('services.openai', []);
+            $apiKey = $config['key'] ?? null;
+            
+            if ($apiKey) {
+                $charsText = is_array($chars) && !empty($chars) 
+                    ? $this->formatCharacteristics($chars, 8) 
+                    : '';
+                
+                $descSnippet = $desc !== '' 
+                    ? mb_substr($desc, 0, 500) 
+                    : '';
+
+                $prompt = "
+Ти — асистент магазину військового спорядження. Сформуй короткий інформативний опис товару для клієнта.
+
+ВАЖЛИВО: використовуй ТІЛЬКИ надану інформацію, НЕ вигадуй нічого.
+
+Товар: {$title}
+Ціна: {$price}
+Категорія: {$category}
+
+Характеристики:
+{$charsText}
+
+Опис:
+{$descSnippet}
+
+Завдання: напиши 3-5 коротких речень про цей товар природною мовою (без bullet points). Використовуй ТІЛЬКИ факти з даних вище.
+Закінчи питанням: чи потрібно порівняти з іншим товаром або показати аксесуари?
+";
+
+                $response = Http::timeout(5)->withToken($apiKey)
+                    ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
+                        'model' => $config['model'] ?? 'gpt-4',
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                        'temperature' => 0.3,
+                        'max_tokens' => 250,
+                    ]);
+
+                $data = $response->json();
+                if (is_array($data) && isset($data['choices'][0]['message']['content'])) {
+                    $aiMessage = trim($data['choices'][0]['message']['content']);
+                    if (!empty($aiMessage)) {
+                        Log::info('AgentOrchestrator: AI formatted product details', ['product_id' => $p['id']]);
+                        return $aiMessage;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('AgentOrchestrator: AI formatting failed, using fallback', ['error' => $e->getMessage()]);
         }
 
-        $chars = $p['characteristics'] ?? [];
+        // Fallback: structured format
+        $lines = [];
+        $lines[] = $title;
+        $lines[] = $price;
+
+        if (!empty($category)) {
+            $lines[] = 'Категорія: ' . $category;
+        }
+
         if (is_array($chars) && !empty($chars)) {
             $charLines = $this->formatCharacteristics($chars, 6);
             if (!empty($charLines)) {
@@ -1552,7 +1615,6 @@ class AgentOrchestrator
             }
         }
 
-        $desc = trim((string) ($p['description'] ?? ''));
         if ($desc !== '') {
             $summary = $this->summarizeDescription($desc, 8, 900);
             if ($summary !== '') {

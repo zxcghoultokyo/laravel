@@ -5,13 +5,15 @@ namespace App\Services\Agent\Tools;
 use App\Models\Product;
 use App\Services\Search\MeiliClient;
 use App\Services\Search\BrandDetectionService;
+use App\Services\Search\ColorService;
 use Illuminate\Support\Facades\Log;
 
 class MeiliProductSearchTool
 {
     public function __construct(
         private MeiliClient $meiliClient,
-        private BrandDetectionService $brandDetection
+        private BrandDetectionService $brandDetection,
+        private ColorService $colorService
     ) {}
 
     /**
@@ -300,27 +302,21 @@ class MeiliProductSearchTool
     {
         $requestedColorLower = mb_strtolower($requestedColor);
         
-        // Color synonyms mapping
-        $colorSynonyms = [
-            'pixel' => ['піксель', 'пиксель', 'mm14', 'мм14', 'pixel', 'пікс'],
-            'піксель' => ['піксель', 'пиксель', 'mm14', 'мм14', 'pixel', 'пікс'],
-            'multicam' => ['мультикам', 'мультікам', 'multicam', 'mc'],
-            'мультикам' => ['мультикам', 'мультікам', 'multicam', 'mc'],
-            'olive' => ['олива', 'оліва', 'olive', 'od', 'ranger green'],
-            'олива' => ['олива', 'оліва', 'olive', 'od', 'ranger green'],
-            'black' => ['чорний', 'чорна', 'чорне', 'black', 'чорн'],
-            'чорний' => ['чорний', 'чорна', 'чорне', 'black', 'чорн'],
-            'tan' => ['тан', 'койот', 'coyote', 'tan', 'fde'],
-            'койот' => ['тан', 'койот', 'coyote', 'tan', 'fde'],
-            'camo' => ['камо', 'камуфляж', 'camo', 'camouflage'],
-        ];
+        // Normalize color to get the canonical color group
+        $colorGroup = $this->colorService->normalizeColor($requestedColorLower) ?? $requestedColorLower;
         
-        // Get all variants for requested color
-        $searchVariants = [$requestedColorLower];
-        if (isset($colorSynonyms[$requestedColorLower])) {
-            $searchVariants = array_merge($searchVariants, $colorSynonyms[$requestedColorLower]);
-        }
-        $searchVariants = array_unique($searchVariants);
+        // Get all synonyms for this color group from DB (via ColorService)
+        $searchVariants = $this->colorService->getSynonymsForColor($colorGroup);
+        
+        // Always include the original requested color and the color group
+        $searchVariants = array_merge([$requestedColorLower, $colorGroup], $searchVariants);
+        $searchVariants = array_unique(array_map('mb_strtolower', $searchVariants));
+        
+        Log::debug('MeiliProductSearchTool: postFilterByColor variants', [
+            'requested' => $requestedColorLower,
+            'color_group' => $colorGroup,
+            'variants' => $searchVariants,
+        ]);
         
         $filtered = [];
         foreach ($hits as $hit) {

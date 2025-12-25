@@ -154,7 +154,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Agent\Tools\MeiliProductSearchTool::class, function ($app) {
             return new \App\Services\Agent\Tools\MeiliProductSearchTool(
                 $app->make(\App\Services\Search\MeiliClient::class),
-                $app->make(\App\Services\Search\BrandDetectionService::class)
+                $app->make(\App\Services\Search\BrandDetectionService::class),
+                $app->make(\App\Services\Search\ColorService::class)
             );
         });
 

@@ -867,44 +867,66 @@ class AgentOrchestrator
         $query = mb_strtolower($searchQuery);
         $original = mb_strtolower($originalMessage);
         
-        // Define product type mappings: query keywords -> expected category keywords
+        // Define product type mappings: query keywords -> expected category paths (not titles!)
         $productTypeMap = [
-            // Plate carriers
-            'плитоноска' => ['плитоноск', 'plate carrier', 'бронежилет', 'жилет'],
-            'плитоноску' => ['плитоноск', 'plate carrier', 'бронежилет', 'жилет'],
-            'бронежилет' => ['бронежилет', 'плитоноск', 'жилет', 'vest'],
+            // Plate carriers - must be in plate carrier category, not accessories
+            'плитоноска' => [
+                'expected_categories' => ['плитоноск', 'plate carrier', 'бронежилет'],
+                'exclude_categories' => ['ремен', 'кріплен', 'аксесуар', '2-точков', '1-точков', 'панел'],
+                'exclude_title_patterns' => ['ремінь', 'кріплення', 'до плитоноски', 'для плитоноски', 'панель'],
+            ],
+            'плитоноску' => [
+                'expected_categories' => ['плитоноск', 'plate carrier', 'бронежилет'],
+                'exclude_categories' => ['ремен', 'кріплен', 'аксесуар', '2-точков', '1-точков', 'панел'],
+                'exclude_title_patterns' => ['ремінь', 'кріплення', 'до плитоноски', 'для плитоноски', 'панель'],
+            ],
+            'бронежилет' => [
+                'expected_categories' => ['бронежилет', 'плитоноск', 'жилет', 'vest'],
+                'exclude_categories' => ['ремен', 'аксесуар'],
+                'exclude_title_patterns' => ['ремінь', 'кріплення'],
+            ],
             // Helmets
-            'шолом' => ['шолом', 'каска', 'helmet', 'балістич'],
-            'каска' => ['шолом', 'каска', 'helmet', 'балістич'],
+            'шолом' => [
+                'expected_categories' => ['шолом', 'каска', 'helmet'],
+                'exclude_categories' => ['кріплен', 'аксесуар', 'кавер'],
+                'exclude_title_patterns' => ['кріплення для', 'до шолома', 'на шолом'],
+            ],
+            'каска' => [
+                'expected_categories' => ['шолом', 'каска', 'helmet'],
+                'exclude_categories' => ['кріплен', 'аксесуар'],
+                'exclude_title_patterns' => ['кріплення'],
+            ],
             // Plates
-            'бронеплита' => ['плита', 'plate', 'бронеплит', 'sapi', 'esapi'],
-            'плита' => ['плита', 'plate', 'бронеплит', 'sapi', 'esapi'],
+            'бронеплита' => [
+                'expected_categories' => ['плита', 'plate', 'бронеплит'],
+                'exclude_categories' => ['чохол', 'кавер'],
+                'exclude_title_patterns' => ['чохол', 'кавер'],
+            ],
             // Boots
-            'берци' => ['берц', 'черевик', 'boot', 'взутт'],
-            'черевики' => ['берц', 'черевик', 'boot', 'взутт'],
-            // Backpacks
-            'рюкзак' => ['рюкзак', 'backpack', 'сумка'],
-            // Gloves
-            'рукавиц' => ['рукавиц', 'glove', 'перчатк'],
+            'берци' => [
+                'expected_categories' => ['берц', 'черевик', 'boot', 'взутт'],
+                'exclude_categories' => [],
+                'exclude_title_patterns' => [],
+            ],
         ];
         
         // Check if query mentions a specific product type
-        $expectedKeywords = null;
+        $typeConfig = null;
         $queryProductType = null;
-        foreach ($productTypeMap as $queryKey => $keywords) {
+        foreach ($productTypeMap as $queryKey => $config) {
             if (str_contains($query, $queryKey) || str_contains($original, $queryKey)) {
-                $expectedKeywords = $keywords;
+                $typeConfig = $config;
                 $queryProductType = $queryKey;
                 break;
             }
         }
         
         // If no specific product type detected, assume relevant
-        if ($expectedKeywords === null) {
+        if ($typeConfig === null) {
             return ['is_relevant' => true, 'reason' => 'generic_query'];
         }
         
-        // Check if any product matches expected type
+        // Check if any product matches expected type (strict validation)
         $foundCategories = [];
         $matchCount = 0;
         
@@ -914,8 +936,34 @@ class AgentOrchestrator
             
             $foundCategories[] = $product['category_path'] ?? 'unknown';
             
-            foreach ($expectedKeywords as $keyword) {
-                if (str_contains($title, $keyword) || str_contains($category, $keyword)) {
+            // First check exclusions - if product is an accessory, skip it
+            $isExcluded = false;
+            
+            // Check category exclusions
+            foreach ($typeConfig['exclude_categories'] as $excludePattern) {
+                if (str_contains($category, $excludePattern)) {
+                    $isExcluded = true;
+                    break;
+                }
+            }
+            
+            // Check title exclusions (e.g., "ремінь до плитоноски" is NOT a plate carrier)
+            if (!$isExcluded) {
+                foreach ($typeConfig['exclude_title_patterns'] as $excludePattern) {
+                    if (str_contains($title, $excludePattern)) {
+                        $isExcluded = true;
+                        break;
+                    }
+                }
+            }
+            
+            if ($isExcluded) {
+                continue; // Don't count this as a match
+            }
+            
+            // Now check if category matches expected type
+            foreach ($typeConfig['expected_categories'] as $expectedKeyword) {
+                if (str_contains($category, $expectedKeyword)) {
                     $matchCount++;
                     break;
                 }
@@ -923,16 +971,16 @@ class AgentOrchestrator
         }
         
         // If less than 30% of results match expected type, consider irrelevant
-        $matchRatio = $matchCount / count($products);
+        $matchRatio = count($products) > 0 ? $matchCount / count($products) : 0;
         
         if ($matchRatio < 0.3) {
             // Build suggestion based on query type
             $suggestions = [
-                'плитоноска' => 'Спробуйте: "плитоноска", "plate carrier", "бронежилет"',
-                'плитоноску' => 'Спробуйте: "плитоноска", "plate carrier", "бронежилет"',
-                'шолом' => 'Спробуйте: "шолом балістичний", "каска", "helmet"',
-                'каска' => 'Спробуйте: "шолом балістичний", "каска", "helmet"',
-                'бронеплита' => 'Спробуйте: "бронеплита SAPI", "plate", "бронепластина"',
+                'плитоноска' => 'На жаль, плитоносок у кольорі мультикам зараз немає в наявності. Перегляньте інші кольори або зверніться до менеджера.',
+                'плитоноску' => 'На жаль, плитоносок у кольорі мультикам зараз немає в наявності. Перегляньте інші кольори або зверніться до менеджера.',
+                'шолом' => 'Шоломів за вашим запитом не знайдено. Спробуйте: "шолом балістичний", "каска".',
+                'каска' => 'Касок за вашим запитом не знайдено. Спробуйте: "шолом балістичний".',
+                'бронеплита' => 'Бронеплит за вашим запитом не знайдено. Спробуйте: "бронеплита SAPI", "керамічна плита".',
             ];
             
             return [

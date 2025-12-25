@@ -2,7 +2,16 @@
 
 namespace App\Services\Agent;
 
+use App\Enums\Intent;
+use App\DTO\SearchPlanDTO;
+use App\DTO\AgentResponseDTO;
 use App\Services\Ai\AiRouter;
+use App\Services\Session\SessionContextService;
+use App\Services\Search\ColorService;
+use App\Services\Agent\Handlers\FaqHandler;
+use App\Services\Agent\Handlers\SmallTalkHandler;
+use App\Services\Agent\Handlers\OrderStatusHandler;
+use App\Services\Agent\Handlers\NarrativeBuilder;
 use App\Models\Brand;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
@@ -28,6 +37,12 @@ class AgentOrchestrator
         private OrderSearchService $orderSearchService,
         private DeliveryTrackingService $deliveryTrackingService,
         private HoroshopDataService $horoshopDataService,
+        private SessionContextService $sessionService,
+        private ColorService $colorService,
+        private FaqHandler $faqHandler,
+        private SmallTalkHandler $smallTalkHandler,
+        private OrderStatusHandler $orderStatusHandler,
+        private NarrativeBuilder $narrativeBuilder,
     ) {}
 
     /**
@@ -46,19 +61,22 @@ class AgentOrchestrator
         // Step 1: Plan with AI (intent + search query + ambiguity)
         $plan = $this->createPlan($message, $context);
         
-        Log::info('AgentOrchestrator: plan created', $plan);
+        Log::info('AgentOrchestrator: plan created', $plan->toArray());
 
-        // Step 2: Execute based on intent
-        $result = match($plan['intent']) {
-            'productsearch' => $this->handleProductSearch($message, $plan, $context),
-            'orderstatus' => $this->handleOrderStatus($message, $plan, $context),
-            'faq' => $this->handleFaq($message, $plan, $context),
-            'smalltalk' => $this->handleSmallTalk($message, $plan, $context),
-            default => $this->handleUnknown($message, $plan, $context),
+        // Step 2: Execute based on intent using handlers
+        $response = match($plan->intent) {
+            Intent::ProductSearch => $this->handleProductSearch($message, $plan, $context),
+            Intent::OrderStatus => $this->orderStatusHandler->handle($message, $plan->toArray(), $context),
+            Intent::Faq => $this->faqHandler->handle($message, $plan->toArray(), $context),
+            Intent::SmallTalk => $this->smallTalkHandler->handle($message, $plan->toArray(), $context),
+            default => AgentResponseDTO::unknown("Не зовсім зрозумів запит. Можете уточнити: шукаєте товар, питаєте про замовлення чи потрібна інша інформація?"),
         };
 
+        // Convert AgentResponseDTO to array if needed
+        $result = $response instanceof AgentResponseDTO ? $response->toArray() : $response;
+
         Log::info('AgentOrchestrator: result generated', [
-            'intent' => $plan['intent'],
+            'intent' => $plan->intent->value,
             'products_count' => count($result['products'] ?? []),
             'message_length' => strlen($result['message'] ?? '')
         ]);
@@ -68,15 +86,15 @@ class AgentOrchestrator
 
     /**
      * Create execution plan using AI
-     * Calls OpenAI once to understand intent + extract search hints
+     * Returns SearchPlanDTO with intent, query, filters
      */
-    private function createPlan(string $message, array $context): array
+    private function createPlan(string $message, array $context): SearchPlanDTO
     {
         // Use existing AiRouter for intent classification
         $classification = $this->aiRouter->classify($message);
         
-        // Normalize intent to lowercase and replace underscores with no separator
-        $intent = str_replace('_', '', strtolower($classification['intent'] ?? 'unknown'));
+        // Use Intent enum for type safety
+        $intent = Intent::fromString($classification['intent'] ?? 'unknown');
         
         // Normalize search query if product-related
         $searchQuery = null;
@@ -85,10 +103,10 @@ class AgentOrchestrator
         
         // Fast-path: if user message clearly contains a brand word, force product search
         if ($this->containsBrandWord($message)) {
-            $intent = 'productsearch';
+            $intent = Intent::ProductSearch;
         }
 
-        if ($intent === 'productsearch') {
+        if ($intent === Intent::ProductSearch) {
             $normalized = $this->aiRouter->normalizeSearchQuery($message);
             
             // normalizeSearchQuery returns a string, not array
@@ -112,28 +130,21 @@ class AgentOrchestrator
                 Log::warning('AgentOrchestrator: brand detection failed', ['error' => $e->getMessage()]);
             }
 
-            // Extract filters from original message (budget, color, etc.)
+            // Extract filters from original message (budget, color, etc.) using ColorService
             $filters = $this->extractFiltersFromMessage($message);
             
             // Check if query is ambiguous (needs clarification but AFTER showing products)
-            $ambiguous = $this->detectAmbiguity($message, $searchQuery, $filters);
+            $ambiguous = $this->detectAmbiguity($message, $searchQuery ?? $message, $filters);
         }
 
-        Log::info('AgentOrchestrator: plan created', [
-            'intent' => $intent,
-            'search_query' => $searchQuery,
-            'filters' => $filters,
-            'ambiguous' => $ambiguous,
-            'confidence' => $classification['confidence'] ?? 0.8,
-        ]);
-
-        return [
-            'intent' => $intent,
-            'search_query' => $searchQuery,
-            'filters' => $filters,
-            'ambiguous' => $ambiguous,
-            'confidence' => $classification['confidence'] ?? 0.8,
-        ];
+        return new SearchPlanDTO(
+            intent: $intent,
+            searchQuery: $searchQuery,
+            filters: $filters,
+            ambiguous: $ambiguous,
+            confidence: (float) ($classification['confidence'] ?? $intent->defaultConfidence()),
+            orderId: $classification['order_id'] ?? null,
+        );
     }
 
     /**
@@ -170,10 +181,10 @@ class AgentOrchestrator
      * Handle product search intent
      * ALWAYS show products, questions come after
      */
-    private function handleProductSearch(string $originalMessage, array $plan, array $context): array
+    private function handleProductSearch(string $originalMessage, SearchPlanDTO $plan, array $context): array
     {
         $sessionId = $context['session_id'] ?? null;
-        $sessionContext = $this->loadSessionContext($sessionId);
+        $sessionContext = $this->sessionService->loadContext($sessionId);
 
         // Detect if this is a follow-up details request about the last product
         if ($this->isDetailsFollowUp($originalMessage) && !empty($sessionContext['last_shown_product_id'])) {
@@ -181,8 +192,8 @@ class AgentOrchestrator
             return $this->handleProductDetailsFollowUp($originalMessage, $sessionContext);
         }
 
-        $searchQuery = $plan['search_query'] ?? $originalMessage;
-        $filters = $plan['filters'] ?? [];
+        $searchQuery = $plan->searchQuery ?? $originalMessage;
+        $filters = $plan->filters;
         
         $debug = [
             'original_message' => $originalMessage,
@@ -201,7 +212,7 @@ class AgentOrchestrator
         ];
         
         if (empty($candidates)) {
-            return $this->handleNoResults($originalMessage, $searchQuery, $filters);
+            return AgentResponseDTO::noResults($searchQuery)->toArray();
         }
 
         // Step 2: Deduplicate by parent_article
@@ -250,12 +261,12 @@ class AgentOrchestrator
         // Collect articles for debug
         $chosenArticles = array_column($products, 'article');
         
-        // Step 5: Generate response message via intent-specific narrative
-        $message = $this->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
+        // Step 5: Generate response message via NarrativeBuilder
+        $message = $this->narrativeBuilder->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
 
-        // Persist lightweight session context
+        // Persist lightweight session context using SessionContextService
         $lastProduct = !empty($products) ? $products[0] : null;
-        $this->saveSessionContext($sessionId, [
+        $this->sessionService->saveContext($sessionId, [
             'last_category' => $this->guessCategoryFromProducts($products),
             'last_budget_min' => $filters['budget_min'] ?? null,
             'last_budget_max' => $filters['budget_max'] ?? null,
@@ -271,84 +282,45 @@ class AgentOrchestrator
         ]);
         
         // Step 6: Add follow-up question if ambiguous (AFTER products)
-        if ($plan['ambiguous'] && count($products) > 5) {
-            $question = $this->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
+        if ($plan->ambiguous && count($products) > 5) {
+            $question = $this->narrativeBuilder->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
             if (!empty($question)) {
                 $message .= "\n\n" . $question;
             }
         }
 
-        return [
-            'message' => $message,
-            'products' => $products,
-            'meta' => [
-                'intent' => 'product_search',
-                'ambiguous' => $plan['ambiguous'],
-                'refined_query' => $searchQuery,
-                'filters' => $filters,
-                'chosen_ids' => $topIds,
-                'chosen_articles' => $chosenArticles,
-                'search_debug' => $debug,
-            ],
-        ];
+        return AgentResponseDTO::productSearch(
+            message: $message,
+            products: $products,
+            refinedQuery: $searchQuery,
+            filters: $filters,
+            chosenIds: $topIds,
+            ambiguous: $plan->ambiguous,
+            searchDebug: $debug,
+        )->toArray();
     }
 
     /**
      * Generate follow-up clarification question using AI
-     * Only after products are shown AND есть разнообразие
+     * @deprecated Use NarrativeBuilder::generateFollowUpQuestion instead
      */
     private function generateFollowUpQuestion(string $originalMessage, string $searchQuery, array $filters, array $products): string
     {
-        // Збираємо контекст про товари
-        $productTitles = array_slice(array_column($products, 'title'), 0, 5);
-        $categories = array_unique(array_column($products, 'category_path'));
-        $colors = array_filter(array_unique(array_column($products, 'color')));
-        $prices = array_column($products, 'price');
-        
-        $productsContext = implode(', ', array_slice($productTitles, 0, 3));
-        $categoryContext = implode(', ', array_slice($categories, 0, 2));
-        $colorContext = !empty($colors) ? implode(', ', array_slice($colors, 0, 3)) : 'різні';
-        $priceRange = !empty($prices) ? round(min($prices)) . '-' . round(max($prices)) . ' грн' : '';
-        
-        $prompt = "Магазин Contractor — тактичне військове спорядження для ЗСУ, правоохоронців, добровольців.
-
-Користувач шукав: \"{$searchQuery}\"
-Знайдено товари: {$productsContext}
-Категорії: {$categoryContext}
-Кольори: {$colorContext}
-Ціновий діапазон: {$priceRange}
-
-Згенеруй ОДНЕ природне уточнююче питання (до 20 слів).
-
-Питай про те, що допоможе вибрати конкретний товар з цього списку.
-Ніяких загальних питань! Дивися на реальні товари.
-
-Будь природним і корисним. Не використовуй шаблони.
-Поверни ТІЛЬКИ текст питання українською, без лапок.";
-
-        // Перевіряємо чи є реальна різноманітність
-        if (!$this->hasProductDiversity($products)) {
-            return ''; // Не питаємо якщо немає про що питати
-        }
-        
-        try {
-            $response = $this->aiRouter->callOpenAI($prompt, 0.7, 60);
-            $question = trim($response, " \n\r\t\"'");
-            
-            // Fallback якщо AI повернула щось дивне
-            if (empty($question) || mb_strlen($question) > 150) {
-                return ''; // Краще нічого не питати, ніж показувати шаблон
-            }
-            
-            return $question;
-        } catch (\Exception $e) {
-            Log::warning('generateFollowUpQuestion: AI failed', ['error' => $e->getMessage()]);
-            return ''; // Просто не питаємо, якщо AI не працює
-        }
+        return $this->narrativeBuilder->generateFollowUpQuestion($originalMessage, $searchQuery, $filters, $products);
     }
 
     /**
-     * Check if products have real diversity worth asking questions about
+     * Build product narrative
+     * @deprecated Use NarrativeBuilder::buildProductNarrative instead
+     */
+    private function buildProductNarrative(array $products, string $originalMessage, array $filters, array $sessionContext, ?string $sessionId): string
+    {
+        return $this->narrativeBuilder->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
+    }
+
+    /**
+     * Legacy: Check if products have diversity
+     * @deprecated Moved to NarrativeBuilder
      */
     private function hasProductDiversity(array $products): bool
     {
@@ -391,626 +363,39 @@ class AgentOrchestrator
 
     /**
      * Handle order status requests
+     * @deprecated Use OrderStatusHandler instead. This method is kept for backward compatibility.
      */
     private function handleOrderStatus(string $message, array $plan, array $context): array
     {
-        // Parse query for order criteria
-        $criteria = $this->orderSearchService->parseQuery($message);
-
-        $settings = WidgetSettings::first();
-        $supportLine = $this->buildSupportLine($settings);
-
-        // If user is angry/rude, de-escalate politely
-        if ($this->isAngry($message)) {
-            return [
-                'message' => "Я бот і хочу допомогти. Напишіть номер замовлення, і я перевірю статус. " . ($supportLine ?: ''),
-                'products' => [],
-                'meta' => ['intent' => 'order_status', 'angry' => true],
-            ];
-        }
-
-        // If user described a problem, return support contacts immediately
-        if ($this->deliveryTrackingService->isProblemReport($message)) {
-            $issue = $this->deliveryTrackingService->getIssueResolutionInfo();
-            return [
-                'message' => $issue['message'],
-                'products' => [],
-                'meta' => [
-                    'intent' => 'order_status',
-                    'order_issue' => true,
-                ],
-            ];
-        }
-
-        if (empty($criteria)) {
-            return [
-                'message' => "Щоб знайти ваше замовлення, вкажіть будь ласка:\n\n" .
-                    "• Номер замовлення (наприклад: 12345)\n" .
-                    "• Номер телефону (наприклад: +380 99 123 45 67)\n" .
-                    "• Прізвище та ім'я (наприклад: Іваненко Петро)\n\n" .
-                    "Приклад запиту: \"замовлення 12345\" або \"статус +380991234567\"",
-                'products' => [],
-                'meta' => ['intent' => 'order_status', 'ambiguous' => true],
-            ];
-        }
-
-        $criteria['limit'] = $plan['order_limit'] ?? 5;
-
-        try {
-            $searchResult = $this->orderSearchService->search($criteria);
-        } catch (\Throwable $e) {
-            return [
-                'message' => "Дякую. Ви питаєте про замовлення №" . ($criteria['order_id'] ?? '...') . ". Наразі я ще не маю прямого доступу до статусів. " . ($supportLine ?: ''),
-                'products' => [],
-                'meta' => ['intent' => 'order_status', 'error' => 'search_failed'],
-            ];
-        }
-
-        $total = $searchResult['total'] ?? 0;
-        $orders = $searchResult['orders'] ?? [];
-        $searchType = $searchResult['search_type'] ?? 'none';
-        $orderIdText = $criteria['order_id'] ?? null;
-
-        // MVP / no integration scenario
-        if ($total === 0 && $searchType === 'none') {
-            return [
-                'message' => "Дякую. Ви питаєте про замовлення №" . ($orderIdText ?? '...') . ". Наразі я ще не маю прямого доступу до статусів замовлень. " . ($supportLine ?: ''),
-                'products' => [],
-                'meta' => ['intent' => 'order_status', 'found' => 0, 'no_integration' => true, 'criteria' => $criteria],
-            ];
-        }
-
-        if ($total === 0) {
-            $searchedBy = [];
-            if (!empty($criteria['order_id'])) {
-                $searchedBy[] = "номером №{$criteria['order_id']}";
-            }
-            if (!empty($criteria['phone'])) {
-                $searchedBy[] = "телефоном {$criteria['phone']}";
-            }
-            if (!empty($criteria['name'])) {
-                $searchedBy[] = "ім'ям '{$criteria['name']}'";
-            }
-            if (!empty($criteria['email'])) {
-                $searchedBy[] = "email '{$criteria['email']}'";
-            }
-            $searchText = !empty($searchedBy) ? implode(' та ', $searchedBy) : 'вказаними параметрами';
-
-            return [
-                'message' => "Не вдалося знайти замовлення за {$searchText}.\n\nПеревірте дані або вкажіть номер замовлення. " . ($supportLine ?: ''),
-                'products' => [],
-                'meta' => ['intent' => 'order_status', 'found' => 0, 'criteria' => $criteria],
-            ];
-        }
-
-        // Enrich with delivery tracking info
-        $orders = array_map(function ($order) {
-            $delivery = $this->deliveryTrackingService->formatDeliveryInfo($order);
-            $order['delivery_tracking'] = $delivery;
-            return $order;
-        }, $orders);
-
-        $first = $orders[0];
-        $delivery = $first['delivery_tracking'] ?? [];
-
-        $msgParts = [];
-        $orderIdOut = $first['id'] ?? ($orderIdText ?? '');
-
-        if ($orderIdOut !== '') {
-            $msgParts[] = "Замовлення №{$orderIdOut}";
-        }
-
-        $statusText = $delivery['status'] ?? null;
-        $ttn = $delivery['nova_poshta_ttn'] ?? null;
-        $tracking = $delivery['tracking_url'] ?? null;
-
-        if (!empty($ttn)) {
-            $msgParts[] = "Замовлення відправлено\nТТН: {$ttn}" . (!empty($tracking) ? "\nВідстежити: {$tracking}" : '');
-            $msgParts[] = "Можете відстежити посилку у додатку або на сайті перевізника.";
-        } elseif (!empty($statusText)) {
-            $msgParts[] = "Статус: {$statusText}";
-            
-            // Only thank for delivered
-            $statusLower = mb_strtolower($statusText);
-            if (str_contains($statusLower, 'доставлено') || str_contains($statusLower, 'delivered') || str_contains($statusLower, 'отримано')) {
-                $msgParts[] = "Дякуємо за покупку!";
-            } elseif (str_contains($statusLower, 'не доставлено') || str_contains($statusLower, 'неуспішн')) {
-                // For failed delivery, offer help
-                $msgParts[] = "Схоже, виникли труднощі з доставкою. " . ($supportLine ?: '');
-            } else {
-                // Generic help for in-progress/pending
-                $msgParts[] = "Якщо є питання — звертайтесь. " . ($supportLine ?: '');
-            }
-        } else {
-            $msgParts[] = "Статус доставки зараз недоступний. " . ($supportLine ?: '');
-        }
-
-        $msgParts[] = "Якщо треба — можу перевірити інше замовлення. Напишіть номер або телефон.";
-
-        return [
-            'message' => implode("\n\n", $msgParts),
-            'products' => [],
-            'meta' => [
-                'intent' => 'order_status',
-                'found' => $searchResult['total'],
-                'orders' => $orders,
-                'criteria' => $criteria,
-            ],
-        ];
-    }
-
-    private function buildSupportLine(?WidgetSettings $settings): string
-    {
-        $parts = [];
-        if (!empty($settings?->shop_phone)) {
-            $parts[] = 'Телефон: ' . $settings->shop_phone;
-        }
-        if (!empty($settings?->callback_form_url)) {
-            $parts[] = 'Заявка: ' . $settings->callback_form_url;
-        }
-        return implode(' | ', $parts);
-    }
-
-    private function isAngry(string $message): bool
-    {
-        $keywords = [
-            'де моя посилка', 'скільки можна', 'ви знущаєтесь', 'обман', 'шахрай', 'лохотрон',
-            'мошен', 'кинули', 'ненормальні', 'дурні', 'погано', 'ненавид', 'гнів', 'злость',
-            'дебіл', 'придур', 'туп', 'fuck', 'shit', 'idiot'
-        ];
-        $m = mb_strtolower($message);
-        foreach ($keywords as $kw) {
-            if (str_contains($m, $kw)) {
-                return true;
-            }
-        }
-        return false;
+        return $this->orderStatusHandler->handle($message, $plan, $context);
     }
 
     /**
      * Handle FAQ requests
+     * @deprecated Use FaqHandler instead. This method is kept for backward compatibility.
      */
     private function handleFaq(string $message, array $plan, array $context): array
     {
-        $settings = WidgetSettings::first();
-        // Disable Horoshop FAQ/pages: use ONLY admin custom content
-        $useHoroshop = false;
-        $useCustom = ($settings?->enable_faq_custom_content ?? true) === true;
-
-        $lowerMessage = mb_strtolower($message);
-
-        // If custom FAQ enabled, try to answer directly by keywords (via AI summarization of ingested content)
-        if ($useCustom) {
-            $map = [
-                'оплата' => ['text' => $settings?->faq_payment_delivery_text, 'url' => $settings?->faq_payment_delivery_url, 'title' => 'Оплата і доставка'],
-                'доставка' => ['text' => $settings?->faq_payment_delivery_text, 'url' => $settings?->faq_payment_delivery_url, 'title' => 'Оплата і доставка'],
-                'повернення' => ['text' => $settings?->faq_returns_text, 'url' => $settings?->faq_returns_url, 'title' => 'Обмін та повернення'],
-                'обмін' => ['text' => $settings?->faq_returns_text, 'url' => $settings?->faq_returns_url, 'title' => 'Обмін та повернення'],
-                'контакти' => ['text' => $settings?->faq_contacts_text, 'url' => $settings?->faq_contacts_url, 'title' => 'Контактна інформація'],
-                'про нас' => ['text' => $settings?->faq_about_text, 'url' => $settings?->faq_about_url, 'title' => 'Про нас'],
-            ];
-
-            foreach ($map as $keyword => $info) {
-                if (str_contains($lowerMessage, $keyword)) {
-                    $contextText = trim((string) ($info['text'] ?? ''));
-                    $url = $info['url'] ?? null;
-                    if (!empty($contextText)) {
-                        try {
-                            $topic = 'general';
-                            if ($keyword === 'доставка') { $topic = 'delivery'; }
-                            elseif ($keyword === 'оплата') { $topic = 'payment'; }
-                            elseif ($keyword === 'повернення' || $keyword === 'обмін') { $topic = 'returns'; }
-                            elseif ($keyword === 'контакти') { $topic = 'contacts'; }
-
-                            if ($topic === 'delivery') {
-                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
-                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про доставку.\n" .
-                                    "Включи рядками: хто доставляє; куди; терміни (якщо є); вартість (якщо згадано — наприклад, за тарифами перевізника).\n" .
-                                    "Завершуй одним простим CTA: 'Можу підібрати товар і перевірити наявність — написати?'.\n" .
-                                    "Не вигадуй фактів. Користуйся лише контекстом. Не посилайся на менеджерів/підтримку. Макс 500 символів.";
-                            } elseif ($topic === 'payment') {
-                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
-                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про оплату.\n" .
-                                    "Включи рядками: доступні способи оплати; що найчастіше використовують (якщо згадано); чи безпечно (лише якщо є в контексті).\n" .
-                                    "Завершуй CTA: 'Готові оформити? Можу підібрати товар — написати?'.\n" .
-                                    "Не вигадуй фактів. Не юридична мова. Макс 500 символів.";
-                            } elseif ($topic === 'returns') {
-                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
-                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ про повернення.\n" .
-                                    "Включи рядками: чи можливе повернення; термін; ключові умови (1-3 пункти).\n" .
-                                    "Завершуй CTA: 'Потрібна допомога з поверненням — написати?'.\n" .
-                                    "Не вигадуй фактів. Макс 450 символів.";
-                            } elseif ($topic === 'contacts') {
-                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                    "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n" .
-                                    "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ з контактами (1-3 способи).\n" .
-                                    "Завершуй CTA: 'Написати тут?'. Макс 300 символів.";
-                            } else {
-                                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                                    "Контекст (очищений):\n" . $contextText . "\n\n" .
-                                    "Дай коротку корисну відповідь одним блоком, без Markdown/емодзі, з CTA наприкінці. Макс 500 символів.";
-                            }
-
-                            $reply = $this->aiRouter->callOpenAI($prompt, 0.15, 350);
-                            $reply = trim($reply);
-                            if (empty($reply)) {
-                                $reply = mb_substr($contextText, 0, 1000);
-                            } elseif (mb_strlen($reply) > 1600) {
-                                $reply = mb_substr($reply, 0, 1600);
-                            }
-
-                            if (!empty($url)) {
-                                $reply .= "\n\nПосилання: " . $url;
-                            }
-
-                            return [
-                                'message' => $reply,
-                                'products' => [],
-                                'meta' => ['intent' => 'faq', 'topic' => $keyword],
-                            ];
-                        } catch (\Throwable $e) {
-                            $fallback = !empty($url) ? ($info['title'] . ": " . $url) : ($info['title'] ?? 'FAQ');
-                            return [
-                                'message' => $fallback,
-                                'products' => [],
-                                'meta' => ['intent' => 'faq', 'topic' => $keyword, 'error' => 'ai-failed'],
-                            ];
-                        }
-                    }
-                    // No ingested text – return link or title
-                    $fallback = !empty($url) ? ($info['title'] . ": " . $url) : ($info['title'] ?? 'FAQ');
-                    return [
-                        'message' => $fallback,
-                        'products' => [],
-                        'meta' => ['intent' => 'faq', 'topic' => $keyword, 'empty' => true],
-                    ];
-                }
-            }
-        }
-
-        // If no keyword matched but we have ingested texts, provide a concise AI summary
-        $allTexts = array_filter([
-            trim((string) ($settings?->faq_payment_delivery_text ?? '')),
-            trim((string) ($settings?->faq_returns_text ?? '')),
-            trim((string) ($settings?->faq_contacts_text ?? '')),
-            trim((string) ($settings?->faq_about_text ?? '')),
-        ], fn($t) => !empty($t));
-
-        if (!empty($allTexts)) {
-            $joined = implode("\n\n---\n\n", array_map(fn($t) => mb_substr($t, 0, 2000), $allTexts));
-            try {
-                $prompt = "Користувач питає: \"{$message}\"\n\n" .
-                    "Контекст (витяги з FAQ сторінок магазину, очищені):\n" . $joined . "\n\n" .
-                    "Визнач одну найрелевантнішу тему: 'Оплата' або 'Доставка' або 'Повернення' або 'Контакти'.\n" .
-                    "Відповідай ТІЛЬКИ по цій темі, коротко, без Markdown/емодзі, 3-5 рядків. Завершуй простим CTA. Макс 500 символів. Без вигадок — лише з контексту.";
-
-                $reply = $this->aiRouter->callOpenAI($prompt, 0.15, 320);
-                $reply = trim($reply);
-                if (empty($reply)) {
-                    $reply = mb_substr($joined, 0, 1000);
-                } elseif (mb_strlen($reply) > 1600) {
-                    $reply = mb_substr($reply, 0, 1600);
-                }
-
-                // Append the single most relevant link if we can infer it from question
-                $link = null;
-                $lm = mb_strtolower($message);
-                if (str_contains($lm, 'достав')) { $link = $settings?->faq_payment_delivery_url; }
-                elseif (str_contains($lm, 'оплат')) { $link = $settings?->faq_payment_delivery_url; }
-                elseif (str_contains($lm, 'повернен') || str_contains($lm, 'обмін')) { $link = $settings?->faq_returns_url; }
-                elseif (str_contains($lm, 'контакт')) { $link = $settings?->faq_contacts_url; }
-                if (!empty($link)) { $reply .= "\n\nПосилання: " . $link; }
-
-                return [
-                    'message' => $reply,
-                    'products' => [],
-                    'meta' => ['intent' => 'faq', 'topic' => 'general'],
-                ];
-            } catch (\Throwable $e) {
-                // fall through to link listing
-            }
-        }
-
-        // Show list of available custom links if no keyword matched
-        $links = [];
-        if (!empty($settings?->faq_payment_delivery_url)) $links[] = 'Оплата і доставка: ' . $settings->faq_payment_delivery_url;
-        if (!empty($settings?->faq_returns_url)) $links[] = 'Обмін та повернення: ' . $settings->faq_returns_url;
-        if (!empty($settings?->faq_contacts_url)) $links[] = 'Контактна інформація: ' . $settings->faq_contacts_url;
-        if (!empty($settings?->faq_about_url)) $links[] = 'Про нас: ' . $settings->faq_about_url;
-        if (!empty($links)) {
-            return [
-                'message' => "Ось корисні сторінки:\n" . implode("\n", array_map(fn($l) => '• ' . $l, $links)),
-                'products' => [],
-                'meta' => ['intent' => 'faq'],
-            ];
-        }
-
-        // Final fallback: prompt user
-        return [
-            'message' => 'Напишіть, що шукаєте... (доставка, оплата, повернення, контакти)',
-            'products' => [],
-            'meta' => ['intent' => 'faq'],
-        ];
+        return $this->faqHandler->handle($message, $plan, $context);
     }
 
     /**
      * Handle small talk
+     * @deprecated Use SmallTalkHandler instead. This method is kept for backward compatibility.
      */
     private function handleSmallTalk(string $message, array $plan, array $context): array
     {
-        try {
-            $prompt = "Користувач написав: \"{$message}\"
-
-Це smalltalk (вітання, подяка, допобачення і т.д.). 
-
-Згенеруй коротку природну відповідь українською (до 15 слів). Будь дружнім і готовим допомогти з підбором тактичного екіпірування.
-
-Поверни ТІЛЬКИ текст відповіді, без лапок.";
-
-            $response = $this->aiRouter->callOpenAI($prompt, 0.7, 50);
-            $reply = trim($response, " \n\r\t\"'");
-            
-            if (empty($reply) || mb_strlen($reply) > 100) {
-                $reply = "👋";
-            }
-            
-            return [
-                'message' => $reply,
-                'products' => [],
-                'meta' => ['intent' => 'smalltalk'],
-            ];
-        } catch (\Exception $e) {
-            Log::warning('handleSmallTalk: AI failed', ['error' => $e->getMessage()]);
-            return [
-                'message' => "👋",
-                'products' => [],
-                'meta' => ['intent' => 'smalltalk'],
-            ];
-        }
+        return $this->smallTalkHandler->handle($message, $plan, $context);
     }
 
     /**
      * Handle unknown intent
+     * @deprecated Use SmallTalkHandler::handleUnknown instead.
      */
     private function handleUnknown(string $message, array $plan, array $context): array
     {
-        return [
-            'message' => "Не зовсім зрозумів запит. Можете уточнити: шукаєте товар, питаєте про замовлення чи потрібна інша інформація?",
-            'products' => [],
-            'meta' => ['intent' => 'unknown', 'ambiguous' => true],
-        ];
+        return $this->smallTalkHandler->handleUnknown($message, $context);
     }
-
-    /**
-     * AI narrative for product responses with intent-specific structure.
-     */
-    private function buildProductNarrative(array $products, string $originalMessage, array $filters, array $sessionContext, ?string $sessionId): string
-    {
-        $productsForPrompt = array_slice($products, 0, 4);
-        if (empty($productsForPrompt)) {
-            return "Ось варіанти";
-        }
-
-        $flow = $this->detectProductFlow($originalMessage);
-
-        if ($flow === 'comparison') {
-            return $this->buildComparisonNarrative($productsForPrompt, $originalMessage);
-        }
-
-        // Concise deterministic narrative: no LLM, no вигадки
-        return $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
-    }
-
-    private function buildComparisonNarrative(array $products, string $originalMessage): string
-    {
-        // Dedup by title and pick best matching pair
-        $uniq = [];
-        foreach ($products as $p) {
-            $title = trim((string) ($p['title'] ?? ''));
-            if ($title === '') { continue; }
-            $key = mb_strtolower($title);
-            if (isset($uniq[$key])) { continue; }
-            $uniq[$key] = $p;
-        }
-        $products = array_values($uniq);
-        if (count($products) === 1) {
-            // nothing to compare, fall back to single-line output
-            $p = $products[0];
-            $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
-            $cat = trim((string) ($p['category_path'] ?? ''));
-            $line = ($p['title'] ?? 'Товар') . ' — ' . $price . ($cat ? " ({$cat})" : '');
-            return $line . "\n" . "Потрібно показати альтернативу для порівняння?";
-        }
-
-        [$a, $b] = $this->pickComparisonPair($products, $originalMessage);
-
-        $titleA = trim((string) ($a['title'] ?? 'Товар A'));
-        $titleB = trim((string) ($b['title'] ?? 'Товар B'));
-        $priceA = $this->formatPrice($a['price'] ?? null);
-        $priceB = $this->formatPrice($b['price'] ?? null);
-        $catA = trim((string) ($a['category_path'] ?? ''));
-        $catB = trim((string) ($b['category_path'] ?? ''));
-
-        $lines = [];
-        $lines[] = "1) {$titleA} — {$priceA}" . ($catA ? " ({$catA})" : '');
-        $factsA = $this->formatProductFacts($a);
-        if (!empty($factsA)) {
-            $lines[] = '   Факти: ' . implode('; ', $factsA);
-        }
-        $lines[] = "2) {$titleB} — {$priceB}" . ($catB ? " ({$catB})" : '');
-        $factsB = $this->formatProductFacts($b);
-        if (!empty($factsB)) {
-            $lines[] = '   Факти: ' . implode('; ', $factsB);
-        }
-
-        $diffs = $this->formatComparisonDiffs($a, $b);
-        if (!empty($diffs)) {
-            $lines[] = 'Різниця: ' . implode('; ', $diffs);
-        }
-
-        $cta = "Потрібно іншу пару для порівняння або показати сумісні аксесуари?";
-        return implode("\n", $lines) . "\n" . $cta;
-    }
-
-    private function buildConciseNarrative(array $products, array $filters, string $originalMessage): string
-    {
-        // Sort by price ascending when available
-        usort($products, fn($a, $b) => ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX));
-
-        $lines = [];
-        $seen = [];
-        foreach ($products as $p) {
-            $title = trim((string) ($p['title'] ?? 'Товар'));
-            if ($title === '' || isset($seen[mb_strtolower($title)])) {
-                continue; // skip duplicates
-            }
-            $seen[mb_strtolower($title)] = true;
-
-            $price = isset($p['price']) ? round((float) $p['price']) . ' ₴' : 'ціна не вказана';
-
-            // Pick 1–2 real facts: category_path and short description if present
-            $facts = [];
-            $cat = trim((string) ($p['category_path'] ?? ''));
-            if ($cat !== '') { $facts[] = $cat; }
-
-            $desc = trim((string) ($p['description'] ?? ''));
-            if ($desc !== '') {
-                $facts[] = mb_substr($desc, 0, 90) . (mb_strlen($desc) > 90 ? '…' : '');
-            }
-
-            if (empty($facts)) {
-                $facts[] = 'деталі не вказано';
-            }
-
-            $lines[] = "- {$title} — {$price}. " . implode(' / ', array_slice($facts, 0, 2));
-
-            if (count($lines) >= 3) {
-                break; // keep response short
-            }
-        }
-
-        if (empty($lines)) {
-            return "Наразі немає товарів за цим запитом";
-        }
-
-        $cta = "Звузити за бюджетом чи кольором, або показати ще?";
-
-        return implode("\n", $lines) . "\n" . $cta;
-    }
-
-    private function buildFallbackNarrative(array $products, string $flow, ?string $categoryHint, array $filters, string $originalMessage): string
-    {
-        $top = array_slice($products, 0, 3);
-        $lines = [];
-        $cta = '';
-
-        if ($flow === 'discovery') {
-            // Price-ordered roles
-            usort($top, fn($a, $b) => ($a['price'] ?? 0) <=> ($b['price'] ?? 0));
-            $roleLabels = ['Бюджетний', 'Збалансований', 'Посилений'];
-            foreach ($top as $idx => $p) {
-                $role = $roleLabels[$idx] ?? 'Варіант';
-                $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
-                $title = $p['title'] ?? 'Товар';
-                $lines[] = "- {$role}: {$title} — {$price}";
-            }
-
-            $cta = isset($filters['budget_max'])
-                ? "Можу лишити тільки варіанти до {$filters['budget_max']} грн — показати?"
-                : "Підкажи бюджет або умови використання — звужу до одного варіанту.";
-            $frame = $categoryHint ? "Ось варіанти у категорії «{$categoryHint}»:" : "Ось 3 варіанти:";
-            return $frame . "\n" . implode("\n", $lines) . "\n" . $cta;
-        }
-
-        if ($flow === 'comparison' && count($top) >= 2) {
-            [$a, $b] = $this->pickComparisonPair($products, $originalMessage);
-            
-            $titleA = $a['title'] ?? 'Товар A';
-            $titleB = $b['title'] ?? 'Товар B';
-            $priceA = isset($a['price']) ? round((float)$a['price']) . ' ₴' : '?';
-            $priceB = isset($b['price']) ? round((float)$b['price']) . ' ₴' : '?';
-            
-            $diffs = [];
-            // Extract key differences from characteristics/description
-            $charA = $this->formatCharacteristics($a['characteristics'] ?? [], 2);
-            $charB = $this->formatCharacteristics($b['characteristics'] ?? [], 2);
-            if ($charA) { $diffs[] = "A: " . str_replace("\n", ", ", $charA); }
-            if ($charB) { $diffs[] = "B: " . str_replace("\n", ", ", $charB); }
-            
-            $block = "{$titleA} — {$priceA} vs {$titleB} — {$priceB}";
-            if (!empty($diffs)) {
-                $block .= "\n" . implode("\n", $diffs);
-            }
-            
-            $cta = "Що важливіше для твої задачі: ціна/легкість чи захист/надійність? Я підкажу, який варіант логічніший.";
-            return $block . "\n\n" . $cta;
-        }
-
-        if ($flow === 'details') {
-            if (empty($top)) {
-                return '';
-            }
-            $p = $top[0];
-            $price = isset($p['price']) ? round((float)$p['price']) . ' ₴' : 'ціна не вказана';
-            $title = $p['title'] ?? 'Товар';
-            $desc = mb_substr((string)($p['description'] ?? ''), 0, 200);
-            $chars = $this->formatCharacteristics($p['characteristics'] ?? [], 3);
-            
-            $block = "{$title} — {$price}";
-            if ($desc) {
-                $block .= "\n" . $desc;
-            }
-            if ($chars) {
-                $block .= "\n" . $chars;
-            }
-            
-            $cta = "Можу порівняти з іншими варіантами або показати сумісні аксесуари — потрібно?";
-            return $block . "\n\n" . $cta;
-        }
-
-        if ($flow === 'followup') {
-            $category = $this->detectMainCategory($top[0] ?? []);
-            $suggestions = $this->buildAccessorySuggestions($category);
-            if (!empty($suggestions)) {
-                $cta = "Не обов’язково, але зручніше. Показати сумісні аксесуари?";
-                return implode("\n", $suggestions) . "\n\n" . $cta;
-            }
-            return '';
-        }
-
-
-        return '';
-    }
-
-    private function formatCharacteristics($characteristics, int $limit = 3): string
-    {
-        if (!is_array($characteristics) || empty($characteristics)) {
-            return '';
-        }
-
-        $out = [];
-        $count = 0;
-        foreach ($characteristics as $key => $value) {
-            if ($count >= $limit) {
-                break;
-            }
-            if (is_string($key) && (is_string($value) || is_numeric($value))) {
-                $out[] = "• {$key}: {$value}";
-                $count++;
-                continue;
-            }
-            if (is_string($value)) {
-                $out[] = "• {$value}";
-                $count++;
-            }
-        }
-
-        return implode("\n", $out);
-    }
-
 
     private function detectProductFlow(string $message): string
     {
@@ -1188,27 +573,22 @@ class AgentOrchestrator
         return $map[$category] ?? [];
     }
 
+    /**
+     * Load session context
+     * @deprecated Use SessionContextService::loadContext instead
+     */
     private function loadSessionContext(?string $sessionId): array
     {
-        if (!$sessionId) {
-            return [];
-        }
-
-        $key = "chat_ctx_{$sessionId}";
-        $ctx = Cache::get($key, []);
-        return is_array($ctx) ? $ctx : [];
+        return $this->sessionService->loadContext($sessionId);
     }
 
+    /**
+     * Save session context
+     * @deprecated Use SessionContextService::saveContext instead
+     */
     private function saveSessionContext(?string $sessionId, array $data): void
     {
-        if (!$sessionId) {
-            return;
-        }
-
-        $key = "chat_ctx_{$sessionId}";
-        $existing = $this->loadSessionContext($sessionId);
-        $merged = array_merge($existing, $data);
-        Cache::put($key, $merged, now()->addHours(6));
+        $this->sessionService->saveContext($sessionId, $data);
     }
 
     // === Helper methods ===

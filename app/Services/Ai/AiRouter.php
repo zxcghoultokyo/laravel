@@ -5,6 +5,7 @@ namespace App\Services\Ai;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Product;
 use App\Models\Brand;
 
@@ -13,6 +14,15 @@ class AiRouter
     protected string $model;
     protected string $baseUrl;
     protected ?string $apiKey;
+
+    // Rate limiting: max 60 requests per minute
+    private const RATE_LIMIT_MAX = 60;
+    private const RATE_LIMIT_DECAY = 60; // seconds
+    private const RATE_LIMIT_KEY = 'openai_api';
+
+    // Caching: cache classify results for 5 minutes
+    private const CLASSIFY_CACHE_TTL = 300; // seconds
+    private const CLASSIFY_CACHE_PREFIX = 'ai_classify_';
 
     public function __construct()
     {
@@ -23,7 +33,38 @@ class AiRouter
     }
 
     /**
-     * Основна маршрутизація намірів
+     * Check if rate limit allows a new request.
+     */
+    protected function checkRateLimit(): bool
+    {
+        if (RateLimiter::tooManyAttempts(self::RATE_LIMIT_KEY, self::RATE_LIMIT_MAX)) {
+            Log::warning('AiRouter: Rate limit exceeded', [
+                'remaining' => RateLimiter::remaining(self::RATE_LIMIT_KEY, self::RATE_LIMIT_MAX),
+                'retry_after' => RateLimiter::availableIn(self::RATE_LIMIT_KEY),
+            ]);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Record an API attempt for rate limiting.
+     */
+    protected function recordAttempt(): void
+    {
+        RateLimiter::hit(self::RATE_LIMIT_KEY, self::RATE_LIMIT_DECAY);
+    }
+
+    /**
+     * Get remaining rate limit attempts.
+     */
+    public function getRateLimitRemaining(): int
+    {
+        return RateLimiter::remaining(self::RATE_LIMIT_KEY, self::RATE_LIMIT_MAX);
+    }
+
+    /**
+     * Основна маршрутизація намірів (with caching and rate limiting)
      */
     public function classify(string $message): array
     {
@@ -35,6 +76,20 @@ class AiRouter
 
         if (empty($this->apiKey)) {
             Log::warning('AiRouter::classify called without OPENAI_API_KEY');
+            return $fallback;
+        }
+
+        // Check cache first
+        $cacheKey = self::CLASSIFY_CACHE_PREFIX . md5(mb_strtolower(trim($message)));
+        $cached = Cache::get($cacheKey);
+        if ($cached !== null) {
+            Log::debug('AiRouter::classify cache hit', ['message' => $message]);
+            return $cached;
+        }
+
+        // Check rate limit
+        if (!$this->checkRateLimit()) {
+            Log::warning('AiRouter::classify rate limited, returning fallback');
             return $fallback;
         }
 
@@ -64,7 +119,11 @@ class AiRouter
 ";
 
         try {
+            // Record API attempt for rate limiting
+            $this->recordAttempt();
+
             $response = Http::withToken($this->apiKey)
+                ->timeout(10)
                 ->post($this->baseUrl . '/chat/completions', [
                     'model'       => $this->model,
                     'messages'    => [
@@ -88,7 +147,13 @@ class AiRouter
                 return $fallback;
             }
 
-            return array_merge($fallback, $decoded);
+            $result = array_merge($fallback, $decoded);
+
+            // Cache the result
+            Cache::put($cacheKey, $result, self::CLASSIFY_CACHE_TTL);
+            Log::debug('AiRouter::classify cached result', ['message' => $message, 'intent' => $result['intent']]);
+
+            return $result;
         } catch (\Throwable $e) {
             Log::error('AiRouter::classify exception: ' . $e->getMessage(), ['exception' => $e]);
             return $fallback;

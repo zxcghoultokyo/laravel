@@ -104,6 +104,52 @@ class AppServiceProvider extends ServiceProvider
             return new AiRecommender();
         });
 
+        // === NEW SERVICES ===
+
+        // Session Context Service (unified session handling)
+        $this->app->singleton(\App\Services\Session\SessionContextService::class, function ($app) {
+            return new \App\Services\Session\SessionContextService();
+        });
+
+        // Color Service (dynamic color detection from DB)
+        $this->app->singleton(\App\Services\Search\ColorService::class, function ($app) {
+            return new \App\Services\Search\ColorService();
+        });
+
+        // === AGENT HANDLERS ===
+
+        // FAQ Handler
+        $this->app->singleton(\App\Services\Agent\Handlers\FaqHandler::class, function ($app) {
+            return new \App\Services\Agent\Handlers\FaqHandler(
+                $app->make(\App\Services\Ai\AiRouter::class)
+            );
+        });
+
+        // SmallTalk Handler
+        $this->app->singleton(\App\Services\Agent\Handlers\SmallTalkHandler::class, function ($app) {
+            return new \App\Services\Agent\Handlers\SmallTalkHandler(
+                $app->make(\App\Services\Ai\AiRouter::class)
+            );
+        });
+
+        // OrderStatus Handler
+        $this->app->singleton(\App\Services\Agent\Handlers\OrderStatusHandler::class, function ($app) {
+            return new \App\Services\Agent\Handlers\OrderStatusHandler(
+                $app->make(\App\Services\Horoshop\OrderSearchService::class),
+                $app->make(\App\Services\Horoshop\DeliveryTrackingService::class)
+            );
+        });
+
+        // Narrative Builder
+        $this->app->singleton(\App\Services\Agent\Handlers\NarrativeBuilder::class, function ($app) {
+            return new \App\Services\Agent\Handlers\NarrativeBuilder(
+                $app->make(\App\Services\Ai\AiRouter::class),
+                $app->make(\App\Services\Search\ColorService::class)
+            );
+        });
+
+        // === AGENT TOOLS ===
+
         // Agent Orchestrator Tools
         $this->app->singleton(\App\Services\Agent\Tools\MeiliProductSearchTool::class, function ($app) {
             return new \App\Services\Agent\Tools\MeiliProductSearchTool(
@@ -141,7 +187,13 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(\App\Services\Agent\Tools\AiRerankTool::class),
                 $app->make(\App\Services\Horoshop\OrderSearchService::class),
                 $app->make(\App\Services\Horoshop\DeliveryTrackingService::class),
-                $app->make(\App\Services\Horoshop\HoroshopDataService::class)
+                $app->make(\App\Services\Horoshop\HoroshopDataService::class),
+                $app->make(\App\Services\Session\SessionContextService::class),
+                $app->make(\App\Services\Search\ColorService::class),
+                $app->make(\App\Services\Agent\Handlers\FaqHandler::class),
+                $app->make(\App\Services\Agent\Handlers\SmallTalkHandler::class),
+                $app->make(\App\Services\Agent\Handlers\OrderStatusHandler::class),
+                $app->make(\App\Services\Agent\Handlers\NarrativeBuilder::class)
             );
         });
     }

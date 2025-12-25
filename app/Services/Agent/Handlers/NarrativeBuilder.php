@@ -504,70 +504,23 @@ class NarrativeBuilder
     }
 
     /**
-     * Build comparison narrative for two products.
+     * Build comparison narrative for products.
+     * NOW: Short intro only, product_cards handle individual descriptions.
      */
     public function buildComparisonNarrative(array $products, string $originalMessage): string
     {
-        // Dedup by title and pick best matching pair
-        $uniq = [];
-
-        foreach ($products as $p) {
-            $title = trim((string) ($p['title'] ?? ''));
-
-            if ($title === '') {
-                continue;
-            }
-
-            $key = mb_strtolower($title);
-
-            if (isset($uniq[$key])) {
-                continue;
-            }
-
-            $uniq[$key] = $p;
+        $count = count($products);
+        
+        if ($count === 0) {
+            return "Не знайшов товарів для порівняння.";
         }
-
-        $products = array_values($uniq);
-
-        if (count($products) === 1) {
-            $p = $products[0];
-            $price = isset($p['price']) ? round((float) $p['price']) . ' ₴' : 'ціна не вказана';
-            $cat = trim((string) ($p['category_path'] ?? ''));
-            $line = ($p['title'] ?? 'Товар') . ' — ' . $price . ($cat ? " ({$cat})" : '');
-            return $line . "\n" . "Потрібно показати альтернативу для порівняння?";
+        
+        if ($count === 1) {
+            return "Знайшов один варіант. Показати альтернативи для порівняння?";
         }
-
-        [$a, $b] = $this->pickComparisonPair($products, $originalMessage);
-
-        $titleA = trim((string) ($a['title'] ?? 'Товар A'));
-        $titleB = trim((string) ($b['title'] ?? 'Товар B'));
-        $priceA = $this->formatPrice($a['price'] ?? null);
-        $priceB = $this->formatPrice($b['price'] ?? null);
-        $catA = trim((string) ($a['category_path'] ?? ''));
-        $catB = trim((string) ($b['category_path'] ?? ''));
-
-        $lines = [];
-        $lines[] = "1) {$titleA} — {$priceA}" . ($catA ? " ({$catA})" : '');
-
-        $factsA = $this->formatProductFacts($a);
-        if (!empty($factsA)) {
-            $lines[] = '   Факти: ' . implode('; ', $factsA);
-        }
-
-        $lines[] = "2) {$titleB} — {$priceB}" . ($catB ? " ({$catB})" : '');
-
-        $factsB = $this->formatProductFacts($b);
-        if (!empty($factsB)) {
-            $lines[] = '   Факти: ' . implode('; ', $factsB);
-        }
-
-        $diffs = $this->formatComparisonDiffs($a, $b);
-        if (!empty($diffs)) {
-            $lines[] = 'Різниця: ' . implode('; ', $diffs);
-        }
-
-        $cta = "Потрібно іншу пару для порівняння або показати сумісні аксесуари?";
-        return implode("\n", $lines) . "\n" . $cta;
+        
+        // Short intro - cards will show details
+        return "Ось варіанти для порівняння:";
     }
 
     /**
@@ -655,7 +608,9 @@ class NarrativeBuilder
     {
         $m = mb_strtolower($message);
 
-        $comparisonKeywords = ['порівняй', 'чим різниця', 'чим відрізня', 'чим відрізняється', 'vs', 'відмінність', 'різниця'];
+        // "яку обрати", "яка краще" = recommendation flow, not strict comparison
+        // Strict comparison only for explicit compare requests
+        $comparisonKeywords = ['порівняй', 'чим різниця', 'чим відрізня', 'чим відрізняється', 'vs', 'відмінність'];
         foreach ($comparisonKeywords as $kw) {
             if (str_contains($m, $kw)) {
                 return 'comparison';

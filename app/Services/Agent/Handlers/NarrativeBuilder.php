@@ -39,11 +39,188 @@ class NarrativeBuilder
             return $this->buildComparisonNarrative($productsForPrompt, $originalMessage);
         }
 
-        // Detect context-aware intro based on user message
-        $intro = $this->detectContextualIntro($originalMessage, $filters, count($products));
+        // NEW: Build individual product cards with descriptions
+        // Returns short intro only, cards have their own descriptions
+        return $this->buildIntroForCards($productsForPrompt, $filters, $originalMessage);
+    }
 
-        // Concise deterministic narrative: no LLM, no hallucinations
-        return $intro . $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
+    /**
+     * Build product cards with individual descriptions.
+     * Each card has: product data + short description
+     * @return array<int, array{description: string, product: array}>
+     */
+    public function buildProductCards(
+        array $products,
+        string $originalMessage,
+        array $filters
+    ): array {
+        $cards = [];
+        $count = count($products);
+        
+        foreach ($products as $i => $product) {
+            $description = $this->buildProductCardDescription($product, $i, $count, $filters, $originalMessage);
+            $cards[] = [
+                'description' => $description,
+                'product' => $product,
+            ];
+        }
+        
+        return $cards;
+    }
+
+    /**
+     * Build short intro text for card-based display.
+     */
+    protected function buildIntroForCards(array $products, array $filters, string $originalMessage): string
+    {
+        $count = count($products);
+        $m = mb_strtolower($originalMessage);
+        
+        // Help/recommendation requests - short acknowledgment
+        $helpKeywords = ['допомож', 'підбер', 'порад', 'рекоменд', 'підкаж', 'потрібн', 'яку обрати', 'який обрати', 'який краще', 'яка краще'];
+        foreach ($helpKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                if ($count === 1) {
+                    return "Рекомендую такий варіант:";
+                }
+                return "Ось мої рекомендації:";
+            }
+        }
+        
+        // Budget search
+        if (!empty($filters['budget_max'])) {
+            return "Варіанти до {$filters['budget_max']} ₴:";
+        }
+        
+        // Color search  
+        if (!empty($filters['color'])) {
+            $color = $filters['color'];
+            return "Варіанти в кольорі «{$color}»:";
+        }
+        
+        // Default
+        if ($count === 1) {
+            return "Ось що знайшов:";
+        }
+        return "Ось варіанти:";
+    }
+
+    /**
+     * Build description for individual product card.
+     * Short, focused on key differentiator.
+     */
+    protected function buildProductCardDescription(
+        array $product,
+        int $index,
+        int $totalCount,
+        array $filters,
+        string $originalMessage
+    ): string {
+        $title = $product['title'] ?? 'Товар';
+        $price = isset($product['price']) ? round($product['price']) : null;
+        $brand = $product['brand'] ?? null;
+        $inStock = $product['in_stock'] ?? false;
+        
+        $parts = [];
+        
+        // Position context for comparisons (if multiple products)
+        if ($totalCount > 1) {
+            if ($index === 0) {
+                // Cheapest or most popular
+                $parts[] = $this->getFirstProductHighlight($product, $totalCount);
+            } elseif ($index === $totalCount - 1 && $price) {
+                // Premium option
+                $parts[] = "💎 Преміум варіант";
+            } else {
+                // Middle option
+                $parts[] = "⚖️ Збалансований вибір";
+            }
+        }
+        
+        // Brand highlight if notable
+        if ($brand && $this->isNotableBrand($brand)) {
+            $parts[] = "Бренд {$brand}";
+        }
+        
+        // Stock status if limited
+        if (!$inStock) {
+            $parts[] = "⏳ Під замовлення";
+        }
+        
+        // Extract one key feature
+        $feature = $this->extractOneKeyFeature($product);
+        if ($feature) {
+            $parts[] = $feature;
+        }
+        
+        // Build final description
+        if (empty($parts)) {
+            return "";
+        }
+        
+        return implode(' • ', array_slice($parts, 0, 2));
+    }
+
+    /**
+     * Get highlight for first product (usually best value).
+     */
+    protected function getFirstProductHighlight(array $product, int $totalCount): string
+    {
+        $price = $product['price'] ?? 0;
+        $popularity = $product['popularity'] ?? 0;
+        
+        if ($popularity > 50) {
+            return "⭐ Популярний вибір";
+        }
+        
+        return "💰 Найдоступніший варіант";
+    }
+
+    /**
+     * Check if brand is notable enough to highlight.
+     */
+    protected function isNotableBrand(?string $brand): bool
+    {
+        if (!$brand) return false;
+        
+        $notableBrands = [
+            'атака', 'velmet', 'uatac', 'м-тас', 'm-tac', 'tasmanian tiger',
+            'direct action', 'helikon', 'firstspear', '5.11', 'condor',
+            'mechanix', 'magpul', 'crye', 'ferro concepts',
+        ];
+        
+        $brandLower = mb_strtolower($brand);
+        foreach ($notableBrands as $notable) {
+            if (str_contains($brandLower, $notable)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * Extract one key feature from product.
+     */
+    protected function extractOneKeyFeature(array $product): ?string
+    {
+        // Try attributes
+        $attrs = $product['attrs'] ?? $product['attributes'] ?? [];
+        if (is_array($attrs)) {
+            // Priority attributes
+            $priorityKeys = ['матеріал', 'material', 'вага', 'weight', 'розмір', 'size', 'клас захисту'];
+            foreach ($priorityKeys as $key) {
+                foreach ($attrs as $k => $v) {
+                    if (is_string($v) && mb_strlen($v) > 2 && mb_strlen($v) < 50) {
+                        if (str_contains(mb_strtolower($k), $key)) {
+                            return ucfirst($k) . ': ' . $v;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
     }
 
     /**

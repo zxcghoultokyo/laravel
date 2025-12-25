@@ -277,8 +277,9 @@ class AgentOrchestrator
         // Collect articles for debug
         $chosenArticles = array_column($products, 'article');
         
-        // Step 5: Generate response message via NarrativeBuilder
+        // Step 5: Generate response - intro message + product cards with descriptions
         $message = $this->narrativeBuilder->buildProductNarrative($products, $originalMessage, $filters, $sessionContext, $sessionId);
+        $productCards = $this->narrativeBuilder->buildProductCards($products, $originalMessage, $filters);
 
         // Persist lightweight session context using SessionContextService
         $lastProduct = !empty($products) ? $products[0] : null;
@@ -305,7 +306,7 @@ class AgentOrchestrator
             }
         }
 
-        return AgentResponseDTO::productSearch(
+        $response = AgentResponseDTO::productSearch(
             message: $message,
             products: $products,
             refinedQuery: $searchQuery,
@@ -313,7 +314,13 @@ class AgentOrchestrator
             chosenIds: $topIds,
             ambiguous: $plan->ambiguous,
             searchDebug: $debug,
-        )->toArray();
+        );
+        
+        // Add product_cards to response for new display format
+        $result = $response->toArray();
+        $result['meta']['product_cards'] = $productCards;
+        
+        return $result;
     }
 
     /**

@@ -59,6 +59,7 @@ class ChatService
             $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $contextWithSessionId);
             
             $intent = $agentResult['meta']['intent'] ?? null;
+            $productCards = $agentResult['meta']['product_cards'] ?? null;
 
             // Формуємо відповідь у форматі очікуваному фронтом
             $response = [
@@ -66,6 +67,8 @@ class ChatService
                 'text'       => $agentResult['message'] ?? '',
                 'data'       => [
                     'products' => $agentResult['products'] ?? [],
+                    // NEW: product_cards for individual card+description display
+                    'product_cards' => $productCards,
                 ],
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],

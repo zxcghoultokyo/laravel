@@ -372,6 +372,9 @@
                     addMessage(msg.content, 'user', false);
                 } else if (msg.role === 'assistant') {
                     addMessage(msg.content, 'assistant', false);
+                } else if (msg.role === 'product_cards' && msg.cards) {
+                    // NEW: restore product cards format
+                    addProductCards(msg.cards, false);
                 } else if (msg.role === 'products' && msg.products) {
                     addProducts(msg.products, false);
                 }
@@ -425,11 +428,17 @@
                     saveSessionId(data.session_id);
                 }
 
-                // Додаємо відповідь
-                addMessage(data.text || 'Вибачте, сталася помилка', 'assistant', true);
+                // Додаємо вступне повідомлення
+                if (data.text) {
+                    addMessage(data.text, 'assistant', true);
+                }
 
-                // Якщо є товари - показуємо їх
-                if (data.data && data.data.products && data.data.products.length > 0) {
+                // NEW: Показуємо товари з описами (product_cards)
+                if (data.data && data.data.product_cards && data.data.product_cards.length > 0) {
+                    addProductCards(data.data.product_cards, true);
+                }
+                // Fallback: старий формат без описів
+                else if (data.data && data.data.products && data.data.products.length > 0) {
                     addProducts(data.data.products, true);
                 }
             })
@@ -472,6 +481,109 @@
 
             if (save) {
                 saveMessage(sessionId, { role, content: text });
+            }
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // NEW: Add product cards with individual descriptions
+        function addProductCards(productCards, save = true) {
+            const s = window.ailureSettings || { primary_color: '#2563eb' };
+            
+            productCards.slice(0, 3).forEach((card, index) => {
+                const product = card.product;
+                const description = card.description;
+                
+                // Add description as small assistant message (if not empty)
+                if (description && description.trim()) {
+                    const descDiv = document.createElement('div');
+                    descDiv.className = 'ailure-message ailure-assistant';
+                    descDiv.style.cssText = `
+                        margin-bottom: 8px;
+                        display: flex;
+                        justify-content: flex-start;
+                        animation: fadeInUp 0.3s ease-out;
+                        animation-delay: ${index * 0.1}s;
+                    `;
+                    const bubble = document.createElement('div');
+                    bubble.style.cssText = `
+                        background: #f8fafc;
+                        color: #64748b;
+                        padding: 8px 12px;
+                        border-radius: 12px;
+                        max-width: 85%;
+                        font-size: 13px;
+                        line-height: 1.4;
+                    `;
+                    bubble.textContent = description;
+                    descDiv.appendChild(bubble);
+                    messages.appendChild(descDiv);
+                }
+                
+                // Add product card
+                const cardEl = document.createElement('a');
+                cardEl.href = product.link || '#';
+                cardEl.target = '_blank';
+                cardEl.style.cssText = `
+                    display: block;
+                    background: white;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 12px;
+                    padding: 12px;
+                    margin-bottom: 12px;
+                    text-decoration: none;
+                    color: inherit;
+                    transition: all 0.2s;
+                    animation: fadeInUp 0.3s ease-out;
+                    animation-delay: ${index * 0.1 + 0.05}s;
+                `;
+                cardEl.onmouseover = () => {
+                    cardEl.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                    cardEl.style.transform = 'translateY(-2px)';
+                    cardEl.style.borderColor = s.primary_color;
+                };
+                cardEl.onmouseout = () => {
+                    cardEl.style.boxShadow = 'none';
+                    cardEl.style.transform = 'translateY(0)';
+                    cardEl.style.borderColor = '#e5e7eb';
+                };
+
+                // Generate image HTML with fallback support
+                let imgHtml = '';
+                if (product.images && product.images.length > 0) {
+                    const imgId = 'img-card-' + product.id + '-' + Date.now();
+                    const fallbackImages = product.images.slice(1).map(img => `'${img}'`).join(',');
+                    imgHtml = `
+                        <img id="${imgId}" 
+                             src="${product.images[0]}" 
+                             style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
+                             onerror="(function(img){
+                                 var fallbacks = [${fallbackImages}];
+                                 var idx = parseInt(img.dataset.fallbackIdx || '0');
+                                 if (idx < fallbacks.length) {
+                                     img.dataset.fallbackIdx = idx + 1;
+                                     img.src = fallbacks[idx];
+                                 } else {
+                                     img.style.display = 'none';
+                                 }
+                             })(this)"
+                        />
+                    `;
+                }
+
+                cardEl.innerHTML = `
+                    <div style="display: flex; gap: 12px;">
+                        ${imgHtml}
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
+                            <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
+                        </div>
+                    </div>
+                `;
+                messages.appendChild(cardEl);
+            });
+            
+            if (save) {
+                saveMessage(sessionId, { role: 'product_cards', cards: productCards.slice(0, 3) });
             }
             messages.scrollTop = messages.scrollHeight;
         }

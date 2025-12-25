@@ -308,6 +308,11 @@ class MeiliProductSearchTool
         // Get all synonyms for this color group from DB (via ColorService)
         $searchVariants = $this->colorService->getSynonymsForColor($colorGroup);
         
+        // FALLBACK: built-in synonyms if DB is empty (critical colors for tactical store)
+        if (empty($searchVariants)) {
+            $searchVariants = $this->getFallbackColorSynonyms($requestedColorLower);
+        }
+        
         // Always include the original requested color and the color group
         $searchVariants = array_merge([$requestedColorLower, $colorGroup], $searchVariants);
         $searchVariants = array_unique(array_map('mb_strtolower', $searchVariants));
@@ -340,6 +345,73 @@ class MeiliProductSearchTool
         }
         
         return $filtered;
+    }
+
+    /**
+     * Fallback color synonyms for when DB table is empty.
+     * Critical colors for Ukrainian tactical store.
+     */
+    private function getFallbackColorSynonyms(string $color): array
+    {
+        $synonymMap = [
+            // Pixel / MM14 camo
+            'піксель' => ['pixel', 'пиксель', 'mm14', 'мм14', 'піксельний', 'пікселя', 'ua pixel', 'ukrainian pixel'],
+            'pixel' => ['піксель', 'пиксель', 'mm14', 'мм14', 'піксельний', 'ua pixel'],
+            'пиксель' => ['піксель', 'pixel', 'mm14', 'мм14', 'піксельний'],
+            'mm14' => ['піксель', 'pixel', 'пиксель', 'мм14', 'піксельний'],
+            
+            // Multicam variations
+            'мультикам' => ['multicam', 'мультікам', 'mc', 'мтк', 'multi'],
+            'multicam' => ['мультикам', 'мультікам', 'mc', 'мтк'],
+            'мультікам' => ['мультикам', 'multicam', 'mc'],
+            
+            // Olive / OD
+            'олива' => ['olive', 'od', 'оливковий', 'оливка', 'ranger green', 'рейнджер грін'],
+            'olive' => ['олива', 'od', 'оливковий', 'оливка'],
+            'od' => ['олива', 'olive', 'оливковий'],
+            
+            // Black
+            'чорний' => ['black', 'чорна', 'чорне', 'чёрный', 'чорного'],
+            'black' => ['чорний', 'чорна', 'чорне', 'чёрный'],
+            'чёрный' => ['чорний', 'black', 'чорна'],
+            
+            // Coyote / Tan
+            'койот' => ['coyote', 'tan', 'пісочний', 'койоте', 'coyote brown', 'cb'],
+            'coyote' => ['койот', 'tan', 'пісочний', 'cb', 'coyote brown'],
+            'tan' => ['койот', 'coyote', 'пісочний', 'бежевий'],
+            'пісочний' => ['койот', 'coyote', 'tan', 'бежевий', 'пісок'],
+            
+            // Khaki
+            'хакі' => ['khaki', 'хаки', 'хакі'],
+            'khaki' => ['хакі', 'хаки'],
+            
+            // Woodland
+            'вудленд' => ['woodland', 'вудланд', 'ліс'],
+            'woodland' => ['вудленд', 'вудланд'],
+            
+            // A-TACS variations
+            'атакс' => ['a-tacs', 'atacs', 'а-такс'],
+            'a-tacs' => ['атакс', 'atacs', 'а-такс'],
+            
+            // Grey
+            'сірий' => ['grey', 'gray', 'сіра', 'сіре', 'серый', 'wolf grey'],
+            'grey' => ['сірий', 'gray', 'сіра', 'серый'],
+            'gray' => ['сірий', 'grey', 'сіра', 'серый'],
+        ];
+        
+        // Direct match
+        if (isset($synonymMap[$color])) {
+            return $synonymMap[$color];
+        }
+        
+        // Partial match (e.g., "піксел" matches "піксель")
+        foreach ($synonymMap as $key => $synonyms) {
+            if (str_contains($key, $color) || str_contains($color, $key)) {
+                return array_merge([$key], $synonyms);
+            }
+        }
+        
+        return [];
     }
 
     private function detectPrimaryType(string $queryLower): ?string

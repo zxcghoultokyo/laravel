@@ -507,11 +507,32 @@
                     card.style.borderColor = '#e5e7eb';
                 };
 
+                // Generate image HTML with fallback support
+                let imgHtml = '';
+                if (product.images && product.images.length > 0) {
+                    const imgId = 'img-' + product.id + '-' + Date.now();
+                    const fallbackImages = product.images.slice(1).map(img => `'${img}'`).join(',');
+                    imgHtml = `
+                        <img id="${imgId}" 
+                             src="${product.images[0]}" 
+                             style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
+                             onerror="(function(img){
+                                 var fallbacks = [${fallbackImages}];
+                                 var idx = parseInt(img.dataset.fallbackIdx || '0');
+                                 if (idx < fallbacks.length) {
+                                     img.dataset.fallbackIdx = idx + 1;
+                                     img.src = fallbacks[idx];
+                                 } else {
+                                     img.style.display = 'none';
+                                 }
+                             })(this)"
+                        />
+                    `;
+                }
+
                 card.innerHTML = `
                     <div style="display: flex; gap: 12px;">
-                        ${product.images && product.images[0] ? `
-                            <img src="${product.images[0]}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" />
-                        ` : ''}
+                        ${imgHtml}
                         <div style="flex: 1; min-width: 0;">
                             <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
                             <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>

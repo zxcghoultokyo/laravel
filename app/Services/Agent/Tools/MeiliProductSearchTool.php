@@ -108,6 +108,15 @@ class MeiliProductSearchTool
                 $result = $index->search($enhancedQuery, $searchParams);
                 $hits = $result->getHits();
                 Log::info('MeiliProductSearchTool: retry without color returned', ['count' => count($hits), 'filter' => $filterStringNoColor]);
+                
+                // Post-filter: if we retried without color, still validate color in title/color field
+                if (!empty($filters['color']) && count($hits) > 0) {
+                    $hits = $this->postFilterByColor($hits, $filters['color']);
+                    Log::info('MeiliProductSearchTool: post-filtered by color in title/field', [
+                        'color' => $filters['color'],
+                        'remaining' => count($hits),
+                    ]);
+                }
             }
             
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);
@@ -280,6 +289,61 @@ class MeiliProductSearchTool
         
         // Otherwise prefer mains first, then others, then accessories
         return array_merge($mainProducts, $others, $accessories);
+    }
+    
+    /**
+     * Post-filter products by color when color_norm filter didn't work.
+     * Checks if color appears in title OR in color field.
+     * Uses color synonyms for matching.
+     */
+    private function postFilterByColor(array $hits, string $requestedColor): array
+    {
+        $requestedColorLower = mb_strtolower($requestedColor);
+        
+        // Color synonyms mapping
+        $colorSynonyms = [
+            'pixel' => ['піксель', 'пиксель', 'mm14', 'мм14', 'pixel', 'пікс'],
+            'піксель' => ['піксель', 'пиксель', 'mm14', 'мм14', 'pixel', 'пікс'],
+            'multicam' => ['мультикам', 'мультікам', 'multicam', 'mc'],
+            'мультикам' => ['мультикам', 'мультікам', 'multicam', 'mc'],
+            'olive' => ['олива', 'оліва', 'olive', 'od', 'ranger green'],
+            'олива' => ['олива', 'оліва', 'olive', 'od', 'ranger green'],
+            'black' => ['чорний', 'чорна', 'чорне', 'black', 'чорн'],
+            'чорний' => ['чорний', 'чорна', 'чорне', 'black', 'чорн'],
+            'tan' => ['тан', 'койот', 'coyote', 'tan', 'fde'],
+            'койот' => ['тан', 'койот', 'coyote', 'tan', 'fde'],
+            'camo' => ['камо', 'камуфляж', 'camo', 'camouflage'],
+        ];
+        
+        // Get all variants for requested color
+        $searchVariants = [$requestedColorLower];
+        if (isset($colorSynonyms[$requestedColorLower])) {
+            $searchVariants = array_merge($searchVariants, $colorSynonyms[$requestedColorLower]);
+        }
+        $searchVariants = array_unique($searchVariants);
+        
+        $filtered = [];
+        foreach ($hits as $hit) {
+            $title = mb_strtolower($hit['title'] ?? '');
+            $colorField = mb_strtolower($hit['color'] ?? '');
+            $searchIndex = mb_strtolower($hit['search_index'] ?? '');
+            
+            $matched = false;
+            foreach ($searchVariants as $variant) {
+                if (str_contains($title, $variant) || 
+                    str_contains($colorField, $variant) ||
+                    str_contains($searchIndex, $variant)) {
+                    $matched = true;
+                    break;
+                }
+            }
+            
+            if ($matched) {
+                $filtered[] = $hit;
+            }
+        }
+        
+        return $filtered;
     }
 
     private function detectPrimaryType(string $queryLower): ?string

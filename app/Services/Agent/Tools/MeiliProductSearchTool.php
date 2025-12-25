@@ -95,10 +95,16 @@ class MeiliProductSearchTool
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
             
-            // Retry without color filter if no hits (color_norm mismatch)
-            if (count($hits) === 0 && !empty($filters['color'])) {
-                Log::info('MeiliProductSearchTool: zero hits with color_norm filter, retrying without color', [
-                    'filter' => $filterString,
+            // Retry without color filter if no hits OR if color_norm might be unreliable
+            $shouldRetryWithoutColor = !empty($filters['color']) && (
+                count($hits) === 0 || 
+                count($hits) < 3  // Not enough results, try broader search
+            );
+            
+            if ($shouldRetryWithoutColor) {
+                Log::info('MeiliProductSearchTool: retrying without color_norm filter', [
+                    'reason' => count($hits) === 0 ? 'zero_hits' : 'few_hits',
+                    'original_count' => count($hits),
                 ]);
                 $filterPartsNoColor = array_filter($filterParts, fn($f) => !str_contains($f, 'color_norm ='));
                 $filterStringNoColor = implode(' AND ', $filterPartsNoColor);
@@ -108,17 +114,25 @@ class MeiliProductSearchTool
                     unset($searchParams['filter']);
                 }
                 $result = $index->search($enhancedQuery, $searchParams);
-                $hits = $result->getHits();
-                Log::info('MeiliProductSearchTool: retry without color returned', ['count' => count($hits), 'filter' => $filterStringNoColor]);
+                $hitsNoColorFilter = $result->getHits();
+                Log::info('MeiliProductSearchTool: retry without color returned', ['count' => count($hitsNoColorFilter)]);
                 
-                // Post-filter: if we retried without color, still validate color in title/color field
-                if (!empty($filters['color']) && count($hits) > 0) {
-                    $hits = $this->postFilterByColor($hits, $filters['color']);
-                    Log::info('MeiliProductSearchTool: post-filtered by color in title/field', [
-                        'color' => $filters['color'],
-                        'remaining' => count($hits),
-                    ]);
+                // Use broader results if we got more
+                if (count($hitsNoColorFilter) > count($hits)) {
+                    $hits = $hitsNoColorFilter;
                 }
+            }
+            
+            // ALWAYS post-filter by color if color filter was requested
+            // This catches cases where color_norm is wrong/missing in index
+            if (!empty($filters['color']) && count($hits) > 0) {
+                $hitsBeforeFilter = count($hits);
+                $hits = $this->postFilterByColor($hits, $filters['color']);
+                Log::info('MeiliProductSearchTool: post-filtered by color', [
+                    'color' => $filters['color'],
+                    'before' => $hitsBeforeFilter,
+                    'after' => count($hits),
+                ]);
             }
             
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);

@@ -66,6 +66,7 @@ class AgentOrchestrator
         // Step 2: Execute based on intent using handlers
         $response = match($plan->intent) {
             Intent::ProductSearch => $this->handleProductSearch($message, $plan, $context),
+            Intent::ProductComparison => $this->handleProductComparison($message, $plan, $context),
             Intent::OrderStatus => $this->orderStatusHandler->handle($message, $plan->toArray(), $context),
             Intent::Faq => $this->faqHandler->handle($message, $plan->toArray(), $context),
             Intent::SmallTalk => $this->smallTalkHandler->handle($message, $plan->toArray(), $context),
@@ -298,6 +299,194 @@ class AgentOrchestrator
             ambiguous: $plan->ambiguous,
             searchDebug: $debug,
         )->toArray();
+    }
+
+    /**
+     * Handle product comparison request.
+     * Uses products from session context (shown_products) for comparison.
+     */
+    private function handleProductComparison(string $message, SearchPlanDTO $plan, array $context): array
+    {
+        $sessionId = $context['session_id'] ?? null;
+        $sessionContext = $this->sessionService->loadContext($sessionId);
+        
+        // Get products IDs from session
+        $shownProductIds = $sessionContext['shown_products'] ?? [];
+        
+        Log::info('AgentOrchestrator: handling product comparison', [
+            'session_id' => $sessionId,
+            'shown_products' => $shownProductIds,
+        ]);
+        
+        // If no products in session, ask user to search first
+        if (empty($shownProductIds)) {
+            return AgentResponseDTO::unknown(
+                "Щоб порівняти товари, спочатку покажіть мені, що вас цікавить. Напишіть, наприклад: 'плитоноска' або 'шолом чорний'."
+            )->toArray();
+        }
+        
+        // Fetch full product details for comparison
+        $products = $this->detailsTool->getCards($shownProductIds, count($shownProductIds));
+        
+        if (count($products) < 2) {
+            return AgentResponseDTO::unknown(
+                "Для порівняння потрібно мінімум 2 товари. Показати ще варіанти для порівняння?"
+            )->toArray();
+        }
+        
+        // Build expert comparison
+        $comparison = $this->buildExpertComparison($products, $message);
+        
+        return [
+            'message' => $comparison,
+            'products' => $products, // Return same products for UI consistency
+            'meta' => [
+                'intent' => 'product_comparison',
+                'compared_ids' => $shownProductIds,
+                'products_count' => count($products),
+            ],
+        ];
+    }
+
+    /**
+     * Build expert product comparison based on real data.
+     * Priority: description → characteristics → title
+     * No hallucinations allowed - only use actual product data.
+     */
+    private function buildExpertComparison(array $products, string $userQuestion): string
+    {
+        // Limit to 3 products for comparison
+        $products = array_slice($products, 0, 3);
+        
+        // Collect product info for comparison
+        $productInfos = [];
+        foreach ($products as $i => $p) {
+            $info = [
+                'title' => trim($p['title'] ?? 'Товар ' . ($i + 1)),
+                'price' => $p['price'] ?? null,
+                'description' => trim($p['description'] ?? ''),
+                'characteristics' => $p['characteristics'] ?? [],
+                'category_path' => $p['category_path'] ?? '',
+                'brand' => $p['brand'] ?? '',
+                'color' => $p['color'] ?? '',
+            ];
+            $productInfos[] = $info;
+        }
+        
+        // Build comparison prompt for AI
+        $productsContext = [];
+        foreach ($productInfos as $i => $info) {
+            $num = $i + 1;
+            $priceText = $info['price'] ? round($info['price']) . ' ₴' : 'ціна не вказана';
+            
+            $ctx = "Товар {$num}: {$info['title']} — {$priceText}";
+            
+            if (!empty($info['description'])) {
+                $ctx .= "\nОпис: " . mb_substr($info['description'], 0, 500);
+            }
+            
+            if (!empty($info['characteristics']) && is_array($info['characteristics'])) {
+                $charsList = [];
+                foreach ($info['characteristics'] as $key => $val) {
+                    if (is_string($key) && !empty($val)) {
+                        $charsList[] = "{$key}: {$val}";
+                    }
+                }
+                if (!empty($charsList)) {
+                    $ctx .= "\nХарактеристики: " . implode('; ', array_slice($charsList, 0, 8));
+                }
+            }
+            
+            if (!empty($info['brand'])) {
+                $ctx .= "\nБренд: {$info['brand']}";
+            }
+            
+            $productsContext[] = $ctx;
+        }
+        
+        $productsText = implode("\n\n", $productsContext);
+        
+        $prompt = "Ти — експерт-консультант магазину тактичного спорядження Contractor.
+
+Користувач запитав: \"{$userQuestion}\"
+
+Ось товари для порівняння:
+{$productsText}
+
+ЗАВДАННЯ:
+Дай коротке ЕКСПЕРТНЕ порівняння (до 300 слів) українською.
+
+ПРАВИЛА:
+1. Використовуй ТІЛЬКИ дані з опису та характеристик вище
+2. НЕ вигадуй факти, яких немає в даних
+3. Порівнюй по реальних відмінностях: ціна, матеріали, рівень захисту, особливості
+4. Дай конкретну рекомендацію: кому який варіант підійде краще
+5. НЕ використовуй Markdown (жирний текст, списки з -)
+6. Пиши як досвідчений менеджер-консультант
+
+Формат відповіді:
+- Короткий вступ (1 речення)
+- Ключові відмінності (2-4 пункти простим текстом)
+- Рекомендація (1-2 речення про те, кому що краще)
+- Питання: 'Який варіант вам більше підходить?' або подібне";
+
+        try {
+            $response = $this->aiRouter->callOpenAI($prompt, 0.3, 500);
+            $comparison = trim($response);
+            
+            if (empty($comparison) || mb_strlen($comparison) < 50) {
+                return $this->buildFallbackComparison($productInfos);
+            }
+            
+            return $comparison;
+        } catch (\Throwable $e) {
+            Log::warning('AgentOrchestrator: AI comparison failed', ['error' => $e->getMessage()]);
+            return $this->buildFallbackComparison($productInfos);
+        }
+    }
+
+    /**
+     * Fallback comparison without AI.
+     */
+    private function buildFallbackComparison(array $productInfos): string
+    {
+        $lines = [];
+        $lines[] = "Ось порівняння товарів:";
+        $lines[] = "";
+        
+        foreach ($productInfos as $i => $info) {
+            $num = $i + 1;
+            $priceText = $info['price'] ? round($info['price']) . ' ₴' : 'ціна не вказана';
+            $lines[] = "{$num}. {$info['title']} — {$priceText}";
+            
+            // Add key facts
+            $facts = [];
+            if (!empty($info['brand'])) {
+                $facts[] = "Бренд: {$info['brand']}";
+            }
+            if (!empty($info['color'])) {
+                $facts[] = "Колір: {$info['color']}";
+            }
+            if (!empty($facts)) {
+                $lines[] = "   " . implode(', ', $facts);
+            }
+        }
+        
+        $lines[] = "";
+        
+        // Price comparison
+        $prices = array_filter(array_column($productInfos, 'price'));
+        if (count($prices) > 1) {
+            $minPrice = min($prices);
+            $maxPrice = max($prices);
+            $diff = $maxPrice - $minPrice;
+            $lines[] = "Різниця в ціні: " . round($diff) . " ₴";
+        }
+        
+        $lines[] = "";
+        $lines[] = "Який варіант вас більше цікавить? Можу розповісти детальніше.";
+        
+        return implode("\n", $lines);
     }
 
     /**

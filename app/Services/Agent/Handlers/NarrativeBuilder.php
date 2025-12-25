@@ -39,8 +39,54 @@ class NarrativeBuilder
             return $this->buildComparisonNarrative($productsForPrompt, $originalMessage);
         }
 
+        // Detect context-aware intro based on user message
+        $intro = $this->detectContextualIntro($originalMessage, $filters, count($products));
+
         // Concise deterministic narrative: no LLM, no hallucinations
-        return $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
+        return $intro . $this->buildConciseNarrative($productsForPrompt, $filters, $originalMessage);
+    }
+
+    /**
+     * Detect contextual intro message based on user's request.
+     */
+    protected function detectContextualIntro(string $message, array $filters, int $productsCount): string
+    {
+        $m = mb_strtolower($message);
+        
+        // Help/recommendation requests
+        $helpKeywords = ['допомож', 'підбер', 'порад', 'рекоменд', 'підкаж', 'потрібн'];
+        foreach ($helpKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                $intros = [
+                    "Ось найкращі варіанти для вас:\n\n",
+                    "Рекомендую такі варіанти:\n\n",
+                    "Ось що можу запропонувати:\n\n",
+                ];
+                return $intros[array_rand($intros)];
+            }
+        }
+        
+        // Budget-specific search
+        if (!empty($filters['budget_max'])) {
+            $budget = $filters['budget_max'];
+            return "Варіанти до {$budget} ₴:\n\n";
+        }
+        
+        // Color-specific search
+        if (!empty($filters['color'])) {
+            return ""; // Let products speak for themselves
+        }
+        
+        // Best sellers / popular items
+        $popularKeywords = ['популярн', 'бестселер', 'топ', 'найкращ', 'хіт'];
+        foreach ($popularKeywords as $kw) {
+            if (str_contains($m, $kw)) {
+                return "Бестселери в цій категорії:\n\n";
+            }
+        }
+        
+        // Default: no intro, just products
+        return "";
     }
 
     /**

@@ -24,6 +24,7 @@ class IntentEnumTest extends TestCase
             ['faq', Intent::Faq],
             ['smalltalk', Intent::SmallTalk],
             ['unknown', Intent::Unknown],
+            ['product_comparison', Intent::ProductComparison],
             
             // Case insensitive
             ['PRODUCT_SEARCH', Intent::ProductSearch],
@@ -31,6 +32,7 @@ class IntentEnumTest extends TestCase
             ['ORDER_STATUS', Intent::OrderStatus],
             ['FAQ', Intent::Faq],
             ['SMALLTALK', Intent::SmallTalk],
+            ['PRODUCT_COMPARISON', Intent::ProductComparison],
             
             // Variations
             ['product-search', Intent::ProductSearch],
@@ -40,6 +42,9 @@ class IntentEnumTest extends TestCase
             ['small_talk', Intent::SmallTalk],
             ['small-talk', Intent::SmallTalk],
             ['small talk', Intent::SmallTalk],
+            ['productcomparison', Intent::ProductComparison],
+            ['comparison', Intent::ProductComparison],
+            ['compare', Intent::ProductComparison],
             
             // Empty and garbage
             ['', Intent::Unknown],
@@ -53,6 +58,24 @@ class IntentEnumTest extends TestCase
         $this->assertTrue(Intent::ProductSearch->isProductSearch());
         $this->assertFalse(Intent::OrderStatus->isProductSearch());
         $this->assertFalse(Intent::Faq->isProductSearch());
+        $this->assertFalse(Intent::ProductComparison->isProductSearch());
+    }
+
+    public function test_is_product_comparison(): void
+    {
+        $this->assertTrue(Intent::ProductComparison->isProductComparison());
+        $this->assertFalse(Intent::ProductSearch->isProductComparison());
+        $this->assertFalse(Intent::OrderStatus->isProductComparison());
+        $this->assertFalse(Intent::Faq->isProductComparison());
+    }
+
+    public function test_is_product_related(): void
+    {
+        $this->assertTrue(Intent::ProductSearch->isProductRelated());
+        $this->assertTrue(Intent::ProductComparison->isProductRelated());
+        $this->assertFalse(Intent::OrderStatus->isProductRelated());
+        $this->assertFalse(Intent::Faq->isProductRelated());
+        $this->assertFalse(Intent::SmallTalk->isProductRelated());
     }
 
     public function test_value_property(): void
@@ -62,5 +85,6 @@ class IntentEnumTest extends TestCase
         $this->assertSame('faq', Intent::Faq->value);
         $this->assertSame('smalltalk', Intent::SmallTalk->value);
         $this->assertSame('unknown', Intent::Unknown->value);
+        $this->assertSame('product_comparison', Intent::ProductComparison->value);
     }
 }

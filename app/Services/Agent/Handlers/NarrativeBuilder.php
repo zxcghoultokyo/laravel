@@ -90,59 +90,240 @@ class NarrativeBuilder
     }
 
     /**
-     * Build concise narrative without AI.
+     * Build concise narrative without AI - as a helpful store manager would.
+     * Does NOT duplicate product list (cards are shown separately).
+     * Provides context, highlights key features, and invites exploration.
      */
     public function buildConciseNarrative(array $products, array $filters, string $originalMessage): string
     {
-        // Sort by price ascending when available
-        usort($products, fn($a, $b) => ($a['price'] ?? PHP_INT_MAX) <=> ($b['price'] ?? PHP_INT_MAX));
-
-        $lines = [];
-        $seen = [];
-
-        foreach ($products as $p) {
-            $title = trim((string) ($p['title'] ?? 'Товар'));
-
-            if ($title === '' || isset($seen[mb_strtolower($title)])) {
-                continue;
-            }
-
-            $seen[mb_strtolower($title)] = true;
-
-            $price = isset($p['price']) ? round((float) $p['price']) . ' ₴' : 'ціна не вказана';
-
-            // Pick 1–2 real facts: category_path and short description if present
-            $facts = [];
-            $cat = trim((string) ($p['category_path'] ?? ''));
-
-            if ($cat !== '') {
-                $facts[] = $cat;
-            }
-
-            $desc = trim((string) ($p['description'] ?? ''));
-
-            if ($desc !== '') {
-                $facts[] = mb_substr($desc, 0, 90) . (mb_strlen($desc) > 90 ? '…' : '');
-            }
-
-            if (empty($facts)) {
-                $facts[] = 'деталі не вказано';
-            }
-
-            $lines[] = "- {$title} — {$price}. " . implode(' / ', array_slice($facts, 0, 2));
-
-            if (count($lines) >= 3) {
-                break;
-            }
+        if (empty($products)) {
+            return "На жаль, не знайшов товарів за вашим запитом. Спробуйте іншу назву або категорію.";
         }
 
-        if (empty($lines)) {
-            return "Наразі немає товарів за цим запитом";
+        $count = count($products);
+        $m = mb_strtolower($originalMessage);
+        
+        // Determine main category from products
+        $categories = array_filter(array_unique(array_column($products, 'category_path')));
+        $mainCategory = $this->extractMainCategory($categories);
+        
+        // Extract price range
+        $prices = array_filter(array_column($products, 'price'));
+        $priceRange = '';
+        if (!empty($prices)) {
+            $minPrice = min($prices);
+            $maxPrice = max($prices);
+            if ($minPrice === $maxPrice) {
+                $priceRange = round($minPrice) . ' ₴';
+            } else {
+                $priceRange = round($minPrice) . ' — ' . round($maxPrice) . ' ₴';
+            }
         }
-
-        $cta = "Звузити за бюджетом чи кольором, або показати ще?";
-
-        return implode("\n", $lines) . "\n" . $cta;
+        
+        // Build contextual message based on search type
+        $narrative = $this->buildManagerStyleNarrative($products, $count, $mainCategory, $priceRange, $filters, $m);
+        
+        // Add call-to-action
+        $cta = $this->buildContextualCTA($filters, $count, $mainCategory);
+        
+        return $narrative . "\n\n" . $cta;
+    }
+    
+    /**
+     * Build narrative as a helpful store manager would.
+     */
+    protected function buildManagerStyleNarrative(
+        array $products,
+        int $count,
+        string $mainCategory,
+        string $priceRange,
+        array $filters,
+        string $message
+    ): string {
+        // Single product - highlight its features
+        if ($count === 1) {
+            return $this->buildSingleProductHighlight($products[0]);
+        }
+        
+        // Multiple products - provide overview
+        $parts = [];
+        
+        // Quantity context
+        if ($count <= 3) {
+            $parts[] = "Знайшов {$count} " . $this->pluralize($count, 'варіант', 'варіанти', 'варіантів');
+        } else {
+            $parts[] = "Ось топ-{$count} варіантів";
+        }
+        
+        // Category context (simplified, no full path)
+        if ($mainCategory && !str_contains($message, mb_strtolower($mainCategory))) {
+            $parts[] = "з категорії «{$mainCategory}»";
+        }
+        
+        // Price context
+        if ($priceRange && empty($filters['budget_max'])) {
+            $parts[] = "в діапазоні {$priceRange}";
+        }
+        
+        $intro = implode(' ', $parts) . '.';
+        
+        // Add product highlights if available
+        $highlights = $this->extractProductHighlights($products);
+        if (!empty($highlights)) {
+            $intro .= "\n\n💡 " . implode("\n💡 ", $highlights);
+        }
+        
+        return $intro;
+    }
+    
+    /**
+     * Build highlight for a single product.
+     */
+    protected function buildSingleProductHighlight(array $product): string
+    {
+        $title = $product['title'] ?? 'Товар';
+        $price = isset($product['price']) ? round($product['price']) . ' ₴' : '';
+        $inStock = ($product['in_stock'] ?? false) ? '✅ В наявності' : '⏳ Під замовлення';
+        
+        $parts = ["Знайшов для вас: **{$title}**"];
+        if ($price) {
+            $parts[] = "Ціна: {$price}";
+        }
+        $parts[] = $inStock;
+        
+        // Extract key features from description
+        $features = $this->extractKeyFeatures($product);
+        if (!empty($features)) {
+            $parts[] = "\n🔹 " . implode("\n🔹 ", $features);
+        }
+        
+        return implode("\n", $parts);
+    }
+    
+    /**
+     * Extract key features from product description/attributes.
+     */
+    protected function extractKeyFeatures(array $product, int $limit = 3): array
+    {
+        $features = [];
+        
+        // Try to get from attributes first
+        $attrs = $product['attrs'] ?? $product['attributes'] ?? [];
+        if (is_array($attrs)) {
+            foreach ($attrs as $key => $value) {
+                if (is_string($value) && mb_strlen($value) > 2 && mb_strlen($value) < 100) {
+                    $features[] = ucfirst($key) . ': ' . $value;
+                    if (count($features) >= $limit) break;
+                }
+            }
+        }
+        
+        // Fallback to description snippets
+        if (empty($features)) {
+            $desc = $product['description'] ?? '';
+            if ($desc) {
+                // Extract first meaningful sentence
+                $sentences = preg_split('/[.!?]+/u', $desc, 3, PREG_SPLIT_NO_EMPTY);
+                foreach ($sentences as $s) {
+                    $s = trim($s);
+                    if (mb_strlen($s) > 20 && mb_strlen($s) < 150) {
+                        $features[] = $s;
+                        if (count($features) >= $limit) break;
+                    }
+                }
+            }
+        }
+        
+        return $features;
+    }
+    
+    /**
+     * Extract highlights from multiple products.
+     */
+    protected function extractProductHighlights(array $products): array
+    {
+        $highlights = [];
+        
+        // Find price extremes worth mentioning
+        $prices = array_filter(array_column($products, 'price'));
+        if (count($prices) >= 2) {
+            $cheapest = array_filter($products, fn($p) => ($p['price'] ?? 0) == min($prices));
+            $cheapest = reset($cheapest);
+            if ($cheapest) {
+                $name = mb_substr($cheapest['title'] ?? '', 0, 40);
+                $highlights[] = "Найдоступніший: {$name} — " . round(min($prices)) . ' ₴';
+            }
+        }
+        
+        // Find bestseller/popular if available
+        $popular = array_filter($products, fn($p) => ($p['popularity'] ?? 0) > 50 || ($p['orders_count'] ?? 0) > 10);
+        if (!empty($popular)) {
+            $best = reset($popular);
+            $name = mb_substr($best['title'] ?? '', 0, 40);
+            if (!str_contains($highlights[0] ?? '', $name)) {
+                $highlights[] = "Популярний вибір: {$name}";
+            }
+        }
+        
+        return array_slice($highlights, 0, 2);
+    }
+    
+    /**
+     * Extract main category name (last segment of path).
+     */
+    protected function extractMainCategory(array $categories): string
+    {
+        if (empty($categories)) {
+            return '';
+        }
+        
+        $firstCat = reset($categories);
+        $parts = explode('/', $firstCat);
+        
+        // Return the most specific (last) category
+        return trim(end($parts));
+    }
+    
+    /**
+     * Build contextual call-to-action.
+     */
+    protected function buildContextualCTA(array $filters, int $count, string $category): string
+    {
+        $ctas = [];
+        
+        // Budget filter suggestion
+        if (empty($filters['budget_max']) && empty($filters['budget_min'])) {
+            $ctas[] = "уточнити бюджет";
+        }
+        
+        // Color filter suggestion  
+        if (empty($filters['color'])) {
+            $ctas[] = "вибрати колір";
+        }
+        
+        // More results suggestion
+        if ($count >= 3) {
+            $ctas[] = "показати ще варіанти";
+        }
+        
+        if (empty($ctas)) {
+            return "Є питання по цих товарах?";
+        }
+        
+        return "Можу " . implode(', ', array_slice($ctas, 0, 2)) . " — або питайте про деталі!";
+    }
+    
+    /**
+     * Ukrainian pluralization helper.
+     */
+    protected function pluralize(int $n, string $one, string $few, string $many): string
+    {
+        $n = abs($n) % 100;
+        if ($n >= 11 && $n <= 19) return $many;
+        $n = $n % 10;
+        if ($n === 1) return $one;
+        if ($n >= 2 && $n <= 4) return $few;
+        return $many;
     }
 
     /**

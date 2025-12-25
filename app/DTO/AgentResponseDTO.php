@@ -126,10 +126,18 @@ readonly class AgentResponseDTO
     /**
      * Create no results response.
      */
-    public static function noResults(string $query): self
+    public static function noResults(string $query, ?string $suggestion = null): self
     {
+        $message = "На жаль, не знайшов товарів за запитом «{$query}».";
+        
+        if ($suggestion) {
+            $message .= "\n\n{$suggestion}";
+        } else {
+            $message .= " Спробуйте інші ключові слова або опишіть що саме вам потрібно.";
+        }
+        
         return new self(
-            message: "Вибачте, не знайшов товарів за запитом «{$query}». Спробуйте інші ключові слова або опишіть що саме вам потрібно.",
+            message: $message,
             products: [],
             intent: Intent::ProductSearch,
             ambiguous: false,

@@ -248,6 +248,21 @@ class AgentOrchestrator
             'dynamic_limit' => count($reranked), // AI decided how many are relevant
         ];
         
+        // Step 3.6: Relevance validation - check if results match the query type
+        $relevanceCheck = $this->validateResultRelevance($reranked, $searchQuery, $originalMessage);
+        if (!$relevanceCheck['is_relevant']) {
+            Log::info('AgentOrchestrator: results not relevant to query', [
+                'query' => $searchQuery,
+                'reason' => $relevanceCheck['reason'],
+                'found_categories' => $relevanceCheck['found_categories'] ?? [],
+            ]);
+            
+            return AgentResponseDTO::noResults(
+                $searchQuery,
+                $relevanceCheck['suggestion'] ?? "Спробуйте уточнити запит або пошукати в іншій категорії."
+            )->toArray();
+        }
+        
         // Step 4: Get full details for AI-selected products (dynamic count)
         $startTime = microtime(true);
         $topIds = array_column($reranked, 'id');
@@ -837,6 +852,104 @@ class AgentOrchestrator
         }
         
         return 'other';
+    }
+    
+    /**
+     * Validate that search results are actually relevant to the query.
+     * Returns array with 'is_relevant', 'reason', 'suggestion', 'found_categories'.
+     */
+    private function validateResultRelevance(array $products, string $searchQuery, string $originalMessage): array
+    {
+        if (empty($products)) {
+            return ['is_relevant' => false, 'reason' => 'no_products'];
+        }
+        
+        $query = mb_strtolower($searchQuery);
+        $original = mb_strtolower($originalMessage);
+        
+        // Define product type mappings: query keywords -> expected category keywords
+        $productTypeMap = [
+            // Plate carriers
+            'плитоноска' => ['плитоноск', 'plate carrier', 'бронежилет', 'жилет'],
+            'плитоноску' => ['плитоноск', 'plate carrier', 'бронежилет', 'жилет'],
+            'бронежилет' => ['бронежилет', 'плитоноск', 'жилет', 'vest'],
+            // Helmets
+            'шолом' => ['шолом', 'каска', 'helmet', 'балістич'],
+            'каска' => ['шолом', 'каска', 'helmet', 'балістич'],
+            // Plates
+            'бронеплита' => ['плита', 'plate', 'бронеплит', 'sapi', 'esapi'],
+            'плита' => ['плита', 'plate', 'бронеплит', 'sapi', 'esapi'],
+            // Boots
+            'берци' => ['берц', 'черевик', 'boot', 'взутт'],
+            'черевики' => ['берц', 'черевик', 'boot', 'взутт'],
+            // Backpacks
+            'рюкзак' => ['рюкзак', 'backpack', 'сумка'],
+            // Gloves
+            'рукавиц' => ['рукавиц', 'glove', 'перчатк'],
+        ];
+        
+        // Check if query mentions a specific product type
+        $expectedKeywords = null;
+        $queryProductType = null;
+        foreach ($productTypeMap as $queryKey => $keywords) {
+            if (str_contains($query, $queryKey) || str_contains($original, $queryKey)) {
+                $expectedKeywords = $keywords;
+                $queryProductType = $queryKey;
+                break;
+            }
+        }
+        
+        // If no specific product type detected, assume relevant
+        if ($expectedKeywords === null) {
+            return ['is_relevant' => true, 'reason' => 'generic_query'];
+        }
+        
+        // Check if any product matches expected type
+        $foundCategories = [];
+        $matchCount = 0;
+        
+        foreach ($products as $product) {
+            $title = mb_strtolower($product['title'] ?? '');
+            $category = mb_strtolower($product['category_path'] ?? '');
+            
+            $foundCategories[] = $product['category_path'] ?? 'unknown';
+            
+            foreach ($expectedKeywords as $keyword) {
+                if (str_contains($title, $keyword) || str_contains($category, $keyword)) {
+                    $matchCount++;
+                    break;
+                }
+            }
+        }
+        
+        // If less than 30% of results match expected type, consider irrelevant
+        $matchRatio = $matchCount / count($products);
+        
+        if ($matchRatio < 0.3) {
+            // Build suggestion based on query type
+            $suggestions = [
+                'плитоноска' => 'Спробуйте: "плитоноска", "plate carrier", "бронежилет"',
+                'плитоноску' => 'Спробуйте: "плитоноска", "plate carrier", "бронежилет"',
+                'шолом' => 'Спробуйте: "шолом балістичний", "каска", "helmet"',
+                'каска' => 'Спробуйте: "шолом балістичний", "каска", "helmet"',
+                'бронеплита' => 'Спробуйте: "бронеплита SAPI", "plate", "бронепластина"',
+            ];
+            
+            return [
+                'is_relevant' => false,
+                'reason' => 'category_mismatch',
+                'match_ratio' => $matchRatio,
+                'expected_type' => $queryProductType,
+                'found_categories' => array_unique($foundCategories),
+                'suggestion' => $suggestions[$queryProductType] ?? 'Спробуйте уточнити назву товару.',
+            ];
+        }
+        
+        return [
+            'is_relevant' => true,
+            'reason' => 'matched',
+            'match_ratio' => $matchRatio,
+        ];
     }
 
     private function guessCategoryFromProducts(array $products): ?string

@@ -1577,6 +1577,25 @@ class AgentOrchestrator
             return $products;
         }
         
+        // Brand transliteration map (cyrillic → latin)
+        $brandMap = [
+            'аегіс' => 'aegis',
+            'аегис' => 'aegis',
+            'елмон' => 'elmon',
+            'хардвайр' => 'hardwire',
+            'фірстспір' => 'firstspear',
+            'есапі' => 'esapi',
+        ];
+        
+        // Check if any keyword is a brand name (requires stricter matching)
+        $hasBrandKeyword = false;
+        foreach ($keywords as $kw) {
+            if (isset($brandMap[$kw])) {
+                $hasBrandKeyword = true;
+                break;
+            }
+        }
+        
         $filtered = [];
         foreach ($products as $product) {
             $searchText = mb_strtolower(
@@ -1586,14 +1605,27 @@ class AgentOrchestrator
             );
             
             $matchCount = 0;
+            
             foreach ($keywords as $kw) {
-                if (str_contains($searchText, $kw)) {
+                // Use stem matching (first 5+ chars) for better Ukrainian morphology
+                $stem = mb_strlen($kw) > 5 ? mb_substr($kw, 0, 5) : $kw;
+                
+                // Check original keyword or stem
+                if (str_contains($searchText, $kw) || str_contains($searchText, $stem)) {
+                    $matchCount++;
+                    continue;
+                }
+                // Check transliterated variant
+                if (isset($brandMap[$kw]) && str_contains($searchText, $brandMap[$kw])) {
                     $matchCount++;
                 }
             }
             
-            // Require at least 50% keyword match
-            if ($matchCount >= count($keywords) * 0.5) {
+            // If brand specified, require ALL keywords to match
+            // Otherwise, require at least 50%
+            $threshold = $hasBrandKeyword ? count($keywords) : (count($keywords) * 0.5);
+            
+            if ($matchCount >= $threshold) {
                 $filtered[] = $product;
             }
         }

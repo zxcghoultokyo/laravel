@@ -187,9 +187,11 @@ class AgentOrchestrator
         $sessionId = $context['session_id'] ?? null;
         $sessionContext = $this->sessionService->loadContext($sessionId);
 
-        // Detect if this is a follow-up details request about the last product
-        if ($this->isDetailsFollowUp($originalMessage) && !empty($sessionContext['last_shown_product_id'])) {
-            // Return details of the last shown product instead of searching
+        // Detect if this is a follow-up details request (e.g., "розкажи про них")
+        // Check for shown_products OR last_shown_product_id (either works for follow-up)
+        $hasShownProducts = !empty($sessionContext['shown_products']) || !empty($sessionContext['last_shown_product_id']);
+        if ($this->isDetailsFollowUp($originalMessage) && $hasShownProducts) {
+            // Return details of the shown product(s) instead of searching
             return $this->handleProductDetailsFollowUp($originalMessage, $sessionContext);
         }
 

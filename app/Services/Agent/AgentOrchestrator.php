@@ -1125,12 +1125,100 @@ class AgentOrchestrator
 
     /**
      * Handle follow-up request for details about a product.
-     * Searches Meilisearch by product name mentioned in message.
-     * Example: "розкажи про схід 24" → search "схід 24" → verify 80%+ match → show details
+     * First checks if user uses pronouns (них, ці, це) → use session context.
+     * Otherwise searches by product name in message.
+     * Example: "розкажи про них" → use shown_products from session
+     * Example: "розкажи про схід 24" → search "схід 24" → verify match → show details
      */
     private function handleProductDetailsFollowUp(string $originalMessage, array $sessionContext): array
     {
-        // Extract search keywords from message (e.g., "розкажи про схід 24" → "схід 24")
+        $messageLower = mb_strtolower($originalMessage);
+        
+        // Step 1: Check for pronoun references (них, їх, ці, цей, ця, це, цих)
+        $pronounPatterns = ['про них', 'про ці', 'про цей', 'про цю', 'про це', 'їх', 'цих', 'детальніше них', 'детальніше про них'];
+        $hasPronoun = false;
+        foreach ($pronounPatterns as $pattern) {
+            if (str_contains($messageLower, $pattern)) {
+                $hasPronoun = true;
+                break;
+            }
+        }
+        
+        // If pronouns detected → use session context (shown_products)
+        if ($hasPronoun) {
+            Log::info('AgentOrchestrator: pronoun detected, using session context', [
+                'message' => $originalMessage,
+                'shown_products' => $sessionContext['shown_products'] ?? [],
+            ]);
+            
+            $shownProductIds = $sessionContext['shown_products'] ?? [];
+            if (!empty($shownProductIds)) {
+                // User might ask about "полегшені" or specific term within the shown products
+                $filterKeywords = $this->extractFilterKeywords($messageLower);
+                
+                // Fetch shown products details
+                $products = $this->detailsTool->getCards($shownProductIds, count($shownProductIds));
+                
+                // If user mentioned specific filter (e.g., "полегшені аегіс"), filter the list
+                if (!empty($filterKeywords) && !empty($products)) {
+                    $filteredProducts = $this->filterProductsByKeywords($products, $filterKeywords);
+                    if (!empty($filteredProducts)) {
+                        $products = $filteredProducts;
+                    }
+                }
+                
+                if (!empty($products)) {
+                    // If only one product or user asks about all
+                    if (count($products) === 1) {
+                        $message = $this->buildProductDetailMessage($products[0]);
+                    } else {
+                        // Build multi-product detail message
+                        $message = $this->buildMultiProductDetailMessage($products);
+                    }
+                    
+                    return [
+                        'message' => $message,
+                        'products' => $products,
+                        'meta' => [
+                            'intent' => 'product_details',
+                            'is_followup' => true,
+                            'confidence' => 1.0,
+                            'chosen_ids' => array_column($products, 'id'),
+                            'source' => 'session_context',
+                        ],
+                    ];
+                }
+            }
+            
+            // Fallback: try last_shown_product
+            $lastProduct = $sessionContext['last_shown_product'] ?? null;
+            if ($lastProduct && isset($lastProduct['id'])) {
+                $products = $this->detailsTool->getCards([$lastProduct['id']], 1);
+                if (!empty($products)) {
+                    $message = $this->buildProductDetailMessage($products[0]);
+                    return [
+                        'message' => $message,
+                        'products' => $products,
+                        'meta' => [
+                            'intent' => 'product_details',
+                            'is_followup' => true,
+                            'confidence' => 1.0,
+                            'chosen_ids' => [$products[0]['id']],
+                            'source' => 'last_shown_product',
+                        ],
+                    ];
+                }
+            }
+            
+            // No products in session
+            return [
+                'message' => 'Покажіть мені спочатку товари, про які хочете дізнатися більше. Напишіть, наприклад: "плитоноска" або "шолом балістичний".',
+                'products' => [],
+                'meta' => ['intent' => 'product_details', 'is_followup' => true, 'no_context' => true],
+            ];
+        }
+        
+        // Step 2: Extract search keywords from message (e.g., "розкажи про схід 24" → "схід 24")
         $messageKeywords = $this->extractSearchTermsFromMessage($originalMessage);
         if (empty($messageKeywords)) {
             return $this->handleNoResults($originalMessage, $originalMessage);
@@ -1138,7 +1226,36 @@ class AgentOrchestrator
 
         $searchQuery = implode(' ', $messageKeywords);
         
-        // Search Meilisearch for product by name
+        // Step 3: First try to find in shown_products (faster, more accurate)
+        $shownProductIds = $sessionContext['shown_products'] ?? [];
+        if (!empty($shownProductIds)) {
+            $shownProducts = $this->detailsTool->getCards($shownProductIds, count($shownProductIds));
+            foreach ($shownProducts as $product) {
+                $confidence = $this->calculateTitleMatchConfidence($product['title'] ?? '', $messageKeywords);
+                if ($confidence >= 0.6) {
+                    Log::info('AgentOrchestrator: found product in session context', [
+                        'product_id' => $product['id'],
+                        'title' => $product['title'],
+                        'confidence' => $confidence,
+                    ]);
+                    
+                    $message = $this->buildProductDetailMessage($product);
+                    return [
+                        'message' => $message,
+                        'products' => [$product],
+                        'meta' => [
+                            'intent' => 'product_details',
+                            'is_followup' => true,
+                            'confidence' => $confidence,
+                            'chosen_ids' => [$product['id']],
+                            'source' => 'session_match',
+                        ],
+                    ];
+                }
+            }
+        }
+        
+        // Step 4: Search Meilisearch for product by name
         try {
             $results = $this->searchTool->search($searchQuery, [], 5);
             if (empty($results)) {
@@ -1410,5 +1527,117 @@ class AgentOrchestrator
         }
 
         return implode("\n", $bullets);
+    }
+
+    /**
+     * Extract filter keywords from message (excluding pronouns and stop words).
+     * Example: "цікавлять полегшені аегіс" → ["полегшені", "аегіс"]
+     */
+    private function extractFilterKeywords(string $message): array
+    {
+        $stopWords = [
+            'розкажи', 'про', 'них', 'їх', 'ці', 'цей', 'цю', 'це', 'цих',
+            'мене', 'цікавлять', 'цікавить', 'хочу', 'дізнатися', 'детальніше',
+            'більше', 'інформац', 'опис', 'характеристик',
+        ];
+        
+        $words = preg_split('/\s+/u', $message) ?: [];
+        $filtered = [];
+        
+        foreach ($words as $word) {
+            $clean = preg_replace('/[^\p{L}\p{N}]/u', '', $word);
+            if (empty($clean) || mb_strlen($clean) < 3) {
+                continue;
+            }
+            
+            $isStop = false;
+            foreach ($stopWords as $stop) {
+                if (str_contains($clean, $stop) || str_contains($stop, $clean)) {
+                    $isStop = true;
+                    break;
+                }
+            }
+            
+            if (!$isStop) {
+                $filtered[] = $clean;
+            }
+        }
+        
+        return $filtered;
+    }
+
+    /**
+     * Filter products by keywords (match in title or description).
+     */
+    private function filterProductsByKeywords(array $products, array $keywords): array
+    {
+        if (empty($keywords)) {
+            return $products;
+        }
+        
+        $filtered = [];
+        foreach ($products as $product) {
+            $searchText = mb_strtolower(
+                ($product['title'] ?? '') . ' ' . 
+                ($product['description'] ?? '') . ' ' .
+                ($product['category_path'] ?? '')
+            );
+            
+            $matchCount = 0;
+            foreach ($keywords as $kw) {
+                if (str_contains($searchText, $kw)) {
+                    $matchCount++;
+                }
+            }
+            
+            // Require at least 50% keyword match
+            if ($matchCount >= count($keywords) * 0.5) {
+                $filtered[] = $product;
+            }
+        }
+        
+        return $filtered;
+    }
+
+    /**
+     * Build detail message for multiple products.
+     */
+    private function buildMultiProductDetailMessage(array $products): string
+    {
+        if (empty($products)) {
+            return 'Не знайшов товарів для опису.';
+        }
+        
+        if (count($products) === 1) {
+            return $this->buildProductDetailMessage($products[0]);
+        }
+        
+        // For multiple products, build a concise comparison-style message
+        $count = count($products);
+        $message = "Ось детальніше про ці {$count} товари:\n\n";
+        
+        foreach ($products as $i => $product) {
+            $num = $i + 1;
+            $title = $product['title'] ?? 'Товар';
+            $price = $this->formatPrice($product['price'] ?? null);
+            $desc = trim((string) ($product['description'] ?? ''));
+            
+            $message .= "**{$num}. {$title}** — {$price}\n";
+            
+            // Add brief description (first 150 chars)
+            if ($desc) {
+                $shortDesc = mb_substr(strip_tags($desc), 0, 150);
+                if (mb_strlen($desc) > 150) {
+                    $shortDesc .= '...';
+                }
+                $message .= "{$shortDesc}\n";
+            }
+            
+            $message .= "\n";
+        }
+        
+        $message .= "Хочете порівняти ці товари детально або дізнатися про якийсь конкретний?";
+        
+        return $message;
     }
 }

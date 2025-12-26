@@ -905,7 +905,8 @@ class ChatService
                 'refined_query'     => $agentMeta['refined_query'] ?? null,
                 'filters'           => $agentMeta['filters'] ?? [],
                 'search_debug'      => $agentMeta['search_debug'] ?? [],
-                'products_shown'    => count($response['products'] ?? []),
+                // FIX: products are in data.products, not response.products
+                'products_shown'    => count($response['data']['products'] ?? $response['products'] ?? []),
             ];
 
             ChatMessage::create([

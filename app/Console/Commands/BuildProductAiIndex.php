@@ -17,7 +17,7 @@ class BuildProductAiIndex extends Command
         {--offset=0 : Skip first N products}
         {--resume : Continue from last saved position}
         {--reset : Reset saved position and start fresh}
-        {--timeout=840 : Max runtime in seconds (default 14 min for 15 min cloud limit)}
+        {--timeout=600 : Max runtime in seconds (default 10 min for 15 min cloud limit)}
         {--no-ai : Skip AI calls, only build fallback index}
         {--stats : Show statistics only, do not process}';
     

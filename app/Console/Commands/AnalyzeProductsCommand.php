@@ -83,10 +83,11 @@ class AnalyzeProductsCommand extends Command
             
             $this->info("This batch: {$batchCount} products");
             
-            // Show config (masked key)
+            // Show config (masked key) - use model_analyze for product analysis (cheaper)
             $maskedKey = substr($apiKey, 0, 8) . '...' . substr($apiKey, -4);
+            $analyzeModel = $config['model_analyze'] ?? $config['model'] ?? 'gpt-4.1-mini';
             $this->info("API Key: {$maskedKey}");
-            $this->info("Model: " . ($config['model'] ?? 'gpt-4o-mini'));
+            $this->info("Model: {$analyzeModel} (model_analyze)");
             $this->newLine();
 
             // Get batch of products (skip only good analysis with 3+ keywords)
@@ -190,7 +191,8 @@ class AnalyzeProductsCommand extends Command
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
         try {
-            $model = $config['model'] ?? 'gpt-4o-mini';
+            // Use model_analyze (cheaper) for product analysis
+            $model = $config['model_analyze'] ?? $config['model'] ?? 'gpt-4.1-mini';
             
             // Build request payload - gpt-5.x uses max_completion_tokens, older models use max_tokens
             $payload = [

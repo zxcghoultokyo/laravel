@@ -29,8 +29,13 @@ return [
     // 👇 Додаємо налаштування OpenAI
     'openai' => [
         'key'      => env('OPENAI_API_KEY'),
-        'model'    => env('OPENAI_MODEL', 'gpt-5.1'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        
+        // Різні моделі для різних задач
+        'model'         => env('OPENAI_MODEL', 'gpt-4.1'),           // Основна модель (чат, класифікація)
+        'model_chat'    => env('OPENAI_MODEL_CHAT', 'gpt-5.1'),      // Для чату з користувачами (якість)
+        'model_analyze' => env('OPENAI_MODEL_ANALYZE', 'gpt-4.1-mini'), // Для аналізу товарів (економія)
+        'model_rerank'  => env('OPENAI_MODEL_RERANK', 'gpt-4.1-mini'),  // Для ререйнку результатів
     ],
 
 ];

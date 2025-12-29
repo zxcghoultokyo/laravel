@@ -12,12 +12,18 @@ use Illuminate\Support\Facades\Log;
 class AnalyzeProductsCommand extends Command
 {
     protected $signature = 'products:analyze 
-        {--batch=10 : Products per batch}
+        {--batch=50 : Products per batch (then pause)}
         {--force : Re-analyze already processed products}
         {--all : Analyze ALL products, not just in_stock}
-        {--limit=0 : Limit total products to analyze (0 = no limit)}';
+        {--limit=0 : Limit total products to analyze (0 = no limit)}
+        {--continue : Auto-continue after each batch}
+        {--delay=1 : Delay between requests in seconds}';
 
     protected $description = 'Analyze products with AI to generate search keywords, slang, synonyms';
+
+    private int $processed = 0;
+    private int $failed = 0;
+    private int $consecutiveErrors = 0;
 
     public function handle(): int
     {
@@ -25,43 +31,9 @@ class AnalyzeProductsCommand extends Command
         $force = $this->option('force');
         $all = $this->option('all');
         $limit = (int) $this->option('limit');
+        $autoContinue = $this->option('continue');
+        $delay = max(0.5, (float) $this->option('delay'));
 
-        // Count products to analyze
-        $query = Product::query()->whereNotNull('title');
-        
-        if (!$all) {
-            $query->where('in_stock', true);
-        }
-
-        if (!$force) {
-            $query->whereNotIn('id', function ($q) {
-                $q->select('product_id')
-                    ->from('product_ai_index')
-                    ->whereNotNull('keywords');
-            });
-        }
-
-        $total = $query->count();
-        $alreadyAnalyzed = ProductAiIndex::whereNotNull('keywords')->count();
-
-        $this->info("=== Product AI Analysis ===");
-        $this->info("Total in DB: " . Product::count());
-        $this->info("In stock: " . Product::where('in_stock', true)->count());
-        $this->info("Already analyzed: {$alreadyAnalyzed}");
-        $this->info("To analyze: {$total}");
-        
-        if ($limit > 0) {
-            $total = min($total, $limit);
-            $this->info("Limited to: {$total}");
-        }
-
-        if ($total === 0) {
-            $this->info('Nothing to analyze!');
-            return 0;
-        }
-
-        $this->info("\nStarting analysis...");
-        
         $config = config('services.openai', []);
         $apiKey = $config['key'] ?? null;
         
@@ -69,66 +41,136 @@ class AnalyzeProductsCommand extends Command
             $this->error('OpenAI API key not configured!');
             return 1;
         }
-        
-        // Show config (masked key)
-        $maskedKey = $apiKey ? (substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)) : 'NOT SET';
-        $this->info("API Key: {$maskedKey}");
-        $this->info("Model: " . ($config['model'] ?? 'gpt-4o-mini'));
-        $this->info("Base URL: " . ($config['base_url'] ?? 'https://api.openai.com/v1'));
-        $this->newLine();
 
-        $processed = 0;
-        $failed = 0;
-        $bar = $this->output->createProgressBar($total);
-        $bar->start();
+        do {
+            // Count products to analyze (refresh each batch)
+            $query = Product::query()->whereNotNull('title');
+            
+            if (!$all) {
+                $query->where('in_stock', true);
+            }
 
-        $query = Product::query()->whereNotNull('title')->orderBy('id');
-        
-        if (!$all) {
-            $query->where('in_stock', true);
-        }
+            if (!$force) {
+                $query->whereNotIn('id', function ($q) {
+                    $q->select('product_id')
+                        ->from('product_ai_index')
+                        ->whereNotNull('keywords');
+                });
+            }
 
-        if (!$force) {
-            $query->whereNotIn('id', function ($q) {
-                $q->select('product_id')
-                    ->from('product_ai_index')
-                    ->whereNotNull('keywords');
-            });
-        }
+            $remaining = $query->count();
+            $alreadyAnalyzed = ProductAiIndex::whereNotNull('keywords')->count();
 
-        if ($limit > 0) {
-            $query->limit($limit);
-        }
+            $this->newLine();
+            $this->info("=== Product AI Analysis ===");
+            $this->info("Total in DB: " . Product::count());
+            $this->info("In stock: " . Product::where('in_stock', true)->count());
+            $this->info("Already analyzed: {$alreadyAnalyzed}");
+            $this->info("Remaining: {$remaining}");
+            
+            if ($remaining === 0) {
+                $this->info('✅ All products analyzed!');
+                return 0;
+            }
 
-        $query->chunk($batchSize, function ($products) use ($apiKey, $config, &$processed, &$failed, $bar) {
+            $batchCount = min($batchSize, $remaining);
+            if ($limit > 0) {
+                $batchCount = min($batchCount, $limit);
+            }
+            
+            $this->info("This batch: {$batchCount} products");
+            
+            // Show config (masked key)
+            $maskedKey = substr($apiKey, 0, 8) . '...' . substr($apiKey, -4);
+            $this->info("API Key: {$maskedKey}");
+            $this->info("Model: " . ($config['model'] ?? 'gpt-4o-mini'));
+            $this->newLine();
+
+            // Get batch of products
+            $products = Product::query()
+                ->whereNotNull('title')
+                ->when(!$all, fn($q) => $q->where('in_stock', true))
+                ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sub) {
+                    $sub->select('product_id')
+                        ->from('product_ai_index')
+                        ->whereNotNull('keywords');
+                }))
+                ->orderBy('id')
+                ->limit($batchCount)
+                ->get();
+
+            $bar = $this->output->createProgressBar($products->count());
+            $bar->start();
+
+            $batchProcessed = 0;
+            $batchFailed = 0;
+
             foreach ($products as $product) {
                 try {
                     $result = $this->analyzeProduct($product, $apiKey, $config);
                     if ($result) {
-                        $processed++;
-                        $this->line(" ✓ [{$product->id}] {$product->title}");
+                        $batchProcessed++;
+                        $this->processed++;
+                        $this->consecutiveErrors = 0;
+                        $this->line(" ✓ [{$product->id}] " . mb_substr($product->title, 0, 60));
                     } else {
-                        $failed++;
-                        $this->line(" ✗ [{$product->id}] Failed to parse AI response");
+                        $batchFailed++;
+                        $this->failed++;
+                        $this->consecutiveErrors++;
+                        $this->line(" ✗ [{$product->id}] Failed");
                     }
                 } catch (\Throwable $e) {
-                    $failed++;
-                    $this->line(" ✗ [{$product->id}] Error: " . $e->getMessage());
+                    $batchFailed++;
+                    $this->failed++;
+                    $this->consecutiveErrors++;
+                    $errorMsg = mb_substr($e->getMessage(), 0, 100);
+                    $this->line(" ✗ [{$product->id}] {$errorMsg}");
+                    
+                    // If too many consecutive errors, pause longer
+                    if ($this->consecutiveErrors >= 5) {
+                        $this->warn("⚠️ 5 consecutive errors, pausing 30s...");
+                        sleep(30);
+                        $this->consecutiveErrors = 0;
+                    }
                 }
+                
                 $bar->advance();
                 
-                // Rate limiting - 0.5s between requests
-                usleep(500000);
+                // Rate limiting
+                usleep((int)($delay * 1000000));
             }
-        });
 
-        $bar->finish();
-        $this->newLine(2);
-        
-        $this->info("=== Results ===");
-        $this->info("Processed: {$processed}");
-        $this->info("Failed: {$failed}");
-        $this->info("Total analyzed now: " . ProductAiIndex::whereNotNull('keywords')->count());
+            $bar->finish();
+            $this->newLine(2);
+            
+            $this->info("Batch done: ✓ {$batchProcessed} / ✗ {$batchFailed}");
+            $this->info("Session total: ✓ {$this->processed} / ✗ {$this->failed}");
+            $this->info("Total analyzed: " . ProductAiIndex::whereNotNull('keywords')->count());
+            
+            // Check if we should continue
+            if (!$autoContinue) {
+                $remaining = Product::query()
+                    ->whereNotNull('title')
+                    ->when(!$all, fn($q) => $q->where('in_stock', true))
+                    ->whereNotIn('id', function ($q) {
+                        $q->select('product_id')
+                            ->from('product_ai_index')
+                            ->whereNotNull('keywords');
+                    })
+                    ->count();
+                    
+                if ($remaining > 0) {
+                    $this->newLine();
+                    $this->info("💡 Run again to continue: php artisan products:analyze --continue");
+                }
+                break;
+            }
+            
+            // Small pause between batches
+            $this->info("⏳ Pausing 5s before next batch...");
+            sleep(5);
+            
+        } while ($autoContinue);
 
         return 0;
     }

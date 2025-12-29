@@ -35,12 +35,13 @@ class ProductIndexBuilder
                 'Return a STRICT JSON object with keys:',
                 'product_type: short snake_case type (e.g., helmet, plate_carrier, armor_plate, tshirt)',
                 'ai_category: broad category (e.g., helmets, armor, apparel, accessories)',
-                'materials: comma-separated materials if known',
-                'standards: comma-separated standards if known (e.g., NIJ III+)',
-                'slang: comma-separated slang names',
-                'keywords: comma-separated search keywords',
-                'usage: short description of typical use',
+                'materials: JSON array of strings ["nylon", "cordura"] or null',
+                'standards: JSON array of strings ["NIJ III+", "DSTU"] or null',
+                'slang: JSON array of slang names in Ukrainian ["чебурашка", "планка"] or null',
+                'keywords: JSON array of search keywords ["keyword1", "keyword2"] or null',
+                'usage: JSON array of use cases ["assault", "training", "everyday"] or null',
                 'embedding: optional vector array (omit if unavailable).',
+                'IMPORTANT: Always return arrays for materials, standards, slang, keywords, usage - never comma-separated strings!',
                 'If unsure, leave fields null but NEVER hallucinate.',
             ]);
 

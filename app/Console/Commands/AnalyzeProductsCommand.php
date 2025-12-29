@@ -51,22 +51,25 @@ class AnalyzeProductsCommand extends Command
             }
 
             if (!$force) {
+                // Skip products with good analysis (keywords array with 3+ items)
                 $query->whereNotIn('id', function ($q) {
                     $q->select('product_id')
                         ->from('product_ai_index')
-                        ->whereNotNull('keywords');
+                        ->whereRaw("JSON_LENGTH(keywords) >= 3");
                 });
             }
 
             $remaining = $query->count();
-            $alreadyAnalyzed = ProductAiIndex::whereNotNull('keywords')->count();
+            $alreadyAnalyzed = ProductAiIndex::whereRaw("JSON_LENGTH(keywords) >= 3")->count();
+            $poorAnalysis = ProductAiIndex::whereRaw("JSON_LENGTH(keywords) < 3 OR keywords IS NULL")->count();
 
             $this->newLine();
             $this->info("=== Product AI Analysis ===");
             $this->info("Total in DB: " . Product::count());
             $this->info("In stock: " . Product::where('in_stock', true)->count());
-            $this->info("Already analyzed: {$alreadyAnalyzed}");
-            $this->info("Remaining: {$remaining}");
+            $this->info("Good analysis (3+ keywords): {$alreadyAnalyzed}");
+            $this->info("Poor/empty analysis: {$poorAnalysis}");
+            $this->info("Remaining to analyze: {$remaining}");
             
             if ($remaining === 0) {
                 $this->info('✅ All products analyzed!');
@@ -86,14 +89,14 @@ class AnalyzeProductsCommand extends Command
             $this->info("Model: " . ($config['model'] ?? 'gpt-4o-mini'));
             $this->newLine();
 
-            // Get batch of products
+            // Get batch of products (skip only good analysis with 3+ keywords)
             $products = Product::query()
                 ->whereNotNull('title')
                 ->when(!$all, fn($q) => $q->where('in_stock', true))
                 ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sub) {
                     $sub->select('product_id')
                         ->from('product_ai_index')
-                        ->whereNotNull('keywords');
+                        ->whereRaw("JSON_LENGTH(keywords) >= 3");
                 }))
                 ->orderBy('id')
                 ->limit($batchCount)

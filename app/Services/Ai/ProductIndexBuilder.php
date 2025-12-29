@@ -74,6 +74,30 @@ class ProductIndexBuilder
     }
 
     /**
+     * Швидкий білд без AI — тільки rule-based fallback.
+     * Корисно для швидкого первинного заповнення або при недоступності API.
+     */
+    public function buildForProductFallbackOnly(Product $product): ProductAiIndex
+    {
+        $payload = $this->fallbackFromProduct($product);
+
+        return ProductAiIndex::updateOrCreate(
+            ['product_id' => $product->id],
+            [
+                'product_type' => $payload['product_type'] ?? null,
+                'ai_category'  => $payload['ai_category'] ?? null,
+                'materials'    => $payload['materials'] ?? null,
+                'standards'    => $payload['standards'] ?? null,
+                'slang'        => $payload['slang'] ?? null,
+                'keywords'     => $payload['keywords'] ?? null,
+                'usage'        => $payload['usage'] ?? null,
+                'embedding'    => $payload['embedding'] ?? null,
+                'raw_ai_json'  => null,
+            ]
+        );
+    }
+
+    /**
      * Дуже простий fallback: щось витягуємо з самого продукту,
      * щоб запис не був пустим навіть без AI.
      */

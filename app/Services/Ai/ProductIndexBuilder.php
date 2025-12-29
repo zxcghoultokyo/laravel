@@ -4,10 +4,24 @@ namespace App\Services\Ai;
 
 use App\Models\Product;
 use App\Models\ProductAiIndex;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProductIndexBuilder
 {
+    protected int $maxRetries = 3;
+    protected int $retryDelayMs = 100;
+    protected ?\Closure $onLockRetry = null;
+
+    /**
+     * Встановити callback для виводу при lock retry.
+     */
+    public function onLockRetry(\Closure $callback): self
+    {
+        $this->onLockRetry = $callback;
+        return $this;
+    }
+
     public function buildForProduct(Product $product): ProductAiIndex
     {
         $aiData = [];
@@ -57,20 +71,17 @@ class ProductIndexBuilder
             $rawJson = null;
         }
 
-        return ProductAiIndex::updateOrCreate(
-            ['product_id' => $product->id],
-            [
-                'product_type' => $payload['product_type'] ?? null,
-                'ai_category'  => $payload['ai_category'] ?? null,
-                'materials'    => $payload['materials'] ?? null,
-                'standards'    => $payload['standards'] ?? null,
-                'slang'        => $payload['slang'] ?? null,
-                'keywords'     => $payload['keywords'] ?? null,
-                'usage'        => $payload['usage'] ?? null,
-                'embedding'    => $payload['embedding'] ?? null,
-                'raw_ai_json'  => $rawJson,
-            ]
-        );
+        return $this->upsertWithRetry($product->id, [
+            'product_type' => $payload['product_type'] ?? null,
+            'ai_category'  => $payload['ai_category'] ?? null,
+            'materials'    => $payload['materials'] ?? null,
+            'standards'    => $payload['standards'] ?? null,
+            'slang'        => $payload['slang'] ?? null,
+            'keywords'     => $payload['keywords'] ?? null,
+            'usage'        => $payload['usage'] ?? null,
+            'embedding'    => $payload['embedding'] ?? null,
+            'raw_ai_json'  => $rawJson,
+        ]);
     }
 
     /**
@@ -81,9 +92,35 @@ class ProductIndexBuilder
     {
         $payload = $this->fallbackFromProduct($product);
 
-        return ProductAiIndex::updateOrCreate(
-            ['product_id' => $product->id],
-            [
+        return $this->upsertWithRetry($product->id, [
+            'product_type' => $payload['product_type'] ?? null,
+            'ai_category'  => $payload['ai_category'] ?? null,
+            'materials'    => $payload['materials'] ?? null,
+            'standards'    => $payload['standards'] ?? null,
+            'slang'        => $payload['slang'] ?? null,
+            'keywords'     => $payload['keywords'] ?? null,
+            'usage'        => $payload['usage'] ?? null,
+            'embedding'    => $payload['embedding'] ?? null,
+            'raw_ai_json'  => null,
+        ]);
+    }
+
+    /**
+     * Batch upsert для масового оновлення без AI.
+     * Значно швидше ніж по одному.
+     *
+     * @param iterable<Product> $products
+     * @return int кількість оброблених
+     */
+    public function buildBatchFallbackOnly(iterable $products): int
+    {
+        $rows = [];
+        $now = now();
+
+        foreach ($products as $product) {
+            $payload = $this->fallbackFromProduct($product);
+            $rows[] = [
+                'product_id'   => $product->id,
                 'product_type' => $payload['product_type'] ?? null,
                 'ai_category'  => $payload['ai_category'] ?? null,
                 'materials'    => $payload['materials'] ?? null,
@@ -91,10 +128,111 @@ class ProductIndexBuilder
                 'slang'        => $payload['slang'] ?? null,
                 'keywords'     => $payload['keywords'] ?? null,
                 'usage'        => $payload['usage'] ?? null,
-                'embedding'    => $payload['embedding'] ?? null,
+                'embedding'    => null,
                 'raw_ai_json'  => null,
-            ]
-        );
+                'created_at'   => $now,
+                'updated_at'   => $now,
+            ];
+        }
+
+        if (empty($rows)) {
+            return 0;
+        }
+
+        return $this->batchUpsertWithRetry($rows);
+    }
+
+    /**
+     * Upsert з retry для обходу database lock.
+     */
+    protected function upsertWithRetry(int $productId, array $data): ProductAiIndex
+    {
+        $attempt = 0;
+        $lastException = null;
+
+        while ($attempt < $this->maxRetries) {
+            try {
+                return ProductAiIndex::updateOrCreate(
+                    ['product_id' => $productId],
+                    $data
+                );
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                $attempt++;
+
+                // Якщо це lock — чекаємо і пробуємо знову
+                if ($this->isLockException($e) && $attempt < $this->maxRetries) {
+                    $delayMs = $this->retryDelayMs * $attempt;
+                    usleep($delayMs * 1000); // exponential backoff
+                    
+                    $msg = "DB LOCK: retry {$attempt}/{$this->maxRetries} for product {$productId}, wait {$delayMs}ms";
+                    Log::debug("ProductIndexBuilder: " . $msg);
+                    
+                    if ($this->onLockRetry) {
+                        ($this->onLockRetry)($msg);
+                    }
+                    continue;
+                }
+
+                throw $e;
+            }
+        }
+
+        throw $lastException;
+    }
+
+    /**
+     * Batch upsert з retry.
+     */
+    protected function batchUpsertWithRetry(array $rows): int
+    {
+        $attempt = 0;
+        $lastException = null;
+
+        while ($attempt < $this->maxRetries) {
+            try {
+                ProductAiIndex::upsert(
+                    $rows,
+                    ['product_id'],
+                    ['product_type', 'ai_category', 'materials', 'standards', 'slang', 'keywords', 'usage', 'embedding', 'raw_ai_json', 'updated_at']
+                );
+                return count($rows);
+            } catch (\Throwable $e) {
+                $lastException = $e;
+                $attempt++;
+
+                            if ($this->isLockException($e) && $attempt < $this->maxRetries) {
+                    $delayMs = $this->retryDelayMs * $attempt;
+                    usleep($delayMs * 1000);
+                    
+                    $msg = "DB LOCK: batch retry {$attempt}/{$this->maxRetries}, wait {$delayMs}ms";
+                    Log::debug("ProductIndexBuilder: " . $msg);
+                    
+                    if ($this->onLockRetry) {
+                        ($this->onLockRetry)($msg);
+                    }
+                    continue;
+                }
+
+                throw $e;
+            }
+        }
+
+        throw $lastException;
+    }
+
+    /**
+     * Перевірка чи exception — це database lock.
+     */
+    protected function isLockException(\Throwable $e): bool
+    {
+        $message = strtolower($e->getMessage());
+        return str_contains($message, 'lock')
+            || str_contains($message, 'deadlock')
+            || str_contains($message, 'try restarting transaction')
+            || str_contains($message, 'database is locked')
+            || $e->getCode() == 1213  // MySQL deadlock
+            || $e->getCode() == 1205; // MySQL lock wait timeout
     }
 
     /**

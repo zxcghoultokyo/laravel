@@ -34,6 +34,9 @@ class BuildProductAiIndex extends Command
         $offset = (int) $this->option('offset');
         $noAi = $this->option('no-ai');
 
+        // Вивід lock retry в консоль
+        $builder->onLockRetry(fn($msg) => $this->warn("[LOCK] {$msg}"));
+
         // Reset position if requested
         if ($this->option('reset')) {
             Cache::forget(self::CACHE_KEY);

@@ -11,13 +11,15 @@ class BuildProductAiIndex extends Command
 {
     protected $signature = 'products:build-ai-index 
         {--limit=0 : Max products to process}
-        {--only-missing : Only products without AI index}
+        {--only-missing : Only products without AI index record}
+        {--incomplete : Only products with empty product_type or keywords}
         {--batch=50 : Products per batch (lower = more output)}
         {--offset=0 : Skip first N products}
         {--resume : Continue from last saved position}
         {--reset : Reset saved position and start fresh}
         {--timeout=840 : Max runtime in seconds (default 14 min for 15 min cloud limit)}
-        {--no-ai : Skip AI calls, only build fallback index}';
+        {--no-ai : Skip AI calls, only build fallback index}
+        {--stats : Show statistics only, do not process}';
     
     protected $aliases = ['build:product-ai-index'];
 
@@ -27,6 +29,11 @@ class BuildProductAiIndex extends Command
 
     public function handle(ProductIndexBuilder $builder): int
     {
+        // Stats mode
+        if ($this->option('stats')) {
+            return $this->showStats();
+        }
+
         $startTime = microtime(true);
         $timeout = (int) $this->option('timeout');
         $batchSize = max(1, (int) $this->option('batch'));
@@ -59,6 +66,18 @@ class BuildProductAiIndex extends Command
 
         if ($this->option('only-missing')) {
             $query->whereDoesntHave('aiIndex');
+        }
+
+        if ($this->option('incomplete')) {
+            $query->where(function ($q) {
+                $q->whereDoesntHave('aiIndex')
+                  ->orWhereHas('aiIndex', function ($ai) {
+                      $ai->where(function ($inner) {
+                          $inner->whereNull('product_type')
+                                ->orWhere('product_type', '');
+                      });
+                  });
+            });
         }
 
         if ($lastProcessedId > 0) {
@@ -163,6 +182,61 @@ class BuildProductAiIndex extends Command
             $this->warn("[WARN] {$errors} errors encountered");
         }
         $this->info("[LAST ID] {$lastId}");
+        $this->info("=================================================");
+
+        return self::SUCCESS;
+    }
+
+    protected function showStats(): int
+    {
+        $this->info("=================================================");
+        $this->info("           PRODUCT AI INDEX STATISTICS           ");
+        $this->info("=================================================");
+
+        $totalProducts = Product::where('display_in_showcase', true)->count();
+        $this->info("Total products (display_in_showcase=1): {$totalProducts}");
+
+        $withAiIndex = Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex')
+            ->count();
+        $this->info("With AI index record: {$withAiIndex}");
+
+        $withoutAiIndex = Product::where('display_in_showcase', true)
+            ->whereDoesntHave('aiIndex')
+            ->count();
+        $this->info("Without AI index record: {$withoutAiIndex}");
+
+        $withProductType = Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex', fn($q) => $q->whereNotNull('product_type')->where('product_type', '!=', ''))
+            ->count();
+        $this->info("With product_type filled: {$withProductType}");
+
+        $withKeywords = Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex', fn($q) => $q->whereNotNull('keywords')->where('keywords', '!=', ''))
+            ->count();
+        $this->info("With keywords filled: {$withKeywords}");
+
+        $withUsage = Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex', fn($q) => $q->whereNotNull('usage')->where('usage', '!=', ''))
+            ->count();
+        $this->info("With usage filled: {$withUsage}");
+
+        $withRawAi = Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex', fn($q) => $q->whereNotNull('raw_ai_json')->where('raw_ai_json', '!=', '[]')->where('raw_ai_json', '!=', '{}'))
+            ->count();
+        $this->info("With AI enrichment (raw_ai_json): {$withRawAi}");
+
+        $incomplete = Product::where('display_in_showcase', true)
+            ->where(function ($q) {
+                $q->whereDoesntHave('aiIndex')
+                  ->orWhereHas('aiIndex', fn($ai) => $ai->whereNull('product_type')->orWhere('product_type', ''));
+            })
+            ->count();
+        
+        $this->newLine();
+        $this->info("-------------------------------------------------");
+        $this->info("Need processing (--incomplete): {$incomplete}");
+        $this->info("Need processing (--only-missing): {$withoutAiIndex}");
         $this->info("=================================================");
 
         return self::SUCCESS;

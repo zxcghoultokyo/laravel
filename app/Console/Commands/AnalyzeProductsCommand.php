@@ -194,18 +194,28 @@ class AnalyzeProductsCommand extends Command
             // Use model_analyze (cheaper) for product analysis
             $model = $config['model_analyze'] ?? $config['model'] ?? 'gpt-4.1-mini';
             
-            // Build request payload - gpt-5.x uses max_completion_tokens, older models use max_tokens
+            // Build request payload - universal for all models
             $payload = [
                 'model' => $model,
                 'messages' => [
                     ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
                     ['role' => 'user', 'content' => $prompt],
                 ],
-                'temperature' => 0.3,
             ];
             
-            // Use correct token parameter based on model
-            if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
+            // Models that DON'T support temperature parameter
+            $noTemperatureModels = ['o1', 'o3', 'gpt-5-nano', 'o1-mini', 'o1-preview', 'o3-mini'];
+            $supportsTemperature = !collect($noTemperatureModels)->contains(fn($m) => str_starts_with($model, $m));
+            
+            if ($supportsTemperature) {
+                $payload['temperature'] = 0.3;
+            }
+            
+            // Models that use max_completion_tokens instead of max_tokens
+            $newTokenModels = ['gpt-5', 'o1', 'o3'];
+            $usesNewTokenParam = collect($newTokenModels)->contains(fn($m) => str_starts_with($model, $m));
+            
+            if ($usesNewTokenParam) {
                 $payload['max_completion_tokens'] = 800;
             } else {
                 $payload['max_tokens'] = 800;

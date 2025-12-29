@@ -145,17 +145,28 @@ class AnalyzeProductsCommand extends Command
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
         try {
+            $model = $config['model'] ?? 'gpt-4o-mini';
+            
+            // Build request payload - gpt-5.x uses max_completion_tokens, older models use max_tokens
+            $payload = [
+                'model' => $model,
+                'messages' => [
+                    ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => 0.3,
+            ];
+            
+            // Use correct token parameter based on model
+            if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
+                $payload['max_completion_tokens'] = 800;
+            } else {
+                $payload['max_tokens'] = 800;
+            }
+            
             $response = Http::timeout(30)
                 ->withToken($apiKey)
-                ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
-                    'model' => $config['model'] ?? 'gpt-4o-mini',
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'temperature' => 0.3,
-                    'max_tokens' => 800,
-                ]);
+                ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', $payload);
 
             $data = $response->json();
             

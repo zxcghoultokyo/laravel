@@ -60,8 +60,8 @@ class AnalyzeProductsCommand extends Command
             return 0;
         }
 
-        $this->info("\nStarting analysis...\n");
-
+        $this->info("\nStarting analysis...");
+        
         $config = config('services.openai', []);
         $apiKey = $config['key'] ?? null;
         
@@ -69,6 +69,13 @@ class AnalyzeProductsCommand extends Command
             $this->error('OpenAI API key not configured!');
             return 1;
         }
+        
+        // Show config (masked key)
+        $maskedKey = $apiKey ? (substr($apiKey, 0, 8) . '...' . substr($apiKey, -4)) : 'NOT SET';
+        $this->info("API Key: {$maskedKey}");
+        $this->info("Model: " . ($config['model'] ?? 'gpt-4o-mini'));
+        $this->info("Base URL: " . ($config['base_url'] ?? 'https://api.openai.com/v1'));
+        $this->newLine();
 
         $processed = 0;
         $failed = 0;
@@ -137,45 +144,59 @@ class AnalyzeProductsCommand extends Command
 
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
-        $response = Http::timeout(30)
-            ->withToken($apiKey)
-            ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
-                'model' => $config['model'] ?? 'gpt-4o-mini',
-                'messages' => [
-                    ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-                'temperature' => 0.3,
-                'max_tokens' => 800,
-            ]);
+        try {
+            $response = Http::timeout(30)
+                ->withToken($apiKey)
+                ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
+                    'model' => $config['model'] ?? 'gpt-4o-mini',
+                    'messages' => [
+                        ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature' => 0.3,
+                    'max_tokens' => 800,
+                ]);
 
-        $data = $response->json();
-        $content = $data['choices'][0]['message']['content'] ?? null;
+            $data = $response->json();
+            
+            // Check for API errors
+            if (isset($data['error'])) {
+                $this->error("API Error: " . ($data['error']['message'] ?? json_encode($data['error'])));
+                return false;
+            }
+            
+            $content = $data['choices'][0]['message']['content'] ?? null;
 
-        if (!$content) {
+            if (!$content) {
+                $this->error("Empty response. Status: " . $response->status() . " Body: " . mb_substr($response->body(), 0, 200));
+                return false;
+            }
+
+            $json = $this->parseJsonFromResponse($content);
+            if (!$json) {
+                $this->error("Failed to parse JSON from: " . mb_substr($content, 0, 300));
+                return false;
+            }
+
+            ProductAiIndex::updateOrCreate(
+                ['product_id' => $product->id],
+                [
+                    'product_type' => $json['product_type'] ?? null,
+                    'ai_category' => $json['ai_category'] ?? null,
+                    'materials' => $json['materials'] ?? [],
+                    'standards' => $json['standards'] ?? [],
+                    'slang' => $json['slang'] ?? [],
+                    'keywords' => $json['keywords'] ?? [],
+                    'usage' => $json['usage'] ?? [],
+                    'raw_ai_json' => $json,
+                ]
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            $this->error("Exception: " . $e->getMessage());
             return false;
         }
-
-        $json = $this->parseJsonFromResponse($content);
-        if (!$json) {
-            return false;
-        }
-
-        ProductAiIndex::updateOrCreate(
-            ['product_id' => $product->id],
-            [
-                'product_type' => $json['product_type'] ?? null,
-                'ai_category' => $json['ai_category'] ?? null,
-                'materials' => $json['materials'] ?? [],
-                'standards' => $json['standards'] ?? [],
-                'slang' => $json['slang'] ?? [],
-                'keywords' => $json['keywords'] ?? [],
-                'usage' => $json['usage'] ?? [],
-                'raw_ai_json' => $json,
-            ]
-        );
-
-        return true;
     }
 
     private function buildPrompt(string $title, string $description, string $category, string $characteristics): string

@@ -131,19 +131,34 @@
         }
     }
 
-    function clearMessages() {
+    async function clearMessages() {
         const currentSessionId = localStorage.getItem(SESSION_KEY);
         
         // Delete session from server
         if (currentSessionId) {
-            fetch(`/api/chat/session/${currentSessionId}`, {
-                method: 'DELETE',
-            }).catch(err => console.warn('Failed to delete session:', err));
+            try {
+                const resp = await fetch(`/api/chat/session/${currentSessionId}`, {
+                    method: 'DELETE',
+                });
+                const data = await resp.json();
+                console.log('Session cleared:', data);
+            } catch (err) {
+                console.warn('Failed to delete session:', err);
+            }
         }
         
+        // Clear all local storage keys for this session
         localStorage.removeItem(getMessagesKey());
         localStorage.removeItem(SESSION_KEY);
+        // Also clear old keys
+        localStorage.removeItem('ailure_chat_session_id');
+        const oldMsgKey = 'ailure_test_messages_' + currentSessionId;
+        localStorage.removeItem(oldMsgKey);
+        
+        // Clear UI
         chatMessages.innerHTML = '';
+        messageHistory = [];
+        
         // Create new session and show welcome
         getOrCreateSessionId();
         showWelcome();
@@ -526,9 +541,9 @@
         }
     });
 
-    clearChatBtn.addEventListener('click', () => {
+    clearChatBtn.addEventListener('click', async () => {
         if (confirm('Очистити історію чату? Буде створено нову сесію.')) {
-            clearMessages();
+            await clearMessages();
         }
     });
 

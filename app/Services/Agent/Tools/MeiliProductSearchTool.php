@@ -219,6 +219,30 @@ class MeiliProductSearchTool
             }
         }
         
+        // Build list of accessory words mentioned IN THE QUERY - don't filter these out
+        $queryAccessoryWords = [];
+        $allAccessoryKeywords = [
+            'напашник', 'сумка', 'сумк', 'bag',
+            'чохол', 'чохл', 'cover', 'кавер',
+            'ремінь', 'ремен', 'strap', 'sling',
+            'підсумок', 'підсумки', 'pouch',
+            'камбербанд', 'cummerbund',
+            'панел', 'panel',
+            'модуль', 'module',
+            'адаптер', 'adapter',
+        ];
+        foreach ($allAccessoryKeywords as $keyword) {
+            if (str_contains($queryLower, $keyword)) {
+                $queryAccessoryWords[] = $keyword;
+            }
+        }
+        if (!empty($queryAccessoryWords)) {
+            Log::info('MeiliProductSearchTool: query contains accessory words, will preserve matching products', [
+                'query' => $query,
+                'accessory_words_in_query' => $queryAccessoryWords
+            ]);
+        }
+        
         // User is searching for main gear (plate carriers, helmets, plates, etc.)
         // Categorize products into main/accessory with primary type awareness
         $mainProducts = [];
@@ -234,6 +258,16 @@ class MeiliProductSearchTool
             $isSidePlate = false;
             foreach (['бокова', 'side', '15x15', '15х15', '15x20', '15х20'] as $hint) {
                 if (str_contains($combined, $hint)) { $isSidePlate = true; break; }
+            }
+            
+            // Check if this product matches any accessory word from the USER'S QUERY
+            // If so, DON'T filter it out - user explicitly asked for this
+            $matchesQueryAccessoryWord = false;
+            foreach ($queryAccessoryWords as $queryWord) {
+                if (str_contains($combined, $queryWord)) {
+                    $matchesQueryAccessoryWord = true;
+                    break;
+                }
             }
             
             // Strict accessory detection: these words ALWAYS mean accessory
@@ -257,10 +291,13 @@ class MeiliProductSearchTool
             ];
             
             $isAccessory = false;
-            foreach ($strictAccessoryWords as $word) {
-                if (str_contains($combined, $word)) {
-                    $isAccessory = true;
-                    break;
+            // Only mark as accessory if it DOESN'T match query accessory words
+            if (!$matchesQueryAccessoryWord) {
+                foreach ($strictAccessoryWords as $word) {
+                    if (str_contains($combined, $word)) {
+                        $isAccessory = true;
+                        break;
+                    }
                 }
             }
             

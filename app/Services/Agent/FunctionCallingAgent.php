@@ -268,11 +268,20 @@ PROMPT;
     private function callGptWithTools(array $messages): ?array
     {
         if (empty($this->apiKey)) {
-            Log::warning('FunctionCallingAgent: no API key');
+            Log::warning('FunctionCallingAgent: no API key', [
+                'config_key_exists' => !empty(config('services.openai.key')),
+                'env_key_exists' => !empty(env('OPENAI_API_KEY')),
+            ]);
             return null;
         }
 
         try {
+            Log::info('FunctionCallingAgent: calling OpenAI', [
+                'model' => $this->model,
+                'base_url' => $this->baseUrl,
+                'messages_count' => count($messages),
+            ]);
+            
             $response = Http::withToken($this->apiKey)
                 ->timeout(30)
                 ->post($this->baseUrl . '/chat/completions', [
@@ -286,13 +295,20 @@ PROMPT;
             $data = $response->json();
             
             Log::info('FunctionCallingAgent: GPT response', [
+                'status' => $response->status(),
                 'has_tool_calls' => isset($data['choices'][0]['message']['tool_calls']),
                 'finish_reason' => $data['choices'][0]['finish_reason'] ?? null,
+                'error' => $data['error'] ?? null,
             ]);
+
+            if (isset($data['error'])) {
+                Log::error('FunctionCallingAgent: OpenAI error', ['error' => $data['error']]);
+                return null;
+            }
 
             return $data;
         } catch (\Throwable $e) {
-            Log::error('FunctionCallingAgent: API error', ['error' => $e->getMessage()]);
+            Log::error('FunctionCallingAgent: API error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return null;
         }
     }
@@ -630,14 +646,14 @@ PROMPT;
             return [
                 'message' => 'Ось що я знайшов:',
                 'products' => $cards ?: $results,
-                'meta' => ['intent' => 'product_search', 'agent' => 'fallback'],
+                'meta' => ['intent' => 'product_search', 'agent' => 'fallback', 'products_found' => count($results)],
             ];
         }
 
         return [
             'message' => 'Вибачте, не вдалося обробити запит. Спробуйте переформулювати.',
             'products' => [],
-            'meta' => ['intent' => 'error', 'agent' => 'fallback'],
+            'meta' => ['intent' => 'error', 'agent' => 'fallback', 'error' => 'No API key or API failed'],
         ];
     }
 }

@@ -421,6 +421,26 @@
             }
 
             const payload = await response.json();
+            
+            // DEBUG: Show meta info in console and chat
+            if (payload.meta) {
+                console.log('🔍 DEBUG META:', payload.meta);
+                const debugInfo = [
+                    `🤖 Agent: ${payload.meta.agent || 'unknown'}`,
+                    `🎯 Intent: ${payload.meta.intent || 'unknown'}`,
+                    payload.meta.tools_called ? `🔧 Tools: ${payload.meta.tools_called.join(', ')}` : null,
+                    payload.meta.products_found !== undefined ? `📦 Found: ${payload.meta.products_found}` : null,
+                    payload.meta.error ? `❌ Error: ${payload.meta.error}` : null,
+                ].filter(Boolean).join(' | ');
+                
+                if (debugInfo) {
+                    const debugEl = document.createElement('div');
+                    debugEl.className = 'text-xs text-gray-400 px-4 py-1 bg-gray-50 rounded mb-2';
+                    debugEl.textContent = debugInfo;
+                    chatMessages.appendChild(debugEl);
+                }
+            }
+            
             renderBotReply(payload);
         } catch (err) {
             console.error(err);

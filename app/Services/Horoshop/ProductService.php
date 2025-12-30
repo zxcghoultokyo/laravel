@@ -47,7 +47,7 @@ class ProductService
                     'parent', 'images', 'slug', 'link', 'presence', 'quantity',
                     'display_in_showcase', 'popularity', 'color', 'brand',
                     'description', 'characteristics', 'short_description',
-                    'select', 'params',
+                    'select', 'params', 'mod_title',
                     'seo_title', 'seo_keywords', 'seo_description',
                     'we_recommended', 'icons',
                 ],
@@ -95,6 +95,9 @@ class ProductService
             ?? null;
 
         $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
+        
+        // Extract size from multiple sources
+        $size = $this->extractSizeFromItem($item, $title);
 
         $product->fill([
             'article' => $article,
@@ -120,11 +123,107 @@ class ProductService
             'color' => Arr::get($item, 'color.value.ua')
                                         ?? Arr::get($item, 'color.value.ru')
                                         ?? null,
+            'size' => $size,
         ]);
 
         $product->search_index = $this->buildSearchIndex($item, $product);
 
         $product->save();
+    }
+    
+    /**
+     * Extract size from Horoshop item data.
+     * Tries multiple sources: mod_title, select.size, select.rozmir, characteristics, title parsing.
+     */
+    protected function extractSizeFromItem(array $item, ?string $title): ?string
+    {
+        // 1. Try mod_title (modification title - most reliable for variants)
+        if (!empty($item['mod_title'])) {
+            $modTitle = is_array($item['mod_title']) 
+                ? ($item['mod_title']['ua'] ?? $item['mod_title']['ru'] ?? reset($item['mod_title']))
+                : $item['mod_title'];
+            if (is_string($modTitle) && trim($modTitle) !== '') {
+                return trim($modTitle);
+            }
+        }
+        
+        // 2. Try select.size
+        $selectSize = Arr::get($item, 'select.size');
+        if ($selectSize) {
+            $size = is_array($selectSize) 
+                ? ($selectSize['ua'] ?? $selectSize['ru'] ?? reset($selectSize))
+                : $selectSize;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 3. Try select.rozmir (Ukrainian)
+        $selectRozmir = Arr::get($item, 'select.rozmir');
+        if ($selectRozmir) {
+            $size = is_array($selectRozmir) 
+                ? ($selectRozmir['ua'] ?? $selectRozmir['ru'] ?? reset($selectRozmir))
+                : $selectRozmir;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 4. Try characteristics.size or characteristics.rozmir
+        $charSize = Arr::get($item, 'characteristics.size.value')
+            ?? Arr::get($item, 'characteristics.size')
+            ?? Arr::get($item, 'characteristics.rozmir.value')
+            ?? Arr::get($item, 'characteristics.rozmir');
+        if ($charSize) {
+            $size = is_array($charSize) 
+                ? ($charSize['ua'] ?? $charSize['ru'] ?? reset($charSize))
+                : $charSize;
+            if (is_string($size) && trim($size) !== '') {
+                return trim((string) $size);
+            }
+        }
+        
+        // 5. Try params.size
+        $paramSize = Arr::get($item, 'params.size');
+        if ($paramSize && is_string($paramSize)) {
+            return trim($paramSize);
+        }
+        
+        // 6. Parse from title as last resort
+        if ($title) {
+            return $this->parseSizeFromTitle($title);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Parse size from product title.
+     * Common patterns: "... Бежевий L", "... Multicam USA XL", "... US L-Long"
+     */
+    protected function parseSizeFromTitle(string $title): ?string
+    {
+        $patterns = [
+            // Size with length: "L-Long", "M-Regular", "S/L", "XL/R"
+            '/\b(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)[-\/](Long|Regular|Short|L|R|S)\b/i',
+            // US size format: "US L-Long", "US M"
+            '/\bUS\s+(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)(?:[-\/](Long|Regular|Short|L|R|S))?\b/i',
+            // Simple size at end: "... XL", "... M"
+            '/\s(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)\s*$/i',
+            // Numeric sizes (shoes): "43", "44.5"
+            '/\s(\d{2}(?:\.\d)?)\s*$/',
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $title, $matches)) {
+                if (isset($matches[2]) && !empty($matches[2])) {
+                    return strtoupper($matches[1]) . '/' . strtoupper($matches[2]);
+                }
+                return strtoupper($matches[1]);
+            }
+        }
+        
+        return null;
     }
 
     protected function isInStock(array $item): bool

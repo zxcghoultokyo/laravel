@@ -55,14 +55,17 @@ class ProductDetailsTool
             $allSiblings = Product::query()
                 ->whereIn('parent_article', $allParentArticles)
                 ->where('in_stock', true)
-                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title']);
+                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title', 'size']);
             
             foreach ($allSiblings as $sibling) {
                 $parentArt = $sibling->parent_article;
-                $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
-                $size = $this->extractSize($sibRaw);
                 
-                // Fallback: parse size from title
+                // Prefer DB size field, then try raw, then parse from title
+                $size = $sibling->size;
+                if (!$size) {
+                    $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
+                    $size = $this->extractSize($sibRaw);
+                }
                 if (!$size && $sibling->title) {
                     $size = $this->parseSizeFromTitle($sibling->title);
                 }
@@ -110,8 +113,11 @@ class ProductDetailsTool
                 $parentRaw = $parentRawMap[$parentArticle];
             }
             
-            // Extract size for current product (try raw fields first, then parse from title)
-            $currentSize = $this->extractSize($raw);
+            // Extract size: prefer DB field, then try raw fields, then parse from title
+            $currentSize = $product->size;
+            if (!$currentSize) {
+                $currentSize = $this->extractSize($raw);
+            }
             if (!$currentSize) {
                 $currentSize = $this->parseSizeFromTitle($title);
             }

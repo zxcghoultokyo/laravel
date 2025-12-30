@@ -54,7 +54,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'in_stock', 'quantity', 'display_in_showcase', 'price',
+                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price',
                 ])),
                 'searchableAttributes' => [
                     // Primary fields (highest priority)
@@ -70,6 +70,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     'category_path',
                     'brand',
                     'color',
+                    'size',
                     'ai_materials',      // Materials
                     'ai_standards',      // Protection standards
                 ],
@@ -120,6 +121,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         'category_path' => (string) ($p->category_path ?? ''),
                         'brand' => (string) ($p->brand ?? ''),
                         'color' => (string) ($p->color ?? ''),
+                        'size' => (string) ($p->size ?? ''),
 
                         'search_index' => (string) ($p->search_index ?? ''),
 

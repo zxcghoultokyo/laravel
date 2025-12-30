@@ -1,4 +1,4 @@
-<div>
+<div wire:poll.5s="loadSession">
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
         <div>
@@ -9,8 +9,23 @@
             <p class="mt-1 text-sm text-gray-500">{{ $session->messages_count }} повідомлень</p>
         </div>
         <div class="flex gap-2">
+            @if($operatorMode)
+                <button wire:click="release" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                    </svg>
+                    Повернути AI
+                </button>
+            @else
+                <button wire:click="takeOver" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Взяти в роботу
+                </button>
+            @endif
             @if($session->status === 'open')
-            <button wire:click="markAsResolved" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            <button wire:click="markAsResolved" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
                 Позначити вирішеним
             </button>
             @endif
@@ -23,15 +38,32 @@
         </div>
     </div>
 
+    <!-- Operator Mode Banner -->
+    @if($operatorMode)
+    <div class="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="flex h-3 w-3 relative">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+            </span>
+            <span class="text-green-800 font-medium">Ви ведете цей чат. AI вимкнено для цієї сесії.</span>
+        </div>
+    </div>
+    @endif
+
     <div class="grid grid-cols-3 gap-6">
         <!-- Messages Timeline -->
         <div class="col-span-2 space-y-4">
             @foreach($messages as $message)
-            <div class="bg-white rounded-lg shadow-sm p-4 @if($message->role === 'user') border-l-4 border-blue-500 @else border-l-4 border-gray-300 @endif">
+            <div class="bg-white rounded-lg shadow-sm p-4 @if($message->role === 'user') border-l-4 border-blue-500 @elseif(isset($message->meta['operator'])) border-l-4 border-green-500 @else border-l-4 border-gray-300 @endif">
                 <div class="flex items-start justify-between mb-2">
                     <div class="flex items-center gap-2">
-                        <span class="px-2 py-1 text-xs font-medium rounded-full @if($message->role === 'user') bg-blue-100 text-blue-800 @else bg-gray-100 text-gray-800 @endif">
-                            {{ $message->role }}
+                        <span class="px-2 py-1 text-xs font-medium rounded-full @if($message->role === 'user') bg-blue-100 text-blue-800 @elseif(isset($message->meta['operator'])) bg-green-100 text-green-800 @else bg-gray-100 text-gray-800 @endif">
+                            @if(isset($message->meta['operator']))
+                                operator
+                            @else
+                                {{ $message->role }}
+                            @endif
                         </span>
                         <span class="text-xs text-gray-500">{{ $message->created_at->format('H:i:s') }}</span>
                     </div>
@@ -141,8 +173,54 @@
             @endforeach
         </div>
 
+        <!-- Operator Message Form -->
+        @if($operatorMode)
+        <div class="bg-white rounded-lg shadow-sm p-4 border-2 border-green-200">
+            <form wire:submit="sendOperatorMessage" class="flex gap-3">
+                <input 
+                    type="text" 
+                    wire:model="operatorMessage"
+                    placeholder="Написати повідомлення клієнту..."
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    autofocus
+                >
+                <button 
+                    type="submit" 
+                    class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    wire:loading.attr="disabled"
+                >
+                    <span wire:loading.remove wire:target="sendOperatorMessage">Надіслати</span>
+                    <span wire:loading wire:target="sendOperatorMessage">...</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                    </svg>
+                </button>
+            </form>
+        </div>
+        @endif
+
         <!-- Metadata Sidebar -->
         <div class="space-y-4">
+            <!-- Operator Status Card -->
+            <div class="bg-white rounded-lg shadow-sm p-4">
+                <h3 class="font-semibold text-gray-900 mb-3">Статус обробки</h3>
+                <div class="flex items-center gap-3">
+                    @if($operatorMode)
+                        <span class="flex h-3 w-3 relative">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        </span>
+                        <span class="text-sm font-medium text-green-700">Оператор веде</span>
+                    @else
+                        <span class="flex h-3 w-3 relative">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                        </span>
+                        <span class="text-sm font-medium text-blue-700">AI обробляє</span>
+                    @endif
+                </div>
+            </div>
+
             <div class="bg-white rounded-lg shadow-sm p-4">
                 <h3 class="font-semibold text-gray-900 mb-3">Метадані</h3>
                 <dl class="space-y-2 text-sm">

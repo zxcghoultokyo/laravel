@@ -16,6 +16,13 @@
                 <p class="text-sm text-gray-500">Адміністрування</p>
             </div>
             <nav class="px-4 space-y-1">
+                <a href="{{ route('admin.dashboard') }}" 
+                   class="flex items-center px-4 py-2 text-sm rounded-lg {{ request()->routeIs('admin.dashboard') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}">
+                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+                    </svg>
+                    Dashboard
+                </a>
                 <a href="{{ route('admin.chats.index') }}" 
                    class="flex items-center px-4 py-2 text-sm rounded-lg {{ request()->routeIs('admin.chats.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}">
                     <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

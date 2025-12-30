@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.2.1
+ * AIntento Chat Widget v2.2.7
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.1"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.7"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.2.1';
+    const WIDGET_VERSION = '2.2.7';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -474,6 +474,11 @@
             let hasReceivedProducts = false;
             let receivedProducts = [];
             
+            // Smooth scroll to loader on start
+            setTimeout(() => {
+                messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+            }, 100);
+            
             const streamUrl = BASE_URL + '/api/chat/stream?message=' + encodeURIComponent(message) + '&session_id=' + encodeURIComponent(state.sessionId);
             
             log('Starting SSE stream:', streamUrl);
@@ -538,6 +543,10 @@
                             // Display products immediately after text
                             if (receivedProducts.length > 0) {
                                 addProducts(messages, receivedProducts, state.sessionId, true);
+                                // Smooth scroll after products added
+                                setTimeout(() => {
+                                    messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
+                                }, 100);
                             }
                             break;
                             
@@ -559,9 +568,15 @@
                                 removeLoader(loader);
                             }
                             
-                            // Always finalize streaming text (remove cursor)
+                            // Finalize or remove streaming text element
                             if (currentTextElement) {
-                                finalizeStreamingText(currentTextElement, accumulatedText);
+                                if (accumulatedText.trim()) {
+                                    // Has text - finalize (remove cursor)
+                                    finalizeStreamingText(currentTextElement, accumulatedText);
+                                } else {
+                                    // No text - remove empty bubble
+                                    currentTextElement.remove();
+                                }
                             }
                             
                             // Fetch cross-sell for first product

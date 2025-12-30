@@ -223,6 +223,12 @@ class AgentOrchestrator
         $searchQuery = $plan->searchQuery ?? $originalMessage;
         $filters = $plan->filters;
         
+        // Handle "popular products" / gift requests - show bestsellers
+        $isPopularRequest = $this->isPopularProductsRequest($searchQuery, $originalMessage);
+        if ($isPopularRequest) {
+            return $this->handlePopularProductsRequest($originalMessage, $sessionId);
+        }
+        
         $debug = [
             'original_message' => $originalMessage,
             'search_query' => $searchQuery,
@@ -1171,6 +1177,96 @@ class AgentOrchestrator
             }
         }
         return false;
+    }
+
+    /**
+     * Detect if this is a request for popular/gift/bestseller products.
+     */
+    private function isPopularProductsRequest(string $searchQuery, string $originalMessage): bool
+    {
+        $q = mb_strtolower($searchQuery . ' ' . $originalMessage);
+        $patterns = [
+            'популярн', 'найкращ', 'хіт', 'бестселер', 'bestseller', 
+            'подарун', 'gift', 'що купують', 'що беруть', 'найчастіше',
+            'рекомендуєш', 'порекомендуй', 'що порадиш', 'не знаю що',
+            'для полігон', 'для служб', 'для військ',
+        ];
+        foreach ($patterns as $p) {
+            if (str_contains($q, $p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Handle popular products request - show bestsellers from different categories.
+     */
+    private function handlePopularProductsRequest(string $originalMessage, ?string $sessionId): array
+    {
+        Log::info('AgentOrchestrator: handling popular products request', ['message' => $originalMessage]);
+
+        // Get top products by popularity/orders from different categories
+        $popularProducts = [];
+        $categories = ['плитоноска', 'шолом', 'берці', 'рюкзак'];
+        
+        foreach ($categories as $category) {
+            $results = $this->searchTool->search($category, [], 5);
+            if (!empty($results)) {
+                // Sort by popularity/orders and take top 1-2
+                usort($results, function($a, $b) {
+                    $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
+                    $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
+                    return $popB <=> $popA;
+                });
+                $popularProducts = array_merge($popularProducts, array_slice($results, 0, 2));
+            }
+        }
+
+        // If no results from categories, fallback to general popular search
+        if (empty($popularProducts)) {
+            $popularProducts = $this->searchTool->search('', ['in_stock' => true], 20);
+            usort($popularProducts, function($a, $b) {
+                $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
+                $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
+                return $popB <=> $popA;
+            });
+            $popularProducts = array_slice($popularProducts, 0, 6);
+        }
+
+        // Deduplicate
+        $deduped = $this->deduperTool->dedupe($popularProducts);
+        $final = array_slice($deduped, 0, 5);
+
+        if (empty($final)) {
+            return AgentResponseDTO::text(
+                "На жаль, зараз не можу завантажити популярні товари. Спробуйте запитати про конкретну категорію: плитоноски, шоломи, берці або рюкзаки."
+            )->toArray();
+        }
+
+        // Save to session
+        $shownIds = array_column($final, 'id');
+        if ($sessionId) {
+            $this->sessionService->saveContext($sessionId, [
+                'shown_products' => $shownIds,
+                'last_query' => 'популярні товари',
+                'last_category' => null,
+            ]);
+        }
+
+        // Generate message
+        $message = "Ось топ-товари з різних категорій 🔥\n\n";
+        $message .= "Це найпопулярніші позиції, які найчастіше замовляють. Якщо хочете звузити пошук — напишіть категорію (плитоноски, шоломи, берці) або бюджет.";
+
+        return AgentResponseDTO::productSearch(
+            message: $message,
+            products: $final,
+            refinedQuery: 'популярні товари',
+            filters: [],
+            chosenIds: $shownIds,
+            ambiguous: false,
+            searchDebug: ['type' => 'popular_products']
+        )->toArray();
     }
 
     /**

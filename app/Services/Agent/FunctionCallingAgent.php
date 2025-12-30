@@ -792,14 +792,23 @@ PROMPT;
             return ['error' => 'Order ID required'];
         }
 
+        Log::info('toolGetOrderStatus: searching', ['order_id' => $orderId]);
+
         try {
-            $result = $this->orderSearchService->searchByOrderId($orderId);
+            $result = $this->orderSearchService->search(['order_id' => $orderId]);
+            
+            Log::info('toolGetOrderStatus: result', [
+                'found' => $result['total'] ?? 0,
+                'orders_count' => count($result['orders'] ?? []),
+            ]);
+            
             return [
                 'orders' => $result['orders'] ?? [],
-                'found' => $result['found'] ?? 0,
+                'found' => $result['total'] ?? 0,
             ];
         } catch (\Throwable $e) {
-            return ['error' => 'Could not find order'];
+            Log::error('toolGetOrderStatus: error', ['error' => $e->getMessage()]);
+            return ['error' => 'Could not find order: ' . $e->getMessage()];
         }
     }
 

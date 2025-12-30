@@ -146,10 +146,10 @@ class SmallTalkHandler
                 'response' => mb_substr($reply, 0, 50),
             ]);
 
-            return AgentResponseDTO::text($reply)->toArray();
+            return AgentResponseDTO::unknown($reply);
         } catch (\Throwable $e) {
             Log::warning('SmallTalkHandler: AI failed for unknown', ['error' => $e->getMessage()]);
-            return AgentResponseDTO::text($this->getFallbackUnknownResponse())->toArray();
+            return AgentResponseDTO::unknown($this->getFallbackUnknownResponse());
         }
     }
 

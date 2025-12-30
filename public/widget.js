@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.1
+ * AIntento Chat Widget v2.3.2
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.1"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.2"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.1';
+    const WIDGET_VERSION = '2.3.2';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -450,6 +450,11 @@
 
         // Send message function with SSE streaming support
         function sendMessage(customMessage = null) {
+            // Ignore event objects passed from click handlers
+            if (customMessage && typeof customMessage === 'object' && customMessage.target) {
+                customMessage = null;
+            }
+            
             const message = customMessage || input.value.trim();
             if (!message) return;
 

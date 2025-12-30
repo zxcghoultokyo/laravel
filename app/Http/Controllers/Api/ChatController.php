@@ -197,8 +197,11 @@ class ChatController extends Controller
             $this->chatService->clearSession($sessionId);
 
             // Delete from database
-            \App\Models\ChatSession::where('session_id', $sessionId)->delete();
-            \App\Models\ChatMessage::where('session_id', $sessionId)->delete();
+            $chatSession = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+            if ($chatSession) {
+                \App\Models\ChatMessage::where('chat_session_id', $chatSession->id)->delete();
+                $chatSession->delete();
+            }
 
             return response()->json([
                 'success' => true,

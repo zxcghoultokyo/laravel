@@ -133,6 +133,19 @@
 
     async function clearMessages() {
         const currentSessionId = localStorage.getItem(SESSION_KEY);
+        console.log('Clearing session:', currentSessionId);
+        
+        // Build keys BEFORE deleting anything
+        const currentMsgKey = MESSAGES_KEY_PREFIX + currentSessionId;
+        const oldMsgKey = 'ailure_test_messages_' + currentSessionId;
+        
+        console.log('Removing keys:', currentMsgKey, oldMsgKey);
+        
+        // Clear all local storage keys for this session FIRST
+        localStorage.removeItem(currentMsgKey);
+        localStorage.removeItem(oldMsgKey);
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem('ailure_chat_session_id');
         
         // Delete session from server
         if (currentSessionId) {
@@ -141,26 +154,19 @@
                     method: 'DELETE',
                 });
                 const data = await resp.json();
-                console.log('Session cleared:', data);
+                console.log('Server response:', data);
             } catch (err) {
                 console.warn('Failed to delete session:', err);
             }
         }
-        
-        // Clear all local storage keys for this session
-        localStorage.removeItem(getMessagesKey());
-        localStorage.removeItem(SESSION_KEY);
-        // Also clear old keys
-        localStorage.removeItem('ailure_chat_session_id');
-        const oldMsgKey = 'ailure_test_messages_' + currentSessionId;
-        localStorage.removeItem(oldMsgKey);
         
         // Clear UI
         chatMessages.innerHTML = '';
         messageHistory = [];
         
         // Create new session and show welcome
-        getOrCreateSessionId();
+        const newSessionId = getOrCreateSessionId();
+        console.log('New session created:', newSessionId);
         showWelcome();
     }
 

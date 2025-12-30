@@ -113,6 +113,26 @@
 
 ---
 
+## Admin Panel
+
+**URL**: `/admin`
+
+- **Dashboard** (`/admin`): Health status, metrics, circuit breakers, активні сесії
+- **Діалоги** (`/admin/chats`): Всі чат-сесії з фільтрами
+- **Деталі чату** (`/admin/chats/{id}`): Повна історія + можливість "взяти в роботу"
+- **Налаштування віджету** (`/admin/widget`): Конфігурація
+
+### Live Chat Takeover
+
+1. Відкрий чат → натисни **"Взяти в роботу"**
+2. AI автоматично вимикається для цієї сесії
+3. Пиши повідомлення клієнту напряму
+4. **"Повернути AI"** → AI знову відповідає
+
+Для real-time оновлень (WebSocket) див. [docs/WEBSOCKET_SETUP.md](docs/WEBSOCKET_SETUP.md)
+
+---
+
 ## Аудит поточного стану і слабкі місця
 - Часткове покриття `product_ai_index` → реранжування має fallback.
 - `category_aliases` — потрібне заповнення і регулярна перебудова з `CategoryIndexService`.

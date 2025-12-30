@@ -76,17 +76,17 @@
         <h3 class="text-lg font-semibold text-gray-900 mb-4">Circuit Breakers</h3>
         <div class="grid grid-cols-3 gap-4">
             @foreach($metrics['circuit_breakers'] as $service => $state)
-            <div class="border rounded-lg p-4 {{ $state['state'] === 'CLOSED' ? 'border-green-200 bg-green-50' : ($state['state'] === 'OPEN' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50') }}">
+            <div class="border rounded-lg p-4 {{ ($state['status'] ?? 'closed') === 'closed' ? 'border-green-200 bg-green-50' : (($state['status'] ?? '') === 'open' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50') }}">
                 <div class="flex items-center justify-between mb-2">
                     <span class="font-medium text-gray-900">{{ ucfirst($service) }}</span>
-                    <span class="px-2 py-1 text-xs font-bold rounded {{ $state['state'] === 'CLOSED' ? 'bg-green-100 text-green-800' : ($state['state'] === 'OPEN' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') }}">
-                        {{ $state['state'] }}
+                    <span class="px-2 py-1 text-xs font-bold rounded {{ ($state['status'] ?? 'closed') === 'closed' ? 'bg-green-100 text-green-800' : (($state['status'] ?? '') === 'open' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') }}">
+                        {{ strtoupper($state['status'] ?? 'closed') }}
                     </span>
                 </div>
                 <div class="text-sm text-gray-600">
                     <p>Failures: {{ $state['failures'] ?? 0 }}</p>
-                    @if($state['state'] !== 'CLOSED')
-                        <p>Opens at: {{ $state['opened_at'] ?? 'N/A' }}</p>
+                    @if(($state['status'] ?? 'closed') !== 'closed')
+                        <p>Retry after: {{ $state['retry_after'] ?? 'N/A' }}s</p>
                         <button 
                             wire:click="resetCircuitBreaker('{{ $service }}')"
                             class="mt-2 px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"

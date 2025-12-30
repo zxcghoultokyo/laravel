@@ -654,6 +654,23 @@ class MeiliProductSearchTool
             $q = str_ireplace('еквкс', 'ECWCS', $q);
         }
         
+        // Russian → Ukrainian clothing terms
+        if (preg_match('/\bбрюки\b/iu', $l)) {
+            $q = preg_replace('/\bбрюки\b/iu', 'штани', $q);
+        }
+        if (preg_match('/\bфутболка\b/iu', $l)) {
+            $q = preg_replace('/\bфутболка\b/iu', 'футболка', $q); // same, but ensure case
+        }
+        if (preg_match('/\bкуртка\b/iu', $l)) {
+            $q = preg_replace('/\bкуртка\b/iu', 'куртка', $q);
+        }
+        if (preg_match('/\bперчатки\b/iu', $l)) {
+            $q = preg_replace('/\bперчатки\b/iu', 'рукавиці', $q);
+        }
+        if (preg_match('/\bботинки\b/iu', $l)) {
+            $q = preg_replace('/\bботинки\b/iu', 'берці', $q);
+        }
+        
         // 2. Use QueryExpander ONLY for product type normalization (not expansion)
         // This helps with "бронік" → finds "плитоноска" products via search_index
         $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk');

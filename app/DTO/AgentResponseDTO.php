@@ -107,6 +107,24 @@ readonly class AgentResponseDTO
     }
 
     /**
+     * Create generic text response (no products, intent = SmallTalk).
+     * Use for explanations, follow-ups, and general text responses.
+     */
+    public static function text(string $message): self
+    {
+        return new self(
+            message: $message,
+            products: [],
+            intent: Intent::SmallTalk,
+            ambiguous: false,
+            refinedQuery: null,
+            filters: [],
+            chosenIds: [],
+            searchDebug: [],
+        );
+    }
+
+    /**
      * Create unknown/error response.
      */
     public static function unknown(string $message): self

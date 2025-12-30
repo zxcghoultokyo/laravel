@@ -1317,116 +1317,109 @@ class AgentOrchestrator
     }
 
     /**
-     * Build explanation why these products were selected.
+     * Build SHORT explanation why these products were selected.
+     * Uses ONLY data from DB: description, title, characteristics, brand, price.
+     * No hallucinations - only facts from product data.
      */
     private function buildSelectionExplanation(array $products, string $query, array $context): string
     {
         $count = count($products);
-        $budgetMax = $context['budget_max'] ?? null;
-        $budgetMin = $context['budget_min'] ?? null;
-
-        $parts = [];
-        $parts[] = "Я підібрав ці товари за такими критеріями:\n";
-
-        // 1. Search relevance
-        $parts[] = "🔍 **Відповідність запиту**: Всі товари відповідають вашому запиту «{$query}»";
-
-        // 2. Budget if specified
-        if ($budgetMax) {
-            $parts[] = "💰 **Бюджет**: до {$budgetMax} ₴";
-        } elseif ($budgetMin) {
-            $parts[] = "💰 **Бюджет**: від {$budgetMin} ₴";
-        }
-
-        // 3. Availability
-        $inStock = array_filter($products, fn($p) => $p['in_stock'] ?? false);
-        if (count($inStock) === $count) {
-            $parts[] = "✅ **Наявність**: всі товари є в наявності";
-        } elseif (count($inStock) > 0) {
-            $parts[] = "✅ **Наявність**: " . count($inStock) . " з {$count} в наявності";
-        }
-
-        // 4. Price range
-        $prices = array_filter(array_column($products, 'price'));
-        if (!empty($prices)) {
-            $minPrice = min($prices);
-            $maxPrice = max($prices);
-            if ($minPrice !== $maxPrice) {
-                $parts[] = "📊 **Ціновий діапазон**: від " . number_format($minPrice, 0, '', ' ') . " до " . number_format($maxPrice, 0, '', ' ') . " ₴";
-            }
-        }
-
-        // 5. Individual product highlights
-        $parts[] = "\n**Чому кожен з них:**\n";
         
+        $lines = [];
+        $lines[] = "Ці {$count} товари підібрані за вашим запитом «{$query}»:\n";
+
         foreach ($products as $i => $product) {
             $title = $product['title'] ?? 'Товар';
             $price = isset($product['price']) ? number_format($product['price'], 0, '', ' ') . ' ₴' : '';
-            $brand = $product['brand'] ?? null;
-            $popularity = $product['popularity'] ?? 0;
             
-            $highlight = $this->getProductHighlight($product, $i, $count);
+            // Extract REAL facts from product data
+            $facts = [];
             
-            $parts[] = "• **{$title}** ({$price}) — {$highlight}";
+            // Brand (if exists)
+            if (!empty($product['brand'])) {
+                $facts[] = "бренд {$product['brand']}";
+            }
+            
+            // Extract key info from description (first sentence or key phrase)
+            if (!empty($product['description'])) {
+                $shortDesc = $this->extractKeyFact($product['description']);
+                if ($shortDesc) {
+                    $facts[] = $shortDesc;
+                }
+            }
+            
+            // Extract from characteristics
+            if (!empty($product['characteristics']) && is_array($product['characteristics'])) {
+                $keyChars = $this->extractKeyCharacteristics($product['characteristics']);
+                if ($keyChars) {
+                    $facts[] = $keyChars;
+                }
+            }
+            
+            // Fallback: category info
+            if (empty($facts) && !empty($product['category_path'])) {
+                $catParts = explode('/', $product['category_path']);
+                $lastCat = end($catParts);
+                if ($lastCat && $lastCat !== $title) {
+                    $facts[] = mb_strtolower($lastCat);
+                }
+            }
+            
+            // Build product line
+            $num = $i + 1;
+            $factText = !empty($facts) ? implode(', ', array_slice($facts, 0, 2)) : 'в наявності';
+            $lines[] = "{$num}. {$title} ({$price}) — {$factText}";
         }
 
-        // 6. Suggestion
-        $parts[] = "\nЯкщо потрібно більше варіантів або інші критерії — напишіть, і я підберу ще!";
+        $lines[] = "\nЩо саме цікавить детальніше?";
 
-        return implode("\n", $parts);
+        return implode("\n", $lines);
     }
-
+    
     /**
-     * Get highlight reason for a specific product.
+     * Extract key fact from description (first meaningful phrase).
      */
-    private function getProductHighlight(array $product, int $index, int $total): string
+    private function extractKeyFact(string $description): ?string
     {
-        $price = $product['price'] ?? 0;
-        $popularity = $product['popularity'] ?? 0;
-        $brand = $product['brand'] ?? null;
-        $ordersCount = $product['orders_count'] ?? 0;
-
-        if ($index === 0) {
-            if ($popularity > 50 || $ordersCount > 10) {
-                return "найпопулярніший варіант";
-            }
-            return "найдоступніший за ціною";
+        $desc = trim(strip_tags($description));
+        if (empty($desc)) return null;
+        
+        // Take first sentence (up to 80 chars)
+        $sentences = preg_split('/[.!?\n]/', $desc);
+        $first = trim($sentences[0] ?? '');
+        
+        if (mb_strlen($first) > 80) {
+            $first = mb_substr($first, 0, 77) . '...';
         }
-
-        if ($index === $total - 1 && $total > 1) {
-            if ($brand && $this->isNotableBrand($brand)) {
-                return "преміум варіант від {$brand}";
-            }
-            return "топовий варіант з найкращими характеристиками";
-        }
-
-        if ($brand && $this->isNotableBrand($brand)) {
-            return "якісний варіант від бренду {$brand}";
-        }
-
-        if ($popularity > 30) {
-            return "популярний вибір покупців";
-        }
-
-        return "збалансований вибір ціна/якість";
+        
+        if (mb_strlen($first) < 10) return null;
+        
+        return mb_strtolower($first);
     }
-
+    
     /**
-     * Check if brand is notable.
+     * Extract key characteristics (material, protection class, weight).
      */
-    private function isNotableBrand(?string $brand): bool
+    private function extractKeyCharacteristics(array $chars): ?string
     {
-        if (!$brand) return false;
+        $priority = ['матеріал', 'material', 'клас захисту', 'рівень захисту', 'protection', 'вага', 'weight', 'розмір', 'size'];
         
-        $notable = ['атака', 'velmet', 'uatac', 'м-тас', 'm-tac', 'tasmanian tiger', 'direct action', 'helikon', 'crye', '5.11'];
-        $brandLower = mb_strtolower($brand);
-        
-        foreach ($notable as $n) {
-            if (str_contains($brandLower, $n)) {
-                return true;
+        foreach ($priority as $key) {
+            foreach ($chars as $charKey => $charVal) {
+                if (is_string($charKey) && str_contains(mb_strtolower($charKey), $key) && !empty($charVal)) {
+                    return mb_strtolower($charKey) . ': ' . $charVal;
+                }
             }
         }
-        return false;
+        
+        // Return first non-empty characteristic
+        foreach ($chars as $charKey => $charVal) {
+            if (is_string($charKey) && !empty($charVal) && mb_strlen($charVal) < 50) {
+                return mb_strtolower($charKey) . ': ' . $charVal;
+            }
+        }
+        
+        return null;
     }
 
     /**

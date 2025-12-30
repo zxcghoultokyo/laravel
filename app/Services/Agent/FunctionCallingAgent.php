@@ -99,11 +99,11 @@ class FunctionCallingAgent
     private function getSystemPrompt(): string
     {
         return <<<PROMPT
-Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor". Відповідай ДУЖЕ коротко (1-2 речення).
+Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor".
 
 СЛОВНИК ТОВАРІВ:
 - "плити", "бронеплити" → search_products(query="бронеплита")
-- "плитоноска", "плитоноска" → search_products(query="плитоноска", product_type="плитоноска")  
+- "плитоноска" → search_products(query="плитоноска", product_type="плитоноска")  
 - "шолом сестан буш" → search_products(query="SESTAN BUSCH", product_type="шолом")
 - "опс коре" → search_products(query="Ops-Core")
 - "салоні берці" → search_products(query="Salomon", product_type="берці")
@@ -113,12 +113,26 @@ class FunctionCallingAgent
 - "подарунок", "що порадиш", "топ" без контексту → get_popular_products
 - Питають про замовлення → get_order_status
 
-ПРАВИЛА:
+ПРАВИЛА ПОШУКУ:
 1. ЗАВЖДИ використовуй search_products для пошуку товарів
 2. Виправляй помилки: сестан=SESTAN, буш=BUSCH, опс коре=Ops-Core
-3. Відповідай МАКСИМАЛЬНО коротко: "Ось варіанти:" або "Знайшов такі:"
-4. НЕ пиши довгі описи товарів - вони показуються автоматично як картки
-5. Якщо не знайдено — одне речення і уточнююче питання
+
+ФОРМАТ ВІДПОВІДІ (JSON):
+Після пошуку товарів відповідай ТІЛЬКИ у форматі JSON:
+{
+  "intro": "Ось варіанти бронеплит:",
+  "products": [
+    {"article": "xxx", "comment": "Топ за співвідношенням ціна/захист"},
+    {"article": "yyy", "comment": "Легша, підходить для довгих виходів"}
+  ],
+  "outro": "Уточни бюджет або розмір плитоноски"
+}
+
+ПРАВИЛА КОМЕНТАРІВ:
+- intro: 1 коротке речення (5-10 слів)
+- comment: 1 коротке речення для кожного товару, чому саме цей варіант
+- outro: необов'язково, коротке уточнення якщо треба
+- НЕ пиши характеристики - вони є в картці товару
 PROMPT;
     }
 
@@ -349,20 +363,115 @@ PROMPT;
 
         // Get final response from GPT
         $finalResponse = $this->callGptWithTools($messages);
-        $responseText = $finalResponse['choices'][0]['message']['content'] ?? 'Ось що я знайшов:';
+        $responseText = $finalResponse['choices'][0]['message']['content'] ?? '';
 
         // Dedupe products
         $products = $this->dedupeProducts($products);
 
+        // Parse GPT response as JSON for structured output
+        $structuredResponse = $this->parseStructuredResponse($responseText, $products);
+
         return [
-            'message' => $responseText,
-            'products' => array_slice($products, 0, 5),
+            'message' => $structuredResponse['intro'] ?? 'Ось що я знайшов:',
+            'products' => $structuredResponse['products'] ?? array_slice($products, 0, 5),
+            'messages' => $structuredResponse['messages'] ?? [],
             'meta' => [
                 'intent' => 'product_search',
                 'agent' => 'function_calling',
                 'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
                 'products_found' => count($products),
+                'outro' => $structuredResponse['outro'] ?? null,
             ],
+        ];
+    }
+
+    /**
+     * Parse GPT structured JSON response and build messages array
+     */
+    private function parseStructuredResponse(string $responseText, array $allProducts): array
+    {
+        // Try to parse JSON from response
+        $json = null;
+        
+        // Extract JSON from response (might be wrapped in markdown code block)
+        if (preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
+            $json = json_decode($matches[0], true);
+        }
+        
+        Log::info('FunctionCallingAgent: parsing response', [
+            'raw_response' => $responseText,
+            'parsed_json' => $json,
+        ]);
+
+        // Build products by article index
+        $productsByArticle = [];
+        foreach ($allProducts as $p) {
+            $productsByArticle[$p['article']] = $p;
+        }
+
+        // If valid JSON with products
+        if ($json && isset($json['products']) && is_array($json['products'])) {
+            $messages = [];
+            
+            // Add intro message
+            if (!empty($json['intro'])) {
+                $messages[] = ['type' => 'text', 'content' => $json['intro']];
+            }
+            
+            // Add product cards with comments
+            $orderedProducts = [];
+            foreach ($json['products'] as $item) {
+                $article = $item['article'] ?? '';
+                $comment = $item['comment'] ?? '';
+                
+                $product = $productsByArticle[$article] ?? null;
+                if (!$product) {
+                    // Try partial match
+                    foreach ($productsByArticle as $a => $p) {
+                        if (str_contains($a, $article) || str_contains($article, $a)) {
+                            $product = $p;
+                            break;
+                        }
+                    }
+                }
+                
+                if ($product) {
+                    $messages[] = [
+                        'type' => 'product',
+                        'product' => $product,
+                        'comment' => $comment,
+                    ];
+                    $orderedProducts[] = $product;
+                }
+            }
+            
+            // Add outro message if exists
+            if (!empty($json['outro'])) {
+                $messages[] = ['type' => 'text', 'content' => $json['outro']];
+            }
+            
+            return [
+                'intro' => $json['intro'] ?? 'Ось що я знайшов:',
+                'outro' => $json['outro'] ?? null,
+                'products' => !empty($orderedProducts) ? $orderedProducts : array_slice($allProducts, 0, 5),
+                'messages' => $messages,
+            ];
+        }
+        
+        // Fallback: plain text response
+        $messages = [];
+        if ($responseText) {
+            $messages[] = ['type' => 'text', 'content' => $responseText];
+        }
+        foreach (array_slice($allProducts, 0, 5) as $product) {
+            $messages[] = ['type' => 'product', 'product' => $product, 'comment' => ''];
+        }
+        
+        return [
+            'intro' => $responseText ?: 'Ось що я знайшов:',
+            'outro' => null,
+            'products' => array_slice($allProducts, 0, 5),
+            'messages' => $messages,
         ];
     }
 

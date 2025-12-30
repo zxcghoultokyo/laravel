@@ -79,6 +79,7 @@ class ChatService
             
             $intent = $agentResult['meta']['intent'] ?? null;
             $productCards = $agentResult['meta']['product_cards'] ?? null;
+            $agentMessages = $agentResult['messages'] ?? [];
 
             // Формуємо відповідь у форматі очікуваному фронтом
             $response = [
@@ -88,6 +89,8 @@ class ChatService
                     'products' => $agentResult['products'] ?? [],
                     // NEW: product_cards for individual card+description display
                     'product_cards' => $productCards,
+                    // NEW: messages array for sequential display
+                    'messages' => $agentMessages,
                 ],
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],

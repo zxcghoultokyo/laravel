@@ -1,9 +1,28 @@
+/**
+ * AIntento Chat Widget v2.0.0
+ * Embeddable chat widget for e-commerce sites
+ * 
+ * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.0"></script>
+ */
 (function() {
     'use strict';
 
-    console.log('AILure Chat: скрипт завантажено');
+    const WIDGET_VERSION = '2.0.0';
+    const DEBUG = false; // Set to true only for debugging
+    
+    // Bot avatar URL
+    const BOT_AVATAR = 'https://aimbot.laravel.cloud/images/aintento-avatar.svg';
 
-    // Допоміжна функція для зміни яскравості кольору
+    function log(...args) {
+        if (DEBUG) console.log('[AIntento]', ...args);
+    }
+
+    function logError(...args) {
+        console.error('[AIntento]', ...args);
+    }
+
+    // Helper function to adjust color brightness
     function adjustBrightness(color, amount) {
         const usePound = color[0] === '#';
         const col = usePound ? color.slice(1) : color;
@@ -17,7 +36,7 @@
         return (usePound ? '#' : '') + (r << 16 | g << 8 | b).toString(16).padStart(6, '0');
     }
 
-    // Чекаємо на завантаження DOM
+    // Wait for DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initWidget);
     } else {
@@ -25,25 +44,23 @@
     }
 
     function initWidget() {
-        console.log('AILure Chat: ініціалізація віджета...');
+        log('Initializing widget v' + WIDGET_VERSION);
         
-        const container = document.getElementById('ailure-chat');
+        // Support both old and new container IDs
+        const container = document.getElementById('aintento-chat') || document.getElementById('ailure-chat');
         if (!container) {
-            console.error('AILure Chat: контейнер #ailure-chat не знайдено');
+            logError('Container #aintento-chat not found');
             return;
         }
-
-        console.log('AILure Chat: контейнер знайдено');
 
         const token = container.dataset.token;
         if (!token) {
-            console.error('AILure Chat: не вказано data-token');
+            logError('data-token not specified');
             return;
         }
 
-        console.log('AILure Chat: токен отримано, завантаження налаштувань...');
+        log('Token received, loading settings...');
 
-        // ЗАВЖДИ використовуємо повний URL до нашого сервера
         const apiUrl = 'https://aimbot.laravel.cloud/api/widget/settings';
 
         fetch(apiUrl, {
@@ -52,18 +69,13 @@
                 'Content-Type': 'application/json'
             }
         })
-        .then(res => {
-            console.log('AILure Chat: відповідь від сервера отримано', res.status);
-            return res.json();
-        })
+        .then(res => res.json())
         .then(settings => {
-            console.log('AILure Chat: налаштування завантажено', settings);
+            log('Settings loaded', settings);
             renderWidget(container, settings, token);
         })
         .catch(err => {
-            console.error('AILure Chat: помилка завантаження налаштувань', err);
-            console.log('AILure Chat: використовуються дефолтні налаштування');
-            // Рендеримо з дефолтними налаштуваннями
+            logError('Failed to load settings', err);
             renderWidget(container, getDefaultSettings(), token);
         });
     }
@@ -74,7 +86,7 @@
             text_color: '#ffffff',
             position: 'right',
             border_radius: 12,
-            welcome_message: 'Вітаю! 👋 Я AILure асистент. Чим можу допомогти?',
+            welcome_message: 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?',
             input_placeholder: 'Напишіть повідомлення...',
             consent_notice: null,
             enabled: true,
@@ -83,112 +95,123 @@
     }
 
     function renderWidget(container, settings, token) {
-        console.log('AILure Chat: рендеринг віджета...', settings);
-        
         if (!settings.enabled) {
-            console.log('AILure Chat: віджет вимкнено в налаштуваннях');
+            log('Widget disabled in settings');
             return;
         }
 
-        // Зберігаємо settings глобально для доступу з функцій
-        window.ailureSettings = settings;
+        // Store settings globally
+        window.aintentoSettings = settings;
 
-        // Додаємо CSS анімації
-        if (!document.getElementById('ailure-animations')) {
-            const style = document.createElement('style');
-            style.id = 'ailure-animations';
-            style.textContent = `
-                @keyframes fadeInUp {
-                    from {
-                        opacity: 0;
-                        transform: translateY(10px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-                @keyframes ailure-pulse {
-                    0%, 80%, 100% { opacity: 0.3; }
-                    40% { opacity: 1; }
-                }
-                .ailure-messages::-webkit-scrollbar {
-                    width: 6px;
-                }
-                .ailure-messages::-webkit-scrollbar-track {
-                    background: #f1f1f1;
-                }
-                .ailure-messages::-webkit-scrollbar-thumb {
-                    background: #cbd5e1;
-                    border-radius: 3px;
-                }
-                .ailure-messages::-webkit-scrollbar-thumb:hover {
-                    background: #94a3b8;
-                }
-                #ailure-overlay {
-                    transition: opacity 0.3s ease;
-                }
-                @media (max-width: 480px) {
-                    .ailure-widget {
-                        position: fixed !important;
-                        bottom: 0 !important;
-                        left: 0 !important;
-                        right: 0 !important;
-                        width: 100% !important;
-                    }
-                    .ailure-window {
-                        position: fixed !important;
-                        bottom: 0 !important;
-                        left: 0 !important;
-                        right: 0 !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        height: auto !important;
-                        max-height: 85vh !important;
-                        border-radius: 16px 16px 0 0 !important;
-                    }
-                    .ailure-toggle {
-                        position: fixed !important;
-                        bottom: 20px !important;
-                        right: 20px !important;
-                        z-index: 10000 !important;
-                    }
-                }
-            `;
-            document.head.appendChild(style);
-        }
+        // Inject CSS (only once)
+        injectStyles(settings);
 
         const sessionId = getOrCreateSessionId();
-        console.log('AILure Chat: session_id:', sessionId);
-
-        // Завантажуємо збережені повідомлення
         const savedMessages = loadMessages(sessionId);
 
-        // Створюємо HTML структуру
-        container.innerHTML = `            <!-- Overlay для закриття на мобільних -->
-            <div id="ailure-overlay" style="
+        // Create HTML structure
+        container.innerHTML = createWidgetHTML(settings);
+
+        // Get DOM elements
+        const elements = {
+            toggle: document.getElementById('aintento-toggle'),
+            close: document.getElementById('aintento-close'),
+            window: document.getElementById('aintento-window'),
+            overlay: document.getElementById('aintento-overlay'),
+            input: document.getElementById('aintento-input'),
+            send: document.getElementById('aintento-send'),
+            messages: document.getElementById('aintento-messages')
+        };
+
+        // Widget state
+        const state = {
+            isOpen: false,
+            hasShownWelcome: false,
+            sessionId: sessionId,
+            eventListeners: [] // Track listeners for cleanup
+        };
+
+        // Setup event handlers with cleanup tracking
+        setupEventHandlers(elements, state, settings, token, savedMessages);
+    }
+
+    function injectStyles(settings) {
+        if (document.getElementById('aintento-styles')) return;
+        
+        const style = document.createElement('style');
+        style.id = 'aintento-styles';
+        style.textContent = `
+            @keyframes aintento-fadeInUp {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes aintento-pulse {
+                0%, 80%, 100% { opacity: 0.3; }
+                40% { opacity: 1; }
+            }
+            @keyframes aintento-glow {
+                0%, 100% { box-shadow: 0 0 5px rgba(34, 211, 238, 0.5); }
+                50% { box-shadow: 0 0 15px rgba(34, 211, 238, 0.8); }
+            }
+            .aintento-messages::-webkit-scrollbar { width: 6px; }
+            .aintento-messages::-webkit-scrollbar-track { background: #f1f1f1; }
+            .aintento-messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+            .aintento-messages::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            #aintento-overlay { transition: opacity 0.3s ease; }
+            .aintento-avatar { animation: aintento-glow 2s ease-in-out infinite; }
+            @media (max-width: 480px) {
+                .aintento-widget {
+                    position: fixed !important;
+                    bottom: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    width: 100% !important;
+                }
+                .aintento-window {
+                    position: fixed !important;
+                    bottom: 0 !important;
+                    left: 0 !important;
+                    right: 0 !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    height: auto !important;
+                    max-height: 85vh !important;
+                    border-radius: 16px 16px 0 0 !important;
+                }
+                .aintento-toggle {
+                    position: fixed !important;
+                    bottom: 20px !important;
+                    right: 20px !important;
+                    z-index: 10000 !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function createWidgetHTML(settings) {
+        const s = settings;
+        return `
+            <div id="aintento-overlay" style="
                 display: none;
                 position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
+                top: 0; left: 0; right: 0; bottom: 0;
                 background: rgba(0, 0, 0, 0.5);
                 z-index: 9998;
             "></div>
-                        <div class="ailure-widget" style="
+            
+            <div class="aintento-widget" style="
                 position: fixed;
                 bottom: 20px;
-                ${settings.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
                 z-index: 9999;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             ">
-                <!-- Кнопка відкриття -->
-                <button id="ailure-toggle" class="ailure-toggle" style="
+                <button id="aintento-toggle" class="aintento-toggle" style="
                     width: 60px;
                     height: 60px;
                     border-radius: 50%;
-                    background: ${settings.primary_color};
+                    background: ${s.primary_color};
                     color: white;
                     border: none;
                     cursor: pointer;
@@ -198,46 +221,53 @@
                     justify-content: center;
                     font-size: 28px;
                     transition: all 0.3s ease;
-                " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-                    💬
+                    overflow: hidden;
+                ">
+                    <img src="${BOT_AVATAR}" alt="Chat" style="width: 40px; height: 40px; border-radius: 50%;">
                 </button>
 
-                <!-- Віконце чату -->
-                <div id="ailure-window" class="ailure-window" style="
+                <div id="aintento-window" class="aintento-window" style="
                     display: none;
                     position: fixed;
                     bottom: 90px;
-                    ${settings.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                    ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
                     width: min(400px, calc(100vw - 40px));
                     max-width: 400px;
                     height: min(600px, calc(100vh - 120px));
                     background: white;
-                    border-radius: ${settings.border_radius}px;
+                    border-radius: ${s.border_radius}px;
                     box-shadow: 0 12px 48px rgba(0,0,0,0.25);
-                    display: flex;
                     flex-direction: column;
                     overflow: hidden;
                 ">
-                    <!-- Header -->
-                    <div class="ailure-header" style="
-                        background: linear-gradient(135deg, ${settings.primary_color} 0%, ${adjustBrightness(settings.primary_color, -15)} 100%);
+                    <div class="aintento-header" style="
+                        background: linear-gradient(135deg, ${s.primary_color} 0%, ${adjustBrightness(s.primary_color, -15)} 100%);
                         color: white;
-                        padding: 20px 16px;
+                        padding: 16px;
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
                         box-shadow: 0 2px 8px rgba(0,0,0,0.1);
                     ">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700;">
-                                A
+                            <div class="aintento-avatar" style="
+                                width: 40px; 
+                                height: 40px; 
+                                border-radius: 50%; 
+                                background: rgba(255,255,255,0.15); 
+                                display: flex; 
+                                align-items: center; 
+                                justify-content: center;
+                                border: 2px solid rgba(34, 211, 238, 0.6);
+                            ">
+                                <img src="${BOT_AVATAR}" alt="AIntento" style="width: 32px; height: 32px; border-radius: 50%;">
                             </div>
                             <div style="display: flex; flex-direction: column;">
-                                <span style="font-weight: 600; font-size: 15px;">AILure Асистент</span>
-                                <span style="font-size: 12px; opacity: 0.9;">Завжди онлайн</span>
+                                <span style="font-weight: 600; font-size: 15px;">AIntento</span>
+                                <span style="font-size: 12px; opacity: 0.9;">🟢 Завжди онлайн</span>
                             </div>
                         </div>
-                        <button id="ailure-close" style="
+                        <button id="aintento-close" style="
                             background: rgba(255,255,255,0.2);
                             border: none;
                             color: white;
@@ -248,36 +278,32 @@
                             height: 28px;
                             border-radius: 50%;
                             transition: all 0.2s;
-                        " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">✕</button>
+                        ">✕</button>
                     </div>
 
-                    <!-- Messages -->
-                    <div id="ailure-messages" class="ailure-messages" style="
+                    <div id="aintento-messages" class="aintento-messages" style="
                         flex: 1;
                         overflow-y: auto;
                         padding: 16px;
                         background: #f9fafb;
                         min-height: 300px;
-                    ">
-                    </div>
+                    "></div>
 
-                    <!-- Input -->
-                    <div class="ailure-input-container" style="
+                    <div class="aintento-input-container" style="
                         padding: 16px;
                         background: white;
                         border-top: 1px solid #e5e7eb;
                         box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
                     ">
-                        ${settings.consent_notice ? `
+                        ${s.consent_notice ? `
                         <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
-                            ${settings.consent_notice}
-                        </div>
-                        ` : ''}
+                            ${s.consent_notice}
+                        </div>` : ''}
                         <div style="display: flex; gap: 8px;">
                             <input 
                                 type="text" 
-                                id="ailure-input" 
-                                placeholder="${settings.input_placeholder}"
+                                id="aintento-input" 
+                                placeholder="${s.input_placeholder}"
                                 style="
                                     flex: 1;
                                     padding: 12px 16px;
@@ -287,11 +313,9 @@
                                     outline: none;
                                     transition: all 0.2s;
                                 "
-                                onfocus="this.style.borderColor='${settings.primary_color}'; this.style.boxShadow='0 0 0 3px ${settings.primary_color}20'"
-                                onblur="this.style.borderColor='#d1d5db'; this.style.boxShadow='none'"
                             >
-                            <button id="ailure-send" style="
-                                background: ${settings.primary_color};
+                            <button id="aintento-send" style="
+                                background: ${s.primary_color};
                                 color: white;
                                 border: none;
                                 padding: 0;
@@ -304,110 +328,51 @@
                                 display: flex;
                                 align-items: center;
                                 justify-content: center;
-                                box-shadow: 0 2px 8px ${settings.primary_color}40;
-                            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                                ➤
-                            </button>
+                                box-shadow: 0 2px 8px ${s.primary_color}40;
+                            ">➤</button>
                         </div>
                     </div>
                 </div>
             </div>
         `;
+    }
 
-        // Додаємо обробники подій
-        const toggle = document.getElementById('ailure-toggle');
-        const close = document.getElementById('ailure-close');
-        const chatWindow = document.getElementById('ailure-window');
-        const overlay = document.getElementById('ailure-overlay');
-        const input = document.getElementById('ailure-input');
-        const send = document.getElementById('ailure-send');
-        const messages = document.getElementById('ailure-messages');
+    function setupEventHandlers(elements, state, settings, token, savedMessages) {
+        const { toggle, close, window: chatWindow, overlay, input, send, messages } = elements;
 
-        let isOpen = false; // ЗАВЖДИ закритий на старті
-        let hasShownWelcome = false; // Чи показано вітальне повідомлення
-        
-        console.log('AILure Chat: початковий стан - isOpen:', isOpen, 'savedMessages:', savedMessages.length);
-
+        // Open widget function
         function openWidget() {
-            console.log('AILure Chat: openWidget викликано');
-            isOpen = true;
+            state.isOpen = true;
             chatWindow.style.display = 'flex';
             overlay.style.display = 'block';
             toggle.style.display = 'none';
-            if (input) input.focus();
+            input?.focus();
             
-            // Показуємо вітальне повідомлення тільки при ПЕРШОМУ відкритті
-            if (!hasShownWelcome && savedMessages.length === 0) {
-                console.log('AILure Chat: додаємо вітальне повідомлення');
-                addMessage(settings.welcome_message, 'assistant', true);
-                hasShownWelcome = true;
+            if (!state.hasShownWelcome && savedMessages.length === 0) {
+                addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
+                state.hasShownWelcome = true;
             }
         }
 
+        // Close widget function
         function closeWidget() {
-            console.log('AILure Chat: closeWidget викликано');
-            isOpen = false;
+            state.isOpen = false;
             chatWindow.style.display = 'none';
             overlay.style.display = 'none';
             toggle.style.display = 'flex';
         }
 
-        toggle.addEventListener('click', openWidget);
-        close.addEventListener('click', closeWidget);
-        overlay.addEventListener('click', closeWidget);
-
-        // Закриття по ESC
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && isOpen) {
-                closeWidget();
-            }
-        });
-
-        // Відновлюємо історію (БЕЗ автоматичного відкриття)
-        if (savedMessages.length > 0) {
-            console.log('AILure Chat: відновлюємо історію, кількість повідомлень:', savedMessages.length);
-            hasShownWelcome = true; // Якщо є історія - вітальне повідомлення вже було
-            savedMessages.forEach(msg => {
-                if (msg.role === 'user') {
-                    addMessage(msg.content, 'user', false);
-                } else if (msg.role === 'assistant') {
-                    addMessage(msg.content, 'assistant', false);
-                } else if (msg.role === 'product_cards' && msg.cards) {
-                    // NEW: restore product cards format
-                    addProductCards(msg.cards, false);
-                } else if (msg.role === 'products' && msg.products) {
-                    addProducts(msg.products, false);
-                }
-            });
-        } else {
-            console.log('AILure Chat: немає збереженої історії');
-        }
-        
-        console.log('AILure Chat: перевіряємо стан після відновлення - chatWindow.style.display:', chatWindow.style.display);
-
-        send.addEventListener('click', sendMessage);
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
+        // Send message function
         function sendMessage() {
             const message = input.value.trim();
             if (!message) return;
 
-            // Додаємо повідомлення користувача
-            addMessage(message, 'user');
+            addMessage(messages, message, 'user', state.sessionId, true);
             input.value = '';
 
-            // Показуємо індикатор завантаження
-            const loader = addLoader();
-
-            // ЗАВЖДИ використовуємо повний URL до нашого сервера
+            const loader = addLoader(messages);
             const chatApiUrl = 'https://aimbot.laravel.cloud/api/chat';
 
-            // Відправляємо на сервер
             fetch(chatApiUrl, {
                 method: 'POST',
                 headers: {
@@ -416,315 +381,347 @@
                 },
                 body: JSON.stringify({
                     message: message,
-                    session_id: sessionId
+                    session_id: state.sessionId
                 })
             })
             .then(res => res.json())
             .then(data => {
                 removeLoader(loader);
                 
-                // Оновлюємо session_id якщо отримали новий
                 if (data.session_id) {
+                    state.sessionId = data.session_id;
                     saveSessionId(data.session_id);
                 }
 
-                // Додаємо вступне повідомлення
                 if (data.text) {
-                    addMessage(data.text, 'assistant', true);
+                    addMessage(messages, data.text, 'assistant', state.sessionId, true);
                 }
 
-                // NEW: Показуємо товари з описами (product_cards)
-                if (data.data && data.data.product_cards && data.data.product_cards.length > 0) {
-                    addProductCards(data.data.product_cards, true);
-                }
-                // Fallback: старий формат без описів
-                else if (data.data && data.data.products && data.data.products.length > 0) {
-                    addProducts(data.data.products, true);
+                if (data.data?.product_cards?.length > 0) {
+                    addProductCards(messages, data.data.product_cards, state.sessionId, true);
+                } else if (data.data?.products?.length > 0) {
+                    addProducts(messages, data.data.products, state.sessionId, true);
                 }
             })
             .catch(err => {
                 removeLoader(loader);
-                addMessage('Вибачте, не вдалося надіслати повідомлення. Спробуйте ще раз.', 'assistant');
-                console.error('AILure Chat:', err);
+                addMessage(messages, 'Вибачте, не вдалося надіслати повідомлення. Спробуйте ще раз.', 'assistant', state.sessionId, false);
+                logError('Send error:', err);
             });
         }
 
-        function addMessage(text, role, save = true) {
-            console.log('AILure Chat: addMessage викликано -', role, ':', text.substring(0, 50));
-            const s = window.ailureSettings || { primary_color: '#2563eb' };
-            const div = document.createElement('div');
-            div.className = `ailure-message ailure-${role}`;
-            div.style.cssText = `
-                margin-bottom: 12px;
-                display: flex;
-                justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'};
-                animation: fadeInUp 0.3s ease-out;
-            `;
-
-            const bubble = document.createElement('div');
-            bubble.style.cssText = `
-                background: ${role === 'user' ? s.primary_color : 'white'};
-                color: ${role === 'user' ? 'white' : '#374151'};
-                padding: 12px 16px;
-                border-radius: ${role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
-                max-width: 75%;
-                font-size: 14px;
-                line-height: 1.6;
-                white-space: pre-wrap;
-                box-shadow: ${role === 'user' ? '0 2px 8px ' + s.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
-            `;
-            bubble.textContent = text;
-            div.appendChild(bubble);
-            messages.appendChild(div);
-            console.log('AILure Chat: повідомлення додано до DOM');
-            messages.scrollTop = messages.scrollHeight;
-
-            if (save) {
-                saveMessage(sessionId, { role, content: text });
+        // Keyboard handler
+        function handleKeydown(e) {
+            if (e.key === 'Escape' && state.isOpen) {
+                closeWidget();
             }
-            messages.scrollTop = messages.scrollHeight;
         }
 
-        // NEW: Add product cards with individual descriptions
-        function addProductCards(productCards, save = true) {
-            const s = window.ailureSettings || { primary_color: '#2563eb' };
-            
-            productCards.slice(0, 3).forEach((card, index) => {
-                const product = card.product;
-                const description = card.description;
-                
-                // Add description as small assistant message (if not empty)
-                if (description && description.trim()) {
-                    const descDiv = document.createElement('div');
-                    descDiv.className = 'ailure-message ailure-assistant';
-                    descDiv.style.cssText = `
-                        margin-bottom: 8px;
-                        display: flex;
-                        justify-content: flex-start;
-                        animation: fadeInUp 0.3s ease-out;
-                        animation-delay: ${index * 0.1}s;
-                    `;
-                    const bubble = document.createElement('div');
-                    bubble.style.cssText = `
-                        background: #f8fafc;
-                        color: #64748b;
-                        padding: 8px 12px;
-                        border-radius: 12px;
-                        max-width: 85%;
-                        font-size: 13px;
-                        line-height: 1.4;
-                    `;
-                    bubble.textContent = description;
-                    descDiv.appendChild(bubble);
-                    messages.appendChild(descDiv);
-                }
-                
-                // Add product card
-                const cardEl = document.createElement('a');
-                cardEl.href = product.link || '#';
-                cardEl.target = '_blank';
-                cardEl.style.cssText = `
-                    display: block;
-                    background: white;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 12px;
-                    padding: 12px;
-                    margin-bottom: 12px;
-                    text-decoration: none;
-                    color: inherit;
-                    transition: all 0.2s;
-                    animation: fadeInUp 0.3s ease-out;
-                    animation-delay: ${index * 0.1 + 0.05}s;
-                `;
-                cardEl.onmouseover = () => {
-                    cardEl.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                    cardEl.style.transform = 'translateY(-2px)';
-                    cardEl.style.borderColor = s.primary_color;
-                };
-                cardEl.onmouseout = () => {
-                    cardEl.style.boxShadow = 'none';
-                    cardEl.style.transform = 'translateY(0)';
-                    cardEl.style.borderColor = '#e5e7eb';
-                };
+        function handleEnter(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
 
-                // Generate image HTML with fallback support
-                let imgHtml = '';
-                if (product.images && product.images.length > 0) {
-                    const imgId = 'img-card-' + product.id + '-' + Date.now();
-                    const fallbackImages = product.images.slice(1).map(img => `'${img}'`).join(',');
-                    imgHtml = `
-                        <img id="${imgId}" 
-                             src="${product.images[0]}" 
-                             style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
-                             onerror="(function(img){
-                                 var fallbacks = [${fallbackImages}];
-                                 var idx = parseInt(img.dataset.fallbackIdx || '0');
-                                 if (idx < fallbacks.length) {
-                                     img.dataset.fallbackIdx = idx + 1;
-                                     img.src = fallbacks[idx];
-                                 } else {
-                                     img.style.display = 'none';
-                                 }
-                             })(this)"
-                        />
-                    `;
-                }
+        // Input focus/blur handlers
+        function handleInputFocus() {
+            input.style.borderColor = settings.primary_color;
+            input.style.boxShadow = `0 0 0 3px ${settings.primary_color}20`;
+        }
 
-                cardEl.innerHTML = `
-                    <div style="display: flex; gap: 12px;">
-                        ${imgHtml}
-                        <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
-                            <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
-                        </div>
-                    </div>
-                `;
-                messages.appendChild(cardEl);
+        function handleInputBlur() {
+            input.style.borderColor = '#d1d5db';
+            input.style.boxShadow = 'none';
+        }
+
+        // Close button hover
+        function handleCloseHover() {
+            close.style.background = 'rgba(255,255,255,0.3)';
+        }
+        function handleCloseLeave() {
+            close.style.background = 'rgba(255,255,255,0.2)';
+        }
+
+        // Toggle button hover
+        function handleToggleHover() {
+            toggle.style.transform = 'scale(1.1)';
+        }
+        function handleToggleLeave() {
+            toggle.style.transform = 'scale(1)';
+        }
+
+        // Send button hover
+        function handleSendHover() {
+            send.style.transform = 'scale(1.05)';
+        }
+        function handleSendLeave() {
+            send.style.transform = 'scale(1)';
+        }
+
+        // Add event listeners
+        toggle.addEventListener('click', openWidget);
+        toggle.addEventListener('mouseenter', handleToggleHover);
+        toggle.addEventListener('mouseleave', handleToggleLeave);
+        
+        close.addEventListener('click', closeWidget);
+        close.addEventListener('mouseenter', handleCloseHover);
+        close.addEventListener('mouseleave', handleCloseLeave);
+        
+        overlay.addEventListener('click', closeWidget);
+        
+        send.addEventListener('click', sendMessage);
+        send.addEventListener('mouseenter', handleSendHover);
+        send.addEventListener('mouseleave', handleSendLeave);
+        
+        input.addEventListener('keypress', handleEnter);
+        input.addEventListener('focus', handleInputFocus);
+        input.addEventListener('blur', handleInputBlur);
+        
+        document.addEventListener('keydown', handleKeydown);
+
+        // Restore message history
+        if (savedMessages.length > 0) {
+            state.hasShownWelcome = true;
+            savedMessages.forEach(msg => {
+                if (msg.role === 'user') {
+                    addMessage(messages, msg.content, 'user', state.sessionId, false);
+                } else if (msg.role === 'assistant') {
+                    addMessage(messages, msg.content, 'assistant', state.sessionId, false);
+                } else if (msg.role === 'product_cards' && msg.cards) {
+                    addProductCards(messages, msg.cards, state.sessionId, false);
+                } else if (msg.role === 'products' && msg.products) {
+                    addProducts(messages, msg.products, state.sessionId, false);
+                }
             });
-            
-            if (save) {
-                saveMessage(sessionId, { role: 'product_cards', cards: productCards.slice(0, 3) });
-            }
-            messages.scrollTop = messages.scrollHeight;
         }
 
-        function addProducts(products, save = true) {
-            const s = window.ailureSettings || { primary_color: '#2563eb' };
-            const container = document.createElement('div');
-            container.style.cssText = 'margin-bottom: 12px;';
+        // Store cleanup function on window for potential later use
+        window.aintentoCleanup = function() {
+            toggle.removeEventListener('click', openWidget);
+            toggle.removeEventListener('mouseenter', handleToggleHover);
+            toggle.removeEventListener('mouseleave', handleToggleLeave);
+            close.removeEventListener('click', closeWidget);
+            close.removeEventListener('mouseenter', handleCloseHover);
+            close.removeEventListener('mouseleave', handleCloseLeave);
+            overlay.removeEventListener('click', closeWidget);
+            send.removeEventListener('click', sendMessage);
+            send.removeEventListener('mouseenter', handleSendHover);
+            send.removeEventListener('mouseleave', handleSendLeave);
+            input.removeEventListener('keypress', handleEnter);
+            input.removeEventListener('focus', handleInputFocus);
+            input.removeEventListener('blur', handleInputBlur);
+            document.removeEventListener('keydown', handleKeydown);
+            log('Widget cleaned up');
+        };
+    }
+
+    function addMessage(messagesContainer, text, role, sessionId, save = true) {
+        const s = window.aintentoSettings || { primary_color: '#2563eb' };
+        const div = document.createElement('div');
+        div.className = `aintento-message aintento-${role}`;
+        div.style.cssText = `
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'};
+            animation: aintento-fadeInUp 0.3s ease-out;
+        `;
+
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `
+            background: ${role === 'user' ? s.primary_color : 'white'};
+            color: ${role === 'user' ? 'white' : '#374151'};
+            padding: 12px 16px;
+            border-radius: ${role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
+            max-width: 75%;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            box-shadow: ${role === 'user' ? '0 2px 8px ' + s.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
+        `;
+        bubble.textContent = text;
+        div.appendChild(bubble);
+        messagesContainer.appendChild(div);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        if (save) {
+            saveMessage(sessionId, { role, content: text });
+        }
+    }
+
+    function addProductCards(messagesContainer, productCards, sessionId, save = true) {
+        const s = window.aintentoSettings || { primary_color: '#2563eb' };
+        
+        productCards.slice(0, 3).forEach((card, index) => {
+            const product = card.product;
+            const description = card.description;
             
-            products.slice(0, 3).forEach(product => {
-                const card = document.createElement('a');
-                card.href = product.link || '#';
-                card.target = '_blank';
-                card.style.cssText = `
-                    display: block;
-                    background: white;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 12px;
-                    padding: 12px;
+            if (description?.trim()) {
+                const descDiv = document.createElement('div');
+                descDiv.className = 'aintento-message aintento-assistant';
+                descDiv.style.cssText = `
                     margin-bottom: 8px;
-                    text-decoration: none;
-                    color: inherit;
-                    transition: all 0.2s;
+                    display: flex;
+                    justify-content: flex-start;
+                    animation: aintento-fadeInUp 0.3s ease-out;
+                    animation-delay: ${index * 0.1}s;
                 `;
-                card.onmouseover = () => {
-                    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                    card.style.transform = 'translateY(-2px)';
-                    card.style.borderColor = s.primary_color;
-                };
-                card.onmouseout = () => {
-                    card.style.boxShadow = 'none';
-                    card.style.transform = 'translateY(0)';
-                    card.style.borderColor = '#e5e7eb';
-                };
-
-                // Generate image HTML with fallback support
-                let imgHtml = '';
-                if (product.images && product.images.length > 0) {
-                    const imgId = 'img-' + product.id + '-' + Date.now();
-                    const fallbackImages = product.images.slice(1).map(img => `'${img}'`).join(',');
-                    imgHtml = `
-                        <img id="${imgId}" 
-                             src="${product.images[0]}" 
-                             style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
-                             onerror="(function(img){
-                                 var fallbacks = [${fallbackImages}];
-                                 var idx = parseInt(img.dataset.fallbackIdx || '0');
-                                 if (idx < fallbacks.length) {
-                                     img.dataset.fallbackIdx = idx + 1;
-                                     img.src = fallbacks[idx];
-                                 } else {
-                                     img.style.display = 'none';
-                                 }
-                             })(this)"
-                        />
-                    `;
-                }
-
-                card.innerHTML = `
-                    <div style="display: flex; gap: 12px;">
-                        ${imgHtml}
-                        <div style="flex: 1; min-width: 0;">
-                            <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
-                            <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
-                        </div>
-                    </div>
+                const bubble = document.createElement('div');
+                bubble.style.cssText = `
+                    background: #f8fafc;
+                    color: #64748b;
+                    padding: 8px 12px;
+                    border-radius: 12px;
+                    max-width: 85%;
+                    font-size: 13px;
+                    line-height: 1.4;
                 `;
-                container.appendChild(card);
-            });
-
-            messages.appendChild(container);
+                bubble.textContent = description;
+                descDiv.appendChild(bubble);
+                messagesContainer.appendChild(descDiv);
+            }
             
-            if (save) {
-                saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
-            }
-            messages.scrollTop = messages.scrollHeight;
+            const cardEl = createProductCard(product, s, index);
+            messagesContainer.appendChild(cardEl);
+        });
+        
+        if (save) {
+            saveMessage(sessionId, { role: 'product_cards', cards: productCards.slice(0, 3) });
         }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 
-        function addLoader() {
-            const div = document.createElement('div');
-            div.className = 'ailure-loader';
-            div.style.cssText = 'margin-bottom: 16px; display: flex; justify-content: flex-start;';
-            div.innerHTML = `
-                <div style="background: white; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                    <span style="display: inline-block; animation: ailure-pulse 1.4s infinite;">●</span>
-                    <span style="display: inline-block; animation: ailure-pulse 1.4s 0.2s infinite;">●</span>
-                    <span style="display: inline-block; animation: ailure-pulse 1.4s 0.4s infinite;">●</span>
-                </div>
+    function addProducts(messagesContainer, products, sessionId, save = true) {
+        const s = window.aintentoSettings || { primary_color: '#2563eb' };
+        const container = document.createElement('div');
+        container.style.cssText = 'margin-bottom: 12px;';
+        
+        products.slice(0, 3).forEach((product, index) => {
+            const card = createProductCard(product, s, index);
+            container.appendChild(card);
+        });
+
+        messagesContainer.appendChild(container);
+        
+        if (save) {
+            saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function createProductCard(product, settings, index) {
+        const card = document.createElement('a');
+        card.href = product.link || '#';
+        card.target = '_blank';
+        card.style.cssText = `
+            display: block;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 8px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.2s;
+            animation: aintento-fadeInUp 0.3s ease-out;
+            animation-delay: ${index * 0.1}s;
+        `;
+
+        card.onmouseenter = () => {
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            card.style.transform = 'translateY(-2px)';
+            card.style.borderColor = settings.primary_color;
+        };
+        card.onmouseleave = () => {
+            card.style.boxShadow = 'none';
+            card.style.transform = 'translateY(0)';
+            card.style.borderColor = '#e5e7eb';
+        };
+
+        let imgHtml = '';
+        if (product.images?.length > 0) {
+            const imgId = 'img-' + product.id + '-' + Date.now();
+            const fallbackImages = product.images.slice(1).map(img => `'${img}'`).join(',');
+            imgHtml = `
+                <img id="${imgId}" 
+                     src="${product.images[0]}" 
+                     style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
+                     onerror="(function(img){
+                         var fallbacks = [${fallbackImages}];
+                         var idx = parseInt(img.dataset.fallbackIdx || '0');
+                         if (idx < fallbacks.length) {
+                             img.dataset.fallbackIdx = idx + 1;
+                             img.src = fallbacks[idx];
+                         } else {
+                             img.style.display = 'none';
+                         }
+                     })(this)"
+                />
             `;
-            messages.appendChild(div);
-            messages.scrollTop = messages.scrollHeight;
-
-            // Додаємо CSS анімацію
-            if (!document.getElementById('ailure-animations')) {
-                const style = document.createElement('style');
-                style.id = 'ailure-animations';
-                style.textContent = `
-                    @keyframes ailure-pulse {
-                        0%, 60%, 100% { opacity: 0.3; }
-                        30% { opacity: 1; }
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-
-            return div;
         }
 
-        function removeLoader(loader) {
-            if (loader && loader.parentNode) {
-                loader.parentNode.removeChild(loader);
-            }
-        }
+        card.innerHTML = `
+            <div style="display: flex; gap: 12px;">
+                ${imgHtml}
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
+                    <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
+                </div>
+            </div>
+        `;
 
-        function getOrCreateSessionId() {
-            let sessionId = localStorage.getItem('ailure_session_id');
-            if (!sessionId) {
-                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('ailure_session_id', sessionId);
-            }
-            return sessionId;
-        }
+        return card;
+    }
 
-        function saveSessionId(sessionId) {
-            localStorage.setItem('ailure_session_id', sessionId);
-        }
+    function addLoader(messagesContainer) {
+        const div = document.createElement('div');
+        div.className = 'aintento-loader';
+        div.style.cssText = 'margin-bottom: 16px; display: flex; justify-content: flex-start;';
+        div.innerHTML = `
+            <div style="background: white; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <span style="display: inline-block; animation: aintento-pulse 1.4s infinite;">●</span>
+                <span style="display: inline-block; animation: aintento-pulse 1.4s 0.2s infinite;">●</span>
+                <span style="display: inline-block; animation: aintento-pulse 1.4s 0.4s infinite;">●</span>
+            </div>
+        `;
+        messagesContainer.appendChild(div);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return div;
+    }
 
-        function saveMessage(sessionId, message) {
-            const key = `ailure_messages_${sessionId}`;
-            const messages = JSON.parse(localStorage.getItem(key) || '[]');
-            messages.push(message);
-            // Зберігаємо максимум 50 повідомлень
-            if (messages.length > 50) {
-                messages.shift();
-            }
-            localStorage.setItem(key, JSON.stringify(messages));
-        }
+    function removeLoader(loader) {
+        loader?.parentNode?.removeChild(loader);
+    }
 
-        function loadMessages(sessionId) {
-            const key = `ailure_messages_${sessionId}`;
-            return JSON.parse(localStorage.getItem(key) || '[]');
+    // Session management - support both old and new keys for backward compatibility
+    function getOrCreateSessionId() {
+        let sessionId = localStorage.getItem('aintento_session_id') || localStorage.getItem('ailure_session_id');
+        if (!sessionId) {
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         }
+        localStorage.setItem('aintento_session_id', sessionId);
+        return sessionId;
+    }
+
+    function saveSessionId(sessionId) {
+        localStorage.setItem('aintento_session_id', sessionId);
+    }
+
+    function saveMessage(sessionId, message) {
+        const key = `aintento_messages_${sessionId}`;
+        const messages = JSON.parse(localStorage.getItem(key) || '[]');
+        messages.push(message);
+        if (messages.length > 50) {
+            messages.shift();
+        }
+        localStorage.setItem(key, JSON.stringify(messages));
+    }
+
+    function loadMessages(sessionId) {
+        // Check both new and old keys
+        const newKey = `aintento_messages_${sessionId}`;
+        const oldKey = `ailure_messages_${sessionId}`;
+        const messages = localStorage.getItem(newKey) || localStorage.getItem(oldKey);
+        return JSON.parse(messages || '[]');
     }
 })();

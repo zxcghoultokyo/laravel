@@ -168,17 +168,18 @@ User: "плитоноска до 5000"
 
 ## Known Duplications & Issues
 
-### ⚠️ ДУБЛЮВАННЯ
+### ✅ DEPRECATED МЕТОДИ (делегують правильно)
 
-| Місце | Що дублюється | Рішення |
-|-------|---------------|---------|
-| `AgentOrchestrator.loadSessionContext()` | Є в `SessionContextService` | Видалити, використовувати Service |
-| `AgentOrchestrator.saveSessionContext()` | Є в `SessionContextService` | Видалити, використовувати Service |
-| `AgentOrchestrator.handleOrderStatus()` | Є в `OrderStatusHandler` | Делегує, OK |
-| `AgentOrchestrator.handleFaq()` | Є в `FaqHandler` | Делегує, OK |
-| `AgentOrchestrator.handleSmallTalk()` | Є в `SmallTalkHandler` | Делегує, OK |
-| `AgentOrchestrator.buildProductNarrative()` | Є в `NarrativeBuilder` | @deprecated, делегує |
-| `NarrativeBuilder.isNotableBrand()` | Була в Orchestrator (видалена) | ✅ Виправлено |
+| Метод | Делегує до | Статус |
+|-------|------------|--------|
+| `AgentOrchestrator.loadSessionContext()` | `sessionService->loadContext()` | ✅ Делегує |
+| `AgentOrchestrator.saveSessionContext()` | `sessionService->saveContext()` | ✅ Делегує |
+| `AgentOrchestrator.handleOrderStatus()` | `orderStatusHandler->handle()` | ✅ Делегує |
+| `AgentOrchestrator.handleFaq()` | `faqHandler->handle()` | ✅ Делегує |
+| `AgentOrchestrator.handleSmallTalk()` | `smallTalkHandler->handle()` | ✅ Делегує |
+| `AgentOrchestrator.buildProductNarrative()` | `narrativeBuilder->buildProductNarrative()` | ✅ Делегує |
+
+> **Примітка:** Ці методи збережені для зворотної сумісності. Вони є тонкими wrappers що викликають відповідні сервіси.
 
 ### ⚠️ ВЕЛИКІ ФАЙЛИ
 
@@ -201,9 +202,10 @@ User: "плитоноска до 5000"
 | `createPlan()` | Аналіз повідомлення, визначення intent |
 | `handleProductSearch()` | Пошук товарів (основний flow) |
 | `handlePopularProductsRequest()` | "подарунок", "популярні" |
-| `handleWhyChosenFollowUp()` | "чому саме ці?" |
+| `handleWhyChosenFollowUp()` | "чому саме ці?" → повертає product_cards |
 | `handleProductDetailsFollowUp()` | "розкажи про них" |
-| `buildSelectionExplanation()` | Формує пояснення (коротке, на основі БД) |
+| `buildWhyChosenCards()` | Формує картки з поясненням вибору |
+| `buildWhyChosenReason()` | Короткий reason для кожного товару |
 
 ### NarrativeBuilder
 

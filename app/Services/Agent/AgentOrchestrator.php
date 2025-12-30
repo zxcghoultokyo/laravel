@@ -1287,9 +1287,6 @@ class AgentOrchestrator
     {
         $shownProductIds = $sessionContext['shown_products'] ?? [];
         $lastQuery = $sessionContext['last_query'] ?? 'товар';
-        $lastBudgetMin = $sessionContext['last_budget_min'] ?? null;
-        $lastBudgetMax = $sessionContext['last_budget_max'] ?? null;
-        $lastCategory = $sessionContext['last_category'] ?? null;
 
         if (empty($shownProductIds)) {
             return AgentResponseDTO::text(
@@ -1306,76 +1303,91 @@ class AgentOrchestrator
             )->toArray();
         }
 
-        // Build explanation
-        $explanation = $this->buildSelectionExplanation($products, $lastQuery, [
-            'budget_min' => $lastBudgetMin,
-            'budget_max' => $lastBudgetMax,
-            'category' => $lastCategory,
-        ]);
-
-        return AgentResponseDTO::text($explanation)->toArray();
-    }
-
-    /**
-     * Build SHORT explanation why these products were selected.
-     * Uses ONLY data from DB: description, title, characteristics, brand, price.
-     * No hallucinations - only facts from product data.
-     */
-    private function buildSelectionExplanation(array $products, string $query, array $context): string
-    {
-        $count = count($products);
+        // Build explanation cards - each product with WHY it was chosen
+        $productCards = $this->buildWhyChosenCards($products, $lastQuery);
         
-        $lines = [];
-        $lines[] = "Ці {$count} товари підібрані за вашим запитом «{$query}»:\n";
+        $message = "Ось чому я обрав саме ці товари:";
 
-        foreach ($products as $i => $product) {
-            $title = $product['title'] ?? 'Товар';
-            $price = isset($product['price']) ? number_format($product['price'], 0, '', ' ') . ' ₴' : '';
-            
-            // Extract REAL facts from product data
-            $facts = [];
-            
-            // Brand (if exists)
-            if (!empty($product['brand'])) {
-                $facts[] = "бренд {$product['brand']}";
-            }
-            
-            // Extract key info from description (first sentence or key phrase)
-            if (!empty($product['description'])) {
-                $shortDesc = $this->extractKeyFact($product['description']);
-                if ($shortDesc) {
-                    $facts[] = $shortDesc;
-                }
-            }
-            
-            // Extract from characteristics
-            if (!empty($product['characteristics']) && is_array($product['characteristics'])) {
-                $keyChars = $this->extractKeyCharacteristics($product['characteristics']);
-                if ($keyChars) {
-                    $facts[] = $keyChars;
-                }
-            }
-            
-            // Fallback: category info
-            if (empty($facts) && !empty($product['category_path'])) {
-                $catParts = explode('/', $product['category_path']);
-                $lastCat = end($catParts);
-                if ($lastCat && $lastCat !== $title) {
-                    $facts[] = mb_strtolower($lastCat);
-                }
-            }
-            
-            // Build product line
-            $num = $i + 1;
-            $factText = !empty($facts) ? implode(', ', array_slice($facts, 0, 2)) : 'в наявності';
-            $lines[] = "{$num}. {$title} ({$price}) — {$factText}";
-        }
-
-        $lines[] = "\nЩо саме цікавить детальніше?";
-
-        return implode("\n", $lines);
+        $response = AgentResponseDTO::productSearch(
+            message: $message,
+            products: $products,
+            refinedQuery: $lastQuery,
+            filters: [],
+            chosenIds: $shownProductIds,
+            ambiguous: false,
+            searchDebug: ['type' => 'why_chosen_explanation']
+        );
+        
+        $result = $response->toArray();
+        $result['meta']['product_cards'] = $productCards;
+        
+        return $result;
     }
     
+    /**
+     * Build product cards with explanations WHY each was chosen.
+     * Based ONLY on real data from DB.
+     */
+    private function buildWhyChosenCards(array $products, string $query): array
+    {
+        $cards = [];
+        
+        foreach ($products as $product) {
+            $reason = $this->buildWhyChosenReason($product, $query);
+            $cards[] = [
+                'description' => $reason,
+                'product' => $product,
+            ];
+        }
+        
+        return $cards;
+    }
+    
+    /**
+     * Build short reason WHY this product was chosen.
+     * Uses ONLY facts from DB: brand, description, characteristics.
+     */
+    private function buildWhyChosenReason(array $product, string $query): string
+    {
+        $facts = [];
+        
+        // Brand
+        if (!empty($product['brand'])) {
+            $facts[] = "бренд {$product['brand']}";
+        }
+        
+        // Key characteristic
+        if (!empty($product['characteristics']) && is_array($product['characteristics'])) {
+            $char = $this->extractKeyCharacteristics($product['characteristics']);
+            if ($char) {
+                $facts[] = $char;
+            }
+        }
+        
+        // Short description fact
+        if (!empty($product['description'])) {
+            $fact = $this->extractKeyFact($product['description']);
+            if ($fact && count($facts) < 2) {
+                $facts[] = $fact;
+            }
+        }
+        
+        // Category fallback
+        if (empty($facts) && !empty($product['category_path'])) {
+            $catParts = explode('/', $product['category_path']);
+            $lastCat = end($catParts);
+            if ($lastCat) {
+                $facts[] = mb_strtolower($lastCat);
+            }
+        }
+        
+        if (empty($facts)) {
+            return "✓ Відповідає запиту «{$query}»";
+        }
+        
+        return "✓ " . ucfirst(implode(', ', array_slice($facts, 0, 2)));
+    }
+
     /**
      * Extract key fact from description (first meaningful phrase).
      */

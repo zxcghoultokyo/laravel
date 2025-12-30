@@ -196,8 +196,10 @@
             <!-- Install Code -->
             <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
                 <h3 class="text-lg font-semibold text-gray-900 mb-4">Код для вставки</h3>
-                <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto"><code>&lt;script src="{{ url('/widget.js') }}"&gt;&lt;/script&gt;
-&lt;div id="ailure-chat" data-token="{{ $api_token }}"&gt;&lt;/div&gt;</code></pre>
+                <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto"><code>&lt;!-- AIntento Chat Widget v2.0.0 --&gt;
+&lt;div id="aintento-chat" data-token="{{ $api_token }}"&gt;&lt;/div&gt;
+&lt;script src="{{ url('/widget.js') }}?v=2.0.0"&gt;&lt;/script&gt;</code></pre>
+                <p class="mt-2 text-xs text-gray-500">Додайте цей код перед закриваючим тегом &lt;/body&gt; на вашому сайті.</p>
             </div>
         </div>
 

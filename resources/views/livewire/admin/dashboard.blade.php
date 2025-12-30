@@ -1,4 +1,4 @@
-<div wire:poll.30s>
+<div wire:poll.60s="loadData">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div>

@@ -15,7 +15,7 @@ class WidgetSettings extends Component
     public $position = 'right';
     public $start_state = 'closed';
     public $border_radius = 12;
-    public $welcome_message = 'Вітаю! 👋 Я AILure Асистент. Напишіть, що шукаєте.';
+    public $welcome_message = 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?';
     public $input_placeholder = 'Напишіть, що шукаєте...';
     public $consent_notice = '';
     public $enabled = true;

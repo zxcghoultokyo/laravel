@@ -97,7 +97,7 @@ class ProductDetailsTool
     {
         $images = [];
 
-        // 1. Try raw['pictures'] first (most reliable structure)
+        // 1. Try raw['pictures'] first (Horoshop standard structure)
         if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
             $images = collect($product->raw['pictures'])
                 ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
@@ -106,7 +106,19 @@ class ProductDetailsTool
                 ->toArray();
         }
 
-        // 2. Fallback to images field (from DB column)
+        // 2. Try raw['images'] (alternative structure)
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['images'])) {
+            $imgs = $product->raw['images'];
+            if (is_array($imgs)) {
+                $images = collect($imgs)
+                    ->map(fn($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
+                    ->filter()
+                    ->values()
+                    ->toArray();
+            }
+        }
+
+        // 3. Fallback to images field (from DB column)
         if (empty($images) && $product->images) {
             $imgs = $product->images;
             // Handle if it's a string (shouldn't be, but just in case)

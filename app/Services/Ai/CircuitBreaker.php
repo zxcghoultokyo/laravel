@@ -181,7 +181,7 @@ class CircuitBreaker
         ]);
     }
 
-    private function getState(string $service): array
+    public function getState(string $service): array
     {
         $default = [
             'status' => 'closed',

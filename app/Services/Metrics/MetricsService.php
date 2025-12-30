@@ -168,7 +168,7 @@ class MetricsService
     /**
      * Aggregate daily stats (run via scheduled job).
      */
-    public function aggregateDailyStats(string $date = null): void
+    public function aggregateDailyStats(?string $date = null): void
     {
         $date = $date ?? now()->subDay()->toDateString();
 

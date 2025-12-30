@@ -99,7 +99,7 @@ class SmallTalkHandler
      * Instead of saying "I don't understand", AI generates a polite response
      * and invites user back to product search.
      */
-    public function handleUnknown(string $message, array $context = []): array
+    public function handleUnknown(string $message, array $context = []): AgentResponseDTO
     {
         try {
             $lastCategory = $context['last_category'] ?? null;

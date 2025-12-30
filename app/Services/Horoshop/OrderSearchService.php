@@ -55,9 +55,7 @@ class OrderSearchService
 
         // Priority 2: fetch all recent orders and filter locally
         // (Horoshop API doesn't support direct phone/name filtering)
-        // For phone/name search, fetch more orders (last 6 months) to find older orders
-        $fetchLimit = ($hasPhone || $hasName || $hasEmail) ? 500 : max(50, $limit * 3);
-        $allOrders = $this->fetchRecentOrders($fetchLimit, $hasPhone || $hasName || $hasEmail);
+        $allOrders = $this->fetchRecentOrders(50);
 
         if (empty($allOrders)) {
             return ['orders' => [], 'total' => 0, 'search_type' => 'none'];
@@ -196,53 +194,20 @@ class OrderSearchService
     /**
      * Fetch recent orders (last N by limit, all statuses).
      */
-    private function fetchRecentOrders(int $limit = 50, bool $extendedSearch = false): array
+    private function fetchRecentOrders(int $limit = 50): array
     {
         try {
-            $params = [
+            $response = $this->client->request('orders/get', [
                 'limit' => min(100, $limit),
                 'offset' => 0,
                 'additionalData' => false,
-            ];
-            
-            // For extended search (phone/name), fetch orders from last 6 months
-            if ($extendedSearch) {
-                $params['from'] = date('Y-m-d', strtotime('-6 months'));
-            }
-            
-            $allOrders = [];
-            $offset = 0;
-            $batchSize = 100;
-            $maxIterations = (int) ceil($limit / $batchSize);
-            
-            // Fetch in batches if needed (API limit is 100 per request)
-            for ($i = 0; $i < $maxIterations && count($allOrders) < $limit; $i++) {
-                $params['offset'] = $offset;
-                $params['limit'] = $batchSize;
-                
-                $response = $this->client->request('orders/get', $params);
-                $orders = $response['orders'] ?? [];
-                
-                if (empty($orders)) {
-                    break; // No more orders
-                }
-                
-                $allOrders = array_merge($allOrders, $orders);
-                $offset += $batchSize;
-                
-                // If we got less than batch size, no more orders available
-                if (count($orders) < $batchSize) {
-                    break;
-                }
-            }
-
-            Log::info('OrderSearchService: fetched recent orders', [
-                'count' => count($allOrders),
-                'extended' => $extendedSearch,
-                'batches' => $i + 1,
             ]);
 
-            return array_slice($allOrders, 0, $limit);
+            $orders = $response['orders'] ?? [];
+
+            Log::info('OrderSearchService: fetched recent orders', ['count' => count($orders)]);
+
+            return $orders;
         } catch (\Exception $e) {
             Log::error('OrderSearchService: error fetching orders', ['error' => $e->getMessage()]);
             return [];

@@ -173,6 +173,33 @@
     // Track all messages for persistence
     let messageHistory = [];
 
+    // ============ MARKDOWN RENDERING ============
+    function renderMarkdown(text) {
+        if (!text) return '';
+        
+        // Bold: **text** or __text__
+        text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        
+        // Italic: *text* or _text_
+        text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
+        
+        // Inline code: `code`
+        text = text.replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 rounded">$1</code>');
+        
+        // Lists: - item or * item
+        text = text.replace(/^[-*]\s+(.+)$/gm, '• $1');
+        
+        // Numbered lists: 1. item
+        text = text.replace(/^\d+\.\s+(.+)$/gm, '• $1');
+        
+        // Line breaks
+        text = text.replace(/\n/g, '<br>');
+        
+        return text;
+    }
+
     // ============ UI FUNCTIONS ============
     function appendMessage(text, side = 'user', save = true) {
         const wrapper = document.createElement('div');
@@ -185,7 +212,8 @@
                 ? 'bg-gradient-to-r from-slate-800 to-slate-900 text-white'
                 : 'bg-white border border-slate-200 text-slate-800');
 
-        bubble.innerHTML = text.replace(/\n/g, '<br>');
+        // Render markdown for bot messages
+        bubble.innerHTML = side === 'bot' ? renderMarkdown(text) : text.replace(/\n/g, '<br>');
         wrapper.appendChild(bubble);
         chatMessages.appendChild(wrapper);
         chatMessages.scrollTop = chatMessages.scrollHeight;

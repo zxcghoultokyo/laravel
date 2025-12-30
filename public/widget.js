@@ -817,13 +817,30 @@
         // Build product summary from description and characteristics
         let summaryText = '';
         
-        // First try characteristics (more structured)
-        if (product.characteristics && Array.isArray(product.characteristics) && product.characteristics.length > 0) {
-            const charParts = product.characteristics.slice(0, 3).map(c => {
-                const name = c.name || c.n || '';
-                const value = c.value || c.v || '';
-                return name && value ? `${name}: ${value}` : '';
-            }).filter(Boolean);
+        // First try characteristics (object format: {name: value} from backend)
+        if (product.characteristics && typeof product.characteristics === 'object') {
+            const chars = product.characteristics;
+            // Handle both object {key: value} and array [{name, value}] formats
+            let charParts = [];
+            
+            if (Array.isArray(chars)) {
+                // Array format: [{name, value}]
+                charParts = chars.slice(0, 3).map(c => {
+                    const name = c.name || c.n || '';
+                    const value = c.value || c.v || '';
+                    return name && value ? `${name}: ${value}` : '';
+                }).filter(Boolean);
+            } else {
+                // Object format: {name: value}
+                const entries = Object.entries(chars).slice(0, 3);
+                charParts = entries.map(([name, value]) => {
+                    if (name && value && typeof value === 'string') {
+                        return `${name}: ${value}`;
+                    }
+                    return '';
+                }).filter(Boolean);
+            }
+            
             if (charParts.length > 0) {
                 summaryText = charParts.join(' • ');
             }
@@ -883,37 +900,66 @@
         `;
         container.appendChild(header);
         
-        // Items list (vertical, not carousel)
-        const itemsList = document.createElement('div');
-        itemsList.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+        // Items CAROUSEL (horizontal scroll)
+        const carousel = document.createElement('div');
+        carousel.style.cssText = `
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin: 0 -4px;
+            padding: 4px;
+            scroll-snap-type: x mandatory;
+        `;
         
         crossSell.suggestions.forEach((item) => {
             const card = document.createElement('div');
             card.style.cssText = `
+                flex-shrink: 0;
+                width: 140px;
                 background: white;
                 border-radius: 10px;
                 padding: 10px;
                 border: 1px solid #e5e7eb;
                 transition: all 0.2s;
+                position: relative;
+                scroll-snap-align: start;
+                display: flex;
+                flex-direction: column;
             `;
             
-            // Card content: image + info + button
-            const cardContent = document.createElement('div');
-            cardContent.style.cssText = 'display: flex; gap: 10px; align-items: flex-start;';
+            // Info icon with tooltip (reason why AI suggested this)
+            const infoIcon = document.createElement('div');
+            infoIcon.style.cssText = `
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                width: 18px;
+                height: 18px;
+                background: #f3f4f6;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 11px;
+                color: #6b7280;
+                cursor: help;
+                font-weight: 600;
+                z-index: 2;
+            `;
+            infoIcon.textContent = 'i';
+            infoIcon.title = item.reason || 'Рекомендований товар';
+            card.appendChild(infoIcon);
             
-            // Image (clickable, goes to site)
-            const imgWrapper = document.createElement('a');
-            imgWrapper.href = item.link || '#';
-            imgWrapper.target = '_blank';
-            imgWrapper.style.cssText = 'flex-shrink: 0; text-decoration: none;';
-            imgWrapper.innerHTML = item.image 
-                ? `<img src="${item.image}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;" onerror="this.parentElement.innerHTML='<div style=\\'width:60px;height:60px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px\\'>📦</div>'">`
-                : '<div style="width:60px;height:60px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>';
-            cardContent.appendChild(imgWrapper);
-            
-            // Info block
-            const infoBlock = document.createElement('div');
-            infoBlock.style.cssText = 'flex: 1; min-width: 0;';
+            // Image (clickable)
+            const imgLink = document.createElement('a');
+            imgLink.href = item.link || '#';
+            imgLink.target = '_blank';
+            imgLink.style.cssText = 'display: block; margin-bottom: 8px;';
+            imgLink.innerHTML = item.image 
+                ? `<img src="${item.image}" style="width: 100%; height: 70px; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:100%;height:70px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px\\'>📦</div>'">`
+                : '<div style="width:100%;height:70px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px">📦</div>';
+            card.appendChild(imgLink);
             
             // Title (clickable)
             const titleLink = document.createElement('a');
@@ -921,49 +967,44 @@
             titleLink.target = '_blank';
             titleLink.style.cssText = `
                 display: block;
-                font-size: 12px;
+                font-size: 11px;
                 font-weight: 600;
                 color: #1f2937;
                 text-decoration: none;
                 line-height: 1.3;
-                margin-bottom: 2px;
+                height: 28px;
+                overflow: hidden;
+                margin-bottom: 4px;
             `;
             titleLink.textContent = item.title;
             titleLink.onmouseenter = () => { titleLink.style.color = s.primary_color; };
             titleLink.onmouseleave = () => { titleLink.style.color = '#1f2937'; };
-            infoBlock.appendChild(titleLink);
+            card.appendChild(titleLink);
             
             // Price
             const price = document.createElement('div');
-            price.style.cssText = `font-size: 13px; font-weight: 700; color: ${s.primary_color}; margin-bottom: 4px;`;
+            price.style.cssText = `font-size: 13px; font-weight: 700; color: ${s.primary_color}; margin-bottom: 8px;`;
             price.textContent = `${item.price} ₴`;
-            infoBlock.appendChild(price);
+            card.appendChild(price);
             
-            // Summary/reason (tooltip on hover of "i" or short text)
-            const summaryText = item.summary || item.reason || '';
-            if (summaryText) {
-                const summaryDiv = document.createElement('div');
-                summaryDiv.style.cssText = 'font-size: 10px; color: #6b7280; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;';
-                summaryDiv.textContent = summaryText;
-                infoBlock.appendChild(summaryDiv);
-            }
+            // Spacer to push button to bottom
+            const spacer = document.createElement('div');
+            spacer.style.cssText = 'flex: 1;';
+            card.appendChild(spacer);
             
-            cardContent.appendChild(infoBlock);
-            
-            // "Мені цікаво" button
+            // "+ Цікаво" button
             const interestedBtn = document.createElement('button');
             interestedBtn.style.cssText = `
-                flex-shrink: 0;
+                width: 100%;
                 background: ${s.primary_color};
                 color: white;
-                padding: 6px 10px;
+                padding: 6px 8px;
                 border: none;
-                border-radius: 8px;
+                border-radius: 6px;
                 font-size: 11px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s;
-                white-space: nowrap;
             `;
             interestedBtn.textContent = '+ Цікаво';
             interestedBtn.onmouseenter = () => { interestedBtn.style.opacity = '0.85'; };
@@ -971,19 +1012,19 @@
             interestedBtn.onclick = (e) => {
                 e.stopPropagation();
                 
-                // Animate removal of this card
+                // Animate card removal
                 card.style.opacity = '0';
-                card.style.transform = 'translateX(20px)';
+                card.style.transform = 'scale(0.9)';
                 card.style.transition = 'all 0.3s ease';
                 
                 setTimeout(() => {
                     card.remove();
                     
-                    // Add product as clickable card in chat
+                    // Add product to chat as clickable card
                     addCrossSellProductToChat(messagesContainer, item, s, sessionId);
                     
                     // If no more items, remove the whole block
-                    if (itemsList.children.length === 0) {
+                    if (carousel.children.length === 0) {
                         wrapper.style.opacity = '0';
                         wrapper.style.transform = 'translateY(-10px)';
                         wrapper.style.transition = 'all 0.3s ease';
@@ -991,13 +1032,22 @@
                     }
                 }, 300);
             };
-            cardContent.appendChild(interestedBtn);
+            card.appendChild(interestedBtn);
             
-            card.appendChild(cardContent);
-            itemsList.appendChild(card);
+            // Hover effect
+            card.onmouseenter = () => {
+                card.style.borderColor = s.primary_color;
+                card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            };
+            card.onmouseleave = () => {
+                card.style.borderColor = '#e5e7eb';
+                card.style.boxShadow = 'none';
+            };
+            
+            carousel.appendChild(card);
         });
         
-        container.appendChild(itemsList);
+        container.appendChild(carousel);
         
         // Hint about adding to cart
         const hint = document.createElement('div');
@@ -1005,7 +1055,7 @@
         hint.innerHTML = `💡 ${crossSell.hint || 'Щоб замовити — додайте товар у кошик на сайті'}`;
         container.appendChild(hint);
         
-        // Dismiss button (small, subtle)
+        // Dismiss button
         const dismissBtn = document.createElement('button');
         dismissBtn.style.cssText = `
             display: block;

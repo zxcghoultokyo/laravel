@@ -120,6 +120,8 @@ class SyncHoroshopCommand extends Command
                         'size' => $size,
                     ]);
 
+                    // Build search_index for new products
+                    $product->search_index = $this->buildSearchIndex($item, $product);
                     $product->save();
 
                     if ($exists) {
@@ -252,5 +254,48 @@ class SyncHoroshopCommand extends Command
         }
 
         return false;
+    }
+
+    /**
+     * Build search_index string for LIKE searches
+     */
+    protected function buildSearchIndex(array $item, Product $product): string
+    {
+        $parts = [];
+
+        $parts[] = Arr::get($item, 'title.ua', '');
+        $parts[] = Arr::get($item, 'title.ru', '');
+        $parts[] = Arr::get($item, 'parent.value', '');
+        $parts[] = Arr::get($item, 'brand.value.ua', '');
+        $parts[] = Arr::get($item, 'brand.value.ru', '');
+        $parts[] = Arr::get($item, 'color.value.ua', '');
+        $parts[] = Arr::get($item, 'color.value.ru', '');
+        $parts[] = $item['article'] ?? '';
+        $parts[] = $item['parent_article'] ?? '';
+
+        // Description (strip HTML)
+        $descUa = strip_tags(Arr::get($item, 'description.ua', ''));
+        $descRu = strip_tags(Arr::get($item, 'description.ru', ''));
+        $parts[] = mb_substr($descUa, 0, 500);
+        $parts[] = mb_substr($descRu, 0, 500);
+
+        // Characteristics
+        foreach ($item['characteristics'] ?? [] as $char) {
+            $parts[] = Arr::get($char, 'name.ua', '');
+            $parts[] = Arr::get($char, 'value.ua', '');
+        }
+
+        // Select attributes
+        foreach ($item['select'] ?? [] as $sel) {
+            $parts[] = Arr::get($sel, 'name.ua', '');
+            $parts[] = Arr::get($sel, 'value.ua', '');
+        }
+
+        // Size
+        if ($product->size) {
+            $parts[] = $product->size;
+        }
+
+        return mb_strtolower(implode(' ', array_filter($parts)));
     }
 }

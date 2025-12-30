@@ -1,14 +1,14 @@
 /**
- * AIntento Chat Widget v2.0.8
+ * AIntento Chat Widget v2.0.9
  * Embeddable chat widget for e-commerce sites
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.8"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.9"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.0.8';
+    const WIDGET_VERSION = '2.0.9';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1147,8 +1147,8 @@
     function addCrossSellProductToChat(messagesContainer, item, settings, sessionId) {
         const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
         
-        // Add intro message
-        addMessage(messagesContainer, `Ви зацікавились: **${item.title}**`, 'assistant', sessionId, false);
+        // Add intro message (no markdown, plain text)
+        addMessage(messagesContainer, `Ви зацікавились: ${item.title}`, 'assistant', sessionId, false);
         
         // Create clickable product card
         const card = document.createElement('a');
@@ -1162,7 +1162,7 @@
             padding: 12px;
             margin-bottom: 12px;
             text-decoration: none;
-            color: inherit;
+            color: #374151;
             transition: all 0.2s;
             animation: aintento-fadeInUp 0.3s ease-out;
         `;

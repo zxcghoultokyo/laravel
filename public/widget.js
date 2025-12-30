@@ -11,8 +11,8 @@
     const WIDGET_VERSION = '2.0.0';
     const DEBUG = false; // Set to true only for debugging
     
-    // Bot avatar URL
-    const BOT_AVATAR = 'https://aimbot.laravel.cloud/images/aintento-avatar.svg';
+    // Bot avatar URL (will be set dynamically)
+    let BOT_AVATAR = '/images/aintento-avatar.svg';
 
     function log(...args) {
         if (DEBUG) console.log('[AIntento]', ...args);
@@ -61,7 +61,19 @@
 
         log('Token received, loading settings...');
 
-        const apiUrl = 'https://aimbot.laravel.cloud/api/widget/settings';
+        // Determine API base URL - use current host if widget is on same domain, otherwise use production
+        const currentScript = document.currentScript || document.querySelector('script[src*="widget.js"]');
+        let baseUrl = 'https://aimbot.laravel.cloud';
+        if (currentScript && currentScript.src) {
+            try {
+                const scriptUrl = new URL(currentScript.src);
+                baseUrl = scriptUrl.origin;
+            } catch (e) {
+                // fallback to production
+            }
+        }
+        
+        const apiUrl = baseUrl + '/api/widget/settings';
 
         fetch(apiUrl, {
             headers: {
@@ -72,11 +84,11 @@
         .then(res => res.json())
         .then(settings => {
             log('Settings loaded', settings);
-            renderWidget(container, settings, token);
+            renderWidget(container, settings, token, baseUrl);
         })
         .catch(err => {
             logError('Failed to load settings', err);
-            renderWidget(container, getDefaultSettings(), token);
+            renderWidget(container, getDefaultSettings(), token, baseUrl);
         });
     }
 
@@ -94,11 +106,14 @@
         };
     }
 
-    function renderWidget(container, settings, token) {
+    function renderWidget(container, settings, token, baseUrl) {
         if (!settings.enabled) {
             log('Widget disabled in settings');
             return;
         }
+
+        // Set bot avatar URL
+        BOT_AVATAR = baseUrl + '/images/aintento-avatar.svg';
 
         // Store settings globally
         window.aintentoSettings = settings;
@@ -420,7 +435,7 @@
             input.value = '';
 
             const loader = addLoader(messages);
-            const chatApiUrl = 'https://aimbot.laravel.cloud/api/chat';
+            const chatApiUrl = baseUrl + '/api/chat';
 
             fetch(chatApiUrl, {
                 method: 'POST',

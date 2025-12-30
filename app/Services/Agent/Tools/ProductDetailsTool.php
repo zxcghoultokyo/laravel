@@ -220,11 +220,23 @@ class ProductDetailsTool
     
     /**
      * Extract size from raw product data.
-     * Horoshop stores size in various places: select.size, params.size, characteristics.size
+     * Horoshop stores size in various places: Rozmir (top-level), select.size, params.size, characteristics.size
      */
     protected function extractSize(array $raw): ?string
     {
-        // 1. Try select.size (most common for variants)
+        // 1. Try Rozmir at top level (Horoshop custom attribute - most common!)
+        // Format: {"id": 29, "value": {"ua": "S/S"}}
+        if (!empty($raw['Rozmir']['value'])) {
+            $rozmir = $raw['Rozmir']['value'];
+            $size = is_array($rozmir) 
+                ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
+                : $rozmir;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 2. Try select.size (most common for variants)
         if (!empty($raw['select']['size'])) {
             $size = $raw['select']['size'];
             if (is_array($size)) {
@@ -234,7 +246,7 @@ class ProductDetailsTool
             return is_string($size) ? trim($size) : null;
         }
         
-        // 2. Try select.rozmir (Ukrainian)
+        // 3. Try select.rozmir (Ukrainian)
         if (!empty($raw['select']['rozmir'])) {
             $size = $raw['select']['rozmir'];
             if (is_array($size)) {
@@ -243,12 +255,12 @@ class ProductDetailsTool
             return is_string($size) ? trim($size) : null;
         }
         
-        // 3. Try params.size
+        // 4. Try params.size
         if (!empty($raw['params']['size'])) {
             return is_string($raw['params']['size']) ? trim($raw['params']['size']) : null;
         }
         
-        // 4. Try characteristics.size
+        // 5. Try characteristics.size
         if (!empty($raw['characteristics']['size'])) {
             $size = $raw['characteristics']['size'];
             if (is_array($size)) {
@@ -257,7 +269,7 @@ class ProductDetailsTool
             return is_string($size) ? trim((string) $size) : null;
         }
         
-        // 5. Try characteristics.rozmir
+        // 6. Try characteristics.rozmir
         if (!empty($raw['characteristics']['rozmir'])) {
             $size = $raw['characteristics']['rozmir'];
             if (is_array($size)) {

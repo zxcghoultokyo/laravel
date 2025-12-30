@@ -47,7 +47,7 @@ class ProductService
                     'parent', 'images', 'slug', 'link', 'presence', 'quantity',
                     'display_in_showcase', 'popularity', 'color', 'brand',
                     'description', 'characteristics', 'short_description',
-                    'select', 'params', 'mod_title',
+                    'select', 'params', 'mod_title', 'Rozmir', 'Kolir', 'Dovzhina',
                     'seo_title', 'seo_keywords', 'seo_description',
                     'we_recommended', 'icons',
                 ],
@@ -133,11 +133,23 @@ class ProductService
     
     /**
      * Extract size from Horoshop item data.
-     * Tries multiple sources: mod_title, select.size, select.rozmir, characteristics, title parsing.
+     * Tries multiple sources: Rozmir (top-level), mod_title, select.size, characteristics, title parsing.
      */
     protected function extractSizeFromItem(array $item, ?string $title): ?string
     {
-        // 1. Try mod_title (modification title - most reliable for variants)
+        // 1. Try Rozmir at top level (Horoshop custom attribute - most common!)
+        // Format: {"id": 29, "value": {"ua": "S/S"}}
+        if (!empty($item['Rozmir']['value'])) {
+            $rozmir = $item['Rozmir']['value'];
+            $size = is_array($rozmir) 
+                ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
+                : $rozmir;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 2. Try mod_title (modification title)
         if (!empty($item['mod_title'])) {
             $modTitle = is_array($item['mod_title']) 
                 ? ($item['mod_title']['ua'] ?? $item['mod_title']['ru'] ?? reset($item['mod_title']))
@@ -147,7 +159,7 @@ class ProductService
             }
         }
         
-        // 2. Try select.size
+        // 3. Try select.size
         $selectSize = Arr::get($item, 'select.size');
         if ($selectSize) {
             $size = is_array($selectSize) 
@@ -158,7 +170,7 @@ class ProductService
             }
         }
         
-        // 3. Try select.rozmir (Ukrainian)
+        // 4. Try select.rozmir (Ukrainian)
         $selectRozmir = Arr::get($item, 'select.rozmir');
         if ($selectRozmir) {
             $size = is_array($selectRozmir) 
@@ -169,7 +181,7 @@ class ProductService
             }
         }
         
-        // 4. Try characteristics.size or characteristics.rozmir
+        // 5. Try characteristics.size or characteristics.rozmir
         $charSize = Arr::get($item, 'characteristics.size.value')
             ?? Arr::get($item, 'characteristics.size')
             ?? Arr::get($item, 'characteristics.rozmir.value')
@@ -183,13 +195,13 @@ class ProductService
             }
         }
         
-        // 5. Try params.size
+        // 6. Try params.size
         $paramSize = Arr::get($item, 'params.size');
         if ($paramSize && is_string($paramSize)) {
             return trim($paramSize);
         }
         
-        // 6. Parse from title as last resort
+        // 7. Parse from title as last resort
         if ($title) {
             return $this->parseSizeFromTitle($title);
         }

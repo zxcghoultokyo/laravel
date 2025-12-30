@@ -690,7 +690,9 @@
         });
 
         messagesContainer.appendChild(container);
-    }(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
+    }
+
+    function addMessage(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
         const s = window.aintentoSettings || { primary_color: '#2563eb' };
         const div = document.createElement('div');
         div.className = `aintento-message aintento-${role}`;

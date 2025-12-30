@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.2.0
+ * AIntento Chat Widget v2.2.1
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.0"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.1"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.2.0';
+    const WIDGET_VERSION = '2.2.1';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -559,9 +559,18 @@
                                 removeLoader(loader);
                             }
                             
-                            // If we got text but no products, finalize the text element
-                            if (currentTextElement && accumulatedText && !hasReceivedProducts) {
+                            // Always finalize streaming text (remove cursor)
+                            if (currentTextElement) {
                                 finalizeStreamingText(currentTextElement, accumulatedText);
+                            }
+                            
+                            // Fetch cross-sell for first product
+                            if (receivedProducts.length > 0) {
+                                const firstProduct = receivedProducts[0];
+                                const productId = firstProduct.id || firstProduct.article;
+                                if (productId) {
+                                    fetchCrossSellAsync(messages, productId, settings, state.sessionId);
+                                }
                             }
                             
                             eventSource.close();

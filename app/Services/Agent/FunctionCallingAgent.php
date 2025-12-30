@@ -8,6 +8,7 @@ use App\Services\Horoshop\OrderSearchService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\WidgetSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -117,7 +118,10 @@ class FunctionCallingAgent
      */
     private function getSystemPrompt(): string
     {
-        return <<<PROMPT
+        // Load FAQ info from settings
+        $faqInfo = $this->loadFaqInfo();
+        
+        $basePrompt = <<<PROMPT
 Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor".
 
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
@@ -167,7 +171,59 @@ FOLLOW-UP (розрізняй типи):
 - Максимум 2-3 речення
 - НЕ питай бюджет/розмір без потреби
 - НЕ читай лекції
+
+ІНФОРМАЦІЯ ПРО МАГАЗИН (використовуй для відповідей на питання):
+{$faqInfo}
 PROMPT;
+
+        return $basePrompt;
+    }
+
+    /**
+     * Load FAQ info from WidgetSettings
+     */
+    private function loadFaqInfo(): string
+    {
+        $settings = Cache::remember('widget_settings_faq', 300, function () {
+            return WidgetSettings::first();
+        });
+
+        if (!$settings) {
+            return "Актуальну інформацію дивіться на сайті contractor.kiev.ua";
+        }
+
+        $info = [];
+
+        // Phone
+        if (!empty($settings->shop_phone)) {
+            $info[] = "ТЕЛЕФОН: {$settings->shop_phone}";
+        }
+
+        // Contacts
+        if (!empty($settings->faq_contacts_text)) {
+            $info[] = "КОНТАКТИ:\n{$settings->faq_contacts_text}";
+        }
+
+        // Payment & Delivery
+        if (!empty($settings->faq_payment_delivery_text)) {
+            $info[] = "ОПЛАТА ТА ДОСТАВКА:\n{$settings->faq_payment_delivery_text}";
+        }
+
+        // Returns
+        if (!empty($settings->faq_returns_text)) {
+            $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";
+        }
+
+        // About
+        if (!empty($settings->faq_about_text)) {
+            $info[] = "ПРО МАГАЗИН:\n{$settings->faq_about_text}";
+        }
+
+        if (empty($info)) {
+            return "Актуальну інформацію дивіться на сайті contractor.kiev.ua";
+        }
+
+        return implode("\n\n", $info);
     }
 
     /**

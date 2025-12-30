@@ -638,6 +638,33 @@ class MeiliProductSearchTool
         $q = trim($query);
         $l = mb_strtolower($q);
         $append = [];
+        
+        // Level 7 / ECWCS synonyms (winter military clothing)
+        if (preg_match('/\b(level\s*7|левел\s*7|лвл\s*7|lvl\s*7|l7)\b/iu', $l)) {
+            $append[] = 'Level 7';
+            $append[] = 'ECWCS';
+            $append[] = 'Gen III';
+        }
+        if (str_contains($l, 'ecwcs') || str_contains($l, 'еквкс')) {
+            $append[] = 'Level';
+            $append[] = 'ECWCS';
+            $append[] = 'Gen III';
+        }
+        
+        // Level synonyms general (level 1-7)
+        if (preg_match('/\b(левел|лвл|lvl)\s*(\d)/iu', $l, $m)) {
+            $append[] = 'Level ' . $m[2];
+            $append[] = 'level' . $m[2];
+        }
+        
+        // Pants / trousers synonyms
+        if (str_contains($l, 'брюки') || str_contains($l, 'штани') || str_contains($l, 'штанів')) {
+            $append[] = 'trousers';
+            $append[] = 'pants';
+            $append[] = 'штани';
+            $append[] = 'брюки';
+        }
+        
         // Medical pouch / IFAK
         if (str_contains($l, 'підсумок') || str_contains($l, 'підсумки') || str_contains($l, 'аптечк')) {
             $append[] = 'IFAK';

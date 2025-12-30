@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.2.7
+ * AIntento Chat Widget v2.3.0
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.7"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.0"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.2.7';
+    const WIDGET_VERSION = '2.3.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1198,6 +1198,24 @@
                 summaryText = parts.join(' • ');
             }
         }
+        
+        // Build size variants HTML (clickable buttons)
+        let sizeHtml = '';
+        if (product.size_variants && product.size_variants.length > 1) {
+            const buttons = product.size_variants.map(v => {
+                const isActive = v.id === product.id || v.article === product.article;
+                const activeStyle = isActive 
+                    ? `background: ${settings.primary_color}; color: white; border-color: ${settings.primary_color};`
+                    : 'background: #f3f4f6; color: #374151; border-color: #e5e7eb;';
+                return `<a href="${v.link || '#'}" target="_blank" 
+                    style="padding: 2px 6px; font-size: 10px; border-radius: 4px; border: 1px solid; text-decoration: none; ${activeStyle}"
+                    onclick="event.stopPropagation();">${v.size}</a>`;
+            }).join('');
+            sizeHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${buttons}</div>`;
+        } else if (product.size) {
+            // Single size, just show label
+            sizeHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Розмір: </span><span style="font-size: 11px; font-weight: 500;">${product.size}</span></div>`;
+        }
 
         card.innerHTML = `
             <div style="display: flex; gap: 12px;">
@@ -1205,7 +1223,8 @@
                 <div style="flex: 1; min-width: 0;">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
                     ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${summaryText}</div>` : ''}
-                    <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
+                    ${sizeHtml}
+                    <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px; margin-top: 4px;">${product.price} ₴</div>
                 </div>
             </div>
         `;

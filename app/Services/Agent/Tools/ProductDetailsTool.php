@@ -47,7 +47,48 @@ class ProductDetailsTool
             ->filter()
             ->values();
         
-        return $orderedProducts->map(function ($product) use ($parentRawMap) {
+        // Collect all sibling variants for size switching
+        $allParentArticles = $orderedProducts->pluck('parent_article')->filter()->unique()->all();
+        $sizeVariantsMap = [];
+        if ($allParentArticles) {
+            // Get all products with the same parent_article (siblings)
+            $allSiblings = Product::query()
+                ->whereIn('parent_article', $allParentArticles)
+                ->where('in_stock', true)
+                ->get(['id', 'article', 'parent_article', 'link', 'raw']);
+            
+            foreach ($allSiblings as $sibling) {
+                $parentArt = $sibling->parent_article;
+                $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
+                $size = $this->extractSize($sibRaw);
+                
+                if ($size) {
+                    if (!isset($sizeVariantsMap[$parentArt])) {
+                        $sizeVariantsMap[$parentArt] = [];
+                    }
+                    $sizeVariantsMap[$parentArt][] = [
+                        'id' => $sibling->id,
+                        'article' => $sibling->article,
+                        'size' => $size,
+                        'link' => $sibling->link,
+                    ];
+                }
+            }
+            
+            // Sort variants by size order
+            $sizeOrder = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '3XL', '4XL', '5XL'];
+            foreach ($sizeVariantsMap as $parentArt => &$variants) {
+                usort($variants, function ($a, $b) use ($sizeOrder) {
+                    $posA = array_search(strtoupper($a['size']), $sizeOrder);
+                    $posB = array_search(strtoupper($b['size']), $sizeOrder);
+                    if ($posA === false) $posA = 999;
+                    if ($posB === false) $posB = 999;
+                    return $posA - $posB ?: strcmp($a['size'], $b['size']);
+                });
+            }
+        }
+        
+        return $orderedProducts->map(function ($product) use ($parentRawMap, $sizeVariantsMap) {
             // Parse images from raw JSON or images field
             $images = $this->extractImages($product);
             
@@ -62,6 +103,15 @@ class ProductDetailsTool
             $parentArticle = (string) ($product->parent_article ?? '');
             if ($parentArticle !== '' && isset($parentRawMap[$parentArticle])) {
                 $parentRaw = $parentRawMap[$parentArticle];
+            }
+            
+            // Extract size for current product
+            $currentSize = $this->extractSize($raw);
+            
+            // Get size variants (siblings with same parent_article)
+            $sizeVariants = [];
+            if ($parentArticle && isset($sizeVariantsMap[$parentArticle])) {
+                $sizeVariants = $sizeVariantsMap[$parentArticle];
             }
 
             return [
@@ -81,6 +131,8 @@ class ProductDetailsTool
                 'quantity' => $product->quantity,
                 'in_stock' => $product->in_stock,
                 'color' => $product->color,
+                'size' => $currentSize,
+                'size_variants' => $sizeVariants,
                 'popularity' => $product->popularity,
                 'ai_product_type' => $product->ai_product_type ?? '__unknown__',
                 // Enriched fields for narratives (purely from stored data)
@@ -150,5 +202,61 @@ class ProductDetailsTool
         }, $images);
 
         return array_values(array_filter($images));
+    }
+    
+    /**
+     * Extract size from raw product data.
+     * Horoshop stores size in various places: select.size, params.size, characteristics.size
+     */
+    protected function extractSize(array $raw): ?string
+    {
+        // 1. Try select.size (most common for variants)
+        if (!empty($raw['select']['size'])) {
+            $size = $raw['select']['size'];
+            if (is_array($size)) {
+                // May be {ua: 'M', ru: 'M'}
+                $size = $size['ua'] ?? $size['ru'] ?? reset($size);
+            }
+            return is_string($size) ? trim($size) : null;
+        }
+        
+        // 2. Try select.rozmir (Ukrainian)
+        if (!empty($raw['select']['rozmir'])) {
+            $size = $raw['select']['rozmir'];
+            if (is_array($size)) {
+                $size = $size['ua'] ?? $size['ru'] ?? reset($size);
+            }
+            return is_string($size) ? trim($size) : null;
+        }
+        
+        // 3. Try params.size
+        if (!empty($raw['params']['size'])) {
+            return is_string($raw['params']['size']) ? trim($raw['params']['size']) : null;
+        }
+        
+        // 4. Try characteristics.size
+        if (!empty($raw['characteristics']['size'])) {
+            $size = $raw['characteristics']['size'];
+            if (is_array($size)) {
+                $size = $size['value'] ?? $size['ua'] ?? $size['ru'] ?? reset($size);
+            }
+            return is_string($size) ? trim((string) $size) : null;
+        }
+        
+        // 5. Try characteristics.rozmir
+        if (!empty($raw['characteristics']['rozmir'])) {
+            $size = $raw['characteristics']['rozmir'];
+            if (is_array($size)) {
+                $size = $size['value'] ?? $size['ua'] ?? $size['ru'] ?? reset($size);
+            }
+            return is_string($size) ? trim((string) $size) : null;
+        }
+        
+        // 6. Try direct size field
+        if (!empty($raw['size'])) {
+            return is_string($raw['size']) ? trim($raw['size']) : null;
+        }
+        
+        return null;
     }
 }

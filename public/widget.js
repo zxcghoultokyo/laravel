@@ -1,14 +1,15 @@
 /**
- * AIntento Chat Widget v2.1.0
+ * AIntento Chat Widget v2.2.0
  * Embeddable chat widget for e-commerce sites
+ * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.1.0"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.2.0"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.1.0';
+    const WIDGET_VERSION = '2.2.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -447,7 +448,7 @@
             toggle.style.display = 'flex';
         }
 
-        // Send message function
+        // Send message function with SSE streaming support
         function sendMessage(customMessage = null) {
             const message = customMessage || input.value.trim();
             if (!message) return;
@@ -455,6 +456,240 @@
             addMessage(messages, message, 'user', state.sessionId, true);
             if (!customMessage) input.value = '';
 
+            // Check if streaming is enabled (default: true)
+            const useStreaming = settings.enable_streaming !== false;
+            
+            if (useStreaming) {
+                sendMessageStreaming(message);
+            } else {
+                sendMessageFetch(message);
+            }
+        }
+        
+        // Streaming version using SSE (Server-Sent Events)
+        function sendMessageStreaming(message) {
+            const loader = addLoader(messages);
+            let currentTextElement = null;
+            let accumulatedText = '';
+            let hasReceivedProducts = false;
+            let receivedProducts = [];
+            
+            const streamUrl = BASE_URL + '/api/chat/stream?message=' + encodeURIComponent(message) + '&session_id=' + encodeURIComponent(state.sessionId);
+            
+            log('Starting SSE stream:', streamUrl);
+            
+            const eventSource = new EventSource(streamUrl);
+            
+            eventSource.onopen = function() {
+                log('SSE connection opened');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('SSE event:', data.type, data);
+                    
+                    // Update session ID if provided
+                    if (data.session_id) {
+                        state.sessionId = data.session_id;
+                        saveSessionId(data.session_id);
+                    }
+                    
+                    switch (data.type) {
+                        case 'status':
+                            // Update loader text with status
+                            if (loader) {
+                                const statusText = loader.querySelector('.aintento-loader-text');
+                                if (statusText) {
+                                    statusText.textContent = data.text || 'Обробляю...';
+                                }
+                            }
+                            break;
+                            
+                        case 'chunk':
+                            // Remove loader on first content chunk
+                            if (loader && loader.parentNode) {
+                                removeLoader(loader);
+                            }
+                            
+                            // Accumulate text
+                            const chunkText = data.text || '';
+                            accumulatedText += chunkText;
+                            
+                            // Create or update text element
+                            if (!currentTextElement) {
+                                currentTextElement = createStreamingTextElement(messages);
+                            }
+                            
+                            // Update text content with typing effect
+                            updateStreamingText(currentTextElement, accumulatedText);
+                            break;
+                            
+                        case 'products':
+                            // Remove loader if still present
+                            if (loader && loader.parentNode) {
+                                removeLoader(loader);
+                            }
+                            
+                            // Store products for later display
+                            hasReceivedProducts = true;
+                            receivedProducts = data.products || [];
+                            
+                            // Display products immediately after text
+                            if (receivedProducts.length > 0) {
+                                addProducts(messages, receivedProducts, state.sessionId, true);
+                            }
+                            break;
+                            
+                        case 'error':
+                            // Remove loader
+                            if (loader && loader.parentNode) {
+                                removeLoader(loader);
+                            }
+                            
+                            addMessage(messages, data.text || 'Сталася помилка', 'assistant', state.sessionId, false);
+                            eventSource.close();
+                            break;
+                            
+                        case 'done':
+                            log('SSE stream done');
+                            
+                            // Remove loader if still present
+                            if (loader && loader.parentNode) {
+                                removeLoader(loader);
+                            }
+                            
+                            // If we got text but no products, finalize the text element
+                            if (currentTextElement && accumulatedText && !hasReceivedProducts) {
+                                finalizeStreamingText(currentTextElement, accumulatedText);
+                            }
+                            
+                            eventSource.close();
+                            break;
+                    }
+                } catch (err) {
+                    logError('SSE parse error:', err, event.data);
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                logError('SSE error:', error);
+                
+                // Remove loader
+                if (loader && loader.parentNode) {
+                    removeLoader(loader);
+                }
+                
+                // Only show error if we haven't received any content
+                if (!accumulatedText && !hasReceivedProducts) {
+                    addMessage(messages, 'Вибачте, не вдалося отримати відповідь. Спробуйте ще раз.', 'assistant', state.sessionId, false);
+                }
+                
+                eventSource.close();
+            };
+        }
+        
+        // Create a streaming text element (initially empty)
+        function createStreamingTextElement(container) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'aintento-message assistant';
+            wrapper.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px;';
+            
+            // Avatar
+            const avatar = document.createElement('img');
+            avatar.src = BOT_AVATAR;
+            avatar.alt = 'Bot';
+            avatar.style.cssText = 'width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;';
+            
+            // Bubble
+            const bubble = document.createElement('div');
+            bubble.className = 'aintento-bubble streaming';
+            bubble.style.cssText = `
+                background: #f3f4f6;
+                padding: 12px 16px;
+                border-radius: 12px;
+                max-width: 85%;
+                line-height: 1.5;
+                color: #374151;
+            `;
+            
+            // Text content with cursor
+            const textSpan = document.createElement('span');
+            textSpan.className = 'streaming-text';
+            
+            const cursor = document.createElement('span');
+            cursor.className = 'streaming-cursor';
+            cursor.style.cssText = `
+                display: inline-block;
+                width: 8px;
+                height: 16px;
+                background: #6b7280;
+                margin-left: 2px;
+                animation: blink 1s infinite;
+                vertical-align: middle;
+            `;
+            
+            // Add cursor animation if not exists
+            if (!document.querySelector('#aintento-cursor-style')) {
+                const style = document.createElement('style');
+                style.id = 'aintento-cursor-style';
+                style.textContent = '@keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }';
+                document.head.appendChild(style);
+            }
+            
+            bubble.appendChild(textSpan);
+            bubble.appendChild(cursor);
+            wrapper.appendChild(avatar);
+            wrapper.appendChild(bubble);
+            container.appendChild(wrapper);
+            
+            // Scroll to the new element
+            wrapper.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            
+            return wrapper;
+        }
+        
+        // Update streaming text content
+        function updateStreamingText(element, text) {
+            const textSpan = element.querySelector('.streaming-text');
+            if (textSpan) {
+                // Clean JSON from text if present (GPT sometimes returns JSON)
+                let displayText = text;
+                
+                // Try to extract intro from JSON response
+                const jsonMatch = text.match(/\{[\s\S]*?\}/);
+                if (jsonMatch) {
+                    try {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        if (parsed.intro) {
+                            displayText = parsed.intro;
+                        }
+                    } catch (e) {
+                        // Not valid JSON yet, show as is (but clean up partial JSON)
+                        displayText = text.replace(/\{[\s\S]*$/, '').trim();
+                    }
+                }
+                
+                textSpan.textContent = displayText;
+                
+                // Scroll to bottom
+                element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+        }
+        
+        // Finalize streaming text (remove cursor)
+        function finalizeStreamingText(element, text) {
+            const cursor = element.querySelector('.streaming-cursor');
+            if (cursor) {
+                cursor.remove();
+            }
+            
+            // Final text cleanup
+            updateStreamingText(element, text);
+        }
+        
+        // Fallback fetch version (non-streaming)
+        function sendMessageFetch(message) {
             const loader = addLoader(messages);
             const chatApiUrl = BASE_URL + '/api/chat';
 
@@ -1241,10 +1476,13 @@
         div.className = 'aintento-loader';
         div.style.cssText = 'margin-bottom: 16px; display: flex; justify-content: flex-start;';
         div.innerHTML = `
-            <div style="background: #f3f4f6; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s infinite;">●</span>
-                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.2s infinite;">●</span>
-                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.4s infinite;">●</span>
+            <div style="background: #f3f4f6; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 8px;">
+                <div style="display: flex; gap: 2px;">
+                    <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s infinite;">●</span>
+                    <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.2s infinite;">●</span>
+                    <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.4s infinite;">●</span>
+                </div>
+                <span class="aintento-loader-text" style="color: #6b7280; font-size: 13px;">Думаю...</span>
             </div>
         `;
         messagesContainer.appendChild(div);

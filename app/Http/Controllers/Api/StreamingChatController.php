@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Chat\ChatService;
-use App\Services\Ai\AiRouter;
+use App\Services\Agent\StreamingFunctionCallingAgent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -27,6 +26,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *   }
  * };
  * ```
+ * 
+ * Test with curl:
+ * curl -N "http://localhost:8000/api/chat/stream?message=плитоноска&session_id=test123"
  */
 class StreamingChatController extends Controller
 {
@@ -34,8 +36,7 @@ class StreamingChatController extends Controller
     private const MIN_SESSION_ID_LENGTH = 8;
 
     public function __construct(
-        protected ChatService $chatService,
-        protected AiRouter $aiRouter,
+        protected StreamingFunctionCallingAgent $streamingAgent,
     ) {}
 
     /**
@@ -54,11 +55,10 @@ class StreamingChatController extends Controller
         ]);
 
         return new StreamedResponse(function () use ($message, $sessionId, $requestId) {
-            // Set headers for SSE
-            header('Content-Type: text/event-stream');
-            header('Cache-Control: no-cache');
-            header('Connection: keep-alive');
-            header('X-Accel-Buffering: no'); // Nginx
+            // Disable output buffering
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
 
             // Validate input
             if (mb_strlen($message) > self::MAX_MESSAGE_LENGTH) {
@@ -82,54 +82,21 @@ class StreamingChatController extends Controller
             }
 
             try {
-                // Step 1: Send "thinking" status
-                $this->sendEvent('status', [
-                    'text' => 'Аналізую запит...',
-                    'phase' => 'classify',
-                ]);
-                flush();
-
-                // Step 2: Get full response (for now, we'll stream the text part)
-                $response = $this->chatService->handleMessage($message, $sessionId);
-
-                // Step 3: If we have products, send status then products
-                if (!empty($response['products'])) {
-                    $this->sendEvent('status', [
-                        'text' => 'Знайшов ' . count($response['products']) . ' товарів...',
-                        'phase' => 'search',
-                    ]);
-                    flush();
+                // Stream response from agent
+                foreach ($this->streamingAgent->stream($message, $sessionId) as $event) {
+                    $type = $event['type'] ?? 'chunk';
+                    $data = $event['data'] ?? [];
+                    $data['session_id'] = $sessionId;
+                    $data['request_id'] = $requestId;
                     
-                    // Stream the narrative text in chunks
-                    $text = $response['message'] ?? $response['text'] ?? '';
-                    if (!empty($text)) {
-                        $this->streamText($text);
-                    }
-
-                    // Send products
-                    $this->sendEvent('products', [
-                        'products' => $response['products'],
-                        'count' => count($response['products']),
-                    ]);
-                } else {
-                    // Text-only response - stream it
-                    $text = $response['text'] ?? $response['message'] ?? '';
-                    if (!empty($text)) {
-                        $this->streamText($text);
-                    }
+                    $this->sendEvent($type, $data);
                 }
-
-                // Send completion
-                $this->sendEvent('done', [
-                    'session_id' => $sessionId,
-                    'request_id' => $requestId,
-                    'meta' => $response['meta'] ?? [],
-                ]);
 
             } catch (\Throwable $e) {
                 Log::error('StreamingChatController: error', [
                     'request_id' => $requestId,
                     'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
                 ]);
 
                 $this->sendEvent('error', [
@@ -144,22 +111,9 @@ class StreamingChatController extends Controller
             'Cache-Control' => 'no-cache',
             'Connection' => 'keep-alive',
             'X-Accel-Buffering' => 'no',
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Headers' => 'Content-Type, X-Widget-Token',
         ]);
-    }
-
-    /**
-     * Stream text in chunks to simulate typing effect.
-     */
-    private function streamText(string $text): void
-    {
-        // Split by sentences for natural streaming
-        $sentences = preg_split('/(?<=[.!?])\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY);
-        
-        foreach ($sentences as $sentence) {
-            $this->sendEvent('chunk', ['text' => $sentence . ' ']);
-            flush();
-            usleep(50000); // 50ms delay between sentences
-        }
     }
 
     /**

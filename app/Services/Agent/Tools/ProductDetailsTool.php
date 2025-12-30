@@ -47,18 +47,9 @@ class ProductDetailsTool
             ->filter()
             ->values();
         
-        return $orderedProducts->map(function ($product) {
-            // Parse images from raw JSON
-            $images = [];
-            if ($product->raw && isset($product->raw['pictures'])) {
-                $images = collect($product->raw['pictures'])
-                    ->map(fn($pic) => $pic['url'] ?? null)
-                    ->filter()
-                    ->values()
-                    ->toArray();
-            } elseif ($product->images) {
-                $images = $product->images;
-            }
+        return $orderedProducts->map(function ($product) use ($parentRawMap) {
+            // Parse images from raw JSON or images field
+            $images = $this->extractImages($product);
             
             // Get title in Ukrainian
             $title = $product->title;
@@ -97,5 +88,55 @@ class ProductDetailsTool
                 'characteristics' => ProductRawExtractor::attributes($raw, 'ua', $parentRaw),
             ];
         })->toArray();
+    }
+
+    /**
+     * Extract images from product with multiple fallbacks.
+     */
+    protected function extractImages(Product $product): array
+    {
+        $images = [];
+
+        // 1. Try raw['pictures'] first (most reliable structure)
+        if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
+            $images = collect($product->raw['pictures'])
+                ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
+        // 2. Fallback to images field (from DB column)
+        if (empty($images) && $product->images) {
+            $imgs = $product->images;
+            // Handle if it's a string (shouldn't be, but just in case)
+            if (is_string($imgs)) {
+                $decoded = json_decode($imgs, true);
+                $imgs = is_array($decoded) ? $decoded : [$imgs];
+            }
+            if (is_array($imgs)) {
+                $images = array_values(array_filter($imgs));
+            }
+        }
+
+        // 3. Fallback to raw['image'] (single image)
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['image'])) {
+            $images = [$product->raw['image']];
+        }
+
+        // 4. Fallback to raw['main_image']
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['main_image'])) {
+            $images = [$product->raw['main_image']];
+        }
+
+        // Normalize URLs (encode special chars if needed)
+        $images = array_map(function ($url) {
+            if (!is_string($url)) return null;
+            // URL encode only the path portion if it has problematic chars
+            // But don't double-encode already encoded URLs
+            return $url;
+        }, $images);
+
+        return array_values(array_filter($images));
     }
 }

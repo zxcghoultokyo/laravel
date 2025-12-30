@@ -8,6 +8,7 @@ use App\Services\Horoshop\OrderSearchService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\ProductSynonym;
 use App\Models\WidgetSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -644,27 +645,8 @@ PROMPT;
             $productType = mb_strtolower($args['product_type']);
             $beforeCount = count($results);
             
-            // Synonyms map for product types (ua <-> ru, variations)
-            $synonyms = [
-                'берці' => ['берці', 'берци', 'берцы', 'boots', 'взуття', 'черевики'],
-                'берци' => ['берці', 'берци', 'берцы', 'boots', 'взуття', 'черевики'],
-                'черевики' => ['берці', 'берци', 'черевики', 'boots', 'взуття'],
-                'плитоноска' => ['плитоноска', 'плитоноски', 'plate carrier', 'плейт'],
-                'шолом' => ['шолом', 'шлем', 'каска', 'helmet', 'fast'],
-                'рюкзак' => ['рюкзак', 'backpack', 'ранець'],
-                'підсумок' => ['підсумок', 'подсумок', 'pouch', 'mag pouch'],
-                'бронеплита' => ['бронеплита', 'плита', 'sapi', 'esapi', 'керамічна'],
-            ];
-            
-            // Get all terms to search for
-            $searchTerms = [$productType];
-            foreach ($synonyms as $key => $values) {
-                if (str_contains($productType, $key) || in_array($productType, $values)) {
-                    $searchTerms = array_merge($searchTerms, $values);
-                    break;
-                }
-            }
-            $searchTerms = array_unique($searchTerms);
+            // Get synonyms from DB (cached)
+            $searchTerms = $this->getProductTypeSynonyms($productType);
             
             $results = array_filter($results, function ($p) use ($searchTerms) {
                 $aiType = mb_strtolower($p['ai_product_type'] ?? '');
@@ -943,6 +925,53 @@ PROMPT;
         }
 
         return $result;
+    }
+
+    /**
+     * Get all synonyms for a product type from DB
+     * Returns array of terms to search for (including the original term)
+     */
+    private function getProductTypeSynonyms(string $productType): array
+    {
+        $cacheKey = 'product_type_synonyms:' . md5($productType);
+        
+        return Cache::remember($cacheKey, 3600, function () use ($productType) {
+            // Start with original term
+            $searchTerms = [$productType];
+            
+            // First, find what product_type this term belongs to
+            $matchedType = ProductSynonym::where('is_active', true)
+                ->where(function ($q) use ($productType) {
+                    $q->where('synonym', $productType)
+                      ->orWhere('product_type', $productType);
+                })
+                ->value('product_type');
+            
+            if ($matchedType) {
+                // Get all synonyms for this product_type
+                $synonyms = ProductSynonym::where('is_active', true)
+                    ->where('product_type', $matchedType)
+                    ->pluck('synonym')
+                    ->toArray();
+                
+                $searchTerms = array_merge($searchTerms, [$matchedType], $synonyms);
+            }
+            
+            // Fallback: minimal hardcoded synonyms for critical cases (ua <-> ru spelling)
+            $fallbackSynonyms = [
+                'берці' => ['берці', 'берци', 'берцы'],
+                'берци' => ['берці', 'берци', 'берцы'],
+            ];
+            
+            foreach ($fallbackSynonyms as $key => $values) {
+                if (str_contains($productType, $key) || in_array($productType, $values)) {
+                    $searchTerms = array_merge($searchTerms, $values);
+                    break;
+                }
+            }
+            
+            return array_unique(array_filter($searchTerms));
+        });
     }
 
     /**

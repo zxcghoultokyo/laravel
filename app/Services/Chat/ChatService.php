@@ -52,6 +52,9 @@ class ChatService
 
         $sessionKey      = $this->buildSessionKey($sessionId);
         $sessionContext  = $this->loadSessionContext($sessionKey);
+        
+        // Load conversation history for context
+        $conversationHistory = $this->loadConversationHistory($sessionId);
 
         Log::info('ChatService::handleMessage incoming', [
             'message'    => $normalizedMessage,
@@ -66,8 +69,11 @@ class ChatService
 
         // Вибираємо агента на основі feature flag
         try {
-            // Передаємо session_id у контексті для follow-up запитів
-            $contextWithSessionId = array_merge($sessionContext, ['session_id' => $sessionId]);
+            // Передаємо session_id та історію у контексті для follow-up запитів
+            $contextWithSessionId = array_merge($sessionContext, [
+                'session_id' => $sessionId,
+                'history' => $conversationHistory,
+            ]);
             
             // NEW: Use function calling agent if enabled
             if ($this->useNewAgent && $this->functionCallingAgent) {
@@ -964,6 +970,61 @@ class ChatService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+        }
+    }
+
+    /**
+     * Load conversation history for GPT context
+     * Returns last N messages in OpenAI format
+     */
+    protected function loadConversationHistory(string $sessionId, int $limit = 10): array
+    {
+        try {
+            $session = ChatSession::where('session_id', $sessionId)->first();
+            if (!$session) {
+                return [];
+            }
+
+            $messages = ChatMessage::where('chat_session_id', $session->id)
+                ->orderBy('created_at', 'desc')
+                ->limit($limit)
+                ->get()
+                ->reverse()
+                ->values();
+
+            $history = [];
+            foreach ($messages as $msg) {
+                // Skip if no content
+                if (empty($msg->content)) {
+                    continue;
+                }
+
+                $role = $msg->role === 'user' ? 'user' : 'assistant';
+                
+                // For assistant messages, extract just text (not full JSON response)
+                $content = $msg->content;
+                if ($role === 'assistant' && is_array($content)) {
+                    $content = $content['text'] ?? json_encode($content, JSON_UNESCAPED_UNICODE);
+                }
+
+                $history[] = [
+                    'role' => $role,
+                    'content' => is_string($content) ? $content : json_encode($content, JSON_UNESCAPED_UNICODE),
+                ];
+            }
+
+            Log::info('Loaded conversation history', [
+                'session_id' => $sessionId,
+                'messages_count' => count($history),
+            ]);
+
+            return $history;
+        } catch (\Exception $e) {
+            Log::error('Failed to load conversation history', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
         }
     }
 }

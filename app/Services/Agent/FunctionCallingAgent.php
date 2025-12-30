@@ -61,11 +61,30 @@ class FunctionCallingAgent
             return $this->handleToolCalls($toolCalls, $messages, $message, $sessionId);
         }
 
-        // Direct text response (small talk, FAQ)
+        // Direct text response (small talk, FAQ, follow-up questions)
         $text = $response['choices'][0]['message']['content'] ?? '';
+        
+        // Check if GPT returned JSON (sometimes it does for follow-ups)
+        // If so, just extract the intro as plain text
+        if (preg_match('/^\s*\{/u', $text)) {
+            $json = json_decode($text, true);
+            if ($json && isset($json['intro'])) {
+                $text = $json['intro'];
+                // If it has product comments, append them
+                if (!empty($json['products'])) {
+                    foreach ($json['products'] as $p) {
+                        if (!empty($p['comment'])) {
+                            $text .= "\n• " . $p['comment'];
+                        }
+                    }
+                }
+            }
+        }
+        
         return [
             'message' => $text,
             'products' => [],
+            'messages' => [['type' => 'text', 'content' => $text]],
             'meta' => ['intent' => 'text', 'agent' => 'function_calling'],
         ];
     }
@@ -122,8 +141,8 @@ class FunctionCallingAgent
 - "подарунок", "що порадиш", "топ" без контексту → get_popular_products
 - Питають про замовлення → get_order_status
 
-ФОРМАТ ВІДПОВІДІ (JSON):
-Відповідай ТІЛЬКИ у форматі JSON:
+ФОРМАТ ВІДПОВІДІ:
+1. ПІСЛЯ виклику search_products - відповідай JSON:
 {
   "intro": "Ось варіанти:",
   "products": [
@@ -131,6 +150,8 @@ class FunctionCallingAgent
     {"article": "yyy", "comment": "Коротко чому цей"}
   ]
 }
+
+2. БЕЗ виклику інструментів (звичайна розмова, FAQ, пояснення) - відповідай ЗВИЧАЙНИМ ТЕКСТОМ, не JSON!
 
 ПРАВИЛА:
 - intro: 1 коротке речення (5-10 слів), без зайвих питань

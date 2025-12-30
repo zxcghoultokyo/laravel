@@ -95,12 +95,12 @@ class ChatService
             $productCards = $agentResult['meta']['product_cards'] ?? null;
             $agentMessages = $agentResult['messages'] ?? [];
             
-            // Generate cross-sell suggestions for first product
-            $crossSellData = null;
+            // Cross-sell is now fetched asynchronously by frontend via /api/cross-sell
+            // This reduces main response time by ~1-2 seconds
             $products = $agentResult['products'] ?? [];
-            if (!empty($products) && $intent === 'product_search') {
-                $crossSellData = $this->generateCrossSell($products[0]);
-            }
+            
+            // Pass first product ID to frontend for async cross-sell fetch
+            $firstProductId = !empty($products) ? ($products[0]['id'] ?? null) : null;
 
             // Формуємо відповідь у форматі очікуваному фронтом
             $response = [
@@ -112,8 +112,8 @@ class ChatService
                     'product_cards' => $productCards,
                     // NEW: messages array for sequential display
                     'messages' => $agentMessages,
-                    // NEW: cross-sell suggestions
-                    'cross_sell' => $crossSellData,
+                    // Cross-sell fetched async - pass product_id for frontend
+                    'cross_sell_product_id' => $firstProductId,
                 ],
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],

@@ -714,60 +714,67 @@ PROMPT;
 
     /**
      * Tool: Get popular products
+     * Cached for 5 minutes to reduce response time
      */
     private function toolGetPopularProducts(array $args): array
     {
         $category = $args['category'] ?? null;
         $limit = $args['limit'] ?? 5;
 
-        $products = [];
+        // Cache key based on category and limit
+        $cacheKey = 'popular_products:' . ($category ?? 'all') . ':' . $limit;
+        
+        // Cache popular products for 5 minutes
+        return Cache::remember($cacheKey, 300, function () use ($category, $limit) {
+            $products = [];
 
-        if ($category) {
-            // Search in specific category
-            $results = $this->searchTool->search($category, [], $limit * 2);
-            
-            // Sort by popularity
-            usort($results, function ($a, $b) {
-                $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                return $popB <=> $popA;
-            });
-            
-            $products = array_slice($results, 0, $limit);
-        } else {
-            // Get top from different categories
-            $categories = ['плитоноска', 'шолом', 'берці', 'рюкзак'];
-            
-            foreach ($categories as $cat) {
-                $results = $this->searchTool->search($cat, [], 5);
-                if (!empty($results)) {
-                    usort($results, function ($a, $b) {
-                        $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                        $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                        return $popB <=> $popA;
-                    });
-                    $products[] = $results[0];
-                }
+            if ($category) {
+                // Search in specific category
+                $results = $this->searchTool->search($category, [], $limit * 2);
                 
-                if (count($products) >= $limit) {
-                    break;
+                // Sort by popularity
+                usort($results, function ($a, $b) {
+                    $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
+                    $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
+                    return $popB <=> $popA;
+                });
+                
+                $products = array_slice($results, 0, $limit);
+            } else {
+                // Get top from different categories
+                $categories = ['плитоноска', 'шолом', 'берці', 'рюкзак'];
+                
+                foreach ($categories as $cat) {
+                    $results = $this->searchTool->search($cat, [], 5);
+                    if (!empty($results)) {
+                        usort($results, function ($a, $b) {
+                            $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
+                            $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
+                            return $popB <=> $popA;
+                        });
+                        $products[] = $results[0];
+                    }
+                    
+                    if (count($products) >= $limit) {
+                        break;
+                    }
                 }
             }
-        }
 
-        // Get full product cards
-        if (!empty($products)) {
-            $ids = array_column($products, 'id');
-            $cards = $this->detailsTool->getCards($ids);
-            if (!empty($cards)) {
-                $products = $cards;
+            // Get full product cards
+            if (!empty($products)) {
+                $ids = array_column($products, 'id');
+                $cards = $this->detailsTool->getCards($ids);
+                if (!empty($cards)) {
+                    $products = $cards;
+                }
             }
-        }
 
-        return [
-            'products' => array_slice($products, 0, $limit),
-            'count' => count($products),
-        ];
+            return [
+                'products' => array_slice($products, 0, $limit),
+                'count' => count($products),
+            ];
+        });
     }
 
     /**

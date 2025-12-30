@@ -49,6 +49,10 @@ Route::post('/orders/search', [OrderSearchController::class, 'search']);
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
 
+// Cross-sell suggestions (async, called after main chat response)
+Route::get('/cross-sell', [\App\Http\Controllers\Api\CrossSellController::class, 'suggestions'])
+    ->middleware(['widget.cors', 'throttle:60,1']);
+
 Route::get('/admin/jobs/sync-horoshop', [AdminJobsController::class, 'syncHoroshop']);
 
 Route::get('/admin/jobs/rebuild-category-index', [AdminJobsController::class, 'rebuildCategoryIndex']);

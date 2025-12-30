@@ -1,14 +1,14 @@
 /**
- * AIntento Chat Widget v2.0.9
+ * AIntento Chat Widget v2.1.0
  * Embeddable chat widget for e-commerce sites
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.9"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.1.0"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.0.9';
+    const WIDGET_VERSION = '2.1.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -511,8 +511,12 @@
                     addProducts(messages, data.data.products, state.sessionId, true);
                 }
                 
-                // Show cross-sell suggestions if available
-                if (data.data?.cross_sell) {
+                // Fetch cross-sell asynchronously (doesn't block main response)
+                if (data.data?.cross_sell_product_id) {
+                    fetchCrossSellAsync(messages, data.data.cross_sell_product_id, settings, state.sessionId);
+                }
+                // Legacy: show cross-sell if returned directly (for backwards compatibility)
+                else if (data.data?.cross_sell) {
                     setTimeout(() => {
                         addCrossSell(messages, data.data.cross_sell, settings, state.sessionId);
                     }, 500);
@@ -522,6 +526,29 @@
                 removeLoader(loader);
                 addMessage(messages, 'Вибачте, не вдалося надіслати повідомлення. Спробуйте ще раз.', 'assistant', state.sessionId, false);
                 logError('Send error:', err);
+            });
+        }
+        
+        // Fetch cross-sell suggestions asynchronously
+        function fetchCrossSellAsync(messagesContainer, productId, settings, sessionId) {
+            const crossSellUrl = BASE_URL + '/api/cross-sell?product_id=' + productId;
+            
+            fetch(crossSellUrl, {
+                headers: {
+                    'X-Widget-Token': token,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.cross_sell) {
+                    setTimeout(() => {
+                        addCrossSell(messagesContainer, data.cross_sell, settings, sessionId);
+                    }, 300);
+                }
+            })
+            .catch(err => {
+                log('Cross-sell fetch failed (non-critical):', err);
             });
         }
 

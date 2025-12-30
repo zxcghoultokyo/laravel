@@ -318,16 +318,19 @@ PROMPT;
                 'type' => 'function', 
                 'function' => [
                     'name' => 'get_order_status',
-                    'description' => 'Перевірити статус замовлення за номером.',
+                    'description' => 'Перевірити статус замовлення за номером або знайти замовлення по телефону.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
                             'order_id' => [
                                 'type' => 'string',
-                                'description' => 'Номер замовлення',
+                                'description' => 'Номер замовлення (якщо відомий)',
+                            ],
+                            'phone' => [
+                                'type' => 'string',
+                                'description' => 'Номер телефону покупця для пошуку замовлень (формат: +380XXXXXXXXX)',
                             ],
                         ],
-                        'required' => ['order_id'],
                     ],
                 ],
             ],
@@ -782,20 +785,40 @@ PROMPT;
     }
 
     /**
-     * Tool: Get order status
+     * Tool: Get order status by order_id or phone
      */
     private function toolGetOrderStatus(array $args): array
     {
         $orderId = $args['order_id'] ?? '';
+        $phone = $args['phone'] ?? '';
         
-        if (empty($orderId)) {
-            return ['error' => 'Order ID required'];
+        // Build search criteria
+        $criteria = [];
+        
+        if (!empty($orderId)) {
+            $criteria['order_id'] = $orderId;
+        }
+        
+        if (!empty($phone)) {
+            // Normalize phone: remove spaces, dashes, parentheses
+            $normalized = preg_replace('/[\s\-\(\)]+/', '', $phone);
+            // Ensure +38 prefix
+            if (!str_starts_with($normalized, '+38') && !str_starts_with($normalized, '38')) {
+                $normalized = '+38' . $normalized;
+            } elseif (str_starts_with($normalized, '38') && !str_starts_with($normalized, '+38')) {
+                $normalized = '+' . $normalized;
+            }
+            $criteria['phone'] = $normalized;
+        }
+        
+        if (empty($criteria)) {
+            return ['error' => 'Потрібен номер замовлення або телефон'];
         }
 
-        Log::info('toolGetOrderStatus: searching', ['order_id' => $orderId]);
+        Log::info('toolGetOrderStatus: searching', $criteria);
 
         try {
-            $result = $this->orderSearchService->search(['order_id' => $orderId]);
+            $result = $this->orderSearchService->search($criteria);
             
             Log::info('toolGetOrderStatus: result', [
                 'found' => $result['total'] ?? 0,
@@ -805,10 +828,11 @@ PROMPT;
             return [
                 'orders' => $result['orders'] ?? [],
                 'found' => $result['total'] ?? 0,
+                'search_type' => $result['search_type'] ?? 'unknown',
             ];
         } catch (\Throwable $e) {
             Log::error('toolGetOrderStatus: error', ['error' => $e->getMessage()]);
-            return ['error' => 'Could not find order: ' . $e->getMessage()];
+            return ['error' => 'Не вдалось знайти замовлення: ' . $e->getMessage()];
         }
     }
 

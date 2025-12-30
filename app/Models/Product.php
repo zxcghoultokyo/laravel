@@ -62,4 +62,17 @@ class Product extends Model
     {
         return $this->hasOne(ProductAiIndex::class, 'product_id');
     }
+    
+    public function crossSells()
+    {
+        return $this->hasMany(ProductCrossSell::class);
+    }
+    
+    public function crossSellProducts()
+    {
+        return $this->belongsToMany(Product::class, 'product_cross_sells', 'product_id', 'cross_sell_product_id')
+            ->withPivot(['type', 'reason', 'priority', 'is_active'])
+            ->wherePivot('is_active', true)
+            ->orderByPivot('priority', 'desc');
+    }
 }

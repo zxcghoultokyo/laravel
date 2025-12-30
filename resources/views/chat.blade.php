@@ -376,6 +376,13 @@
             const products = payload.data.products.slice(0, 10);
             const html = renderProducts(products, payload.text);
             appendBotHtml(html, true, products);
+            
+            // Show cross-sell if available
+            if (payload.data?.cross_sell) {
+                setTimeout(() => {
+                    renderCrossSell(payload.data.cross_sell);
+                }, 500);
+            }
             return;
         }
 
@@ -444,6 +451,92 @@
             </a>
         `;
     }
+    
+    // ============ CROSS-SELL CAROUSEL ============
+    function renderCrossSell(crossSell) {
+        if (!crossSell || !crossSell.suggestions?.length) return;
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex justify-start message-appear mt-3';
+        
+        const container = document.createElement('div');
+        container.className = 'bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-200 max-w-[95%]';
+        
+        // Header
+        container.innerHTML = `
+            <div class="flex items-center gap-2 mb-3">
+                <span class="text-lg">🎯</span>
+                <div>
+                    <div class="font-semibold text-slate-900 text-sm">${crossSell.title || 'Разом краще'}</div>
+                    <div class="text-xs text-amber-700">${crossSell.subtitle || 'Часто беруть разом'}</div>
+                </div>
+            </div>
+            <div id="cross-sell-items" class="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin"></div>
+            <div class="flex gap-2 mt-3">
+                <button id="cross-sell-add-all" class="flex-1 bg-slate-900 text-white py-2.5 px-4 rounded-xl text-sm font-medium hover:bg-slate-800 transition-colors">
+                    Додати все
+                </button>
+                <button id="cross-sell-dismiss" class="px-4 py-2.5 text-slate-500 text-sm hover:text-slate-700 transition-colors">
+                    Ні, дякую
+                </button>
+            </div>
+        `;
+        
+        wrapper.appendChild(container);
+        chatMessages.appendChild(wrapper);
+        
+        // Render suggestions in carousel
+        const itemsContainer = container.querySelector('#cross-sell-items');
+        crossSell.suggestions.forEach((item, index) => {
+            const card = document.createElement('div');
+            card.className = 'flex-shrink-0 w-32 bg-white rounded-xl p-2 border border-slate-200 cursor-pointer hover:border-cyan-400 transition-all';
+            card.innerHTML = `
+                <div class="relative">
+                    <input type="checkbox" checked class="absolute top-1 right-1 w-4 h-4 accent-cyan-500 cursor-pointer" data-article="${item.article}">
+                    ${item.image 
+                        ? `<img src="${item.image}" class="w-full h-20 object-cover rounded-lg mb-2" onerror="this.style.display='none'">`
+                        : '<div class="w-full h-20 bg-slate-100 rounded-lg mb-2 flex items-center justify-center text-2xl">📦</div>'
+                    }
+                </div>
+                <div class="text-xs font-medium text-slate-900 line-clamp-2 mb-1">${item.title}</div>
+                <div class="text-xs text-amber-700 mb-1">${item.reason || ''}</div>
+                <div class="text-sm font-bold text-cyan-600">${item.price} ₴</div>
+            `;
+            
+            // Toggle checkbox on card click
+            card.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const checkbox = card.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+                }
+            });
+            
+            itemsContainer.appendChild(card);
+        });
+        
+        // Add all button handler
+        container.querySelector('#cross-sell-add-all').addEventListener('click', () => {
+            const selectedArticles = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(cb => cb.dataset.article);
+            
+            if (selectedArticles.length > 0) {
+                appendMessage(`Хочу додати до замовлення: ${selectedArticles.join(', ')}`, 'user');
+                wrapper.remove();
+                // Here you could call an API to add to cart
+                appendMessage('Чудово! Ці товари будуть додані до вашого замовлення при оформленні. 🛒', 'bot');
+            }
+        });
+        
+        // Dismiss button handler
+        container.querySelector('#cross-sell-dismiss').addEventListener('click', () => {
+            wrapper.style.opacity = '0';
+            wrapper.style.transform = 'translateY(-10px)';
+            wrapper.style.transition = 'all 0.3s ease';
+            setTimeout(() => wrapper.remove(), 300);
+        });
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 
     // ============ RESTORE HISTORY ============
     function restoreHistory() {
@@ -507,6 +600,66 @@
 Можу дізнатись статус вашого замовлення, розповім все про магазин та допоможу підібрати спорядження.`;
         
         appendMessage(welcomeText, 'bot', true);
+        
+        // Show quick actions
+        showQuickActions();
+    }
+    
+    function showQuickActions() {
+        const container = document.createElement('div');
+        container.id = 'quick-actions';
+        container.className = 'flex flex-wrap gap-2 message-appear mb-2';
+        
+        const actions = [
+            { icon: '🎯', label: 'Підбери товар', action: 'product_help' },
+            { icon: '📦', label: 'Моє замовлення', action: 'order_info' },
+            { icon: 'ℹ️', label: 'Про магазин', action: 'store_info' }
+        ];
+        
+        actions.forEach(qa => {
+            const btn = document.createElement('button');
+            btn.className = 'flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-700 hover:border-cyan-400 hover:bg-cyan-50 transition-all shadow-sm';
+            btn.innerHTML = `<span>${qa.icon}</span><span>${qa.label}</span>`;
+            btn.onclick = () => handleQuickAction(qa.action);
+            container.appendChild(btn);
+        });
+        
+        chatMessages.appendChild(container);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    function handleQuickAction(action) {
+        // Remove quick actions
+        const qa = document.getElementById('quick-actions');
+        if (qa) qa.remove();
+        
+        const responses = {
+            product_help: `Щоб я міг підібрати найкращий товар, розкажи:
+
+🔹 Що шукаєш? (наприклад: плитоноска, рюкзак, берці)
+🔹 Бюджет? (необов'язково)
+🔹 Колір/розмір? (якщо важливо)
+
+Або просто напиши що потрібно — я розберусь! 😊`,
+            order_info: `Для пошуку замовлення мені потрібно:
+
+📝 Номер замовлення (наприклад: 12345)
+
+або
+
+📱 Номер телефону з якого робили замовлення
+
+Напиши будь-що з цього і я знайду твоє замовлення!`,
+            store_info: `🏪 **ATK.UA — тактичне спорядження**
+
+📍 м. Київ, вул. Хрещатик 1
+📞 Телефон: +380 (XX) XXX-XX-XX
+🕐 Графік: Пн-Пт 9:00-18:00, Сб-Нд 10:00-16:00
+
+Чим можу допомогти? 😊`
+        };
+        
+        appendMessage(responses[action], 'bot', true);
     }
 
     // ============ EVENT HANDLERS ============

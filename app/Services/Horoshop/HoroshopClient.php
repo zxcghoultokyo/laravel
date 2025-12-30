@@ -11,6 +11,7 @@ class HoroshopClient
     protected string $domain;
     protected string $login;
     protected string $password;
+    protected bool $isConfigured = false;
 
     public function __construct()
     {
@@ -18,16 +19,16 @@ class HoroshopClient
         $this->login    = (string) config('services.horoshop.login');
         $this->password = (string) config('services.horoshop.password');
 
-        // ✅ Важливо: не валимо composer/artisan під час деплою/інсталяції
-        if (! $this->domain) {
-            if (app()->runningInConsole()) {
-                // просто лишаємо client "неактивним" — реальні API виклики все одно впадуть,
-                // але composer install і package:discover пройдуть
-                return;
-            }
-
-            throw new RuntimeException('Horoshop domain is not configured (services.horoshop.domain)');
-        }
+        // Check if configured
+        $this->isConfigured = !empty($this->domain) && !empty($this->login) && !empty($this->password);
+    }
+    
+    /**
+     * Check if Horoshop is configured
+     */
+    public function isConfigured(): bool
+    {
+        return $this->isConfigured;
     }
 
     /**
@@ -78,6 +79,10 @@ class HoroshopClient
      */
     public function request(string $function, array $payload = []): array
     {
+        if (!$this->isConfigured) {
+            throw new RuntimeException('Horoshop is not configured');
+        }
+        
         $token = $this->authenticate();
         $url   = $this->domain . '/api/' . trim($function, '/') . '/';
 

@@ -340,6 +340,53 @@
     function setupEventHandlers(elements, state, settings, token, savedMessages) {
         const { toggle, close, window: chatWindow, overlay, input, send, messages } = elements;
 
+        // Quick action responses
+        const quickActionResponses = {
+            product_help: 'Щоб я міг підібрати найкращий товар, розкажи:\n\n🔹 Що шукаєш? (наприклад: плитоноска, рюкзак, берці)\n🔹 Бюджет? (необов\'язково)\n🔹 Колір/розмір? (якщо важливо)\n\nАбо просто напиши що потрібно — я розберусь! 😊',
+            order_info: 'Для пошуку замовлення мені потрібно:\n\n📝 Номер замовлення (наприклад: 12345)\n\nабо\n\n📱 Номер телефону з якого робили замовлення\n\nНапиши будь-що з цього і я знайду твоє замовлення!',
+            store_info: null // Will be fetched from settings
+        };
+
+        // Handle quick action click
+        function handleQuickAction(action) {
+            if (action === 'store_info') {
+                // Build store info from settings
+                const storeInfo = buildStoreInfo(settings);
+                addMessage(messages, storeInfo, 'assistant', state.sessionId, true);
+            } else {
+                const response = quickActionResponses[action];
+                if (response) {
+                    addMessage(messages, response, 'assistant', state.sessionId, true);
+                }
+            }
+        }
+
+        // Build store info from settings
+        function buildStoreInfo(s) {
+            let info = '🏪 **ATK.UA — тактичне спорядження**\n\n';
+            
+            if (s.store_address) {
+                info += `📍 ${s.store_address}\n`;
+            }
+            if (s.store_phone) {
+                info += `📞 Телефон: ${s.store_phone}\n`;
+            }
+            if (s.store_hours) {
+                info += `🕐 Графік роботи: ${s.store_hours}\n`;
+            }
+            if (s.store_about) {
+                info += `\n${s.store_about}\n`;
+            }
+            
+            if (!s.store_address && !s.store_phone && !s.store_hours && !s.store_about) {
+                info += '📞 Зв\'яжіться з нами через сайт atk.ua\n';
+                info += '🕐 Працюємо щодня\n';
+            }
+            
+            info += '\nЧим можу допомогти? 😊';
+            return info;
+        }
+
         // Open widget function
         function openWidget() {
             state.isOpen = true;
@@ -350,6 +397,8 @@
             
             if (!state.hasShownWelcome && savedMessages.length === 0) {
                 addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
+                // Add quick actions after welcome message
+                addQuickActions(messages, settings, handleQuickAction);
                 state.hasShownWelcome = true;
             }
         }
@@ -401,6 +450,13 @@
                     addProductCards(messages, data.data.product_cards, state.sessionId, true);
                 } else if (data.data?.products?.length > 0) {
                     addProducts(messages, data.data.products, state.sessionId, true);
+                }
+                
+                // Show cross-sell suggestions if available
+                if (data.data?.cross_sell) {
+                    setTimeout(() => {
+                        addCrossSell(messages, data.data.cross_sell, settings, state.sessionId);
+                    }, 500);
                 }
             })
             .catch(err => {
@@ -514,6 +570,87 @@
             document.removeEventListener('keydown', handleKeydown);
             log('Widget cleaned up');
         };
+    }
+
+    function addQuickActions(messagesContainer, settings, onActionClick) {
+        const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
+        
+        const quickActions = [
+            {
+                icon: '🎯',
+                label: 'Підбери товар',
+                action: 'product_help'
+            },
+            {
+                icon: '📦',
+                label: 'Моє замовлення',
+                action: 'order_info'
+            },
+            {
+                icon: 'ℹ️',
+                label: 'Про магазин',
+                action: 'store_info'
+            }
+        ];
+
+        const container = document.createElement('div');
+        container.className = 'aintento-quick-actions';
+        container.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 0 4px;
+            animation: aintento-fadeInUp 0.3s ease-out;
+            animation-delay: 0.2s;
+            opacity: 0;
+            animation-fill-mode: forwards;
+        `;
+
+        quickActions.forEach(qa => {
+            const btn = document.createElement('button');
+            btn.className = 'aintento-quick-action';
+            btn.dataset.action = qa.action;
+            btn.style.cssText = `
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 10px 14px;
+                background: white;
+                border: 1.5px solid #e5e7eb;
+                border-radius: 20px;
+                font-size: 13px;
+                color: #374151;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            `;
+            btn.innerHTML = `<span style="font-size: 16px;">${qa.icon}</span><span>${qa.label}</span>`;
+            
+            btn.onmouseenter = () => {
+                btn.style.borderColor = s.primary_color;
+                btn.style.background = `${s.primary_color}10`;
+                btn.style.transform = 'translateY(-1px)';
+                btn.style.boxShadow = '0 3px 8px rgba(0,0,0,0.1)';
+            };
+            btn.onmouseleave = () => {
+                btn.style.borderColor = '#e5e7eb';
+                btn.style.background = 'white';
+                btn.style.transform = 'translateY(0)';
+                btn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+            };
+            
+            btn.onclick = () => {
+                // Remove quick actions after click
+                container.remove();
+                onActionClick(qa.action);
+            };
+            
+            container.appendChild(btn);
+        });
+
+        messagesContainer.appendChild(container);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     function addMessage(messagesContainer, text, role, sessionId, save = true) {
@@ -671,6 +808,167 @@
         `;
 
         return card;
+    }
+
+    function addCrossSell(messagesContainer, crossSell, settings, sessionId) {
+        if (!crossSell || !crossSell.suggestions?.length) return;
+        
+        const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'aintento-cross-sell';
+        wrapper.style.cssText = `
+            margin-bottom: 16px;
+            animation: aintento-fadeInUp 0.3s ease-out;
+        `;
+        
+        const container = document.createElement('div');
+        container.style.cssText = `
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1px solid #fcd34d;
+            border-radius: 16px;
+            padding: 16px;
+        `;
+        
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
+        header.innerHTML = `
+            <span style="font-size: 18px;">🎯</span>
+            <div>
+                <div style="font-weight: 600; font-size: 14px; color: #1f2937;">${crossSell.title || 'Разом краще'}</div>
+                <div style="font-size: 12px; color: #92400e;">${crossSell.subtitle || 'Часто беруть разом'}</div>
+            </div>
+        `;
+        container.appendChild(header);
+        
+        // Items carousel
+        const carousel = document.createElement('div');
+        carousel.style.cssText = `
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin: 0 -4px;
+            padding: 0 4px;
+        `;
+        
+        crossSell.suggestions.forEach((item, index) => {
+            const card = document.createElement('div');
+            card.style.cssText = `
+                flex-shrink: 0;
+                width: 110px;
+                background: white;
+                border-radius: 12px;
+                padding: 8px;
+                border: 1px solid #e5e7eb;
+                cursor: pointer;
+                transition: all 0.2s;
+                position: relative;
+            `;
+            
+            card.innerHTML = `
+                <input type="checkbox" checked style="
+                    position: absolute;
+                    top: 6px;
+                    right: 6px;
+                    width: 16px;
+                    height: 16px;
+                    accent-color: ${s.primary_color};
+                    cursor: pointer;
+                " data-article="${item.article}">
+                ${item.image 
+                    ? `<img src="${item.image}" style="width: 100%; height: 60px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" onerror="this.style.display='none'">`
+                    : '<div style="width: 100%; height: 60px; background: #f1f5f9; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>'
+                }
+                <div style="font-size: 11px; font-weight: 500; color: #374151; line-height: 1.3; height: 28px; overflow: hidden;">${item.title}</div>
+                <div style="font-size: 10px; color: #92400e; margin: 4px 0;">${item.reason || ''}</div>
+                <div style="font-size: 13px; font-weight: 700; color: ${s.primary_color};">${item.price} ₴</div>
+            `;
+            
+            card.onmouseenter = () => {
+                card.style.borderColor = s.primary_color;
+                card.style.transform = 'translateY(-2px)';
+                card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            };
+            card.onmouseleave = () => {
+                card.style.borderColor = '#e5e7eb';
+                card.style.transform = 'translateY(0)';
+                card.style.boxShadow = 'none';
+            };
+            
+            // Toggle checkbox on card click
+            card.onclick = (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const checkbox = card.querySelector('input[type="checkbox"]');
+                    checkbox.checked = !checkbox.checked;
+                }
+            };
+            
+            carousel.appendChild(card);
+        });
+        container.appendChild(carousel);
+        
+        // Buttons
+        const buttons = document.createElement('div');
+        buttons.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
+        
+        const addAllBtn = document.createElement('button');
+        addAllBtn.style.cssText = `
+            flex: 1;
+            background: ${s.primary_color};
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        `;
+        addAllBtn.textContent = 'Додати все';
+        addAllBtn.onmouseenter = () => { addAllBtn.style.opacity = '0.9'; };
+        addAllBtn.onmouseleave = () => { addAllBtn.style.opacity = '1'; };
+        addAllBtn.onclick = () => {
+            const selectedArticles = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(cb => cb.dataset.article);
+            if (selectedArticles.length > 0) {
+                // Here you could call an API to add to cart
+                wrapper.style.opacity = '0';
+                wrapper.style.transform = 'translateY(-10px)';
+                wrapper.style.transition = 'all 0.3s ease';
+                setTimeout(() => wrapper.remove(), 300);
+                addMessage(messagesContainer, 'Чудово! Ці товари будуть додані до вашого замовлення при оформленні. 🛒', 'assistant', sessionId, true);
+            }
+        };
+        
+        const dismissBtn = document.createElement('button');
+        dismissBtn.style.cssText = `
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            color: #6b7280;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        `;
+        dismissBtn.textContent = 'Ні, дякую';
+        dismissBtn.onmouseenter = () => { dismissBtn.style.color = '#374151'; };
+        dismissBtn.onmouseleave = () => { dismissBtn.style.color = '#6b7280'; };
+        dismissBtn.onclick = () => {
+            wrapper.style.opacity = '0';
+            wrapper.style.transform = 'translateY(-10px)';
+            wrapper.style.transition = 'all 0.3s ease';
+            setTimeout(() => wrapper.remove(), 300);
+        };
+        
+        buttons.appendChild(addAllBtn);
+        buttons.appendChild(dismissBtn);
+        container.appendChild(buttons);
+        
+        wrapper.appendChild(container);
+        messagesContainer.appendChild(wrapper);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     function addLoader(messagesContainer) {

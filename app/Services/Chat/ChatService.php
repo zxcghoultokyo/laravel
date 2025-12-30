@@ -4,9 +4,11 @@ namespace App\Services\Chat;
 
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Models\Product;
 use App\Services\Agent\AgentOrchestrator;
 use App\Services\Agent\FunctionCallingAgent;
 use App\Services\Ai\AiRouter;
+use App\Services\CrossSell\CrossSellService;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
@@ -23,6 +25,7 @@ class ChatService
         protected ProductService $productService,
         protected AgentOrchestrator $agentOrchestrator,
         protected ?FunctionCallingAgent $functionCallingAgent = null,
+        protected ?CrossSellService $crossSellService = null,
     ) {
         // Enable new agent via env variable (default: true for testing)
         $this->useNewAgent = config('services.openai.use_function_calling', true);
@@ -30,6 +33,11 @@ class ChatService
         // Lazy load function calling agent
         if ($this->useNewAgent && !$this->functionCallingAgent) {
             $this->functionCallingAgent = app(FunctionCallingAgent::class);
+        }
+        
+        // Lazy load cross-sell service
+        if (!$this->crossSellService) {
+            $this->crossSellService = app(CrossSellService::class);
         }
     }
 
@@ -86,17 +94,26 @@ class ChatService
             $intent = $agentResult['meta']['intent'] ?? null;
             $productCards = $agentResult['meta']['product_cards'] ?? null;
             $agentMessages = $agentResult['messages'] ?? [];
+            
+            // Generate cross-sell suggestions for first product
+            $crossSellData = null;
+            $products = $agentResult['products'] ?? [];
+            if (!empty($products) && $intent === 'product_search') {
+                $crossSellData = $this->generateCrossSell($products[0]);
+            }
 
             // Формуємо відповідь у форматі очікуваному фронтом
             $response = [
                 'type'       => 'products',
                 'text'       => $agentResult['message'] ?? '',
                 'data'       => [
-                    'products' => $agentResult['products'] ?? [],
+                    'products' => $products,
                     // NEW: product_cards for individual card+description display
                     'product_cards' => $productCards,
                     // NEW: messages array for sequential display
                     'messages' => $agentMessages,
+                    // NEW: cross-sell suggestions
+                    'cross_sell' => $crossSellData,
                 ],
                 'session_id' => $sessionId,
                 'meta'       => $agentResult['meta'] ?? [],
@@ -1025,6 +1042,41 @@ class ChatService
                 'error' => $e->getMessage(),
             ]);
             return [];
+        }
+    }
+    
+    /**
+     * Generate cross-sell suggestions for a product
+     */
+    private function generateCrossSell(array $productData): ?array
+    {
+        try {
+            // Find product by article
+            $article = $productData['article'] ?? null;
+            if (!$article) {
+                return null;
+            }
+            
+            $product = Product::where('article', $article)->first();
+            if (!$product) {
+                return null;
+            }
+            
+            // Get cross-sell suggestions
+            $suggestions = $this->crossSellService->getSuggestions($product, 3);
+            
+            if (empty($suggestions)) {
+                return null;
+            }
+            
+            // Format for frontend
+            return $this->crossSellService->formatForChat($suggestions, $product);
+        } catch (\Exception $e) {
+            Log::warning('Failed to generate cross-sell', [
+                'error' => $e->getMessage(),
+                'article' => $productData['article'] ?? 'unknown',
+            ]);
+            return null;
         }
     }
 }

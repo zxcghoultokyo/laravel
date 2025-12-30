@@ -16,6 +16,14 @@ class OrderSearchService
         protected OrderService $orderService,
         protected DeliveryTrackingService $trackingService,
     ) {}
+    
+    /**
+     * Check if Horoshop is configured
+     */
+    public function isAvailable(): bool
+    {
+        return $this->client->isConfigured();
+    }
 
     /**
      * Search orders by flexible criteria.

@@ -104,6 +104,13 @@ class AppServiceProvider extends ServiceProvider
             return new AiRecommender();
         });
 
+        // CrossSell Service
+        $this->app->singleton(\App\Services\CrossSell\CrossSellService::class, function ($app) {
+            return new \App\Services\CrossSell\CrossSellService(
+                $app->make(AiRouter::class)
+            );
+        });
+
         // === NEW SERVICES ===
 
         // Session Context Service (unified session handling)

@@ -8,7 +8,12 @@ use App\Livewire\Admin\WidgetSettings;
 use App\Livewire\Admin\Dashboard;
 
 Route::get('/', function () {
-    return view('chat'); // resources/views/chat.blade.php
+    return view('demo'); // AI Chat Demo landing page
+});
+
+// Test chat page
+Route::get('/chat', function () {
+    return view('chat');
 });
 
 // Widget with proper cache control headers

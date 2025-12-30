@@ -193,7 +193,6 @@ PROMPT;
                                 'description' => 'Кількість товарів (за замовчуванням 5)',
                             ],
                         ],
-                        'required' => [],
                     ],
                 ],
             ],
@@ -238,8 +237,7 @@ PROMPT;
                     'description' => 'Список категорій товарів в магазині.',
                     'parameters' => [
                         'type' => 'object',
-                        'properties' => [],
-                        'required' => [],
+                        'properties' => (object)[],  // Must be object, not array
                     ],
                 ],
             ],
@@ -256,7 +254,6 @@ PROMPT;
                                 'description' => 'Категорія для фільтрації брендів',
                             ],
                         ],
-                        'required' => [],
                     ],
                 ],
             ],

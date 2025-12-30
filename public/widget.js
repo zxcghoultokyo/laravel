@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.3
+ * AIntento Chat Widget v2.3.4
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.3"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.4"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.3';
+    const WIDGET_VERSION = '2.3.4';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -682,27 +682,40 @@
         function updateStreamingText(element, text) {
             const textSpan = element.querySelector('.streaming-text');
             if (textSpan) {
-                // Clean JSON from text if present (GPT sometimes returns JSON)
                 let displayText = text;
                 
-                // Try to extract intro from JSON response
-                const jsonMatch = text.match(/\{[\s\S]*?\}/);
-                if (jsonMatch) {
+                // Try to extract intro from complete JSON response
+                // Only try to parse if we have both { and } and it looks complete
+                if (text.includes('"intro"') && text.includes('}')) {
                     try {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        if (parsed.intro) {
-                            displayText = parsed.intro;
+                        // Find the outermost JSON object
+                        const firstBrace = text.indexOf('{');
+                        const lastBrace = text.lastIndexOf('}');
+                        if (firstBrace !== -1 && lastBrace > firstBrace) {
+                            const jsonStr = text.substring(firstBrace, lastBrace + 1);
+                            const parsed = JSON.parse(jsonStr);
+                            if (parsed.intro) {
+                                displayText = parsed.intro;
+                            }
                         }
                     } catch (e) {
-                        // Not valid JSON yet, show as is (but clean up partial JSON)
-                        displayText = text.replace(/\{[\s\S]*$/, '').trim();
+                        // JSON not complete yet - show intro if we can extract it
+                        const introMatch = text.match(/"intro"\s*:\s*"([^"]+)"/);
+                        if (introMatch) {
+                            displayText = introMatch[1];
+                        } else {
+                            // Can't parse yet, show nothing to avoid showing raw JSON
+                            displayText = '';
+                        }
                     }
                 }
                 
                 textSpan.textContent = displayText;
                 
-                // Scroll to bottom
-                element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                // Scroll to bottom if we have content
+                if (displayText) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                }
             }
         }
         
@@ -713,8 +726,38 @@
                 cursor.remove();
             }
             
-            // Final text cleanup
-            updateStreamingText(element, text);
+            // Final text cleanup - extract intro from JSON if needed
+            let displayText = text;
+            
+            if (text.includes('"intro"')) {
+                try {
+                    const firstBrace = text.indexOf('{');
+                    const lastBrace = text.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace > firstBrace) {
+                        const jsonStr = text.substring(firstBrace, lastBrace + 1);
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.intro) {
+                            displayText = parsed.intro;
+                        }
+                    }
+                } catch (e) {
+                    // Try regex fallback
+                    const introMatch = text.match(/"intro"\s*:\s*"([^"]+)"/);
+                    if (introMatch) {
+                        displayText = introMatch[1];
+                    }
+                }
+            }
+            
+            const textSpan = element.querySelector('.streaming-text');
+            if (textSpan) {
+                textSpan.textContent = displayText;
+            }
+            
+            // If still no readable text, hide the element
+            if (!displayText || displayText.trim().startsWith('{')) {
+                element.style.display = 'none';
+            }
         }
         
         // Fallback fetch version (non-streaming)

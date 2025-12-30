@@ -29,9 +29,10 @@ class FunctionCallingAgent
         private ProductDetailsTool $detailsTool,
         private OrderSearchService $orderSearchService,
     ) {
-        $this->apiKey = config('services.openai.key', '');
-        $this->model = config('services.openai.model', 'gpt-4o');
-        $this->baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
+        $config = config('services.openai', []);
+        $this->apiKey = $config['key'] ?? '';
+        $this->model = $config['model'] ?? 'gpt-4o';
+        $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
     }
 
     /**

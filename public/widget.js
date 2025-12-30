@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.4
+ * AIntento Chat Widget v2.3.5
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.4"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.5"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.4';
+    const WIDGET_VERSION = '2.3.5';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1585,12 +1585,27 @@
             ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${item.summary}</div>`
             : '';
         
+        // Color display
+        const colorHtml = item.color
+            ? `<span style="font-size: 11px; color: #6b7280;">🎨 ${item.color}</span>`
+            : '';
+        
+        // Size display
+        const sizeHtml = item.size
+            ? `<span style="font-size: 11px; color: #6b7280; ${item.color ? 'margin-left: 8px;' : ''}">📐 ${item.size}</span>`
+            : '';
+        
+        const metaHtml = (colorHtml || sizeHtml) 
+            ? `<div style="margin-bottom: 4px;">${colorHtml}${sizeHtml}</div>`
+            : '';
+        
         card.innerHTML = `
             <div style="display: flex; gap: 12px;">
                 ${imgHtml}
                 <div style="flex: 1; min-width: 0;">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3;">${item.title}</div>
                     ${summaryHtml}
+                    ${metaHtml}
                     <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${item.price} ₴</div>
                 </div>
             </div>

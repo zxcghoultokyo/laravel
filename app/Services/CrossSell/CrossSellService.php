@@ -391,6 +391,8 @@ class CrossSellService
                     'link' => $product->link,
                     'reason' => $s['reason'],
                     'summary' => $summary,
+                    'color' => $product->color,
+                    'size' => $product->size,
                 ];
             }, $suggestions),
             'hint' => 'Щоб замовити — додайте товар у кошик на сайті',

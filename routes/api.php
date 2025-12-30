@@ -23,8 +23,9 @@ Route::options('/widget/settings', function () {
 })->middleware('widget.cors');
 
 // AI-чат — БЕЗ use ChatController, прямо повний namespace
+// Rate limit: 30 requests per minute per IP
 Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle'])
-    ->middleware('widget.cors');
+    ->middleware(['widget.cors', 'throttle:30,1']);
 
 // Віджет налаштування
 Route::get('/widget/settings', [WidgetController::class, 'settings'])

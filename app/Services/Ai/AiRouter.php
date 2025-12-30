@@ -14,6 +14,11 @@ class AiRouter
     protected string $model;
     protected string $baseUrl;
     protected ?string $apiKey;
+    
+    // Timeouts from config
+    protected int $timeoutFast;
+    protected int $timeoutNormal;
+    protected int $timeoutLong;
 
     // Rate limiting: max 60 requests per minute
     private const RATE_LIMIT_MAX = 60;
@@ -30,6 +35,11 @@ class AiRouter
         $this->model   = $config['model'] ?? 'gpt-5.1';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         $this->apiKey  = $config['key'] ?? null;
+        
+        // Timeouts from config with defaults
+        $this->timeoutFast   = $config['timeout_fast'] ?? 5;
+        $this->timeoutNormal = $config['timeout_normal'] ?? 15;
+        $this->timeoutLong   = $config['timeout_long'] ?? 30;
     }
 
     /**
@@ -132,7 +142,7 @@ class AiRouter
             $this->recordAttempt();
 
             $response = Http::withToken($this->apiKey)
-                ->timeout(10)
+                ->timeout($this->timeoutFast)
                 ->post($this->baseUrl . '/chat/completions', [
                     'model'       => $this->model,
                     'messages'    => [
@@ -922,16 +932,23 @@ PROMPT;
 
     /**
      * Generic OpenAI call helper for tools
+     * @param string $timeout 'fast', 'normal', or 'long'
      */
-    public function callOpenAI(string $prompt, float $temperature = 0.3, int $maxTokens = 1000): string
+    public function callOpenAI(string $prompt, float $temperature = 0.3, int $maxTokens = 1000, string $timeout = 'normal'): string
     {
         if (empty($this->apiKey)) {
             Log::warning('AiRouter::callOpenAI called without OPENAI_API_KEY');
             throw new \RuntimeException('OpenAI key not configured');
         }
 
+        $timeoutSeconds = match($timeout) {
+            'fast' => $this->timeoutFast,
+            'long' => $this->timeoutLong,
+            default => $this->timeoutNormal,
+        };
+
         $response = Http::withToken($this->apiKey)
-            ->timeout(30)
+            ->timeout($timeoutSeconds)
             ->post($this->baseUrl . '/chat/completions', [
                 'model'       => $this->model,
                 'messages'    => [

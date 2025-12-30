@@ -50,6 +50,21 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Handle throttle (rate limit) exceptions with user-friendly message
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'type' => 'text',
+                    'text' => 'Забагато запитів. Зачекайте кілька секунд і спробуйте ще раз 🙏',
+                    'data' => null,
+                    'session_id' => $request->input('session_id'),
+                    'meta' => [
+                        'error' => true,
+                        'rate_limited' => true,
+                        'retry_after' => $e->getHeaders()['Retry-After'] ?? 60,
+                    ],
+                ], 429);
+            }
+        });
     })
     ->create();

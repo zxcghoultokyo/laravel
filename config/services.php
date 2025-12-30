@@ -36,6 +36,14 @@ return [
         'model_chat'    => env('OPENAI_MODEL_CHAT', 'gpt-5.1'),      // Для чату з користувачами (якість)
         'model_analyze' => env('OPENAI_MODEL_ANALYZE', 'gpt-4.1-mini'), // Для аналізу товарів (економія)
         'model_rerank'  => env('OPENAI_MODEL_RERANK', 'gpt-4.1-mini'),  // Для ререйнку результатів
+        
+        // Timeouts (seconds)
+        'timeout_fast'   => (int) env('OPENAI_TIMEOUT_FAST', 5),     // Для classify, normalize
+        'timeout_normal' => (int) env('OPENAI_TIMEOUT_NORMAL', 15),  // Для звичайних запитів
+        'timeout_long'   => (int) env('OPENAI_TIMEOUT_LONG', 30),    // Для складних запитів
+        
+        // Rate limiting
+        'rate_limit_per_minute' => (int) env('OPENAI_RATE_LIMIT', 60),
     ],
 
 ];

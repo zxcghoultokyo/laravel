@@ -5,6 +5,7 @@ namespace App\Services\Chat;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
 use App\Services\Agent\AgentOrchestrator;
+use App\Services\Agent\FunctionCallingAgent;
 use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Support\Arr;
@@ -14,11 +15,22 @@ use Illuminate\Support\Str;
 
 class ChatService
 {
+    // Feature flag: use new function calling agent
+    private bool $useNewAgent;
+
     public function __construct(
         protected AiRouter $aiRouter,
         protected ProductService $productService,
         protected AgentOrchestrator $agentOrchestrator,
+        protected ?FunctionCallingAgent $functionCallingAgent = null,
     ) {
+        // Enable new agent via env variable
+        $this->useNewAgent = config('services.openai.use_function_calling', false);
+        
+        // Lazy load function calling agent
+        if ($this->useNewAgent && !$this->functionCallingAgent) {
+            $this->functionCallingAgent = app(FunctionCallingAgent::class);
+        }
     }
 
     /**
@@ -46,17 +58,24 @@ class ChatService
             'session_id' => $sessionId,
             'sessionKey' => $sessionKey,
             'ctx'        => $sessionContext,
+            'use_new_agent' => $this->useNewAgent,
         ]);
 
         // Логуємо повідомлення користувача
         $this->logUserMessage($sessionId, $normalizedMessage);
 
-        // НОВИЙ ПІДХІД: Використовуємо AgentOrchestrator
-        // Він сам вирішує: показувати товари, уточнювати, шукати статус замовлення тощо
+        // Вибираємо агента на основі feature flag
         try {
             // Передаємо session_id у контексті для follow-up запитів
             $contextWithSessionId = array_merge($sessionContext, ['session_id' => $sessionId]);
-            $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $contextWithSessionId);
+            
+            // NEW: Use function calling agent if enabled
+            if ($this->useNewAgent && $this->functionCallingAgent) {
+                Log::info('ChatService: using FunctionCallingAgent');
+                $agentResult = $this->functionCallingAgent->handle($normalizedMessage, $contextWithSessionId);
+            } else {
+                $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $contextWithSessionId);
+            }
             
             $intent = $agentResult['meta']['intent'] ?? null;
             $productCards = $agentResult['meta']['product_cards'] ?? null;

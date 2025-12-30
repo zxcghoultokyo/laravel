@@ -47,6 +47,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Додаємо CORS для віджета
         $middleware->alias([
             'widget.cors' => \App\Http\Middleware\WidgetCors::class,
+            'admin.token' => \App\Http\Middleware\AdminTokenMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

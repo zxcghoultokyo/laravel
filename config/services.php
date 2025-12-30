@@ -46,4 +46,9 @@ return [
         'rate_limit_per_minute' => (int) env('OPENAI_RATE_LIMIT', 60),
     ],
 
+    // Admin panel
+    'admin' => [
+        'api_token' => env('ADMIN_API_TOKEN'),
+    ],
+
 ];

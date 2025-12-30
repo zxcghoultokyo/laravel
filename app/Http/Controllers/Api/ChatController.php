@@ -4,14 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Chat\ChatService;
+use App\Services\Metrics\MetricsService;
+use App\Events\NewChatMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
 {
     public function __construct(
-        protected ChatService $chatService
+        protected ChatService $chatService,
+        protected MetricsService $metricsService,
     ) {}
 
     private const MAX_MESSAGE_LENGTH = 2000;
@@ -55,7 +59,63 @@ class ChatController extends Controller
                 ]);
             }
 
+            // Check if session is in operator mode
+            $session = $this->metricsService->getSession($sessionId);
+            if ($session && $session->status === 'operator') {
+                // Broadcast user message to operator, don't process with AI
+                try {
+                    event(new NewChatMessage($sessionId, $message, 'user', [
+                        'request_id' => $requestId,
+                    ]));
+                } catch (\Throwable $e) {
+                    Log::warning('ChatController: failed to broadcast to operator', ['error' => $e->getMessage()]);
+                }
+
+                return response()->json([
+                    'type' => 'text',
+                    'text' => 'Ваше повідомлення передано оператору. Очікуйте відповідь...',
+                    'session_id' => $sessionId,
+                    'meta' => ['request_id' => $requestId, 'operator_mode' => true],
+                ]);
+            }
+
+            $startTime = microtime(true);
             $response = $this->chatService->handleMessage($message, $sessionId);
+            $responseTime = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Record metrics
+            $this->metricsService->recordRequest([
+                'request_id' => $requestId,
+                'session_id' => $sessionId,
+                'intent' => $response['meta']['intent'] ?? null,
+                'response_time_ms' => $responseTime,
+                'products_count' => count($response['products'] ?? []),
+                'cache_hit' => $response['meta']['cache_hit'] ?? false,
+                'is_fallback' => $response['meta']['is_fallback'] ?? false,
+            ]);
+
+            // Update active session
+            $this->metricsService->updateActiveSession($sessionId, [
+                'status' => 'ai',
+                'message_count' => DB::raw('COALESCE(message_count, 0) + 1'),
+                'last_query' => mb_substr($message, 0, 255),
+                'context' => json_encode([
+                    'shown_products' => array_slice($response['products'] ?? [], 0, 5),
+                    'intent' => $response['meta']['intent'] ?? null,
+                ]),
+            ]);
+
+            // Broadcast for admin dashboard
+            try {
+                event(new NewChatMessage($sessionId, $message, 'user', ['request_id' => $requestId]));
+                event(new NewChatMessage($sessionId, $response['text'] ?? '', 'ai', [
+                    'request_id' => $requestId,
+                    'products_count' => count($response['products'] ?? []),
+                ]));
+            } catch (\Throwable $e) {
+                // Don't fail if broadcast fails
+                Log::debug('ChatController: broadcast failed', ['error' => $e->getMessage()]);
+            }
 
             // Повертаємо session_id та request_id завжди
             $response['session_id'] = $sessionId;

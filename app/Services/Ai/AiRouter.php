@@ -8,12 +8,14 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Product;
 use App\Models\Brand;
+use App\Services\Ai\CircuitBreaker;
 
 class AiRouter
 {
     protected string $model;
     protected string $baseUrl;
     protected ?string $apiKey;
+    protected CircuitBreaker $circuitBreaker;
     
     // Timeouts from config
     protected int $timeoutFast;
@@ -29,17 +31,26 @@ class AiRouter
     private const CLASSIFY_CACHE_TTL = 300; // seconds
     private const CLASSIFY_CACHE_PREFIX = 'ai_classify_';
 
-    public function __construct()
+    public function __construct(?CircuitBreaker $circuitBreaker = null)
     {
         $config        = config('services.openai', []);
         $this->model   = $config['model'] ?? 'gpt-5.1';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         $this->apiKey  = $config['key'] ?? null;
+        $this->circuitBreaker = $circuitBreaker ?? new CircuitBreaker();
         
         // Timeouts from config with defaults
         $this->timeoutFast   = $config['timeout_fast'] ?? 5;
         $this->timeoutNormal = $config['timeout_normal'] ?? 15;
         $this->timeoutLong   = $config['timeout_long'] ?? 30;
+    }
+
+    /**
+     * Check if circuit breaker is open.
+     */
+    protected function isCircuitOpen(): bool
+    {
+        return $this->circuitBreaker->isOpen('openai');
     }
 
     /**
@@ -74,7 +85,7 @@ class AiRouter
     }
 
     /**
-     * Основна маршрутизація намірів (with caching and rate limiting)
+     * Основна маршрутизація намірів (with caching, rate limiting, circuit breaker)
      */
     public function classify(string $message): array
     {
@@ -95,6 +106,12 @@ class AiRouter
         if ($cached !== null) {
             Log::debug('AiRouter::classify cache hit', ['message' => $message]);
             return $cached;
+        }
+
+        // Check circuit breaker
+        if ($this->isCircuitOpen()) {
+            Log::warning('AiRouter::classify circuit breaker open, returning fallback');
+            return array_merge($fallback, ['_circuit_breaker' => 'open']);
         }
 
         // Check rate limit
@@ -168,12 +185,18 @@ class AiRouter
 
             $result = array_merge($fallback, $decoded);
 
+            // Record success for circuit breaker
+            $this->circuitBreaker->recordSuccess('openai');
+
             // Cache the result
             Cache::put($cacheKey, $result, self::CLASSIFY_CACHE_TTL);
             Log::debug('AiRouter::classify cached result', ['message' => $message, 'intent' => $result['intent']]);
 
             return $result;
         } catch (\Throwable $e) {
+            // Record failure for circuit breaker
+            $this->circuitBreaker->recordFailure('openai');
+            
             Log::error('AiRouter::classify exception: ' . $e->getMessage(), ['exception' => $e]);
             return $fallback;
         }
@@ -941,30 +964,45 @@ PROMPT;
             throw new \RuntimeException('OpenAI key not configured');
         }
 
+        // Check circuit breaker
+        if ($this->isCircuitOpen()) {
+            Log::warning('AiRouter::callOpenAI circuit breaker open');
+            throw new \RuntimeException('OpenAI circuit breaker open, service temporarily unavailable');
+        }
+
         $timeoutSeconds = match($timeout) {
             'fast' => $this->timeoutFast,
             'long' => $this->timeoutLong,
             default => $this->timeoutNormal,
         };
 
-        $response = Http::withToken($this->apiKey)
-            ->timeout($timeoutSeconds)
-            ->post($this->baseUrl . '/chat/completions', [
-                'model'       => $this->model,
-                'messages'    => [
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-                'temperature' => $temperature,
-                'max_completion_tokens'  => $maxTokens,
-            ]);
+        try {
+            $response = Http::withToken($this->apiKey)
+                ->timeout($timeoutSeconds)
+                ->post($this->baseUrl . '/chat/completions', [
+                    'model'       => $this->model,
+                    'messages'    => [
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature' => $temperature,
+                    'max_completion_tokens'  => $maxTokens,
+                ]);
 
-        $data = $response->json();
+            $data = $response->json();
 
-        if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
-            Log::error('AiRouter::callOpenAI invalid response', ['data' => $data]);
-            throw new \RuntimeException('Invalid OpenAI response: ' . json_encode($data));
+            if (!is_array($data) || !isset($data['choices'][0]['message']['content'])) {
+                $this->circuitBreaker->recordFailure('openai');
+                Log::error('AiRouter::callOpenAI invalid response', ['data' => $data]);
+                throw new \RuntimeException('Invalid OpenAI response: ' . json_encode($data));
+            }
+
+            // Success!
+            $this->circuitBreaker->recordSuccess('openai');
+            
+            return trim((string) $data['choices'][0]['message']['content']);
+        } catch (\Throwable $e) {
+            $this->circuitBreaker->recordFailure('openai');
+            throw $e;
         }
-
-        return trim((string) $data['choices'][0]['message']['content']);
     }
 }

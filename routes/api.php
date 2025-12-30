@@ -50,3 +50,22 @@ Route::get('/admin/jobs/sync-horoshop', [AdminJobsController::class, 'syncHorosh
 Route::get('/admin/jobs/rebuild-category-index', [AdminJobsController::class, 'rebuildCategoryIndex']);
 
 Route::get('/search/products', [ProductSearchController::class, 'index']);
+
+// Health check endpoint
+Route::get('/health', \App\Http\Controllers\Api\HealthController::class);
+
+// Admin API (token protected)
+Route::prefix('admin')->middleware('admin.token')->group(function () {
+    // Circuit breaker management
+    Route::get('/circuit-breaker', [\App\Http\Controllers\Api\Admin\CircuitBreakerController::class, 'index']);
+    Route::post('/circuit-breaker/{service}/reset', [\App\Http\Controllers\Api\Admin\CircuitBreakerController::class, 'reset']);
+    
+    // Metrics
+    Route::get('/metrics', [\App\Http\Controllers\Api\Admin\MetricsController::class, 'index']);
+    
+    // Live chat sessions
+    Route::get('/chats/active', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'active']);
+    Route::post('/chats/{sessionId}/takeover', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'takeover']);
+    Route::post('/chats/{sessionId}/release', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'release']);
+    Route::post('/chats/{sessionId}/message', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'sendMessage']);
+});

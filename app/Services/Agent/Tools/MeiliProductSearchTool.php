@@ -640,43 +640,35 @@ class MeiliProductSearchTool
         $q = trim($query);
         $l = mb_strtolower($q);
         
-        // 1. Use QueryExpander with DB synonyms (product_synonyms + color_synonyms tables)
+        // 1. NORMALIZE query - replace user terms with standard terms (NOT expand!)
+        // Meilisearch uses AND logic, so adding synonyms breaks search
+        
+        // Level 7 / ECWCS normalization
+        if (preg_match('/\b(левел|лвл|lvl)\s*7\b/iu', $l)) {
+            $q = preg_replace('/\b(левел|лвл|lvl)\s*7\b/iu', 'Level 7', $q);
+        }
+        if (preg_match('/\b(левел|лвл|lvl)\s*(\d)\b/iu', $l, $m)) {
+            $q = preg_replace('/\b(левел|лвл|lvl)\s*(\d)\b/iu', 'Level $2', $q);
+        }
+        if (str_contains($l, 'еквкс')) {
+            $q = str_ireplace('еквкс', 'ECWCS', $q);
+        }
+        
+        // 2. Use QueryExpander ONLY for product type normalization (not expansion)
+        // This helps with "бронік" → finds "плитоноска" products via search_index
         $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk');
         
-        // 2. Additional hardcoded synonyms for edge cases not in DB
-        $append = [];
-        
-        // Level 7 / ECWCS synonyms (winter military clothing)
-        if (preg_match('/\b(level\s*7|левел\s*7|лвл\s*7|lvl\s*7|l7)\b/iu', $l)) {
-            $append[] = 'Level 7';
-            $append[] = 'ECWCS';
-            $append[] = 'Gen III';
-        }
-        if (str_contains($l, 'ecwcs') || str_contains($l, 'еквкс')) {
-            $append[] = 'Level';
-            $append[] = 'ECWCS';
-            $append[] = 'Gen III';
+        // 3. Limit expansion - don't add too many words (causes AND problem)
+        // Only keep first 2-3 synonym additions
+        $originalWords = count(preg_split('/\s+/', $q));
+        $expandedWords = preg_split('/\s+/', $expanded);
+        if (count($expandedWords) > $originalWords + 3) {
+            $expanded = implode(' ', array_slice($expandedWords, 0, $originalWords + 3));
         }
         
-        // Level synonyms general (level 1-7)
-        if (preg_match('/\b(левел|лвл|lvl)\s*(\d)/iu', $l, $m)) {
-            $append[] = 'Level ' . $m[2];
-            $append[] = 'level' . $m[2];
-        }
-        
-        // Pants / trousers synonyms
-        if (str_contains($l, 'брюки') || str_contains($l, 'штани') || str_contains($l, 'штанів')) {
-            $append[] = 'trousers';
-            $append[] = 'pants';
-        }
-        
-        if (!empty($append)) {
-            $expanded .= ' ' . implode(' ', array_unique($append));
-        }
-        
-        Log::debug('MeiliProductSearchTool: expanded query', [
-            'original' => $q,
-            'expanded' => $expanded,
+        Log::debug('MeiliProductSearchTool: normalized query', [
+            'original' => $query,
+            'normalized' => $expanded,
         ]);
         
         return $expanded;

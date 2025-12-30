@@ -58,6 +58,22 @@ class AgentOrchestrator
             'session_id' => $sessionId
         ]);
 
+        // Check for follow-up questions BEFORE classification
+        // These should be handled in product search context
+        $sessionContext = $this->sessionService->loadContext($sessionId);
+        $hasShownProducts = !empty($sessionContext['shown_products']);
+        
+        if ($hasShownProducts) {
+            // "Чому саме ці?" — explain selection
+            if ($this->isWhyChosenFollowUp($message)) {
+                return $this->handleWhyChosenFollowUp($sessionContext, $sessionId);
+            }
+            // "Розкажи про них" — product details
+            if ($this->isDetailsFollowUp($message)) {
+                return $this->handleProductDetailsFollowUp($message, $sessionContext);
+            }
+        }
+
         // Step 1: Plan with AI (intent + search query + ambiguity)
         $plan = $this->createPlan($message, $context);
         
@@ -190,9 +206,15 @@ class AgentOrchestrator
         // Detect if this is a follow-up details request (e.g., "розкажи про них")
         // Check for shown_products OR last_shown_product_id (either works for follow-up)
         $hasShownProducts = !empty($sessionContext['shown_products']) || !empty($sessionContext['last_shown_product_id']);
+        
         if ($this->isDetailsFollowUp($originalMessage) && $hasShownProducts) {
             // Return details of the shown product(s) instead of searching
             return $this->handleProductDetailsFollowUp($originalMessage, $sessionContext);
+        }
+
+        // Handle "why these?" follow-up questions
+        if ($this->isWhyChosenFollowUp($originalMessage) && $hasShownProducts) {
+            return $this->handleWhyChosenFollowUp($sessionContext, $sessionId);
         }
 
         $searchQuery = $plan->searchQuery ?? $originalMessage;
@@ -286,6 +308,8 @@ class AgentOrchestrator
         // Persist lightweight session context using SessionContextService
         $lastProduct = !empty($products) ? $products[0] : null;
         $this->sessionService->saveContext($sessionId, [
+            'last_query' => $originalMessage,
+            'last_search_query' => $searchQuery,
             'last_category' => $this->guessCategoryFromProducts($products),
             'last_budget_min' => $filters['budget_min'] ?? null,
             'last_budget_max' => $filters['budget_max'] ?? null,
@@ -1119,6 +1143,176 @@ class AgentOrchestrator
         $patterns = ['розкажи про', 'розкажи', 'опис', 'що за', 'характеристик', 'деталь', 'розмір', 'параметр'];
         foreach ($patterns as $p) {
             if (str_contains($m, $p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Detect if message is asking why these products were chosen.
+     */
+    private function isWhyChosenFollowUp(string $message): bool
+    {
+        $m = mb_strtolower($message);
+        $patterns = [
+            'чому саме ці', 'чому ці', 'чому саме', 'чому обрав', 'чому вибрав', 
+            'чому підібрав', 'чому порекомендував', 'чому рекомендуєш',
+            'на якій підставі', 'за яким принципом', 'як обирав', 'як вибирав',
+            'поясни вибір', 'поясни чому', 'чому їх', 'чому них',
+        ];
+        foreach ($patterns as $p) {
+            if (str_contains($m, $p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Handle "why these products?" follow-up.
+     * Explains why the shown products were selected.
+     */
+    private function handleWhyChosenFollowUp(array $sessionContext, ?string $sessionId): array
+    {
+        $shownProductIds = $sessionContext['shown_products'] ?? [];
+        $lastQuery = $sessionContext['last_query'] ?? 'товар';
+        $lastBudgetMin = $sessionContext['last_budget_min'] ?? null;
+        $lastBudgetMax = $sessionContext['last_budget_max'] ?? null;
+        $lastCategory = $sessionContext['last_category'] ?? null;
+
+        if (empty($shownProductIds)) {
+            return AgentResponseDTO::text(
+                "Здається, я ще не показував вам товари. Напишіть, що шукаєте, і я підберу варіанти з поясненнями."
+            )->toArray();
+        }
+
+        // Fetch product details
+        $products = $this->detailsTool->getCards($shownProductIds, count($shownProductIds));
+
+        if (empty($products)) {
+            return AgentResponseDTO::text(
+                "На жаль, не можу знайти деталі про показані товари. Спробуйте пошукати ще раз."
+            )->toArray();
+        }
+
+        // Build explanation
+        $explanation = $this->buildSelectionExplanation($products, $lastQuery, [
+            'budget_min' => $lastBudgetMin,
+            'budget_max' => $lastBudgetMax,
+            'category' => $lastCategory,
+        ]);
+
+        return AgentResponseDTO::text($explanation)->toArray();
+    }
+
+    /**
+     * Build explanation why these products were selected.
+     */
+    private function buildSelectionExplanation(array $products, string $query, array $context): string
+    {
+        $count = count($products);
+        $budgetMax = $context['budget_max'] ?? null;
+        $budgetMin = $context['budget_min'] ?? null;
+
+        $parts = [];
+        $parts[] = "Я підібрав ці товари за такими критеріями:\n";
+
+        // 1. Search relevance
+        $parts[] = "🔍 **Відповідність запиту**: Всі товари відповідають вашому запиту «{$query}»";
+
+        // 2. Budget if specified
+        if ($budgetMax) {
+            $parts[] = "💰 **Бюджет**: до {$budgetMax} ₴";
+        } elseif ($budgetMin) {
+            $parts[] = "💰 **Бюджет**: від {$budgetMin} ₴";
+        }
+
+        // 3. Availability
+        $inStock = array_filter($products, fn($p) => $p['in_stock'] ?? false);
+        if (count($inStock) === $count) {
+            $parts[] = "✅ **Наявність**: всі товари є в наявності";
+        } elseif (count($inStock) > 0) {
+            $parts[] = "✅ **Наявність**: " . count($inStock) . " з {$count} в наявності";
+        }
+
+        // 4. Price range
+        $prices = array_filter(array_column($products, 'price'));
+        if (!empty($prices)) {
+            $minPrice = min($prices);
+            $maxPrice = max($prices);
+            if ($minPrice !== $maxPrice) {
+                $parts[] = "📊 **Ціновий діапазон**: від " . number_format($minPrice, 0, '', ' ') . " до " . number_format($maxPrice, 0, '', ' ') . " ₴";
+            }
+        }
+
+        // 5. Individual product highlights
+        $parts[] = "\n**Чому кожен з них:**\n";
+        
+        foreach ($products as $i => $product) {
+            $title = $product['title'] ?? 'Товар';
+            $price = isset($product['price']) ? number_format($product['price'], 0, '', ' ') . ' ₴' : '';
+            $brand = $product['brand'] ?? null;
+            $popularity = $product['popularity'] ?? 0;
+            
+            $highlight = $this->getProductHighlight($product, $i, $count);
+            
+            $parts[] = "• **{$title}** ({$price}) — {$highlight}";
+        }
+
+        // 6. Suggestion
+        $parts[] = "\nЯкщо потрібно більше варіантів або інші критерії — напишіть, і я підберу ще!";
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * Get highlight reason for a specific product.
+     */
+    private function getProductHighlight(array $product, int $index, int $total): string
+    {
+        $price = $product['price'] ?? 0;
+        $popularity = $product['popularity'] ?? 0;
+        $brand = $product['brand'] ?? null;
+        $ordersCount = $product['orders_count'] ?? 0;
+
+        if ($index === 0) {
+            if ($popularity > 50 || $ordersCount > 10) {
+                return "найпопулярніший варіант";
+            }
+            return "найдоступніший за ціною";
+        }
+
+        if ($index === $total - 1 && $total > 1) {
+            if ($brand && $this->isNotableBrand($brand)) {
+                return "преміум варіант від {$brand}";
+            }
+            return "топовий варіант з найкращими характеристиками";
+        }
+
+        if ($brand && $this->isNotableBrand($brand)) {
+            return "якісний варіант від бренду {$brand}";
+        }
+
+        if ($popularity > 30) {
+            return "популярний вибір покупців";
+        }
+
+        return "збалансований вибір ціна/якість";
+    }
+
+    /**
+     * Check if brand is notable.
+     */
+    private function isNotableBrand(?string $brand): bool
+    {
+        if (!$brand) return false;
+        
+        $notable = ['атака', 'velmet', 'uatac', 'м-тас', 'm-tac', 'tasmanian tiger', 'direct action', 'helikon', 'crye', '5.11'];
+        $brandLower = mb_strtolower($brand);
+        
+        foreach ($notable as $n) {
+            if (str_contains($brandLower, $n)) {
                 return true;
             }
         }

@@ -378,16 +378,90 @@ class CrossSellService
             ],
             'suggestions' => array_map(function($s) {
                 $product = $s['product'];
+                
+                // Build AI summary from product data
+                $summary = $this->buildProductSummary($product);
+                
                 return [
                     'id' => $product->id,
                     'article' => $product->article,
                     'title' => $product->title,
                     'price' => $product->price,
-                    'image' => $product->images[0] ?? null,
+                    'image' => $this->getProductImage($product),
                     'link' => $product->link,
                     'reason' => $s['reason'],
+                    'summary' => $summary,
                 ];
             }, $suggestions),
+            'hint' => 'Щоб замовити — додайте товар у кошик на сайті',
         ];
+    }
+    
+    /**
+     * Build short AI summary from product data (title, description, characteristics)
+     */
+    protected function buildProductSummary(Product $product): string
+    {
+        $parts = [];
+        
+        // 1. Title already contains key info
+        $title = $product->title ?? '';
+        
+        // 2. Extract key characteristics
+        $raw = is_array($product->raw) ? $product->raw : [];
+        $chars = $raw['characteristics_ua'] ?? $raw['characteristics_ru'] ?? [];
+        
+        if (!empty($chars) && is_array($chars)) {
+            // Take first 2-3 key characteristics
+            $keyChars = array_slice($chars, 0, 3);
+            foreach ($keyChars as $char) {
+                $name = $char['name'] ?? '';
+                $value = $char['value'] ?? '';
+                if ($name && $value) {
+                    $parts[] = "{$name}: {$value}";
+                }
+            }
+        }
+        
+        // 3. Short description snippet
+        $desc = $raw['description_ua'] ?? $raw['description_ru'] ?? '';
+        if ($desc) {
+            $desc = strip_tags($desc);
+            $desc = preg_replace('/\s+/', ' ', $desc);
+            $desc = trim($desc);
+            if (mb_strlen($desc) > 100) {
+                $desc = mb_substr($desc, 0, 100) . '...';
+            }
+            if ($desc) {
+                $parts[] = $desc;
+            }
+        }
+        
+        // Combine into short summary
+        if (empty($parts)) {
+            return '';
+        }
+        
+        return implode(' • ', array_slice($parts, 0, 3));
+    }
+    
+    /**
+     * Get product image with fallback
+     */
+    protected function getProductImage(Product $product): ?string
+    {
+        // Try images array first
+        if (!empty($product->images) && is_array($product->images)) {
+            return $product->images[0];
+        }
+        
+        // Try raw pictures
+        $raw = is_array($product->raw) ? $product->raw : [];
+        $pictures = $raw['pictures'] ?? [];
+        if (!empty($pictures) && is_array($pictures)) {
+            return $pictures[0]['url'] ?? $pictures[0] ?? null;
+        }
+        
+        return null;
     }
 }

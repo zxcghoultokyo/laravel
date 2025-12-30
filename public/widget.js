@@ -814,11 +814,27 @@
             `;
         }
 
-        // Truncate description
-        let descText = '';
-        if (product.description) {
-            descText = product.description.replace(/<[^>]*>/g, '').substring(0, 80);
-            if (product.description.length > 80) descText += '...';
+        // Build product summary from description and characteristics
+        let summaryText = '';
+        
+        // First try characteristics (more structured)
+        if (product.characteristics && Array.isArray(product.characteristics) && product.characteristics.length > 0) {
+            const charParts = product.characteristics.slice(0, 3).map(c => {
+                const name = c.name || c.n || '';
+                const value = c.value || c.v || '';
+                return name && value ? `${name}: ${value}` : '';
+            }).filter(Boolean);
+            if (charParts.length > 0) {
+                summaryText = charParts.join(' • ');
+            }
+        }
+        
+        // If no characteristics, use description
+        if (!summaryText && product.description) {
+            summaryText = product.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+            if (summaryText.length > 120) {
+                summaryText = summaryText.substring(0, 120) + '...';
+            }
         }
 
         card.innerHTML = `
@@ -826,7 +842,7 @@
                 ${imgHtml}
                 <div style="flex: 1; min-width: 0;">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
-                    ${descText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${descText}</div>` : ''}
+                    ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${summaryText}</div>` : ''}
                     <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
                 </div>
             </div>
@@ -852,161 +868,235 @@
             background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
             border: 1px solid #fcd34d;
             border-radius: 16px;
-            padding: 16px;
+            padding: 14px;
         `;
         
         // Header
         const header = document.createElement('div');
-        header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
+        header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 10px;';
         header.innerHTML = `
-            <span style="font-size: 18px;">🎯</span>
+            <span style="font-size: 16px;">🎯</span>
             <div>
-                <div style="font-weight: 600; font-size: 14px; color: #1f2937;">${crossSell.title || 'Разом краще'}</div>
-                <div style="font-size: 12px; color: #92400e;">${crossSell.subtitle || 'Часто беруть разом'}</div>
+                <div style="font-weight: 600; font-size: 13px; color: #1f2937;">${crossSell.title || 'Разом краще'}</div>
+                <div style="font-size: 11px; color: #92400e;">${crossSell.subtitle || 'Часто беруть разом'}</div>
             </div>
         `;
         container.appendChild(header);
         
-        // Items carousel
-        const carousel = document.createElement('div');
-        carousel.style.cssText = `
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 8px;
-            margin: 0 -4px;
-            padding: 0 4px;
-        `;
+        // Items list (vertical, not carousel)
+        const itemsList = document.createElement('div');
+        itemsList.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
         
-        crossSell.suggestions.forEach((item, index) => {
+        crossSell.suggestions.forEach((item) => {
             const card = document.createElement('div');
             card.style.cssText = `
-                flex-shrink: 0;
-                width: 100px;
                 background: white;
                 border-radius: 10px;
-                padding: 8px;
+                padding: 10px;
                 border: 1px solid #e5e7eb;
+                transition: all 0.2s;
+            `;
+            
+            // Card content: image + info + button
+            const cardContent = document.createElement('div');
+            cardContent.style.cssText = 'display: flex; gap: 10px; align-items: flex-start;';
+            
+            // Image (clickable, goes to site)
+            const imgWrapper = document.createElement('a');
+            imgWrapper.href = item.link || '#';
+            imgWrapper.target = '_blank';
+            imgWrapper.style.cssText = 'flex-shrink: 0; text-decoration: none;';
+            imgWrapper.innerHTML = item.image 
+                ? `<img src="${item.image}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;" onerror="this.parentElement.innerHTML='<div style=\\'width:60px;height:60px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px\\'>📦</div>'">`
+                : '<div style="width:60px;height:60px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>';
+            cardContent.appendChild(imgWrapper);
+            
+            // Info block
+            const infoBlock = document.createElement('div');
+            infoBlock.style.cssText = 'flex: 1; min-width: 0;';
+            
+            // Title (clickable)
+            const titleLink = document.createElement('a');
+            titleLink.href = item.link || '#';
+            titleLink.target = '_blank';
+            titleLink.style.cssText = `
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                color: #1f2937;
+                text-decoration: none;
+                line-height: 1.3;
+                margin-bottom: 2px;
+            `;
+            titleLink.textContent = item.title;
+            titleLink.onmouseenter = () => { titleLink.style.color = s.primary_color; };
+            titleLink.onmouseleave = () => { titleLink.style.color = '#1f2937'; };
+            infoBlock.appendChild(titleLink);
+            
+            // Price
+            const price = document.createElement('div');
+            price.style.cssText = `font-size: 13px; font-weight: 700; color: ${s.primary_color}; margin-bottom: 4px;`;
+            price.textContent = `${item.price} ₴`;
+            infoBlock.appendChild(price);
+            
+            // Summary/reason (tooltip on hover of "i" or short text)
+            const summaryText = item.summary || item.reason || '';
+            if (summaryText) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.style.cssText = 'font-size: 10px; color: #6b7280; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;';
+                summaryDiv.textContent = summaryText;
+                infoBlock.appendChild(summaryDiv);
+            }
+            
+            cardContent.appendChild(infoBlock);
+            
+            // "Мені цікаво" button
+            const interestedBtn = document.createElement('button');
+            interestedBtn.style.cssText = `
+                flex-shrink: 0;
+                background: ${s.primary_color};
+                color: white;
+                padding: 6px 10px;
+                border: none;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s;
-                position: relative;
+                white-space: nowrap;
             `;
-            
-            const reasonTooltip = item.reason 
-                ? `<span title="${item.reason.replace(/"/g, '&quot;')}" style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: #f3f4f6; border-radius: 50%; font-size: 9px; color: #6b7280; cursor: help; position: absolute; top: 6px; left: 6px;">i</span>` 
-                : '';
-            
-            card.innerHTML = `
-                ${reasonTooltip}
-                <input type="checkbox" checked style="
-                    position: absolute;
-                    top: 6px;
-                    right: 6px;
-                    width: 16px;
-                    height: 16px;
-                    accent-color: ${s.primary_color};
-                    cursor: pointer;
-                " data-article="${item.article}">
-                ${item.image 
-                    ? `<img src="${item.image}" style="width: 100%; height: 50px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" onerror="this.style.display='none'">`
-                    : '<div style="width: 100%; height: 50px; background: #f1f5f9; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px;">📦</div>'
-                }
-                <div style="font-size: 10px; font-weight: 500; color: #374151; line-height: 1.2; height: 24px; overflow: hidden;">${item.title}</div>
-                <div style="font-size: 12px; font-weight: 700; color: ${s.primary_color};">${item.price} ₴</div>
-            `;
-            
-            card.onmouseenter = () => {
-                card.style.borderColor = s.primary_color;
-                card.style.transform = 'translateY(-2px)';
-                card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-            };
-            card.onmouseleave = () => {
-                card.style.borderColor = '#e5e7eb';
-                card.style.transform = 'translateY(0)';
-                card.style.boxShadow = 'none';
-            };
-            
-            // Toggle checkbox on card click
-            card.onclick = (e) => {
-                if (e.target.type !== 'checkbox') {
-                    const checkbox = card.querySelector('input[type="checkbox"]');
-                    checkbox.checked = !checkbox.checked;
-                }
-            };
-            
-            carousel.appendChild(card);
-        });
-        container.appendChild(carousel);
-        
-        // Buttons
-        const buttons = document.createElement('div');
-        buttons.style.cssText = 'display: flex; gap: 8px; margin-top: 12px;';
-        
-        const addAllBtn = document.createElement('button');
-        addAllBtn.style.cssText = `
-            flex: 1;
-            background: ${s.primary_color};
-            color: white;
-            padding: 10px 16px;
-            border: none;
-            border-radius: 12px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        `;
-        addAllBtn.textContent = 'Мені цікаво';
-        addAllBtn.onmouseenter = () => { addAllBtn.style.opacity = '0.9'; };
-        addAllBtn.onmouseleave = () => { addAllBtn.style.opacity = '1'; };
-        addAllBtn.onclick = () => {
-            const selectedItems = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
-                .map(cb => {
-                    const card = cb.closest('div[style*="flex-shrink"]');
-                    const title = card?.querySelector('div[style*="font-weight: 500"]')?.textContent || '';
-                    return { article: cb.dataset.article, title: title.trim() };
-                })
-                .filter(item => item.article);
-            
-            if (selectedItems.length > 0) {
-                // Close cross-sell block
-                wrapper.style.opacity = '0';
-                wrapper.style.transform = 'translateY(-10px)';
-                wrapper.style.transition = 'all 0.3s ease';
-                setTimeout(() => wrapper.remove(), 300);
+            interestedBtn.textContent = '+ Цікаво';
+            interestedBtn.onmouseenter = () => { interestedBtn.style.opacity = '0.85'; };
+            interestedBtn.onmouseleave = () => { interestedBtn.style.opacity = '1'; };
+            interestedBtn.onclick = (e) => {
+                e.stopPropagation();
                 
-                // Show confirmation with selected items
-                const itemsList = selectedItems.map(i => i.title || i.article).join(', ');
-                addMessage(messagesContainer, `Записав! Ви зацікавлені в: ${itemsList}. При оформленні замовлення можемо додати ці товари. 👍`, 'assistant', sessionId, true);
-            }
-        };
+                // Animate removal of this card
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(20px)';
+                card.style.transition = 'all 0.3s ease';
+                
+                setTimeout(() => {
+                    card.remove();
+                    
+                    // Add product as clickable card in chat
+                    addCrossSellProductToChat(messagesContainer, item, s, sessionId);
+                    
+                    // If no more items, remove the whole block
+                    if (itemsList.children.length === 0) {
+                        wrapper.style.opacity = '0';
+                        wrapper.style.transform = 'translateY(-10px)';
+                        wrapper.style.transition = 'all 0.3s ease';
+                        setTimeout(() => wrapper.remove(), 300);
+                    }
+                }, 300);
+            };
+            cardContent.appendChild(interestedBtn);
+            
+            card.appendChild(cardContent);
+            itemsList.appendChild(card);
+        });
         
+        container.appendChild(itemsList);
+        
+        // Hint about adding to cart
+        const hint = document.createElement('div');
+        hint.style.cssText = 'margin-top: 10px; font-size: 10px; color: #92400e; text-align: center;';
+        hint.innerHTML = `💡 ${crossSell.hint || 'Щоб замовити — додайте товар у кошик на сайті'}`;
+        container.appendChild(hint);
+        
+        // Dismiss button (small, subtle)
         const dismissBtn = document.createElement('button');
         dismissBtn.style.cssText = `
-            padding: 10px 16px;
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 6px;
             background: transparent;
             border: none;
-            color: #6b7280;
-            font-size: 13px;
+            color: #9ca3af;
+            font-size: 11px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: color 0.2s;
         `;
-        dismissBtn.textContent = 'Ні, дякую';
-        dismissBtn.onmouseenter = () => { dismissBtn.style.color = '#374151'; };
-        dismissBtn.onmouseleave = () => { dismissBtn.style.color = '#6b7280'; };
+        dismissBtn.textContent = 'Приховати';
+        dismissBtn.onmouseenter = () => { dismissBtn.style.color = '#6b7280'; };
+        dismissBtn.onmouseleave = () => { dismissBtn.style.color = '#9ca3af'; };
         dismissBtn.onclick = () => {
             wrapper.style.opacity = '0';
             wrapper.style.transform = 'translateY(-10px)';
             wrapper.style.transition = 'all 0.3s ease';
             setTimeout(() => wrapper.remove(), 300);
         };
-        
-        buttons.appendChild(addAllBtn);
-        buttons.appendChild(dismissBtn);
-        container.appendChild(buttons);
+        container.appendChild(dismissBtn);
         
         wrapper.appendChild(container);
         messagesContainer.appendChild(wrapper);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Add cross-sell product as clickable card in chat
+    function addCrossSellProductToChat(messagesContainer, item, settings, sessionId) {
+        const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
+        
+        // Add intro message
+        addMessage(messagesContainer, `Ви зацікавились: **${item.title}**`, 'assistant', sessionId, false);
+        
+        // Create clickable product card
+        const card = document.createElement('a');
+        card.href = item.link || '#';
+        card.target = '_blank';
+        card.style.cssText = `
+            display: block;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.2s;
+            animation: aintento-fadeInUp 0.3s ease-out;
+        `;
+        
+        card.onmouseenter = () => {
+            card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+            card.style.transform = 'translateY(-2px)';
+            card.style.borderColor = s.primary_color;
+        };
+        card.onmouseleave = () => {
+            card.style.boxShadow = 'none';
+            card.style.transform = 'translateY(0)';
+            card.style.borderColor = '#e5e7eb';
+        };
+        
+        const imgHtml = item.image 
+            ? `<img src="${item.image}" style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" onerror="this.style.display='none'">`
+            : '';
+        
+        const summaryHtml = item.summary 
+            ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${item.summary}</div>`
+            : '';
+        
+        card.innerHTML = `
+            <div style="display: flex; gap: 12px;">
+                ${imgHtml}
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3;">${item.title}</div>
+                    ${summaryHtml}
+                    <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${item.price} ₴</div>
+                </div>
+            </div>
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #6b7280; text-align: center;">
+                👆 Натисніть щоб відкрити на сайті та додати в кошик
+            </div>
+        `;
+        
+        messagesContainer.appendChild(card);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // Save to history
+        saveMessage(sessionId, { role: 'cross_sell_interest', product: item });
     }
 
     function addLoader(messagesContainer) {

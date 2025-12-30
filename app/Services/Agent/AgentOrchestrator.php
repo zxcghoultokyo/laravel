@@ -80,13 +80,16 @@ class AgentOrchestrator
         Log::info('AgentOrchestrator: plan created', $plan->toArray());
 
         // Step 2: Execute based on intent using handlers
+        // Load session context for unknown handler
+        $sessionContext = $sessionId ? $this->sessionService->loadContext($sessionId) : [];
+        
         $response = match($plan->intent) {
             Intent::ProductSearch => $this->handleProductSearch($message, $plan, $context),
             Intent::ProductComparison => $this->handleProductComparison($message, $plan, $context),
             Intent::OrderStatus => $this->orderStatusHandler->handle($message, $plan->toArray(), $context),
             Intent::Faq => $this->faqHandler->handle($message, $plan->toArray(), $context),
             Intent::SmallTalk => $this->smallTalkHandler->handle($message, $plan->toArray(), $context),
-            default => AgentResponseDTO::unknown("Не зовсім зрозумів запит. Можете уточнити: шукаєте товар, питаєте про замовлення чи потрібна інша інформація?"),
+            default => $this->smallTalkHandler->handleUnknown($message, $sessionContext),
         };
 
         // Convert AgentResponseDTO to array if needed
@@ -368,7 +371,7 @@ class AgentOrchestrator
         
         // If no products in session, ask user to search first
         if (empty($shownProductIds)) {
-            return AgentResponseDTO::unknown(
+            return AgentResponseDTO::text(
                 "Щоб порівняти товари, спочатку покажіть мені, що вас цікавить. Напишіть, наприклад: 'плитоноска' або 'шолом чорний'."
             )->toArray();
         }
@@ -377,7 +380,7 @@ class AgentOrchestrator
         $products = $this->detailsTool->getCards($shownProductIds, count($shownProductIds));
         
         if (count($products) < 2) {
-            return AgentResponseDTO::unknown(
+            return AgentResponseDTO::text(
                 "Для порівняння потрібно мінімум 2 товари. Показати ще варіанти для порівняння?"
             )->toArray();
         }
@@ -626,12 +629,13 @@ class AgentOrchestrator
     }
 
     /**
-     * Handle unknown intent
-     * @deprecated Use SmallTalkHandler::handleUnknown instead.
+     * Handle unknown intent — delegates to SmallTalkHandler.
      */
     private function handleUnknown(string $message, array $plan, array $context): array
     {
-        return $this->smallTalkHandler->handleUnknown($message, $context);
+        $sessionId = $context['session_id'] ?? null;
+        $sessionContext = $sessionId ? $this->sessionService->loadContext($sessionId) : [];
+        return $this->smallTalkHandler->handleUnknown($message, $sessionContext);
     }
 
     private function detectProductFlow(string $message): string

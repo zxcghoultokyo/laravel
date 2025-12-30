@@ -1,14 +1,14 @@
 /**
- * AIntento Chat Widget v2.0.0
+ * AIntento Chat Widget v2.0.6
  * Embeddable chat widget for e-commerce sites
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.0"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.6"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.0.1';
+    const WIDGET_VERSION = '2.0.6';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -876,6 +876,21 @@
                 summaryText = summaryText.substring(0, 120) + '...';
             }
         }
+        
+        // Fallback: build from brand, category_path, color
+        if (!summaryText) {
+            const parts = [];
+            if (product.brand) parts.push(product.brand);
+            if (product.color) parts.push(product.color);
+            if (product.category_path) {
+                // Extract last part of category path
+                const cats = product.category_path.split('/');
+                if (cats.length > 0) parts.push(cats[cats.length - 1].trim());
+            }
+            if (parts.length > 0) {
+                summaryText = parts.join(' • ');
+            }
+        }
 
         card.innerHTML = `
             <div style="display: flex; gap: 12px;">
@@ -907,18 +922,18 @@
         container.style.cssText = `
             background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
             border: 1px solid #fcd34d;
-            border-radius: 16px;
-            padding: 14px;
+            border-radius: 12px;
+            padding: 10px;
         `;
         
         // Header
         const header = document.createElement('div');
-        header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 10px;';
+        header.style.cssText = 'display: flex; align-items: center; gap: 6px; margin-bottom: 8px;';
         header.innerHTML = `
-            <span style="font-size: 16px;">🎯</span>
+            <span style="font-size: 14px;">🎯</span>
             <div>
-                <div style="font-weight: 600; font-size: 13px; color: #1f2937;">${crossSell.title || 'Разом краще'}</div>
-                <div style="font-size: 11px; color: #92400e;">${crossSell.subtitle || 'Часто беруть разом'}</div>
+                <div style="font-weight: 600; font-size: 12px; color: #1f2937;">${crossSell.title || 'Разом краще'}</div>
+                <div style="font-size: 10px; color: #92400e;">${crossSell.subtitle || 'Часто беруть разом'}</div>
             </div>
         `;
         container.appendChild(header);
@@ -927,9 +942,9 @@
         const carousel = document.createElement('div');
         carousel.style.cssText = `
             display: flex;
-            gap: 10px;
+            gap: 8px;
             overflow-x: auto;
-            padding-bottom: 8px;
+            padding-bottom: 6px;
             margin: 0 -4px;
             padding: 4px;
             scroll-snap-type: x mandatory;
@@ -939,10 +954,10 @@
             const card = document.createElement('div');
             card.style.cssText = `
                 flex-shrink: 0;
-                width: 140px;
+                width: 110px;
                 background: white;
-                border-radius: 10px;
-                padding: 10px;
+                border-radius: 8px;
+                padding: 8px;
                 border: 1px solid #e5e7eb;
                 transition: all 0.2s;
                 position: relative;
@@ -955,16 +970,16 @@
             const infoIcon = document.createElement('div');
             infoIcon.style.cssText = `
                 position: absolute;
-                top: 8px;
-                right: 8px;
-                width: 18px;
-                height: 18px;
+                top: 6px;
+                right: 6px;
+                width: 14px;
+                height: 14px;
                 background: #f3f4f6;
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 11px;
+                font-size: 9px;
                 color: #6b7280;
                 cursor: help;
                 font-weight: 600;
@@ -978,10 +993,10 @@
             const imgLink = document.createElement('a');
             imgLink.href = item.link || '#';
             imgLink.target = '_blank';
-            imgLink.style.cssText = 'display: block; margin-bottom: 8px;';
+            imgLink.style.cssText = 'display: block; margin-bottom: 6px;';
             imgLink.innerHTML = item.image 
-                ? `<img src="${item.image}" style="width: 100%; height: 70px; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:100%;height:70px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px\\'>📦</div>'">`
-                : '<div style="width:100%;height:70px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px">📦</div>';
+                ? `<img src="${item.image}" style="width: 100%; height: 55px; object-fit: cover; border-radius: 6px;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:100%;height:55px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px\\'>📦</div>'">`
+                : '<div style="width:100%;height:55px;background:#f1f5f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>';
             card.appendChild(imgLink);
             
             // Title (clickable)
@@ -990,14 +1005,14 @@
             titleLink.target = '_blank';
             titleLink.style.cssText = `
                 display: block;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: 600;
                 color: #1f2937;
                 text-decoration: none;
-                line-height: 1.3;
-                height: 28px;
+                line-height: 1.2;
+                height: 24px;
                 overflow: hidden;
-                margin-bottom: 4px;
+                margin-bottom: 3px;
             `;
             titleLink.textContent = item.title;
             titleLink.onmouseenter = () => { titleLink.style.color = s.primary_color; };
@@ -1006,7 +1021,7 @@
             
             // Price
             const price = document.createElement('div');
-            price.style.cssText = `font-size: 13px; font-weight: 700; color: ${s.primary_color}; margin-bottom: 8px;`;
+            price.style.cssText = `font-size: 12px; font-weight: 700; color: ${s.primary_color}; margin-bottom: 6px;`;
             price.textContent = `${item.price} ₴`;
             card.appendChild(price);
             
@@ -1021,10 +1036,10 @@
                 width: 100%;
                 background: ${s.primary_color};
                 color: white;
-                padding: 6px 8px;
+                padding: 5px 6px;
                 border: none;
-                border-radius: 6px;
-                font-size: 11px;
+                border-radius: 5px;
+                font-size: 10px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s;
@@ -1074,7 +1089,7 @@
         
         // Hint about adding to cart
         const hint = document.createElement('div');
-        hint.style.cssText = 'margin-top: 10px; font-size: 10px; color: #92400e; text-align: center;';
+        hint.style.cssText = 'margin-top: 8px; font-size: 9px; color: #92400e; text-align: center;';
         hint.innerHTML = `💡 ${crossSell.hint || 'Щоб замовити — додайте товар у кошик на сайті'}`;
         container.appendChild(hint);
         
@@ -1083,12 +1098,12 @@
         dismissBtn.style.cssText = `
             display: block;
             width: 100%;
-            margin-top: 8px;
-            padding: 6px;
+            margin-top: 6px;
+            padding: 4px;
             background: transparent;
             border: none;
             color: #9ca3af;
-            font-size: 11px;
+            font-size: 10px;
             cursor: pointer;
             transition: color 0.2s;
         `;

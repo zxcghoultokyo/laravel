@@ -537,6 +537,8 @@ PROMPT;
         $query = $args['query'] ?? '';
         $limit = $args['limit'] ?? 10;
         
+        Log::info('toolSearchProducts: args', ['args' => $args]);
+        
         // Build filters
         $filters = [];
         if (!empty($args['price_min'])) {
@@ -552,21 +554,30 @@ PROMPT;
         // Search in Meilisearch (request more to account for filtering)
         $searchLimit = $limit * 3;
         $results = $this->searchTool->search($query, $filters, $searchLimit);
+        
+        $initialCount = count($results);
 
         // Exclude products by keyword in title
         if (!empty($args['exclude']) && !empty($results)) {
             $exclude = mb_strtolower($args['exclude']);
+            $beforeCount = count($results);
             $results = array_filter($results, function ($p) use ($exclude) {
                 $title = mb_strtolower($p['title'] ?? '');
                 return !str_contains($title, $exclude);
             });
             $results = array_values($results);
+            Log::info('toolSearchProducts: after exclude filter', [
+                'exclude' => $exclude,
+                'before' => $beforeCount,
+                'after' => count($results),
+            ]);
         }
 
         // Filter by product_type if specified
         // Check ai_product_type, title, and category_path (ai_product_type is often __unknown__)
         if (!empty($args['product_type']) && !empty($results)) {
             $productType = mb_strtolower($args['product_type']);
+            $beforeCount = count($results);
             $results = array_filter($results, function ($p) use ($productType) {
                 $aiType = mb_strtolower($p['ai_product_type'] ?? '');
                 $title = mb_strtolower($p['title'] ?? '');
@@ -578,21 +589,37 @@ PROMPT;
                     || str_contains($category, $productType);
             });
             $results = array_values($results);
+            Log::info('toolSearchProducts: after product_type filter', [
+                'product_type' => $productType,
+                'before' => $beforeCount,
+                'after' => count($results),
+            ]);
         }
 
         // Filter by color if specified
         if (!empty($args['color']) && !empty($results)) {
             $color = mb_strtolower($args['color']);
+            $beforeCount = count($results);
             $results = array_filter($results, function ($p) use ($color) {
                 $title = mb_strtolower($p['title'] ?? '');
                 $attrs = mb_strtolower($p['color'] ?? '');
                 return str_contains($title, $color) || str_contains($attrs, $color);
             });
             $results = array_values($results);
+            Log::info('toolSearchProducts: after color filter', [
+                'color' => $color,
+                'before' => $beforeCount,
+                'after' => count($results),
+            ]);
         }
 
         // Limit results after filtering
         $results = array_slice($results, 0, $limit);
+        
+        Log::info('toolSearchProducts: final results', [
+            'initial_from_meili' => $initialCount,
+            'final_count' => count($results),
+        ]);
 
         // Get full product cards with images
         if (!empty($results)) {

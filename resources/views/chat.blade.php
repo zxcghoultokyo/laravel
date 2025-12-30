@@ -248,7 +248,18 @@
             setSessionId(payload.session_id);
         }
 
-        // Products response
+        // Product cards response (with descriptions) - NEW FORMAT
+        if (payload.type === 'products' && payload.data?.product_cards?.length) {
+            // Show intro text first
+            if (payload.text) {
+                appendMessage(payload.text, 'bot');
+            }
+            // Render each card with description
+            renderProductCards(payload.data.product_cards);
+            return;
+        }
+
+        // Products response (legacy format without descriptions)
         if (payload.type === 'products' && payload.data?.products?.length) {
             const products = payload.data.products.slice(0, 10);
             const html = renderProducts(products, payload.text);
@@ -271,6 +282,57 @@
         appendMessage('Отримав відповідь, але не знаю як її показати 🤔', 'bot');
     }
 
+    function renderProductCards(productCards) {
+        productCards.slice(0, 5).forEach((card) => {
+            const product = card.product;
+            const description = card.description;
+
+            // Show description bubble (if exists)
+            if (description && description.trim()) {
+                const descWrapper = document.createElement('div');
+                descWrapper.className = 'flex justify-start message-appear mb-2';
+                descWrapper.innerHTML = `
+                    <div class="bg-slate-100 text-slate-600 rounded-2xl px-4 py-2 text-sm">
+                        ${description}
+                    </div>
+                `;
+                chatMessages.appendChild(descWrapper);
+            }
+
+            // Show product card
+            const cardHtml = renderSingleProduct(product);
+            appendBotHtml(cardHtml, false);
+        });
+
+        // Save to history
+        messageHistory.push({ type: 'product_cards', cards: productCards.slice(0, 5) });
+        saveMessages(messageHistory);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function renderSingleProduct(p) {
+        const title = p.title ?? (p.title_json && (p.title_json.ua || p.title_json.ru)) ?? 'Без назви';
+        const price = p.price ? (Math.round(p.price) + ' ₴') : '';
+        const link = p.link || '#';
+        const image = (p.images && p.images.length) ? p.images[0] : '';
+
+        return `
+            <a href="${link}" target="_blank"
+               class="flex items-start gap-3 bg-slate-50 rounded-xl p-3 transition-all duration-200 border border-slate-200 hover:shadow-md hover:-translate-y-0.5 hover:border-cyan-500">
+                <div class="w-16 h-16 flex-shrink-0 bg-white rounded-lg overflow-hidden border border-slate-200">
+                    ${image 
+                        ? `<img src="${image}" alt="${title}" class="w-full h-full object-cover" onerror="this.style.display='none'">`
+                        : '<div class="w-full h-full flex items-center justify-center text-slate-400 text-2xl">📦</div>'
+                    }
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-slate-900 line-clamp-2">${title}</div>
+                    <div class="text-base font-bold text-cyan-600 mt-1">${price}</div>
+                </div>
+            </a>
+        `;
+    }
+
     // ============ RESTORE HISTORY ============
     function restoreHistory() {
         const saved = loadMessages();
@@ -282,6 +344,22 @@
         saved.forEach(msg => {
             if (msg.type === 'text') {
                 appendMessage(msg.text, msg.side, false);
+            } else if (msg.type === 'product_cards' && msg.cards) {
+                // Restore product cards with descriptions
+                msg.cards.forEach((card) => {
+                    if (card.description && card.description.trim()) {
+                        const descWrapper = document.createElement('div');
+                        descWrapper.className = 'flex justify-start message-appear mb-2';
+                        descWrapper.innerHTML = `
+                            <div class="bg-slate-100 text-slate-600 rounded-2xl px-4 py-2 text-sm">
+                                ${card.description}
+                            </div>
+                        `;
+                        chatMessages.appendChild(descWrapper);
+                    }
+                    const cardHtml = renderSingleProduct(card.product);
+                    appendBotHtml(cardHtml, false);
+                });
             } else if (msg.type === 'products' && msg.products) {
                 const html = renderProducts(msg.products, 'Раніше знайдені товари:');
                 appendBotHtml(html, false);

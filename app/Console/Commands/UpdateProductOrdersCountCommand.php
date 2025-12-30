@@ -76,11 +76,14 @@ class UpdateProductOrdersCountCommand extends Command
         $bar->start();
 
         foreach ($counts as $article => $count) {
-            $affected = Product::where('article', $article)->update(['orders_count' => $count]);
+            // Cast article to string for safe comparison
+            $articleStr = (string) $article;
+            
+            $affected = Product::where('article', $articleStr)->update(['orders_count' => $count]);
             
             if ($affected === 0) {
                 // Try parent_article
-                $affected = Product::where('parent_article', $article)->update(['orders_count' => $count]);
+                $affected = Product::where('parent_article', $articleStr)->update(['orders_count' => $count]);
             }
             
             if ($affected > 0) {

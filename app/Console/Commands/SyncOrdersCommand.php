@@ -278,16 +278,33 @@ class SyncOrdersCommand extends Command
         // Reset all to 0 first
         Product::query()->update(['orders_count' => 0]);
 
-        // Update products with counts
+        // Update products with counts - separate queries to avoid type mismatch
         $updated = 0;
+        $notFound = 0;
+        
         foreach ($counts as $article => $count) {
-            $affected = Product::where('article', $article)
-                ->orWhere('parent_article', $article)
-                ->update(['orders_count' => $count]);
-            $updated += $affected;
+            // Cast article to string for safe comparison
+            $articleStr = (string) $article;
+            
+            // First try exact article match
+            $affected = Product::where('article', $articleStr)->update(['orders_count' => $count]);
+            
+            // If not found, try parent_article
+            if ($affected === 0) {
+                $affected = Product::where('parent_article', $articleStr)->update(['orders_count' => $count]);
+            }
+            
+            if ($affected > 0) {
+                $updated += $affected;
+            } else {
+                $notFound++;
+            }
         }
 
         $this->info("  Updated {$updated} products");
+        if ($notFound > 0) {
+            $this->info("  {$notFound} articles not found in products table");
+        }
         $this->info("[DONE] orders_count updated");
     }
 

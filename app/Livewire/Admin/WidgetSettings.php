@@ -126,7 +126,9 @@ class WidgetSettings extends Component
             ]
         );
 
-        // Manual-only: do NOT auto-ingest on save
+        // Clear FAQ cache so changes take effect immediately
+        Cache::forget('widget_settings_faq');
+        
         session()->flash('message', 'Налаштування збережено!');
     }
 

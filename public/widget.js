@@ -987,14 +987,15 @@
     }
 
     function addLoader(messagesContainer) {
+        const s = window.aintentoSettings || { primary_color: '#2563eb' };
         const div = document.createElement('div');
         div.className = 'aintento-loader';
         div.style.cssText = 'margin-bottom: 16px; display: flex; justify-content: flex-start;';
         div.innerHTML = `
-            <div style="background: white; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <span style="display: inline-block; animation: aintento-pulse 1.4s infinite;">●</span>
-                <span style="display: inline-block; animation: aintento-pulse 1.4s 0.2s infinite;">●</span>
-                <span style="display: inline-block; animation: aintento-pulse 1.4s 0.4s infinite;">●</span>
+            <div style="background: #f3f4f6; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s infinite;">●</span>
+                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.2s infinite;">●</span>
+                <span style="display: inline-block; color: ${s.primary_color}; font-size: 16px; animation: aintento-pulse 1.4s 0.4s infinite;">●</span>
             </div>
         `;
         messagesContainer.appendChild(div);

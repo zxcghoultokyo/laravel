@@ -37,7 +37,7 @@ class WidgetController extends Controller
             'text_color' => '#ffffff',
             'position' => 'right',
             'border_radius' => 12,
-            'welcome_message' => 'Вітаю! 👋 Я AILure асистент. Чим можу допомогти?',
+            'welcome_message' => 'Вітаю! 👋 Я AIntento — ваш персональний помічник. Чим можу допомогти?',
             'input_placeholder' => 'Напишіть повідомлення...',
             'consent_notice' => null,
             'store_phone' => null,

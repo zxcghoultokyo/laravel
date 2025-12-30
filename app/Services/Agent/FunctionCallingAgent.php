@@ -533,12 +533,19 @@ PROMPT;
             $results = array_values($results);
         }
 
-        // Filter by product_type if specified (using ai_product_type)
+        // Filter by product_type if specified
+        // Check ai_product_type, title, and category_path (ai_product_type is often __unknown__)
         if (!empty($args['product_type']) && !empty($results)) {
             $productType = mb_strtolower($args['product_type']);
             $results = array_filter($results, function ($p) use ($productType) {
                 $aiType = mb_strtolower($p['ai_product_type'] ?? '');
-                return str_contains($aiType, $productType);
+                $title = mb_strtolower($p['title'] ?? '');
+                $category = mb_strtolower($p['category_path'] ?? '');
+                
+                // Match if any field contains the product type
+                return str_contains($aiType, $productType) 
+                    || str_contains($title, $productType)
+                    || str_contains($category, $productType);
             });
             $results = array_values($results);
         }

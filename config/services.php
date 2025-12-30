@@ -37,8 +37,8 @@ return [
         'model_analyze' => env('OPENAI_MODEL_ANALYZE', 'gpt-4.1-mini'), // Для аналізу товарів (економія)
         'model_rerank'  => env('OPENAI_MODEL_RERANK', 'gpt-4.1-mini'),  // Для ререйнку результатів
         
-        // New function calling agent
-        'use_function_calling' => env('OPENAI_USE_FUNCTION_CALLING', false),
+        // New function calling agent (enabled by default for testing)
+        'use_function_calling' => env('OPENAI_USE_FUNCTION_CALLING', true),
         
         // Timeouts (seconds)
         'timeout_fast'   => (int) env('OPENAI_TIMEOUT_FAST', 5),     // Для classify, normalize

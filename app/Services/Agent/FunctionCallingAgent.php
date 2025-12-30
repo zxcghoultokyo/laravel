@@ -643,19 +643,47 @@ PROMPT;
         if (!empty($args['product_type']) && !empty($results)) {
             $productType = mb_strtolower($args['product_type']);
             $beforeCount = count($results);
-            $results = array_filter($results, function ($p) use ($productType) {
+            
+            // Synonyms map for product types (ua <-> ru, variations)
+            $synonyms = [
+                'берці' => ['берці', 'берци', 'берцы', 'boots', 'взуття', 'черевики'],
+                'берци' => ['берці', 'берци', 'берцы', 'boots', 'взуття', 'черевики'],
+                'черевики' => ['берці', 'берци', 'черевики', 'boots', 'взуття'],
+                'плитоноска' => ['плитоноска', 'плитоноски', 'plate carrier', 'плейт'],
+                'шолом' => ['шолом', 'шлем', 'каска', 'helmet', 'fast'],
+                'рюкзак' => ['рюкзак', 'backpack', 'ранець'],
+                'підсумок' => ['підсумок', 'подсумок', 'pouch', 'mag pouch'],
+                'бронеплита' => ['бронеплита', 'плита', 'sapi', 'esapi', 'керамічна'],
+            ];
+            
+            // Get all terms to search for
+            $searchTerms = [$productType];
+            foreach ($synonyms as $key => $values) {
+                if (str_contains($productType, $key) || in_array($productType, $values)) {
+                    $searchTerms = array_merge($searchTerms, $values);
+                    break;
+                }
+            }
+            $searchTerms = array_unique($searchTerms);
+            
+            $results = array_filter($results, function ($p) use ($searchTerms) {
                 $aiType = mb_strtolower($p['ai_product_type'] ?? '');
                 $title = mb_strtolower($p['title'] ?? '');
                 $category = mb_strtolower($p['category_path'] ?? '');
+                $searchText = $aiType . ' ' . $title . ' ' . $category;
                 
-                // Match if any field contains the product type
-                return str_contains($aiType, $productType) 
-                    || str_contains($title, $productType)
-                    || str_contains($category, $productType);
+                // Match if any search term is found
+                foreach ($searchTerms as $term) {
+                    if (str_contains($searchText, $term)) {
+                        return true;
+                    }
+                }
+                return false;
             });
             $results = array_values($results);
             Log::info('toolSearchProducts: after product_type filter', [
                 'product_type' => $productType,
+                'search_terms' => $searchTerms,
                 'before' => $beforeCount,
                 'after' => count($results),
             ]);

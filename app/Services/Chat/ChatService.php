@@ -24,8 +24,8 @@ class ChatService
         protected AgentOrchestrator $agentOrchestrator,
         protected ?FunctionCallingAgent $functionCallingAgent = null,
     ) {
-        // Enable new agent via env variable
-        $this->useNewAgent = config('services.openai.use_function_calling', false);
+        // Enable new agent via env variable (default: true for testing)
+        $this->useNewAgent = config('services.openai.use_function_calling', true);
         
         // Lazy load function calling agent
         if ($this->useNewAgent && !$this->functionCallingAgent) {

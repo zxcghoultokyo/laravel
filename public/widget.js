@@ -1,14 +1,14 @@
 /**
- * AIntento Chat Widget v2.0.6
+ * AIntento Chat Widget v2.0.8
  * Embeddable chat widget for e-commerce sites
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.6"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.0.8"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.0.6';
+    const WIDGET_VERSION = '2.0.8';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -176,6 +176,8 @@
             .aintento-messages::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
             #aintento-overlay { transition: opacity 0.3s ease; }
             .aintento-avatar { animation: aintento-glow 2s ease-in-out infinite; }
+            
+            /* Mobile styles */
             @media (max-width: 480px) {
                 .aintento-widget {
                     position: fixed !important;
@@ -183,21 +185,36 @@
                     left: 0 !important;
                     right: 0 !important;
                     width: 100% !important;
+                    touch-action: manipulation;
                 }
                 .aintento-window {
                     position: fixed !important;
                     bottom: 0 !important;
                     left: 0 !important;
                     right: 0 !important;
+                    top: auto !important;
                     width: 100% !important;
                     max-width: 100% !important;
-                    height: auto !important;
-                    max-height: 85vh !important;
-                    border-radius: 16px 16px 0 0 !important;
+                    height: 80vh !important;
+                    max-height: 80vh !important;
+                    border-radius: 20px 20px 0 0 !important;
+                    z-index: 10001 !important;
                 }
                 .aintento-toggle {
                     position: fixed !important;
-                    bottom: 20px !important;
+                    bottom: 16px !important;
+                    right: 16px !important;
+                    z-index: 10000 !important;
+                    width: 56px !important;
+                    height: 56px !important;
+                }
+                .aintento-messages {
+                    font-size: 15px !important;
+                }
+                #aintento-input {
+                    font-size: 16px !important; /* Prevents zoom on iOS */
+                }
+            }
                     right: 20px !important;
                     z-index: 10000 !important;
                 }
@@ -359,7 +376,6 @@
 
         // Quick action responses
         const quickActionResponses = {
-            product_help: 'Щоб я міг підібрати найкращий товар, розкажи:\n\n🔹 Що шукаєш? (наприклад: плитоноска, рюкзак, берці)\n🔹 Бюджет? (необов\'язково)\n🔹 Колір/розмір? (якщо важливо)\n\nАбо просто напиши що потрібно — я розберусь! 😊',
             order_info: 'Для пошуку замовлення мені потрібно:\n\n📝 Номер замовлення (наприклад: 12345)\n\nабо\n\n📱 Номер телефону з якого робили замовлення\n\nНапиши будь-що з цього і я знайду твоє замовлення!',
             store_info: null // Will be fetched from settings
         };
@@ -370,6 +386,9 @@
                 // Build store info from settings
                 const storeInfo = buildStoreInfo(settings);
                 addMessage(messages, storeInfo, 'assistant', state.sessionId, true);
+            } else if (action === 'top_products') {
+                // Send "Покажи топ товари" to backend to get popular products
+                sendMessage('покажи топ товари');
             } else {
                 const response = quickActionResponses[action];
                 if (response) {
@@ -429,12 +448,12 @@
         }
 
         // Send message function
-        function sendMessage() {
-            const message = input.value.trim();
+        function sendMessage(customMessage = null) {
+            const message = customMessage || input.value.trim();
             if (!message) return;
 
             addMessage(messages, message, 'user', state.sessionId, true);
-            input.value = '';
+            if (!customMessage) input.value = '';
 
             const loader = addLoader(messages);
             const chatApiUrl = BASE_URL + '/api/chat';
@@ -617,9 +636,9 @@
         
         const quickActions = [
             {
-                icon: '🎯',
-                label: 'Підбери товар',
-                action: 'product_help'
+                icon: '🔥',
+                label: 'Топ товари',
+                action: 'top_products'
             },
             {
                 icon: '📦',
@@ -800,7 +819,7 @@
             padding: 12px;
             margin-bottom: 8px;
             text-decoration: none;
-            color: inherit;
+            color: #374151;
             transition: all 0.2s;
             animation: aintento-fadeInUp 0.3s ease-out;
             animation-delay: ${index * 0.1}s;

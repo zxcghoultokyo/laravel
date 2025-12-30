@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.0
+ * AIntento Chat Widget v2.3.1
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.0"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.1"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.0';
+    const WIDGET_VERSION = '2.3.1';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1199,23 +1199,35 @@
             }
         }
         
-        // Build size variants HTML (clickable buttons)
+        // Build size variants HTML (clickable buttons that switch the card)
         let sizeHtml = '';
+        const cardId = 'card-' + product.id + '-' + Date.now();
+        
         if (product.size_variants && product.size_variants.length > 1) {
             const buttons = product.size_variants.map(v => {
                 const isActive = v.id === product.id || v.article === product.article;
                 const activeStyle = isActive 
                     ? `background: ${settings.primary_color}; color: white; border-color: ${settings.primary_color};`
                     : 'background: #f3f4f6; color: #374151; border-color: #e5e7eb;';
-                return `<a href="${v.link || '#'}" target="_blank" 
-                    style="padding: 2px 6px; font-size: 10px; border-radius: 4px; border: 1px solid; text-decoration: none; ${activeStyle}"
-                    onclick="event.stopPropagation();">${v.size}</a>`;
+                // Store variant data as data attributes
+                return `<button type="button" class="size-btn" 
+                    data-size="${v.size}" 
+                    data-link="${v.link || ''}" 
+                    data-id="${v.id}"
+                    data-article="${v.article || ''}"
+                    style="padding: 2px 6px; font-size: 10px; border-radius: 4px; border: 1px solid; cursor: pointer; ${activeStyle}"
+                >${v.size}</button>`;
             }).join('');
-            sizeHtml = `<div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${buttons}</div>`;
+            sizeHtml = `<div class="size-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${buttons}</div>`;
         } else if (product.size) {
             // Single size, just show label
             sizeHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Розмір: </span><span style="font-size: 11px; font-weight: 500;">${product.size}</span></div>`;
         }
+
+        // Store all variants data on the card for switching
+        card.dataset.variants = JSON.stringify(product.size_variants || []);
+        card.dataset.currentLink = product.link || '#';
+        card.id = cardId;
 
         card.innerHTML = `
             <div style="display: flex; gap: 12px;">
@@ -1228,6 +1240,34 @@
                 </div>
             </div>
         `;
+
+        // Add click handlers for size buttons
+        setTimeout(() => {
+            const sizeButtons = card.querySelectorAll('.size-btn');
+            sizeButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const newLink = btn.dataset.link;
+                    const primaryColor = settings.primary_color;
+                    
+                    // Update card link
+                    card.href = newLink || '#';
+                    card.dataset.currentLink = newLink;
+                    
+                    // Update button styles - deactivate all, activate clicked
+                    sizeButtons.forEach(b => {
+                        b.style.background = '#f3f4f6';
+                        b.style.color = '#374151';
+                        b.style.borderColor = '#e5e7eb';
+                    });
+                    btn.style.background = primaryColor;
+                    btn.style.color = 'white';
+                    btn.style.borderColor = primaryColor;
+                });
+            });
+        }, 0);
 
         return card;
     }

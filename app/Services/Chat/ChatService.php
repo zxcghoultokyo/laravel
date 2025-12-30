@@ -682,6 +682,19 @@ class ChatService
     }
 
     /**
+     * Очищує сесійні дані з кешу.
+     */
+    public function clearSession(string $sessionId): void
+    {
+        $sessionKey = $this->buildSessionKey($sessionId);
+        
+        Cache::forget('chat_ctx_' . $sessionKey);
+        Cache::forget('chat_search_' . $sessionKey);
+        
+        Log::info('ChatService::clearSession', ['session_id' => $sessionId, 'sessionKey' => $sessionKey]);
+    }
+
+    /**
      * Визначаємо, чи запит виглядає як "ще", "ще покажи", "давай ще" і т.д.
      */
     protected function isFollowupMoreRequest(string $query): bool

@@ -132,6 +132,15 @@
     }
 
     function clearMessages() {
+        const currentSessionId = localStorage.getItem(SESSION_KEY);
+        
+        // Delete session from server
+        if (currentSessionId) {
+            fetch(`/api/chat/session/${currentSessionId}`, {
+                method: 'DELETE',
+            }).catch(err => console.warn('Failed to delete session:', err));
+        }
+        
         localStorage.removeItem(getMessagesKey());
         localStorage.removeItem(SESSION_KEY);
         chatMessages.innerHTML = '';

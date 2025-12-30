@@ -184,4 +184,36 @@ class ChatController extends Controller
 
         return substr($normalized, 0, 64);
     }
+
+    /**
+     * Clear/delete a chat session from DB and cache.
+     */
+    public function clearSession(string $sessionId)
+    {
+        Log::info('ChatController::clearSession', ['session_id' => $sessionId]);
+
+        try {
+            // Clear from ChatService cache
+            $this->chatService->clearSession($sessionId);
+
+            // Delete from database
+            \App\Models\ChatSession::where('session_id', $sessionId)->delete();
+            \App\Models\ChatMessage::where('session_id', $sessionId)->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Сесію видалено',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('ChatController::clearSession failed', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Не вдалося видалити сесію',
+            ], 500);
+        }
+    }
 }

@@ -1,4 +1,4 @@
-<div wire:poll.5s="loadSession">
+<div wire:poll.5s.keep-alive="loadSession">
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
         <div>
@@ -155,7 +155,7 @@
                     
                     <!-- Search debug -->
                     @if(!empty($message->meta['search_debug']))
-                    <details class="mt-2">
+                    <details class="mt-2" x-data="{ open: false }" :open="open" @click="open = !open" wire:ignore.self>
                         <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">🔍 Search Debug</summary>
                         <pre class="mt-1 text-xs bg-gray-50 p-2 rounded overflow-x-auto border">{{ json_encode($message->meta['search_debug'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
                     </details>
@@ -164,7 +164,7 @@
                 @endif
 
                 @if($message->meta)
-                <details class="mt-3">
+                <details class="mt-3" x-data="{ open: false }" :open="open" @click="open = !open" wire:ignore.self>
                     <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-700">📋 Full Metadata</summary>
                     <pre class="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">{{ json_encode($message->meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
                 </details>

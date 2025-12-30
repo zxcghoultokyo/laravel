@@ -32,6 +32,10 @@ Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle']
 Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::class, 'stream'])
     ->middleware(['widget.cors', 'throttle:30,1']);
 
+// Clear chat session (delete from DB and cache)
+Route::delete('/chat/session/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'clearSession'])
+    ->middleware(['widget.cors']);
+
 // Віджет налаштування
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
     ->middleware('widget.cors');

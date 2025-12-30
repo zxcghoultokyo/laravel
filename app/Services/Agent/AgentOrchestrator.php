@@ -8,6 +8,7 @@ use App\DTO\AgentResponseDTO;
 use App\Services\Ai\AiRouter;
 use App\Services\Session\SessionContextService;
 use App\Services\Search\ColorService;
+use App\Services\Search\BrandDetectionService;
 use App\Services\Agent\Handlers\FaqHandler;
 use App\Services\Agent\Handlers\SmallTalkHandler;
 use App\Services\Agent\Handlers\OrderStatusHandler;
@@ -27,6 +28,8 @@ use Illuminate\Support\Facades\Log;
 
 class AgentOrchestrator
 {
+    private BrandDetectionService $brandDetectionService;
+
     public function __construct(
         private AiRouter $aiRouter,
         private MeiliProductSearchTool $searchTool,
@@ -43,7 +46,9 @@ class AgentOrchestrator
         private SmallTalkHandler $smallTalkHandler,
         private OrderStatusHandler $orderStatusHandler,
         private NarrativeBuilder $narrativeBuilder,
-    ) {}
+    ) {
+        $this->brandDetectionService = app(BrandDetectionService::class);
+    }
 
     /**
      * Main orchestration method
@@ -137,13 +142,22 @@ class AgentOrchestrator
                 $filters = $normalized['filters'] ?? [];
             }
             
+            // Transliterate cyrillic brand names to latin (e.g., "сестан буш" → "SESTAN BUSCH")
+            $searchQuery = $this->brandDetectionService->normalizeBrandsInQuery($searchQuery);
+            Log::info('AgentOrchestrator: brand transliteration applied', [
+                'before' => $normalized,
+                'after' => $searchQuery
+            ]);
+            
             // Preserve brand terms: if message contains a known brand, override searchQuery with original
             try {
                 if ($this->containsBrandWord($message)) {
-                    $searchQuery = $message;
+                    // Also transliterate the original message for brand searches
+                    $searchQuery = $this->brandDetectionService->normalizeBrandsInQuery($message);
                     $ambiguous = false;
-                    Log::info('AgentOrchestrator: brand detected, preserving original query', [
-                        'query' => $message
+                    Log::info('AgentOrchestrator: brand detected, using transliterated query', [
+                        'original' => $message,
+                        'query' => $searchQuery
                     ]);
                 }
             } catch (\Throwable $e) {

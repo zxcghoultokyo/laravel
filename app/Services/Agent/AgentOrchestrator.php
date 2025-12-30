@@ -1236,16 +1236,26 @@ class AgentOrchestrator
 
         // Deduplicate
         $deduped = $this->deduperTool->dedupe($popularProducts);
-        $final = array_slice($deduped, 0, 5);
+        $topCandidates = array_slice($deduped, 0, 5);
 
-        if (empty($final)) {
+        if (empty($topCandidates)) {
+            return AgentResponseDTO::text(
+                "На жаль, зараз не можу завантажити популярні товари. Спробуйте запитати про конкретну категорію: плитоноски, шоломи, берці або рюкзаки."
+            )->toArray();
+        }
+
+        // Get full product details with images (same as regular product search)
+        $topIds = array_column($topCandidates, 'id');
+        $products = $this->detailsTool->getCards($topIds, count($topIds));
+
+        if (empty($products)) {
             return AgentResponseDTO::text(
                 "На жаль, зараз не можу завантажити популярні товари. Спробуйте запитати про конкретну категорію: плитоноски, шоломи, берці або рюкзаки."
             )->toArray();
         }
 
         // Save to session
-        $shownIds = array_column($final, 'id');
+        $shownIds = array_column($products, 'id');
         if ($sessionId) {
             $this->sessionService->saveContext($sessionId, [
                 'shown_products' => $shownIds,
@@ -1260,7 +1270,7 @@ class AgentOrchestrator
 
         return AgentResponseDTO::productSearch(
             message: $message,
-            products: $final,
+            products: $products,
             refinedQuery: 'популярні товари',
             filters: [],
             chosenIds: $shownIds,

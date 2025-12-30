@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.2
+ * AIntento Chat Widget v2.3.3
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.2"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.3"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.2';
+    const WIDGET_VERSION = '2.3.3';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1193,7 +1193,6 @@
         if (!summaryText) {
             const parts = [];
             if (product.brand) parts.push(product.brand);
-            if (product.color) parts.push(product.color);
             if (product.category_path) {
                 // Extract last part of category path
                 const cats = product.category_path.split('/');
@@ -1202,6 +1201,12 @@
             if (parts.length > 0) {
                 summaryText = parts.join(' • ');
             }
+        }
+        
+        // Build color display (if color exists and not already in summary)
+        let colorHtml = '';
+        if (product.color && !summaryText.includes(product.color)) {
+            colorHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Колір: </span><span style="font-size: 11px; font-weight: 500;">${product.color}</span></div>`;
         }
         
         // Build size variants HTML (clickable buttons that switch the card)
@@ -1240,6 +1245,7 @@
                 <div style="flex: 1; min-width: 0;">
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
                     ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${summaryText}</div>` : ''}
+                    ${colorHtml}
                     ${sizeHtml}
                     <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px; margin-top: 4px;">${product.price} ₴</div>
                 </div>

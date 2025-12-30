@@ -55,12 +55,17 @@ class ProductDetailsTool
             $allSiblings = Product::query()
                 ->whereIn('parent_article', $allParentArticles)
                 ->where('in_stock', true)
-                ->get(['id', 'article', 'parent_article', 'link', 'raw']);
+                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title']);
             
             foreach ($allSiblings as $sibling) {
                 $parentArt = $sibling->parent_article;
                 $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
                 $size = $this->extractSize($sibRaw);
+                
+                // Fallback: parse size from title
+                if (!$size && $sibling->title) {
+                    $size = $this->parseSizeFromTitle($sibling->title);
+                }
                 
                 if ($size) {
                     if (!isset($sizeVariantsMap[$parentArt])) {
@@ -105,8 +110,11 @@ class ProductDetailsTool
                 $parentRaw = $parentRawMap[$parentArticle];
             }
             
-            // Extract size for current product
+            // Extract size for current product (try raw fields first, then parse from title)
             $currentSize = $this->extractSize($raw);
+            if (!$currentSize) {
+                $currentSize = $this->parseSizeFromTitle($title);
+            }
             
             // Get size variants (siblings with same parent_article)
             $sizeVariants = [];
@@ -255,6 +263,48 @@ class ProductDetailsTool
         // 6. Try direct size field
         if (!empty($raw['size'])) {
             return is_string($raw['size']) ? trim($raw['size']) : null;
+        }
+        
+        // 7. Try mod_title (Horoshop modification title)
+        if (!empty($raw['mod_title'])) {
+            $modTitle = is_array($raw['mod_title']) 
+                ? ($raw['mod_title']['ua'] ?? $raw['mod_title']['ru'] ?? reset($raw['mod_title']))
+                : $raw['mod_title'];
+            if (is_string($modTitle) && trim($modTitle) !== '') {
+                return trim($modTitle);
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Parse size from product title.
+     * Common patterns: "... Бежевий L", "... Multicam USA XL", "... US L-Long"
+     */
+    protected function parseSizeFromTitle(string $title): ?string
+    {
+        // Pattern for common sizes at the end of title
+        // Matches: S, M, L, XL, XXL, 3XL, XS, S/L, M/R, L-Long, US M-Regular, etc.
+        $patterns = [
+            // Size with length: "L-Long", "M-Regular", "S-Short"
+            '/\b(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)[-\/](Long|Regular|Short|L|R|S)\b/i',
+            // US size format: "US L-Long", "US M"
+            '/\bUS\s+(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)(?:[-\/](Long|Regular|Short|L|R|S))?\b/i',
+            // Simple size at end: "... XL", "... M"
+            '/\s(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)\s*$/i',
+            // Numeric sizes (shoes, etc): "43", "44.5"
+            '/\s(\d{2}(?:\.\d)?)\s*$/',
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $title, $matches)) {
+                // Return full match for compound sizes, or first capture group
+                if (isset($matches[2]) && !empty($matches[2])) {
+                    return strtoupper($matches[1]) . '/' . strtoupper($matches[2]);
+                }
+                return strtoupper($matches[1]);
+            }
         }
         
         return null;

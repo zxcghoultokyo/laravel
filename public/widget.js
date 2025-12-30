@@ -1,15 +1,15 @@
 /**
- * AIntento Chat Widget v2.3.5
+ * AIntento Chat Widget v2.3.6
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.5"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.6"></script>
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.5';
+    const WIDGET_VERSION = '2.3.6';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1392,21 +1392,42 @@
                 position: absolute;
                 top: 6px;
                 right: 6px;
-                width: 14px;
-                height: 14px;
-                background: #f3f4f6;
+                width: 18px;
+                height: 18px;
+                background: linear-gradient(135deg, ${s.primary_color}, #60a5fa);
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 9px;
-                color: #6b7280;
-                cursor: help;
-                font-weight: 600;
+                font-size: 11px;
+                color: white;
+                cursor: pointer;
+                font-weight: 700;
                 z-index: 2;
+                box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+                transition: all 0.2s;
+                animation: aintento-info-pulse 2s infinite;
             `;
             infoIcon.textContent = 'i';
             infoIcon.title = item.reason || 'Рекомендований товар';
+            
+            // Add pulse animation for info icon if not exists
+            if (!document.querySelector('#aintento-info-pulse-style')) {
+                const style = document.createElement('style');
+                style.id = 'aintento-info-pulse-style';
+                style.textContent = '@keyframes aintento-info-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }';
+                document.head.appendChild(style);
+            }
+            
+            infoIcon.onmouseenter = () => { 
+                infoIcon.style.transform = 'scale(1.2)';
+                infoIcon.style.animation = 'none';
+            };
+            infoIcon.onmouseleave = () => { 
+                infoIcon.style.transform = 'scale(1)';
+                infoIcon.style.animation = 'aintento-info-pulse 2s infinite';
+            };
+            
             card.appendChild(infoIcon);
             
             // Image (clickable)

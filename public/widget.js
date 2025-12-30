@@ -8,11 +8,25 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.0.0';
-    const DEBUG = false; // Set to true only for debugging
+    const WIDGET_VERSION = '2.0.1';
+    const DEBUG = true; // Enable for troubleshooting
     
-    // Bot avatar URL (will be set dynamically)
-    let BOT_AVATAR = '/images/aintento-avatar.svg';
+    // Capture script reference immediately (before DOMContentLoaded makes it null)
+    const CURRENT_SCRIPT = document.currentScript;
+    
+    // Determine API base URL from script src
+    let BASE_URL = 'https://aimbot.laravel.cloud';
+    if (CURRENT_SCRIPT && CURRENT_SCRIPT.src) {
+        try {
+            const scriptUrl = new URL(CURRENT_SCRIPT.src);
+            BASE_URL = scriptUrl.origin;
+        } catch (e) {
+            // fallback to production
+        }
+    }
+    
+    // Bot avatar URL
+    let BOT_AVATAR = BASE_URL + '/images/aintento-avatar.svg';
 
     function log(...args) {
         if (DEBUG) console.log('[AIntento]', ...args);
@@ -61,19 +75,7 @@
 
         log('Token received, loading settings...');
 
-        // Determine API base URL - use current host if widget is on same domain, otherwise use production
-        const currentScript = document.currentScript || document.querySelector('script[src*="widget.js"]');
-        let baseUrl = 'https://aimbot.laravel.cloud';
-        if (currentScript && currentScript.src) {
-            try {
-                const scriptUrl = new URL(currentScript.src);
-                baseUrl = scriptUrl.origin;
-            } catch (e) {
-                // fallback to production
-            }
-        }
-        
-        const apiUrl = baseUrl + '/api/widget/settings';
+        const apiUrl = BASE_URL + '/api/widget/settings';
 
         fetch(apiUrl, {
             headers: {
@@ -84,11 +86,11 @@
         .then(res => res.json())
         .then(settings => {
             log('Settings loaded', settings);
-            renderWidget(container, settings, token, baseUrl);
+            renderWidget(container, settings, token);
         })
         .catch(err => {
             logError('Failed to load settings', err);
-            renderWidget(container, getDefaultSettings(), token, baseUrl);
+            renderWidget(container, getDefaultSettings(), token);
         });
     }
 
@@ -106,14 +108,14 @@
         };
     }
 
-    function renderWidget(container, settings, token, baseUrl) {
+    function renderWidget(container, settings, token) {
         if (!settings.enabled) {
             log('Widget disabled in settings');
             return;
         }
 
-        // Set bot avatar URL
-        BOT_AVATAR = baseUrl + '/images/aintento-avatar.svg';
+        // Bot avatar uses BASE_URL
+        BOT_AVATAR = BASE_URL + '/images/aintento-avatar.svg';
 
         // Store settings globally
         window.aintentoSettings = settings;
@@ -435,7 +437,7 @@
             input.value = '';
 
             const loader = addLoader(messages);
-            const chatApiUrl = baseUrl + '/api/chat';
+            const chatApiUrl = BASE_URL + '/api/chat';
 
             fetch(chatApiUrl, {
                 method: 'POST',

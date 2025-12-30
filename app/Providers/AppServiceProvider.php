@@ -162,7 +162,8 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\Agent\Tools\MeiliProductSearchTool(
                 $app->make(\App\Services\Search\MeiliClient::class),
                 $app->make(\App\Services\Search\BrandDetectionService::class),
-                $app->make(\App\Services\Search\ColorService::class)
+                $app->make(\App\Services\Search\ColorService::class),
+                $app->make(\App\Services\Search\QueryExpander::class)
             );
         });
 

@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Services\Search\MeiliClient;
 use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
+use App\Services\Search\QueryExpander;
 use Illuminate\Support\Facades\Log;
 
 class MeiliProductSearchTool
@@ -13,7 +14,8 @@ class MeiliProductSearchTool
     public function __construct(
         private MeiliClient $meiliClient,
         private BrandDetectionService $brandDetection,
-        private ColorService $colorService
+        private ColorService $colorService,
+        private QueryExpander $queryExpander
     ) {}
 
     /**
@@ -637,6 +639,11 @@ class MeiliProductSearchTool
     {
         $q = trim($query);
         $l = mb_strtolower($q);
+        
+        // 1. Use QueryExpander with DB synonyms (product_synonyms + color_synonyms tables)
+        $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk');
+        
+        // 2. Additional hardcoded synonyms for edge cases not in DB
         $append = [];
         
         // Level 7 / ECWCS synonyms (winter military clothing)
@@ -661,27 +668,17 @@ class MeiliProductSearchTool
         if (str_contains($l, 'брюки') || str_contains($l, 'штани') || str_contains($l, 'штанів')) {
             $append[] = 'trousers';
             $append[] = 'pants';
-            $append[] = 'штани';
-            $append[] = 'брюки';
         }
         
-        // Medical pouch / IFAK
-        if (str_contains($l, 'підсумок') || str_contains($l, 'підсумки') || str_contains($l, 'аптечк')) {
-            $append[] = 'IFAK';
-            $append[] = 'med pouch';
-            $append[] = 'medical';
-        }
-        // Multicam camo
-        if (str_contains($l, 'мультикам') || str_contains($l, 'multicam')) {
-            $append[] = 'Multicam';
-        }
-        // Boots
-        if (str_contains($l, 'берц') || str_contains($l, 'черевик') || str_contains($l, 'взутт') || str_contains($l, 'boots')) {
-            $append[] = 'boots';
-        }
         if (!empty($append)) {
-            $q .= ' ' . implode(' ', array_unique($append));
+            $expanded .= ' ' . implode(' ', array_unique($append));
         }
-        return $q;
+        
+        Log::debug('MeiliProductSearchTool: expanded query', [
+            'original' => $q,
+            'expanded' => $expanded,
+        ]);
+        
+        return $expanded;
     }
 }

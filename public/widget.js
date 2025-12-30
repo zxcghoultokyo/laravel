@@ -459,13 +459,36 @@
                     saveSessionId(data.session_id);
                 }
 
+                // Track if we need to scroll (only for first element)
+                let hasScrolled = false;
+
                 if (data.text) {
-                    addMessage(messages, data.text, 'assistant', state.sessionId, true);
+                    const firstMsg = addMessage(messages, data.text, 'assistant', state.sessionId, true, !hasScrolled);
+                    if (!hasScrolled && firstMsg) {
+                        hasScrolled = true;
+                    }
                 }
 
                 if (data.data?.product_cards?.length > 0) {
+                    if (!hasScrolled) {
+                        // Scroll to first product card area
+                        setTimeout(() => {
+                            const cards = messages.querySelectorAll('.aintento-message');
+                            if (cards.length > 0) {
+                                cards[cards.length - data.data.product_cards.length]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }
+                        }, 100);
+                        hasScrolled = true;
+                    }
                     addProductCards(messages, data.data.product_cards, state.sessionId, true);
                 } else if (data.data?.products?.length > 0) {
+                    if (!hasScrolled) {
+                        setTimeout(() => {
+                            const container = messages.lastElementChild;
+                            container?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }, 100);
+                        hasScrolled = true;
+                    }
                     addProducts(messages, data.data.products, state.sessionId, true);
                 }
                 
@@ -667,10 +690,7 @@
         });
 
         messagesContainer.appendChild(container);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-
-    function addMessage(messagesContainer, text, role, sessionId, save = true) {
+    }(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
         const s = window.aintentoSettings || { primary_color: '#2563eb' };
         const div = document.createElement('div');
         div.className = `aintento-message aintento-${role}`;
@@ -696,11 +716,16 @@
         bubble.textContent = text;
         div.appendChild(bubble);
         messagesContainer.appendChild(div);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        if (scrollToView) {
+            div.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
         if (save) {
             saveMessage(sessionId, { role, content: text });
         }
+        
+        return div;
     }
 
     function addProductCards(messagesContainer, productCards, sessionId, save = true) {
@@ -742,7 +767,6 @@
         if (save) {
             saveMessage(sessionId, { role: 'product_cards', cards: productCards.slice(0, 3) });
         }
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     function addProducts(messagesContainer, products, sessionId, save = true) {
@@ -760,7 +784,6 @@
         if (save) {
             saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
         }
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
     function createProductCard(product, settings, index) {
@@ -1082,7 +1105,6 @@
         
         wrapper.appendChild(container);
         messagesContainer.appendChild(wrapper);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
     
     // Add cross-sell product as clickable card in chat
@@ -1143,7 +1165,8 @@
         `;
         
         messagesContainer.appendChild(card);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        // Scroll to the product card
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
         
         // Save to history
         saveMessage(sessionId, { role: 'cross_sell_interest', product: item });
@@ -1162,7 +1185,7 @@
             </div>
         `;
         messagesContainer.appendChild(div);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        div.scrollIntoView({ behavior: 'smooth', block: 'end' });
         return div;
     }
 

@@ -27,6 +27,11 @@ Route::options('/widget/settings', function () {
 Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle'])
     ->middleware(['widget.cors', 'throttle:30,1']);
 
+// Streaming chat via Server-Sent Events (SSE)
+// Usage: GET /api/chat/stream?message=плитоноска&session_id=xxx
+Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::class, 'stream'])
+    ->middleware(['widget.cors', 'throttle:30,1']);
+
 // Віджет налаштування
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
     ->middleware('widget.cors');

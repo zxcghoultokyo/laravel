@@ -814,11 +814,19 @@
             `;
         }
 
+        // Truncate description
+        let descText = '';
+        if (product.description) {
+            descText = product.description.replace(/<[^>]*>/g, '').substring(0, 80);
+            if (product.description.length > 80) descText += '...';
+        }
+
         card.innerHTML = `
             <div style="display: flex; gap: 12px;">
                 ${imgHtml}
                 <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
+                    ${descText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${descText}</div>` : ''}
                     <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px;">${product.price} ₴</div>
                 </div>
             </div>
@@ -874,9 +882,9 @@
             const card = document.createElement('div');
             card.style.cssText = `
                 flex-shrink: 0;
-                width: 110px;
+                width: 100px;
                 background: white;
-                border-radius: 12px;
+                border-radius: 10px;
                 padding: 8px;
                 border: 1px solid #e5e7eb;
                 cursor: pointer;
@@ -884,7 +892,12 @@
                 position: relative;
             `;
             
+            const reasonTooltip = item.reason 
+                ? `<span title="${item.reason.replace(/"/g, '&quot;')}" style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: #f3f4f6; border-radius: 50%; font-size: 9px; color: #6b7280; cursor: help; position: absolute; top: 6px; left: 6px;">i</span>` 
+                : '';
+            
             card.innerHTML = `
+                ${reasonTooltip}
                 <input type="checkbox" checked style="
                     position: absolute;
                     top: 6px;
@@ -895,12 +908,11 @@
                     cursor: pointer;
                 " data-article="${item.article}">
                 ${item.image 
-                    ? `<img src="${item.image}" style="width: 100%; height: 60px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" onerror="this.style.display='none'">`
-                    : '<div style="width: 100%; height: 60px; background: #f1f5f9; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px;">📦</div>'
+                    ? `<img src="${item.image}" style="width: 100%; height: 50px; object-fit: cover; border-radius: 8px; margin-bottom: 6px;" onerror="this.style.display='none'">`
+                    : '<div style="width: 100%; height: 50px; background: #f1f5f9; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px;">📦</div>'
                 }
-                <div style="font-size: 11px; font-weight: 500; color: #374151; line-height: 1.3; height: 28px; overflow: hidden;">${item.title}</div>
-                <div style="font-size: 10px; color: #92400e; margin: 4px 0;">${item.reason || ''}</div>
-                <div style="font-size: 13px; font-weight: 700; color: ${s.primary_color};">${item.price} ₴</div>
+                <div style="font-size: 10px; font-weight: 500; color: #374151; line-height: 1.2; height: 24px; overflow: hidden;">${item.title}</div>
+                <div style="font-size: 12px; font-weight: 700; color: ${s.primary_color};">${item.price} ₴</div>
             `;
             
             card.onmouseenter = () => {
@@ -943,19 +955,28 @@
             cursor: pointer;
             transition: all 0.2s;
         `;
-        addAllBtn.textContent = 'Додати все';
+        addAllBtn.textContent = 'Мені цікаво';
         addAllBtn.onmouseenter = () => { addAllBtn.style.opacity = '0.9'; };
         addAllBtn.onmouseleave = () => { addAllBtn.style.opacity = '1'; };
         addAllBtn.onclick = () => {
-            const selectedArticles = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
-                .map(cb => cb.dataset.article);
-            if (selectedArticles.length > 0) {
-                // Here you could call an API to add to cart
+            const selectedItems = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(cb => {
+                    const card = cb.closest('div[style*="flex-shrink"]');
+                    const title = card?.querySelector('div[style*="font-weight: 500"]')?.textContent || '';
+                    return { article: cb.dataset.article, title: title.trim() };
+                })
+                .filter(item => item.article);
+            
+            if (selectedItems.length > 0) {
+                // Close cross-sell block
                 wrapper.style.opacity = '0';
                 wrapper.style.transform = 'translateY(-10px)';
                 wrapper.style.transition = 'all 0.3s ease';
                 setTimeout(() => wrapper.remove(), 300);
-                addMessage(messagesContainer, 'Чудово! Ці товари будуть додані до вашого замовлення при оформленні. 🛒', 'assistant', sessionId, true);
+                
+                // Show confirmation with selected items
+                const itemsList = selectedItems.map(i => i.title || i.article).join(', ');
+                addMessage(messagesContainer, `Записав! Ви зацікавлені в: ${itemsList}. При оформленні замовлення можемо додати ці товари. 👍`, 'assistant', sessionId, true);
             }
         };
         

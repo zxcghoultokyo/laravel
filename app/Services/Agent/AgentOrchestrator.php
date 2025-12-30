@@ -1181,10 +1181,31 @@ class AgentOrchestrator
 
     /**
      * Detect if this is a request for popular/gift/bestseller products.
+     * Returns false if there's a specific product mentioned (e.g., "футболку на подарунок").
      */
     private function isPopularProductsRequest(string $searchQuery, string $originalMessage): bool
     {
         $q = mb_strtolower($searchQuery . ' ' . $originalMessage);
+        
+        // If there's a specific product type mentioned, it's NOT a "show me popular" request
+        // It's a "find me THIS specific product" request
+        $specificProducts = [
+            'футбол', 'майк', 'штан', 'куртк', 'кепк', 'панам', 'шапк', 'балаклав',
+            'термо', 'підштан', 'сорочк', 'худі', 'флан', 'флісов', 'світшот',
+            'плитонос', 'шолом', 'берц', 'рюкзак', 'підсумк', 'розвантаж', 'бронежил',
+            'ремен', 'пояс', 'накол', 'налокіт', 'рукавиц', 'перчатк', 'окуляр', 
+            'ліхтар', 'ніж', 'мультитул', 'компас', 'намет', 'каремат', 'спальн',
+            'аптечк', 'турнікет', 'бинт', 'пластир', 'навушник', 'радіо', 'рація',
+            'гідратор', 'фляг', 'термос', 'котелок', 'горілк', 'пальник',
+        ];
+        
+        foreach ($specificProducts as $product) {
+            if (str_contains($q, $product)) {
+                return false; // Has specific product - do normal search
+            }
+        }
+        
+        // Only then check for "popular/gift" patterns
         $patterns = [
             'популярн', 'найкращ', 'хіт', 'бестселер', 'bestseller', 
             'подарун', 'gift', 'що купують', 'що беруть', 'найчастіше',

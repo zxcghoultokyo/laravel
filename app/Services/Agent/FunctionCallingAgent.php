@@ -102,11 +102,17 @@ class FunctionCallingAgent
 Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor".
 
 СЛОВНИК ТОВАРІВ:
-- "плити", "бронеплити" → search_products(query="бронеплита")
+- "плити", "бронеплити" → search_products(query="бронеплита ESAPI керамічна", exclude="бокова")
+- "бокові плити" → search_products(query="бокова бронеплита")
 - "плитоноска" → search_products(query="плитоноска", product_type="плитоноска")  
-- "шолом сестан буш" → search_products(query="SESTAN BUSCH", product_type="шолом")
+- "шолом сестан буш" → search_products(query="SESTAN BUSCH шолом")
 - "опс коре" → search_products(query="Ops-Core")
-- "салоні берці" → search_products(query="Salomon", product_type="берці")
+- "салоні берці" → search_products(query="Salomon берці")
+
+ВАЖЛИВО:
+- "плити" = ОСНОВНІ грудні/спинні бронеплити (ESAPI, керамічні, сталеві), НЕ бокові!
+- Якщо просять "плити" - показуй тільки основні, виключай бокові
+- Бокові плити показуй тільки якщо явно просять "бокові"
 
 КОЛИ ЯКИЙ ІНСТРУМЕНТ:
 - Шукають конкретний товар → search_products з query
@@ -173,6 +179,10 @@ PROMPT;
                             'color' => [
                                 'type' => 'string',
                                 'description' => 'Колір (чорний, мультикам, піксель, койот, олива)',
+                            ],
+                            'exclude' => [
+                                'type' => 'string',
+                                'description' => 'Виключити товари що містять це слово в назві (наприклад "бокова" для виключення бокових плит)',
                             ],
                             'limit' => [
                                 'type' => 'integer',
@@ -511,8 +521,19 @@ PROMPT;
             $filters['brand'] = $args['brand'];
         }
 
-        // Search in Meilisearch
-        $results = $this->searchTool->search($query, $filters, $limit);
+        // Search in Meilisearch (request more to account for filtering)
+        $searchLimit = $limit * 3;
+        $results = $this->searchTool->search($query, $filters, $searchLimit);
+
+        // Exclude products by keyword in title
+        if (!empty($args['exclude']) && !empty($results)) {
+            $exclude = mb_strtolower($args['exclude']);
+            $results = array_filter($results, function ($p) use ($exclude) {
+                $title = mb_strtolower($p['title'] ?? '');
+                return !str_contains($title, $exclude);
+            });
+            $results = array_values($results);
+        }
 
         // Filter by product_type if specified (using ai_product_type)
         if (!empty($args['product_type']) && !empty($results)) {
@@ -534,6 +555,9 @@ PROMPT;
             });
             $results = array_values($results);
         }
+
+        // Limit results after filtering
+        $results = array_slice($results, 0, $limit);
 
         // Get full product cards with images
         if (!empty($results)) {

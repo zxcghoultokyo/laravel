@@ -194,6 +194,6 @@ class Analytics extends Component
 
     public function render()
     {
-        return view('livewire.admin.analytics');
+        return view('livewire.admin.analytics')->layout('admin.layout');
     }
 }

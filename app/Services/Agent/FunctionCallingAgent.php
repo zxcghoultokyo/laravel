@@ -734,15 +734,40 @@ PROMPT;
         $limit = $args['limit'] ?? 5;
 
         // Cache key based on category and limit
-        $cacheKey = 'popular_products:' . ($category ?? 'all') . ':' . $limit;
+        $cacheKey = 'popular_products_v4:' . ($category ?? 'all') . ':' . $limit;
         
         // Cache popular products for 5 minutes
         return Cache::remember($cacheKey, 300, function () use ($category, $limit) {
             $products = [];
 
+            // Filter function to exclude rare/expensive items
+            $filterProduct = function($p) {
+                $size = strtolower($p['size'] ?? '');
+                $title = strtolower($p['title'] ?? '');
+                $price = (float) ($p['price'] ?? 0);
+                
+                // Exclude very large/rare sizes
+                if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl|us\s*1[4-9]|us\s*16)\b/i', $size . ' ' . $title)) {
+                    return false;
+                }
+                
+                // Exclude expensive items (>15k) - not mass market
+                if ($price > 15000) {
+                    return false;
+                }
+                
+                // Must be in stock
+                if (!($p['in_stock'] ?? false)) {
+                    return false;
+                }
+                
+                return true;
+            };
+
             if ($category) {
                 // Search in specific category
-                $results = $this->searchTool->search($category, [], $limit * 2);
+                $results = $this->searchTool->search($category, [], $limit * 3);
+                $results = array_filter($results, $filterProduct);
                 
                 // Sort by popularity
                 usort($results, function ($a, $b) {
@@ -753,18 +778,27 @@ PROMPT;
                 
                 $products = array_slice($results, 0, $limit);
             } else {
-                // Get top from different categories
-                $categories = ['плитоноска', 'шолом', 'берці', 'рюкзак'];
+                // Curated popular queries - affordable, common items
+                $popularQueries = [
+                    'плитоноска НАТО',    // Basic plate carrier
+                    'підсумок магазин',   // Magazine pouches
+                    'рукавички тактичні', // Tactical gloves
+                    'аптечка ІФАК',       // First aid
+                ];
                 
-                foreach ($categories as $cat) {
-                    $results = $this->searchTool->search($cat, [], 5);
+                foreach ($popularQueries as $query) {
+                    $results = $this->searchTool->search($query, [], 10);
+                    $results = array_filter($results, $filterProduct);
                     if (!empty($results)) {
-                        usort($results, function ($a, $b) {
-                            $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                            $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                            return $popB <=> $popA;
+                        // Sort by optimal price (mid-range preferred)
+                        usort($results, function($a, $b) {
+                            $priceA = (float) ($a['price'] ?? 0);
+                            $priceB = (float) ($b['price'] ?? 0);
+                            $scoreA = abs($priceA - 3000) + (10000 - ($a['popularity'] ?? 0));
+                            $scoreB = abs($priceB - 3000) + (10000 - ($b['popularity'] ?? 0));
+                            return $scoreA <=> $scoreB;
                         });
-                        $products[] = $results[0];
+                        $products[] = array_values($results)[0];
                     }
                     
                     if (count($products) >= $limit) {

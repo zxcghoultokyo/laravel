@@ -44,7 +44,7 @@ class AnalyticsController extends Controller
         ]);
 
         if (empty($events)) {
-            return response()->json(['status' => 'ok', 'received' => 0]);
+            return response()->json(['status' => 'ok', 'received' => 0, 'version' => 'v5']);
         }
 
         $inserted = 0;
@@ -94,11 +94,18 @@ class AnalyticsController extends Controller
                 'trace' => $e->getTraceAsString(),
                 'events_count' => count($events)
             ]);
+            return response()->json([
+                'status' => 'error',
+                'received' => 0,
+                'version' => 'v5',
+                'error' => $e->getMessage()
+            ]);
         }
 
         return response()->json([
             'status' => 'ok',
-            'received' => $inserted
+            'received' => $inserted,
+            'version' => 'v5'
         ]);
     }
 

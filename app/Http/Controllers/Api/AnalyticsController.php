@@ -15,7 +15,14 @@ class AnalyticsController extends Controller
      */
     public function events(Request $request)
     {
-        $data = $request->json()->all();
+        // Support both application/json and text/plain (for CORS-free sendBeacon)
+        $contentType = $request->header('Content-Type', '');
+        if (str_contains($contentType, 'text/plain')) {
+            $data = json_decode($request->getContent(), true) ?? [];
+        } else {
+            $data = $request->json()->all();
+        }
+        
         $events = $data['events'] ?? [];
 
         if (empty($events)) {

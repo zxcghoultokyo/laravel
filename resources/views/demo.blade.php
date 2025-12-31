@@ -146,6 +146,21 @@
             gap: 1rem;
             max-width: 800px;
             margin-bottom: 3rem;
+            transition: all 0.5s ease;
+        }
+
+        .features.shifted {
+            max-width: 400px;
+            grid-template-columns: 1fr;
+        }
+
+        .features-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 2rem;
+            justify-content: center;
+            width: 100%;
+            max-width: 1000px;
         }
 
         .feature {
@@ -156,12 +171,21 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
-            transition: all 0.2s;
+            transition: all 0.3s;
+            cursor: pointer;
+            user-select: none;
         }
 
         .feature:hover {
             background: var(--surface-hover);
             border-color: rgba(34, 197, 94, 0.3);
+            transform: translateX(-4px);
+        }
+
+        .feature.active {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
         }
 
         .feature-icon {
@@ -171,6 +195,127 @@
         .feature-text {
             font-size: 0.875rem;
             color: var(--text-muted);
+        }
+
+        .feature.active .feature-text {
+            color: var(--text);
+        }
+
+        /* Feature Demo Panel */
+        .feature-demo {
+            width: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: all 0.5s ease;
+            flex-shrink: 0;
+        }
+
+        .feature-demo.visible {
+            width: 380px;
+            opacity: 1;
+        }
+
+        .feature-demo-inner {
+            width: 380px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .feature-demo-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, var(--primary), #10b981);
+        }
+
+        .feature-demo-header h4 {
+            font-size: 0.875rem;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .feature-demo-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .feature-demo-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .feature-demo-chat {
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .chat-msg {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+            animation: msgFadeIn 0.3s ease-out;
+            animation-fill-mode: both;
+        }
+
+        .chat-msg:nth-child(1) { animation-delay: 0.1s; }
+        .chat-msg:nth-child(2) { animation-delay: 0.3s; }
+        .chat-msg:nth-child(3) { animation-delay: 0.5s; }
+        .chat-msg:nth-child(4) { animation-delay: 0.7s; }
+        .chat-msg:nth-child(5) { animation-delay: 0.9s; }
+
+        @keyframes msgFadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chat-msg.user {
+            background: var(--border);
+            margin-left: 2rem;
+            border-bottom-right-radius: 4px;
+        }
+
+        .chat-msg.bot {
+            background: rgba(34, 197, 94, 0.1);
+            margin-right: 2rem;
+            border-bottom-left-radius: 4px;
+        }
+
+        .chat-msg .product-card {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: var(--surface-hover);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .chat-msg .product-card strong {
+            color: var(--primary);
+            font-size: 0.75rem;
+        }
+
+        .chat-msg .product-card p {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
         }
 
         .cta-group {
@@ -331,6 +476,16 @@
             .features {
                 grid-template-columns: 1fr;
             }
+            .features-container {
+                flex-direction: column;
+            }
+            .feature-demo.visible {
+                width: 100%;
+                max-width: 380px;
+            }
+            .features.shifted {
+                max-width: 100%;
+            }
         }
     </style>
 </head>
@@ -362,38 +517,52 @@
             Демо на базі <a href="https://contractor.kiev.ua" target="_blank" style="color: var(--primary);">contractor.kiev.ua</a>
         </p>
 
-        <div class="features">
-            <div class="feature">
-                <span class="feature-icon">🔍</span>
-                <span class="feature-text">Пошук товарів з AI-ранжуванням</span>
+        <div class="features-container">
+            <div class="features" id="featuresGrid">
+                <div class="feature" data-feature="search" onclick="showFeatureDemo('search')">
+                    <span class="feature-icon">🔍</span>
+                    <span class="feature-text">Пошук товарів з AI-ранжуванням</span>
+                </div>
+                <div class="feature" data-feature="tracking" onclick="showFeatureDemo('tracking')">
+                    <span class="feature-icon">📦</span>
+                    <span class="feature-text">Відстеження замовлень НП</span>
+                </div>
+                <div class="feature" data-feature="faq" onclick="showFeatureDemo('faq')">
+                    <span class="feature-icon">💬</span>
+                    <span class="feature-text">FAQ та консультації</span>
+                </div>
+                <div class="feature" data-feature="crosssell" onclick="showFeatureDemo('crosssell')">
+                    <span class="feature-icon">🛒</span>
+                    <span class="feature-text">Cross-sell пропозиції</span>
+                </div>
+                <div class="feature" data-feature="sizes" onclick="showFeatureDemo('sizes')">
+                    <span class="feature-icon">📐</span>
+                    <span class="feature-text">Розміри та наявність</span>
+                </div>
+                <div class="feature" data-feature="multilang" onclick="showFeatureDemo('multilang')">
+                    <span class="feature-icon">🌍</span>
+                    <span class="feature-text">Мультимовність (UA/EN/RU)</span>
+                </div>
+                <div class="feature" data-feature="streaming" onclick="showFeatureDemo('streaming')">
+                    <span class="feature-icon">⚡</span>
+                    <span class="feature-text">SSE Streaming відповіді</span>
+                </div>
+                <div class="feature" data-feature="context" onclick="showFeatureDemo('context')">
+                    <span class="feature-icon">🧠</span>
+                    <span class="feature-text">Контекст сесії</span>
+                </div>
             </div>
-            <div class="feature">
-                <span class="feature-icon">📦</span>
-                <span class="feature-text">Відстеження замовлень НП</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">💬</span>
-                <span class="feature-text">FAQ та консультації</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">🛒</span>
-                <span class="feature-text">Cross-sell пропозиції</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">📐</span>
-                <span class="feature-text">Розміри та наявність</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">🌍</span>
-                <span class="feature-text">Мультимовність (UA/EN/RU)</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">⚡</span>
-                <span class="feature-text">SSE Streaming відповіді</span>
-            </div>
-            <div class="feature">
-                <span class="feature-icon">🧠</span>
-                <span class="feature-text">Контекст сесії</span>
+
+            <div class="feature-demo" id="featureDemo">
+                <div class="feature-demo-inner">
+                    <div class="feature-demo-header">
+                        <h4><span id="demoPanelIcon">🔍</span> <span id="demoPanelTitle">Демо</span></h4>
+                        <button class="feature-demo-close" onclick="hideFeatureDemo()">×</button>
+                    </div>
+                    <div class="feature-demo-chat" id="demoChatMessages">
+                        <!-- Messages will be inserted here -->
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -450,5 +619,133 @@
     <!-- AIntento Chat Widget (production version) -->
     <div id="aintento-chat" data-token="demo"></div>
     <script src="/widget.js?v={{ time() }}"></script>
+
+    <script>
+        // Feature demo data
+        const featureDemos = {
+            search: {
+                icon: '🔍',
+                title: 'Пошук товарів',
+                messages: [
+                    { type: 'user', text: 'плитоноска до 5000 грн' },
+                    { type: 'bot', text: '🎯 Ось що знайшов для тебе:', product: { name: 'Плитоноска АТАКА Quick Release', price: '4,850 грн', desc: 'Швидкоскидна, Мультикам, в наявності' } },
+                    { type: 'bot', text: 'Всі 3 варіанти в наявності та підходять під твій бюджет. Перший — найпопулярніший!' }
+                ]
+            },
+            tracking: {
+                icon: '📦',
+                title: 'Відстеження НП',
+                messages: [
+                    { type: 'user', text: 'ТТН 20450678901234' },
+                    { type: 'bot', text: '📦 <strong>Статус посилки:</strong><br><br>✅ Відправлення прибуло у відділення<br>📍 Київ, відділення №125<br>📅 Очікує отримання з 28.12' },
+                    { type: 'bot', text: '💡 Відділення працює до 20:00. Не забудьте паспорт!' }
+                ]
+            },
+            faq: {
+                icon: '💬',
+                title: 'FAQ',
+                messages: [
+                    { type: 'user', text: 'як оплатити замовлення?' },
+                    { type: 'bot', text: '💳 <strong>Способи оплати:</strong><br><br>• Карткою онлайн (Visa/MC)<br>• Накладений платіж НП<br>• Безготівковий для ФОП/ТОВ<br>• Apple Pay / Google Pay' },
+                    { type: 'user', text: 'а безкоштовна доставка є?' },
+                    { type: 'bot', text: '🚚 Так! Безкоштовна доставка при замовленні від 2000 грн' }
+                ]
+            },
+            crosssell: {
+                icon: '🛒',
+                title: 'Cross-sell',
+                messages: [
+                    { type: 'bot', text: '✨ До твоєї плитоноски рекомендую:', product: { name: 'Підсумок під магазини', price: '890 грн', desc: 'Ідеально підходить до АТАКА' } },
+                    { type: 'bot', text: '🎯 Також часто беруть:', product: { name: 'Гідратор 2.5L', price: '650 грн', desc: 'Сумісний з твоєю плитоноскою' } },
+                    { type: 'user', text: 'давай обидва' },
+                    { type: 'bot', text: '✅ Додав до кошика! Загалом: 6,390 грн' }
+                ]
+            },
+            sizes: {
+                icon: '📐',
+                title: 'Розміри',
+                messages: [
+                    { type: 'user', text: 'берці Salomon' },
+                    { type: 'bot', text: '🥾 Знайшов Salomon Quest 4D:', product: { name: 'Salomon Quest 4D GTX', price: '8,200 грн', desc: 'Розмір: 44, Чорні' } },
+                    { type: 'user', text: 'а є в 42?' },
+                    { type: 'bot', text: '✅ Так, є! Розмір 42 в наявності.<br><br>Доступні розміри: <strong>41, 42, 43, 45</strong>' }
+                ]
+            },
+            multilang: {
+                icon: '🌍',
+                title: 'Мультимовність',
+                messages: [
+                    { type: 'user', text: 'Do you have tactical gloves?' },
+                    { type: 'bot', text: '🧤 Yes! Here are our tactical gloves:', product: { name: 'Mechanix M-Pact', price: '1,450 UAH', desc: 'Black, Size M, in stock' } },
+                    { type: 'user', text: 'Есть ли доставка в Польшу?' },
+                    { type: 'bot', text: '🌍 Да, доставляем в Польшу через Meest. Срок 5-7 дней, стоимость от 350 грн.' }
+                ]
+            },
+            streaming: {
+                icon: '⚡',
+                title: 'SSE Streaming',
+                messages: [
+                    { type: 'user', text: 'розкажи про шолом балістичний' },
+                    { type: 'bot', text: '⚡ <em style="color:var(--text-muted)">[відповідь друкується в реальному часі...]</em>' },
+                    { type: 'bot', text: '🪖 <strong>Шолом АТАКА Aegis II:</strong><br><br>• Клас захисту: NIJ IIIA<br>• Вага: 1.4 кг<br>• Матеріал: арамід<br>• Рейки та NVG mount' },
+                    { type: 'bot', text: '💡 Текст з\'являється поступово — користувач бачить відповідь одразу!' }
+                ]
+            },
+            context: {
+                icon: '🧠',
+                title: 'Контекст сесії',
+                messages: [
+                    { type: 'user', text: 'покажи рюкзаки' },
+                    { type: 'bot', text: '🎒 Ось тактичні рюкзаки:', product: { name: 'Рюкзак 45L АТАКА', price: '2,800 грн', desc: 'Олива, Molle система' } },
+                    { type: 'user', text: 'а більший є?' },
+                    { type: 'bot', text: '🧠 Зрозумів — шукаєш рюкзак більше 45L:', product: { name: 'Рюкзак 65L Tactical', price: '3,400 грн', desc: 'Найбільший у лінійці' } },
+                    { type: 'user', text: 'ще варіанти' },
+                    { type: 'bot', text: '📋 Показую ще 3 рюкзаки 50-70L, яких ще не бачив...' }
+                ]
+            }
+        };
+
+        let currentFeature = null;
+
+        function showFeatureDemo(featureKey) {
+            const demo = featureDemos[featureKey];
+            if (!demo) return;
+
+            // Update active state
+            document.querySelectorAll('.feature').forEach(f => f.classList.remove('active'));
+            document.querySelector(`[data-feature="${featureKey}"]`).classList.add('active');
+
+            // Shift grid
+            document.getElementById('featuresGrid').classList.add('shifted');
+
+            // Show demo panel
+            document.getElementById('featureDemo').classList.add('visible');
+            document.getElementById('demoPanelIcon').textContent = demo.icon;
+            document.getElementById('demoPanelTitle').textContent = demo.title;
+
+            // Render messages
+            const chatContainer = document.getElementById('demoChatMessages');
+            chatContainer.innerHTML = demo.messages.map(msg => {
+                let html = `<div class="chat-msg ${msg.type}">${msg.text}`;
+                if (msg.product) {
+                    html += `<div class="product-card">
+                        <strong>${msg.product.name}</strong>
+                        <p>${msg.product.price} • ${msg.product.desc}</p>
+                    </div>`;
+                }
+                html += '</div>';
+                return html;
+            }).join('');
+
+            currentFeature = featureKey;
+        }
+
+        function hideFeatureDemo() {
+            document.querySelectorAll('.feature').forEach(f => f.classList.remove('active'));
+            document.getElementById('featuresGrid').classList.remove('shifted');
+            document.getElementById('featureDemo').classList.remove('visible');
+            currentFeature = null;
+        }
+    </script>
 </body>
 </html>

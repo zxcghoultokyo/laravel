@@ -54,6 +54,37 @@ class Analytics extends Component
 
     private function getBasicStats($startDate): array
     {
+        // Page views (visitors who saw the widget)
+        $pageViews = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->where('event_type', 'page_view')
+            ->count();
+        
+        // Unique page visitors
+        $pageVisitors = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->where('event_type', 'page_view')
+            ->whereNotNull('client_id')
+            ->distinct('client_id')
+            ->count('client_id');
+        
+        // Chat opened (users who opened the chat)
+        $chatOpened = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->where('event_type', 'chat_opened')
+            ->count();
+        
+        // Unique users who opened chat
+        $chatOpenedUsers = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->where('event_type', 'chat_opened')
+            ->whereNotNull('client_id')
+            ->distinct('client_id')
+            ->count('client_id');
+        
+        // Widget open rate (% of visitors who opened chat)
+        $widgetOpenRate = $pageVisitors > 0 ? round(($chatOpenedUsers / $pageVisitors) * 100, 1) : 0;
+        
         // Sessions (unique session_ids with session_start event)
         $sessions = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
@@ -112,6 +143,11 @@ class Analytics extends Component
         $avgMessages = $sessions > 0 ? round($messages / $sessions, 1) : 0;
 
         return [
+            'page_views' => $pageViews,
+            'page_visitors' => $pageVisitors,
+            'chat_opened' => $chatOpened,
+            'chat_opened_users' => $chatOpenedUsers,
+            'widget_open_rate' => $widgetOpenRate,
             'sessions' => $sessions,
             'unique_users' => $uniqueUsers,
             'messages' => $messages,

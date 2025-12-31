@@ -32,6 +32,28 @@
             <code class="bg-yellow-100 px-3 py-1 rounded text-sm">php artisan migrate</code>
         </div>
     @else
+        <!-- Visitors Funnel -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <h3 class="text-sm font-semibold text-gray-500 mb-3">📈 Воронка відвідувачів</h3>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <div class="text-3xl font-bold text-gray-700">{{ number_format($stats['page_visitors'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500">Відвідувачів</div>
+                    <div class="text-xs text-gray-400 mt-1">{{ number_format($stats['page_views'] ?? 0) }} переглядів</div>
+                </div>
+                <div class="text-center p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
+                    <div class="text-3xl font-bold text-blue-600">{{ number_format($stats['chat_opened_users'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500">Відкрили чат</div>
+                    <div class="text-xs text-blue-600 mt-1 font-medium">{{ $stats['widget_open_rate'] ?? 0 }}% конверсія</div>
+                </div>
+                <div class="text-center p-3 bg-green-50 rounded-lg">
+                    <div class="text-3xl font-bold text-green-600">{{ number_format($stats['sessions'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500">Активних сесій</div>
+                    <div class="text-xs text-gray-400 mt-1">{{ $stats['avg_messages'] ?? 0 }} msg/сесія</div>
+                </div>
+            </div>
+        </div>
+    
         <!-- Stats Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
             <div class="bg-white rounded-lg shadow p-4">

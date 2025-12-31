@@ -154,6 +154,11 @@
 
         // Setup event handlers with cleanup tracking
         setupEventHandlers(elements, state, settings, token, savedMessages);
+        
+        // Track page view (widget loaded on page)
+        sendAnalyticsEvent('page_view', {
+            widget_version: WIDGET_VERSION
+        });
     }
 
     function injectStyles(settings) {

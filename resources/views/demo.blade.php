@@ -349,7 +349,7 @@
 
     <main class="hero">
         <div class="badge">
-            🚀 GPT-4.1 + Meilisearch
+            🚀 GPT-4.1 / GPT-5.1 + Meilisearch
         </div>
 
         <h1>
@@ -429,7 +429,8 @@
             <h3>🛠 Технології</h3>
             <div class="tech-items">
                 <span class="tech-item">Laravel 12</span>
-                <span class="tech-item">GPT-4.1</span>
+                <span class="tech-item">GPT-5.1 (chat)</span>
+                <span class="tech-item">GPT-4.1-mini (analyze)</span>
                 <span class="tech-item">Meilisearch</span>
                 <span class="tech-item">SSE Streaming</span>
                 <span class="tech-item">Horoshop API</span>

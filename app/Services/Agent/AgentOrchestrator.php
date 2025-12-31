@@ -73,6 +73,11 @@ class AgentOrchestrator
             if ($this->isWhyChosenFollowUp($message)) {
                 return $this->handleWhyChosenFollowUp($sessionContext, $sessionId);
             }
+            // "А є такі в розмірі 44?" — check size/color availability
+            $sizeColorRequest = $this->parseSizeColorAvailabilityRequest($message);
+            if ($sizeColorRequest) {
+                return $this->handleSizeColorAvailabilityFollowUp($message, $sessionContext, $sizeColorRequest, $sessionId);
+            }
             // "Розкажи про них" — product details
             if ($this->isDetailsFollowUp($message)) {
                 return $this->handleProductDetailsFollowUp($message, $sessionContext);
@@ -1191,6 +1196,373 @@ class AgentOrchestrator
             }
         }
         return false;
+    }
+
+    /**
+     * Parse size/color availability request.
+     * Examples: "а є в 44?", "є такі в розмірі L?", "чи є чорні?", "а є меншого розміру?"
+     * Returns array with 'type' (size|color|both|smaller|larger) and 'value' if applicable.
+     */
+    private function parseSizeColorAvailabilityRequest(string $message): ?array
+    {
+        $m = mb_strtolower(trim($message));
+        
+        // Patterns for size/color availability questions
+        $sizePatterns = [
+            // "а є в 44?" / "є в розмірі 44?"
+            '/(?:а\s+)?(?:чи\s+)?є\s+(?:такі\s+)?(?:в\s+)?(?:розмір[іуе]?\s+)?(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*\??$/ui',
+            // "є розмір 44?" / "розмір L є?"
+            '/(?:є\s+)?розмір\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*\??$/ui',
+            // "такі є в 44?" / "в 44 є?"
+            '/(?:такі\s+)?(?:є\s+)?в\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*\??$/ui',
+        ];
+        
+        foreach ($sizePatterns as $pattern) {
+            if (preg_match($pattern, $m, $matches)) {
+                return [
+                    'type' => 'size',
+                    'value' => strtoupper($matches[1]),
+                ];
+            }
+        }
+        
+        // "меншого розміру" / "більшого розміру"
+        if (preg_match('/(?:є\s+)?(?:такі\s+)?(?:в\s+)?менш(?:ого|ий|і)\s*(?:розмір|size)?/ui', $m)) {
+            return ['type' => 'smaller', 'value' => null];
+        }
+        if (preg_match('/(?:є\s+)?(?:такі\s+)?(?:в\s+)?більш(?:ого|ий|і)\s*(?:розмір|size)?/ui', $m)) {
+            return ['type' => 'larger', 'value' => null];
+        }
+        
+        // Color patterns: "а є чорні?" / "в іншому кольорі?"
+        $colorPatterns = [
+            // "є чорні/сірі/зелені?"
+            '/(?:а\s+)?(?:чи\s+)?є\s+(?:такі\s+)?(чорн|сір|біл|зелен|син|червон|коричнев|беж|пісоч|оліков|мультикам|хакі|камуфляж|однотон|кольор)/ui',
+            // "в іншому кольорі?" / "інший колір?"
+            '/(?:в\s+)?(?:інш(?:ому|ий|і))\s*(?:колір|кольор)/ui',
+        ];
+        
+        foreach ($colorPatterns as $pattern) {
+            if (preg_match($pattern, $m, $matches)) {
+                return [
+                    'type' => 'color',
+                    'value' => $matches[1] ?? null,
+                ];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Handle size/color availability follow-up.
+     * User asks "а є в 44?" after seeing a product.
+     */
+    private function handleSizeColorAvailabilityFollowUp(string $message, array $sessionContext, array $request, ?string $sessionId): array
+    {
+        Log::info('AgentOrchestrator: size/color availability follow-up', [
+            'message' => $message,
+            'request' => $request,
+            'last_shown_product' => $sessionContext['last_shown_product'] ?? null,
+        ]);
+
+        // Get the last shown product
+        $lastProduct = $sessionContext['last_shown_product'] ?? null;
+        $shownProductIds = $sessionContext['shown_products'] ?? [];
+        
+        if (!$lastProduct && empty($shownProductIds)) {
+            return [
+                'message' => 'Покажіть мені спочатку товар, і тоді я перевірю наявність в потрібному розмірі. Наприклад, напишіть: "берці" або "куртка тактична".',
+                'products' => [],
+                'meta' => ['intent' => 'size_availability', 'no_context' => true],
+            ];
+        }
+
+        // Fetch full details of the last product(s) including size_variants
+        $productIds = $lastProduct ? [$lastProduct['id']] : array_slice($shownProductIds, 0, 1);
+        $products = $this->detailsTool->getCards($productIds, 1);
+        
+        if (empty($products)) {
+            return [
+                'message' => 'Не вдалося знайти інформацію про цей товар. Спробуйте пошукати ще раз.',
+                'products' => [],
+                'meta' => ['intent' => 'size_availability', 'product_not_found' => true],
+            ];
+        }
+
+        $product = $products[0];
+        $productTitle = $product['title'] ?? 'товар';
+        $currentSize = $product['size'] ?? null;
+        $sizeVariants = $product['size_variants'] ?? [];
+        $parentArticle = $product['parent_article'] ?? null;
+        
+        // Handle specific size request
+        if ($request['type'] === 'size' && $request['value']) {
+            $requestedSize = $request['value'];
+            
+            // Check if requested size exists in variants
+            $matchingVariant = null;
+            foreach ($sizeVariants as $variant) {
+                if (strtoupper($variant['size']) === $requestedSize) {
+                    $matchingVariant = $variant;
+                    break;
+                }
+            }
+            
+            if ($matchingVariant) {
+                // Found! Fetch the variant product details
+                $variantProducts = $this->detailsTool->getCards([$matchingVariant['id']], 1);
+                if (!empty($variantProducts)) {
+                    $variantProduct = $variantProducts[0];
+                    return [
+                        'message' => "✅ Так, є! **{$productTitle}** в розмірі **{$requestedSize}** в наявності.\n\n" .
+                                    "Ціна: **{$variantProduct['price']} грн**",
+                        'products' => [$variantProduct],
+                        'meta' => [
+                            'intent' => 'size_availability',
+                            'found' => true,
+                            'requested_size' => $requestedSize,
+                            'chosen_ids' => [$variantProduct['id']],
+                        ],
+                    ];
+                }
+            }
+            
+            // Not found in variants - suggest alternatives
+            $availableSizes = array_column($sizeVariants, 'size');
+            $alternatives = $this->findSizeAlternatives($product, $requestedSize, $sessionId);
+            
+            $messageParts = ["❌ На жаль, **{$productTitle}** в розмірі **{$requestedSize}** немає в наявності."];
+            
+            if (!empty($availableSizes)) {
+                $sizesStr = implode(', ', array_unique($availableSizes));
+                $messageParts[] = "Доступні розміри: **{$sizesStr}**";
+            }
+            
+            if (!empty($alternatives)) {
+                $messageParts[] = "\n🔄 Але я знайшов схожі товари в розмірі {$requestedSize}:";
+                return [
+                    'message' => implode("\n\n", $messageParts),
+                    'products' => $alternatives,
+                    'meta' => [
+                        'intent' => 'size_availability',
+                        'found' => false,
+                        'requested_size' => $requestedSize,
+                        'alternatives_shown' => true,
+                        'chosen_ids' => array_column($alternatives, 'id'),
+                    ],
+                ];
+            }
+            
+            return [
+                'message' => implode("\n\n", $messageParts),
+                'products' => [],
+                'meta' => [
+                    'intent' => 'size_availability',
+                    'found' => false,
+                    'requested_size' => $requestedSize,
+                    'available_sizes' => $availableSizes,
+                ],
+            ];
+        }
+        
+        // Handle "smaller" / "larger" size request
+        if (in_array($request['type'], ['smaller', 'larger']) && !empty($sizeVariants) && $currentSize) {
+            $sizeOrder = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '3XL', '4XL', '5XL'];
+            $numericSizes = range(36, 52, 2); // 36, 38, 40, 42, 44, 46, 48, 50, 52
+            
+            $currentSizeUpper = strtoupper($currentSize);
+            $currentIndex = array_search($currentSizeUpper, $sizeOrder);
+            if ($currentIndex === false && is_numeric($currentSize)) {
+                $currentIndex = array_search((int)$currentSize, $numericSizes);
+                $sizeOrder = $numericSizes;
+            }
+            
+            if ($currentIndex !== false) {
+                $targetIndex = $request['type'] === 'smaller' ? $currentIndex - 1 : $currentIndex + 1;
+                if ($targetIndex >= 0 && $targetIndex < count($sizeOrder)) {
+                    $targetSize = (string) $sizeOrder[$targetIndex];
+                    
+                    // Find variant with target size
+                    foreach ($sizeVariants as $variant) {
+                        if (strtoupper($variant['size']) === $targetSize || $variant['size'] === $targetSize) {
+                            $variantProducts = $this->detailsTool->getCards([$variant['id']], 1);
+                            if (!empty($variantProducts)) {
+                                $direction = $request['type'] === 'smaller' ? 'менший' : 'більший';
+                                return [
+                                    'message' => "✅ Так, є {$direction} розмір! **{$productTitle}** в розмірі **{$targetSize}**:",
+                                    'products' => $variantProducts,
+                                    'meta' => [
+                                        'intent' => 'size_availability',
+                                        'found' => true,
+                                        'direction' => $request['type'],
+                                        'requested_size' => $targetSize,
+                                        'chosen_ids' => [$variantProducts[0]['id']],
+                                    ],
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+            
+            $direction = $request['type'] === 'smaller' ? 'меншого' : 'більшого';
+            $availableSizes = array_column($sizeVariants, 'size');
+            return [
+                'message' => "❌ На жаль, {$direction} розміру немає.\n\nДоступні розміри: **" . implode(', ', array_unique($availableSizes)) . "**",
+                'products' => [],
+                'meta' => [
+                    'intent' => 'size_availability',
+                    'found' => false,
+                    'direction' => $request['type'],
+                    'available_sizes' => $availableSizes,
+                ],
+            ];
+        }
+        
+        // Handle color request
+        if ($request['type'] === 'color') {
+            return $this->handleColorAvailability($product, $request['value'], $sessionId);
+        }
+        
+        // Default: show available variants
+        if (!empty($sizeVariants)) {
+            $sizesStr = implode(', ', array_unique(array_column($sizeVariants, 'size')));
+            return [
+                'message' => "Для **{$productTitle}** доступні розміри: **{$sizesStr}**\n\nЯкий розмір вас цікавить?",
+                'products' => $products,
+                'meta' => [
+                    'intent' => 'size_availability',
+                    'available_sizes' => array_column($sizeVariants, 'size'),
+                ],
+            ];
+        }
+        
+        return [
+            'message' => "Для **{$productTitle}** розмірних варіантів не знайдено. Можливо, це універсальний розмір.",
+            'products' => $products,
+            'meta' => ['intent' => 'size_availability', 'no_variants' => true],
+        ];
+    }
+
+    /**
+     * Find alternative products in the requested size from the same category.
+     */
+    private function findSizeAlternatives(array $originalProduct, string $requestedSize, ?string $sessionId): array
+    {
+        $categoryPath = $originalProduct['category_path'] ?? null;
+        $brand = $originalProduct['brand'] ?? null;
+        
+        if (!$categoryPath) {
+            return [];
+        }
+        
+        // Search for similar products in same category with the requested size
+        $filters = [
+            'size' => $requestedSize,
+        ];
+        
+        // Extract category from path (last segment)
+        $categoryParts = explode(' > ', $categoryPath);
+        $searchCategory = end($categoryParts) ?: $categoryPath;
+        
+        try {
+            $candidates = $this->searchTool->search($searchCategory, $filters, 10);
+            
+            if (empty($candidates)) {
+                return [];
+            }
+            
+            // Filter to only products that have the requested size
+            $matchingProducts = [];
+            foreach ($candidates as $candidate) {
+                $candidateSize = $candidate['size'] ?? null;
+                if ($candidateSize && strtoupper($candidateSize) === strtoupper($requestedSize)) {
+                    $matchingProducts[] = $candidate;
+                }
+            }
+            
+            // Exclude the original product
+            $matchingProducts = array_filter($matchingProducts, fn($p) => ($p['id'] ?? 0) !== ($originalProduct['id'] ?? -1));
+            
+            // Fetch full cards for top 3
+            $ids = array_slice(array_column($matchingProducts, 'id'), 0, 3);
+            if (empty($ids)) {
+                return [];
+            }
+            
+            return $this->detailsTool->getCards($ids, 3);
+        } catch (\Throwable $e) {
+            Log::warning('AgentOrchestrator: failed to find size alternatives', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /**
+     * Handle color availability request.
+     */
+    private function handleColorAvailability(array $product, ?string $requestedColor, ?string $sessionId): array
+    {
+        $productTitle = $product['title'] ?? 'товар';
+        $parentArticle = $product['parent_article'] ?? null;
+        
+        if (!$parentArticle) {
+            return [
+                'message' => "Для **{$productTitle}** кольорових варіантів не знайдено.",
+                'products' => [$product],
+                'meta' => ['intent' => 'color_availability', 'no_variants' => true],
+            ];
+        }
+        
+        // Find siblings with different colors
+        $siblings = \App\Models\Product::query()
+            ->where('parent_article', $parentArticle)
+            ->where('in_stock', true)
+            ->where('id', '!=', $product['id'])
+            ->limit(10)
+            ->get(['id', 'color', 'title']);
+        
+        if ($siblings->isEmpty()) {
+            return [
+                'message' => "Для **{$productTitle}** інших кольорових варіантів немає в наявності.",
+                'products' => [$product],
+                'meta' => ['intent' => 'color_availability', 'no_variants' => true],
+            ];
+        }
+        
+        $siblingIds = $siblings->pluck('id')->toArray();
+        $colorProducts = $this->detailsTool->getCards($siblingIds, 5);
+        
+        if ($requestedColor) {
+            // Filter to matching color
+            $matching = array_filter($colorProducts, function($p) use ($requestedColor) {
+                $color = mb_strtolower($p['color'] ?? '');
+                return str_contains($color, mb_strtolower($requestedColor));
+            });
+            
+            if (!empty($matching)) {
+                $matched = array_values($matching)[0];
+                return [
+                    'message' => "✅ Так, є! **{$productTitle}** в кольорі **{$matched['color']}**:",
+                    'products' => [array_values($matching)[0]],
+                    'meta' => ['intent' => 'color_availability', 'found' => true, 'chosen_ids' => [$matched['id']]],
+                ];
+            }
+        }
+        
+        // Show all available colors
+        $colors = array_filter(array_unique(array_column($colorProducts, 'color')));
+        $colorsStr = implode(', ', $colors);
+        
+        return [
+            'message' => "Для **{$productTitle}** доступні кольори: **{$colorsStr}**",
+            'products' => array_slice($colorProducts, 0, 3),
+            'meta' => [
+                'intent' => 'color_availability',
+                'available_colors' => $colors,
+                'chosen_ids' => array_slice($siblingIds, 0, 3),
+            ],
+        ];
     }
 
     /**

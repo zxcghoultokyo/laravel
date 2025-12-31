@@ -136,6 +136,25 @@ class AnalyticsController extends Controller
     }
 
     /**
+     * Echo endpoint - returns exactly what was received (for debugging)
+     */
+    public function echo(Request $request)
+    {
+        $rawBody = $request->getContent();
+        $parsed = json_decode($rawBody, true);
+        
+        return response()->json([
+            'content_type' => $request->header('Content-Type'),
+            'content_length' => strlen($rawBody),
+            'raw_body_first_500' => substr($rawBody, 0, 500),
+            'json_parse_success' => $parsed !== null,
+            'json_error' => $parsed === null ? json_last_error_msg() : null,
+            'events_count' => isset($parsed['events']) ? count($parsed['events']) : 0,
+            'php_input' => substr(file_get_contents('php://input'), 0, 500),
+        ]);
+    }
+
+    /**
      * Track a conversion (add_to_cart, purchase, lead)
      */
     public function conversion(Request $request)

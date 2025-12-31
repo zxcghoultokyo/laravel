@@ -77,6 +77,8 @@ Route::prefix('analytics')->middleware('widget.cors')->group(function () {
     Route::post('/webhook', [\App\Http\Controllers\Api\AnalyticsController::class, 'webhook']);
     // Debug endpoint - check recent events
     Route::get('/debug-events', [\App\Http\Controllers\Api\AnalyticsController::class, 'debugEvents']);
+    // Echo endpoint - returns what was received
+    Route::post('/echo', [\App\Http\Controllers\Api\AnalyticsController::class, 'echo']);
     // Dashboard data (protected)
     Route::get('/dashboard', [\App\Http\Controllers\Api\AnalyticsController::class, 'dashboard'])
         ->middleware('admin.token');

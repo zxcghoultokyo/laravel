@@ -363,27 +363,16 @@ class DiagnosticController extends Controller
             ]);
         }
 
-        $jobs = 0;
-
-        Product::query()
-            ->select('id')
-            ->orderBy('id')
-            ->chunk($chunk, function ($rows) use (&$jobs, $chunk) {
-                $fromId = (int) $rows->first()->id;
-                $toId   = (int) $rows->last()->id;
-
-                \App\Jobs\IndexProductsToMeiliJob::dispatch($fromId, $toId, $chunk)
-                    ->onQueue('meili');
-
-                $jobs++;
-            });
+        // Dispatch single job that indexes all products in chunks internally
+        \App\Jobs\IndexProductsToMeiliJob::dispatch($chunk)
+            ->onQueue('meili');
 
         return response()->json([
             'status' => 'dispatched',
-            'jobs' => $jobs,
+            'jobs' => 1,
             'total_products' => $total,
             'chunk_size' => $chunk,
-            'message' => "Dispatched {$jobs} job(s) to queue=meili for {$total} product(s)",
+            'message' => "Dispatched 1 job to queue=meili for {$total} product(s)",
         ]);
     }
 }

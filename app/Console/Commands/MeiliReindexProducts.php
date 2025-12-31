@@ -22,23 +22,11 @@ class MeiliReindexProducts extends Command
             return self::SUCCESS;
         }
 
-        $jobs = 0;
+        // Job internally chunks all products
+        IndexProductsToMeiliJob::dispatch($chunk)
+            ->onQueue('meili');
 
-        // One job per ID range (≈ $chunk items)
-        Product::query()
-            ->select('id')
-            ->orderBy('id')
-            ->chunk($chunk, function ($rows) use (&$jobs, $chunk) {
-                $fromId = (int) $rows->first()->id;
-                $toId   = (int) $rows->last()->id;
-
-                IndexProductsToMeiliJob::dispatch($fromId, $toId, $chunk)
-                    ->onQueue('meili');
-
-                $jobs++;
-            });
-
-        $this->info("Dispatched {$jobs} job(s) to queue=meili for {$total} product(s). Chunk={$chunk}.");
+        $this->info("Dispatched 1 job to queue=meili for {$total} product(s). Chunk={$chunk}.");
 
         return self::SUCCESS;
     }

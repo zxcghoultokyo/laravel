@@ -67,6 +67,19 @@ Route::prefix('diagnostic')->group(function () {
 Route::get('/cross-sell', [\App\Http\Controllers\Api\CrossSellController::class, 'suggestions'])
     ->middleware(['widget.cors', 'throttle:60,1']);
 
+// Analytics endpoints
+Route::prefix('analytics')->middleware('widget.cors')->group(function () {
+    // Receive events batch from widget
+    Route::post('/events', [\App\Http\Controllers\Api\AnalyticsController::class, 'events']);
+    // Track conversion (add_to_cart, purchase, lead)
+    Route::post('/conversion', [\App\Http\Controllers\Api\AnalyticsController::class, 'conversion']);
+    // Webhook from merchant platform (order created, etc.)
+    Route::post('/webhook', [\App\Http\Controllers\Api\AnalyticsController::class, 'webhook']);
+    // Dashboard data (protected)
+    Route::get('/dashboard', [\App\Http\Controllers\Api\AnalyticsController::class, 'dashboard'])
+        ->middleware('admin.token');
+});
+
 Route::get('/admin/jobs/sync-horoshop', [AdminJobsController::class, 'syncHoroshop']);
 
 Route::get('/admin/jobs/rebuild-category-index', [AdminJobsController::class, 'rebuildCategoryIndex']);

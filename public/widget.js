@@ -1170,6 +1170,9 @@
 
         messagesContainer.appendChild(container);
         
+        // Track products shown for analytics
+        trackProductsShown(products.slice(0, 3));
+        
         if (save) {
             saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
         }
@@ -1177,7 +1180,10 @@
 
     function createProductCard(product, settings, index) {
         const card = document.createElement('a');
-        card.href = product.link || '#';
+        // Add UTM parameters to product link for attribution
+        const sessionId = localStorage.getItem('aintento_session_id') || '';
+        const productLink = addUtmToLink(product.link, sessionId, product.id);
+        card.href = productLink || '#';
         card.target = '_blank';
         card.style.cssText = `
             display: block;
@@ -1192,6 +1198,11 @@
             animation: aintento-fadeInUp 0.3s ease-out;
             animation-delay: ${index * 0.1}s;
         `;
+        
+        // Track product click for analytics
+        card.addEventListener('click', () => {
+            trackProductClick(product);
+        });
 
         card.onmouseenter = () => {
             card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
@@ -1821,4 +1832,152 @@
         const messages = localStorage.getItem(newKey) || localStorage.getItem(oldKey);
         return JSON.parse(messages || '[]');
     }
+
+    // === Analytics & Attribution ===
+    
+    /**
+     * Add UTM parameters to product link for attribution tracking
+     */
+    function addUtmToLink(link, sessionId, productId) {
+        if (!link || link === '#') return link;
+        try {
+            const url = new URL(link);
+            url.searchParams.set('utm_source', 'aintento');
+            url.searchParams.set('utm_medium', 'chat');
+            url.searchParams.set('utm_campaign', 'widget');
+            if (sessionId) url.searchParams.set('utm_content', sessionId);
+            if (productId) url.searchParams.set('utm_term', String(productId));
+            return url.toString();
+        } catch (e) {
+            return link;
+        }
+    }
+
+    /**
+     * Track product click for attribution
+     */
+    function trackProductClick(product) {
+        // Store clicked product in localStorage for attribution
+        const key = 'aintento_clicked_products';
+        let clicked = [];
+        try {
+            clicked = JSON.parse(localStorage.getItem(key) || '[]');
+        } catch (e) {}
+
+        clicked.push({
+            id: product.id,
+            article: product.article,
+            price: product.price,
+            session_id: localStorage.getItem('aintento_session_id'),
+            timestamp: Date.now()
+        });
+
+        // Keep only last 72 hours, max 50 items
+        const cutoff = Date.now() - (72 * 60 * 60 * 1000);
+        clicked = clicked.filter(p => p.timestamp > cutoff).slice(-50);
+        localStorage.setItem(key, JSON.stringify(clicked));
+
+        // Send event to server
+        sendAnalyticsEvent('product_click', {
+            product_id: product.id,
+            product_article: product.article,
+            product_price: product.price
+        });
+    }
+
+    /**
+     * Track products shown in chat
+     */
+    function trackProductsShown(products) {
+        products.forEach(product => {
+            sendAnalyticsEvent('product_shown', {
+                product_id: product.id,
+                product_article: product.article,
+                product_price: product.price
+            });
+        });
+    }
+
+    /**
+     * Send analytics event to server
+     */
+    const analyticsQueue = [];
+    let analyticsFlushTimeout = null;
+
+    function sendAnalyticsEvent(eventType, data = {}) {
+        const event = {
+            session_id: localStorage.getItem('aintento_session_id') || '',
+            client_id: getOrCreateClientId(),
+            merchant_id: getMerchantId(),
+            event_type: eventType,
+            event_source: 'widget',
+            device_type: detectDeviceType(),
+            page_url: window.location.href,
+            referrer: document.referrer,
+            timestamp: new Date().toISOString(),
+            ...data
+        };
+
+        analyticsQueue.push(event);
+
+        // Debounced flush
+        if (analyticsFlushTimeout) clearTimeout(analyticsFlushTimeout);
+        analyticsFlushTimeout = setTimeout(flushAnalytics, 2000);
+
+        // Immediate flush for important events
+        if (['add_to_cart', 'purchase'].includes(eventType)) {
+            flushAnalytics();
+        }
+    }
+
+    function flushAnalytics() {
+        if (analyticsQueue.length === 0) return;
+
+        const events = [...analyticsQueue];
+        analyticsQueue.length = 0;
+
+        // Use sendBeacon if available for reliability
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon(
+                BASE_URL + '/api/analytics/events',
+                JSON.stringify({ events })
+            );
+        } else {
+            fetch(BASE_URL + '/api/analytics/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ events }),
+                keepalive: true
+            }).catch(() => {});
+        }
+    }
+
+    function getOrCreateClientId() {
+        const cookieName = 'aintento_client_id';
+        let clientId = document.cookie.match(new RegExp('(^| )' + cookieName + '=([^;]+)'))?.[2];
+        if (!clientId) {
+            clientId = 'cli_' + Date.now() + '_' + Math.random().toString(36).substr(2, 12);
+            const expires = new Date(Date.now() + 72 * 60 * 60 * 1000).toUTCString();
+            document.cookie = `${cookieName}=${clientId}; expires=${expires}; path=/; SameSite=Lax`;
+        }
+        return clientId;
+    }
+
+    function getMerchantId() {
+        const container = document.getElementById('aintento-chat');
+        return container?.dataset?.token || window.location.hostname;
+    }
+
+    function detectDeviceType() {
+        const ua = navigator.userAgent;
+        if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+        if (/mobile|iphone|ipod|android|blackberry|opera mini|iemobile/i.test(ua)) return 'mobile';
+        return 'desktop';
+    }
+
+    // Flush analytics on page unload
+    window.addEventListener('pagehide', flushAnalytics);
+    window.addEventListener('beforeunload', flushAnalytics);
+
 })();
+

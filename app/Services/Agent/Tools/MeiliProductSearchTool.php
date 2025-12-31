@@ -161,8 +161,11 @@ class MeiliProductSearchTool
             
             // If we filtered out too many (likely false positives), return originals
             if (count($filtered) === 0) {
-                return $hits;
+                $filtered = $hits;
             }
+            
+            // Deduplicate by title to show different models (not just size/color variants)
+            $filtered = $this->dedupeByTitle($filtered, $limit);
             
             return $filtered;
             
@@ -552,6 +555,31 @@ class MeiliProductSearchTool
             return str_contains($combinedLower, 'берц') || str_contains($combinedLower, 'черевик') || str_contains($combinedLower, 'взутт') || str_contains($combinedLower, 'boot');
         }
         return true;
+    }
+
+    /**
+     * Deduplicate results by title to show different models
+     * Keeps first occurrence of each unique title
+     */
+    private function dedupeByTitle(array $results, int $limit): array
+    {
+        $seen = [];
+        $deduped = [];
+        foreach ($results as $item) {
+            $titleKey = md5(mb_strtolower($item['title'] ?? ''));
+            if (!isset($seen[$titleKey])) {
+                $seen[$titleKey] = true;
+                $deduped[] = $item;
+                if (count($deduped) >= $limit) break;
+            }
+        }
+        
+        Log::info('MeiliProductSearchTool: deduped by title', [
+            'before' => count($results),
+            'after' => count($deduped)
+        ]);
+        
+        return $deduped;
     }
 
     /**

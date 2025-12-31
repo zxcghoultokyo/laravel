@@ -100,7 +100,7 @@ class HealthController extends Controller
 
     private function checkMeilisearch(): array
     {
-        if (!config('app.meili_enabled', false)) {
+        if (!config('meilisearch.enabled', false)) {
             return [
                 'status' => 'ok',
                 'enabled' => false,

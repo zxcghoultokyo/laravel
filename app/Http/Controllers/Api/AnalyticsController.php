@@ -22,12 +22,16 @@ class AnalyticsController extends Controller
             'raw_body_preview' => substr($request->getContent(), 0, 500),
         ]);
         
-        // Support both application/json and text/plain (for CORS-free sendBeacon)
-        $contentType = $request->header('Content-Type', '');
-        if (str_contains($contentType, 'text/plain')) {
-            $data = json_decode($request->getContent(), true) ?? [];
-        } else {
-            $data = $request->json()->all();
+        // Always parse raw body as JSON - handles both text/plain and application/json
+        $rawBody = $request->getContent();
+        $data = json_decode($rawBody, true);
+        
+        if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
+            Log::warning('Analytics JSON parse error', [
+                'error' => json_last_error_msg(),
+                'raw_body' => substr($rawBody, 0, 200),
+            ]);
+            $data = [];
         }
         
         $events = $data['events'] ?? [];

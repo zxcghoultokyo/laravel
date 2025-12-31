@@ -346,6 +346,7 @@ class DiagnosticController extends Controller
     /**
      * POST /api/diagnostic/reindex-meili
      * Trigger Meilisearch reindex
+     * Add ?sync=1 to run synchronously (takes longer but doesn't need queue worker)
      */
     public function reindexMeili(Request $request): JsonResponse
     {
@@ -353,7 +354,8 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $chunk = min((int) $request->query('chunk', 500), 1000);
+        $chunk = min((int) $request->query('chunk', 200), 500);
+        $sync = $request->query('sync', false);
         $total = Product::count();
 
         if ($total === 0) {
@@ -363,7 +365,21 @@ class DiagnosticController extends Controller
             ]);
         }
 
-        // Dispatch single job that indexes all products in chunks internally
+        if ($sync) {
+            // Run synchronously - for when queue worker is not running
+            set_time_limit(300); // 5 minutes
+            $job = new \App\Jobs\IndexProductsToMeiliJob($chunk);
+            $job->handle(app(\App\Services\Search\MeiliClient::class));
+            
+            return response()->json([
+                'status' => 'completed',
+                'total_products' => $total,
+                'chunk_size' => $chunk,
+                'message' => "Indexed {$total} product(s) synchronously",
+            ]);
+        }
+
+        // Dispatch to queue
         \App\Jobs\IndexProductsToMeiliJob::dispatch($chunk)
             ->onQueue('meili');
 

@@ -420,6 +420,8 @@
 
         .tech-stack {
             margin-top: 2rem;
+            margin-left: auto;
+            margin-right: auto;
             padding: 1.5rem;
             background: var(--surface);
             border: 1px solid var(--border);

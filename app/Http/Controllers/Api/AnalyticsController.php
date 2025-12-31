@@ -15,6 +15,13 @@ class AnalyticsController extends Controller
      */
     public function events(Request $request)
     {
+        // Log incoming request for debugging
+        Log::info('Analytics events received', [
+            'content_type' => $request->header('Content-Type'),
+            'content_length' => strlen($request->getContent()),
+            'raw_body_preview' => substr($request->getContent(), 0, 500),
+        ]);
+        
         // Support both application/json and text/plain (for CORS-free sendBeacon)
         $contentType = $request->header('Content-Type', '');
         if (str_contains($contentType, 'text/plain')) {
@@ -24,6 +31,11 @@ class AnalyticsController extends Controller
         }
         
         $events = $data['events'] ?? [];
+
+        Log::info('Analytics events parsed', [
+            'events_count' => count($events),
+            'event_types' => array_column($events, 'event_type'),
+        ]);
 
         if (empty($events)) {
             return response()->json(['status' => 'ok', 'received' => 0]);
@@ -67,11 +79,13 @@ class AnalyticsController extends Controller
                 // Batch insert
                 DB::table('chat_events')->insert($rows);
                 $inserted = count($rows);
+                Log::info('Analytics events inserted', ['count' => $inserted]);
             }
 
         } catch (\Throwable $e) {
             Log::error('Analytics events insert failed', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'events_count' => count($events)
             ]);
         }
@@ -80,6 +94,41 @@ class AnalyticsController extends Controller
             'status' => 'ok',
             'received' => $inserted
         ]);
+    }
+
+    /**
+     * Debug endpoint to check recent events (temporary)
+     */
+    public function debugEvents(Request $request)
+    {
+        $hours = $request->get('hours', 1);
+        
+        try {
+            $events = DB::table('chat_events')
+                ->where('created_at', '>=', now()->subHours($hours))
+                ->orderByDesc('created_at')
+                ->limit(50)
+                ->get(['id', 'event_type', 'session_id', 'created_at']);
+            
+            $counts = DB::table('chat_events')
+                ->where('created_at', '>=', now()->subHours($hours))
+                ->selectRaw('event_type, COUNT(*) as cnt')
+                ->groupBy('event_type')
+                ->get();
+            
+            return response()->json([
+                'status' => 'ok',
+                'hours' => $hours,
+                'total' => count($events),
+                'by_type' => $counts,
+                'recent_events' => $events,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**

@@ -1611,19 +1611,18 @@ class AgentOrchestrator
     /**
      * Handle popular products request - show bestsellers from different categories.
      * Focus on common/mass items, not rare sizes or configurations.
-     * Updated: 2025-12-31 v2 - better filtering
+     * Updated: 2025-12-31 v3 - prioritize affordable items
      */
     private function handlePopularProductsRequest(string $originalMessage, ?string $sessionId): array
     {
-        Log::info('AgentOrchestrator: handling popular products request v2', ['message' => $originalMessage]);
+        Log::info('AgentOrchestrator: handling popular products request v3', ['message' => $originalMessage]);
 
-        // Curated list of popular/essential items that are commonly purchased
-        // These are mass market items, not rare sizes
+        // Curated list of popular/essential items - affordable and commonly purchased
         $popularQueries = [
-            'турнікет',           // Medical - always in demand
-            'плитоноска',         // Plate carriers - universal
+            'турнікет CAT',       // Medical - always in demand, specific
+            'плитоноска НАТО',    // Basic plate carrier, affordable
             'підсумок магазин',   // Magazine pouches - essential
-            'рукавички',          // Gloves - everyone needs
+            'рукавички Mechanix', // Gloves - popular brand
             'аптечка ІФАК',       // First aid kit
         ];
         
@@ -1632,49 +1631,54 @@ class AgentOrchestrator
         foreach ($popularQueries as $query) {
             $results = $this->searchTool->search($query, [], 15);
             if (!empty($results)) {
-                // Filter out rare sizes and expensive items for "mass market" feel
+                // Filter: affordable (<15k), common sizes, in stock
                 $filtered = array_filter($results, function($p) {
                     $size = strtolower($p['size'] ?? '');
                     $title = strtolower($p['title'] ?? '');
                     $price = (float) ($p['price'] ?? 0);
                     
-                    // Exclude very large sizes (50+, XXL, XXXL) - they are rare
+                    // Exclude very large/rare sizes
                     if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl|us\s*1[4-9]|us\s*16)\b/i', $size . ' ' . $title)) {
                         return false;
                     }
                     
-                    // Exclude very expensive items for top products (>20k)
-                    if ($price > 20000) {
+                    // Exclude expensive items (>15k) - not mass market
+                    if ($price > 15000) {
                         return false;
                     }
                     
-                    // Prefer items with universal/common sizes
+                    // Must be in stock
+                    if (!($p['in_stock'] ?? false)) {
+                        return false;
+                    }
+                    
                     return true;
                 });
                 
-                // Sort by popularity + orders + cart adds
+                // Sort by price (affordable first), then popularity
                 usort($filtered, function($a, $b) {
-                    $scoreA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10) + (($a['added_to_cart_count'] ?? 0) * 5);
-                    $scoreB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10) + (($b['added_to_cart_count'] ?? 0) * 5);
-                    return $scoreB <=> $scoreA;
+                    $priceA = (float) ($a['price'] ?? 0);
+                    $priceB = (float) ($b['price'] ?? 0);
+                    // Prefer mid-range (not too cheap, not expensive)
+                    $scoreA = abs($priceA - 3000) + (10000 - ($a['popularity'] ?? 0));
+                    $scoreB = abs($priceB - 3000) + (10000 - ($b['popularity'] ?? 0));
+                    return $scoreA <=> $scoreB;
                 });
                 
-                // Take top 1 from each category
+                // Take first matching item from each query
                 if (!empty($filtered)) {
                     $popularProducts[] = $filtered[0];
                 }
             }
         }
 
-        // If no results, fallback to general popular search
+        // Fallback if not enough products
         if (count($popularProducts) < 3) {
-            $fallback = $this->searchTool->search('тактичне спорядження', ['in_stock' => true], 20);
-            usort($fallback, function($a, $b) {
-                $scoreA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                $scoreB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                return $scoreB <=> $scoreA;
-            });
-            $popularProducts = array_merge($popularProducts, array_slice($fallback, 0, 6 - count($popularProducts)));
+            $fallback = $this->searchTool->search('тактичне спорядження', ['in_stock' => true], 30);
+            // Filter and sort by affordable price
+            $fallback = array_filter($fallback, fn($p) => ($p['price'] ?? 0) > 500 && ($p['price'] ?? 0) < 10000);
+            usort($fallback, fn($a, $b) => ($a['price'] ?? 0) <=> ($b['price'] ?? 0));
+            $popularProducts = array_merge($popularProducts, array_slice($fallback, 0, 5 - count($popularProducts)));
         }
 
         // Deduplicate

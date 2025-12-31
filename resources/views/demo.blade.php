@@ -668,9 +668,6 @@
             <button class="btn btn-primary" onclick="openChat()">
                 💬 Спробувати чат
             </button>
-            <a href="/chat" class="btn btn-secondary">
-                🧪 Тестова версія
-            </a>
         </div>
 
         <div class="demo-preview">

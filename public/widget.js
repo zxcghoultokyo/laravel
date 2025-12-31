@@ -1978,15 +1978,6 @@
         log('Payload size:', payload.length, 'bytes');
         log('Payload preview:', payload.substring(0, 200));
 
-        // DEBUG: Send to echo endpoint first to see what server receives
-        fetch(BASE_URL + '/api/analytics/echo', {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: payload
-        }).then(r => r.json()).then(d => {
-            log('ECHO response:', d);
-        }).catch(e => log('ECHO error:', e.message));
-
         // Use fetch with keepalive for reliable delivery
         fetch(BASE_URL + '/api/analytics/events', {
             method: 'POST',

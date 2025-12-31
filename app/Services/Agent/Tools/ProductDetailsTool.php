@@ -47,15 +47,15 @@ class ProductDetailsTool
             ->filter()
             ->values();
         
-        // Collect all sibling variants for size switching
+        // Collect all sibling variants for size/color switching
         $allParentArticles = $orderedProducts->pluck('parent_article')->filter()->unique()->all();
-        $sizeVariantsMap = [];
+        $variantsMap = [];
         if ($allParentArticles) {
             // Get all products with the same parent_article (siblings)
             $allSiblings = Product::query()
                 ->whereIn('parent_article', $allParentArticles)
                 ->where('in_stock', true)
-                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title', 'size']);
+                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title', 'size', 'color']);
             
             foreach ($allSiblings as $sibling) {
                 $parentArt = $sibling->parent_article;
@@ -70,33 +70,44 @@ class ProductDetailsTool
                     $size = $this->parseSizeFromTitle($sibling->title);
                 }
                 
-                if ($size) {
-                    if (!isset($sizeVariantsMap[$parentArt])) {
-                        $sizeVariantsMap[$parentArt] = [];
-                    }
-                    $sizeVariantsMap[$parentArt][] = [
-                        'id' => $sibling->id,
-                        'article' => $sibling->article,
-                        'size' => $size,
-                        'link' => $sibling->link,
-                    ];
+                // Get color from DB or raw
+                $color = $sibling->color;
+                if (!$color) {
+                    $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
+                    $color = $this->extractColor($sibRaw);
                 }
+                
+                if (!isset($variantsMap[$parentArt])) {
+                    $variantsMap[$parentArt] = [];
+                }
+                $variantsMap[$parentArt][] = [
+                    'id' => $sibling->id,
+                    'article' => $sibling->article,
+                    'size' => $size,
+                    'color' => $color,
+                    'link' => $sibling->link,
+                ];
             }
             
-            // Sort variants by size order
+            // Sort variants by color then size
             $sizeOrder = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '3XL', '4XL', '5XL'];
-            foreach ($sizeVariantsMap as $parentArt => &$variants) {
+            foreach ($variantsMap as $parentArt => &$variants) {
                 usort($variants, function ($a, $b) use ($sizeOrder) {
-                    $posA = array_search(strtoupper($a['size']), $sizeOrder);
-                    $posB = array_search(strtoupper($b['size']), $sizeOrder);
+                    // First sort by color
+                    $colorCmp = strcmp($a['color'] ?? '', $b['color'] ?? '');
+                    if ($colorCmp !== 0) return $colorCmp;
+                    
+                    // Then by size
+                    $posA = array_search(strtoupper($a['size'] ?? ''), $sizeOrder);
+                    $posB = array_search(strtoupper($b['size'] ?? ''), $sizeOrder);
                     if ($posA === false) $posA = 999;
                     if ($posB === false) $posB = 999;
-                    return $posA - $posB ?: strcmp($a['size'], $b['size']);
+                    return $posA - $posB ?: strcmp($a['size'] ?? '', $b['size'] ?? '');
                 });
             }
         }
         
-        return $orderedProducts->map(function ($product) use ($parentRawMap, $sizeVariantsMap) {
+        return $orderedProducts->map(function ($product) use ($parentRawMap, $variantsMap) {
             // Parse images from raw JSON or images field
             $images = $this->extractImages($product);
             
@@ -122,11 +133,30 @@ class ProductDetailsTool
                 $currentSize = $this->parseSizeFromTitle($title);
             }
             
-            // Get size variants (siblings with same parent_article)
-            $sizeVariants = [];
-            if ($parentArticle && isset($sizeVariantsMap[$parentArticle])) {
-                $sizeVariants = $sizeVariantsMap[$parentArticle];
+            // Extract color: prefer DB field, then try raw
+            $currentColor = $product->color;
+            if (!$currentColor) {
+                $currentColor = $this->extractColor($raw);
             }
+            
+            // Get all variants (siblings with same parent_article) - includes color and size
+            $allVariants = [];
+            if ($parentArticle && isset($variantsMap[$parentArticle])) {
+                $allVariants = $variantsMap[$parentArticle];
+            }
+            
+            // Build structured variants: grouped by color with sizes array
+            $colorVariants = $this->buildColorVariants($allVariants, $currentColor);
+            
+            // Keep backward-compatible size_variants (flat list)
+            $sizeVariants = array_map(function($v) {
+                return [
+                    'id' => $v['id'],
+                    'article' => $v['article'],
+                    'size' => $v['size'],
+                    'link' => $v['link'],
+                ];
+            }, $allVariants);
 
             return [
                 'id' => $product->id,
@@ -144,9 +174,10 @@ class ProductDetailsTool
                 'presence' => $product->presence,
                 'quantity' => $product->quantity,
                 'in_stock' => $product->in_stock,
-                'color' => $product->color,
+                'color' => $currentColor,
                 'size' => $currentSize,
                 'size_variants' => $sizeVariants,
+                'color_variants' => $colorVariants,
                 'popularity' => $product->popularity,
                 'ai_product_type' => $product->ai_product_type ?? '__unknown__',
                 // Enriched fields for narratives (purely from stored data)
@@ -154,6 +185,38 @@ class ProductDetailsTool
                 'characteristics' => ProductRawExtractor::attributes($raw, 'ua', $parentRaw),
             ];
         })->toArray();
+    }
+    
+    /**
+     * Build color variants structure: array of colors with their available sizes.
+     */
+    protected function buildColorVariants(array $allVariants, ?string $currentColor): array
+    {
+        $byColor = [];
+        
+        foreach ($allVariants as $variant) {
+            $color = $variant['color'] ?? null;
+            if (!$color) continue;
+            
+            if (!isset($byColor[$color])) {
+                $byColor[$color] = [
+                    'color' => $color,
+                    'is_current' => ($color === $currentColor),
+                    'sizes' => [],
+                ];
+            }
+            
+            if ($variant['size']) {
+                $byColor[$color]['sizes'][] = [
+                    'id' => $variant['id'],
+                    'article' => $variant['article'],
+                    'size' => $variant['size'],
+                    'link' => $variant['link'],
+                ];
+            }
+        }
+        
+        return array_values($byColor);
     }
 
     /**
@@ -216,6 +279,44 @@ class ProductDetailsTool
         }, $images);
 
         return array_values(array_filter($images));
+    }
+    
+    /**
+     * Extract color from raw product data.
+     * Horoshop stores color in: Kolir (top-level custom attr), color (standard)
+     */
+    protected function extractColor(array $raw): ?string
+    {
+        // 1. Try Kolir at top level (Horoshop custom attribute - most specific!)
+        // Format: {"id": 9, "value": {"ua": "Мультикам"}}
+        if (!empty($raw['Kolir']['value'])) {
+            $kolir = $raw['Kolir']['value'];
+            $color = is_array($kolir) 
+                ? ($kolir['ua'] ?? $kolir['ru'] ?? reset($kolir))
+                : $kolir;
+            if (is_string($color) && trim($color) !== '') {
+                return trim($color);
+            }
+        }
+        
+        // 2. Try standard color field
+        // Format: {"id": 33, "value": {"ua": "Хаки"}}
+        if (!empty($raw['color']['value'])) {
+            $colorData = $raw['color']['value'];
+            $color = is_array($colorData) 
+                ? ($colorData['ua'] ?? $colorData['ru'] ?? reset($colorData))
+                : $colorData;
+            if (is_string($color) && trim($color) !== '') {
+                return trim($color);
+            }
+        }
+        
+        // 3. Try direct color as string
+        if (!empty($raw['color']) && is_string($raw['color'])) {
+            return trim($raw['color']);
+        }
+        
+        return null;
     }
     
     /**

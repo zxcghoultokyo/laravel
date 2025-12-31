@@ -120,9 +120,7 @@ class ProductService
             'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
             'in_stock' => $this->isInStock($item),
-            'color' => Arr::get($item, 'color.value.ua')
-                                        ?? Arr::get($item, 'color.value.ru')
-                                        ?? null,
+            'color' => $this->extractColorFromItem($item),
             'size' => $size,
         ]);
 
@@ -204,6 +202,39 @@ class ProductService
         // 7. Parse from title as last resort
         if ($title) {
             return $this->parseSizeFromTitle($title);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Extract color from Horoshop item data.
+     * Tries multiple sources: Kolir (custom attribute), color (standard).
+     */
+    protected function extractColorFromItem(array $item): ?string
+    {
+        // 1. Try Kolir at top level (Horoshop custom attribute - most specific!)
+        // Format: {"id": 9, "value": {"ua": "Мультикам"}}
+        if (!empty($item['Kolir']['value'])) {
+            $kolir = $item['Kolir']['value'];
+            $color = is_array($kolir) 
+                ? ($kolir['ua'] ?? $kolir['ru'] ?? reset($kolir))
+                : $kolir;
+            if (is_string($color) && trim($color) !== '') {
+                return trim($color);
+            }
+        }
+        
+        // 2. Try standard color field
+        // Format: {"id": 33, "value": {"ua": "Хаки"}}
+        if (!empty($item['color']['value'])) {
+            $colorData = $item['color']['value'];
+            $color = is_array($colorData) 
+                ? ($colorData['ua'] ?? $colorData['ru'] ?? reset($colorData))
+                : $colorData;
+            if (is_string($color) && trim($color) !== '') {
+                return trim($color);
+            }
         }
         
         return null;

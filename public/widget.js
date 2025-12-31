@@ -688,11 +688,18 @@
         function updateStreamingText(element, text) {
             const textSpan = element.querySelector('.streaming-text');
             if (textSpan) {
-                let displayText = text;
+                let displayText = '';
+                
+                // Check if this looks like raw JSON/function call output
+                const looksLikeJson = text.trim().startsWith('{') || 
+                                      text.includes('```') ||
+                                      text.includes('"action"') ||
+                                      text.includes('"tool"') ||
+                                      text.includes('search_products') ||
+                                      text.includes('function_call');
                 
                 // Try to extract intro from complete JSON response
-                // Only try to parse if we have both { and } and it looks complete
-                if (text.includes('"intro"') && text.includes('}')) {
+                if (text.includes('"intro"')) {
                     try {
                         // Find the outermost JSON object
                         const firstBrace = text.indexOf('{');
@@ -705,15 +712,20 @@
                             }
                         }
                     } catch (e) {
-                        // JSON not complete yet - show intro if we can extract it
+                        // JSON not complete yet - try regex
                         const introMatch = text.match(/"intro"\s*:\s*"([^"]+)"/);
                         if (introMatch) {
                             displayText = introMatch[1];
-                        } else {
-                            // Can't parse yet, show nothing to avoid showing raw JSON
-                            displayText = '';
                         }
                     }
+                } else if (!looksLikeJson) {
+                    // Not JSON - show as plain text
+                    displayText = text;
+                }
+                
+                // If we have no displayable text but got data, show thinking indicator
+                if (!displayText && text.length > 0) {
+                    displayText = 'Шукаю для вас...';
                 }
                 
                 textSpan.textContent = displayText;
@@ -733,7 +745,15 @@
             }
             
             // Final text cleanup - extract intro from JSON if needed
-            let displayText = text;
+            let displayText = '';
+            
+            // Check if this looks like raw JSON/function call output
+            const looksLikeJson = text.trim().startsWith('{') || 
+                                  text.includes('```') ||
+                                  text.includes('"action"') ||
+                                  text.includes('"tool"') ||
+                                  text.includes('search_products') ||
+                                  text.includes('function_call');
             
             if (text.includes('"intro"')) {
                 try {
@@ -753,6 +773,9 @@
                         displayText = introMatch[1];
                     }
                 }
+            } else if (!looksLikeJson) {
+                // Not JSON - show as plain text
+                displayText = text;
             }
             
             const textSpan = element.querySelector('.streaming-text');
@@ -760,8 +783,8 @@
                 textSpan.textContent = displayText;
             }
             
-            // If still no readable text, hide the element
-            if (!displayText || displayText.trim().startsWith('{')) {
+            // If no readable text, hide the element
+            if (!displayText || displayText.trim().startsWith('{') || displayText === 'Шукаю для вас...') {
                 element.style.display = 'none';
             }
         }

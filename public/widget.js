@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.7';
+    const WIDGET_VERSION = '2.3.9';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1971,19 +1971,21 @@
         const events = [...analyticsQueue];
         analyticsQueue.length = 0;
 
-        // Use sendBeacon if available for reliability
+        const payload = JSON.stringify({ events });
+        log('Flushing analytics:', events.length, 'events', events.map(e => e.event_type));
+
+        // Use sendBeacon with Blob for proper Content-Type
         if (navigator.sendBeacon) {
-            navigator.sendBeacon(
-                BASE_URL + '/api/analytics/events',
-                JSON.stringify({ events })
-            );
+            const blob = new Blob([payload], { type: 'application/json' });
+            const sent = navigator.sendBeacon(BASE_URL + '/api/analytics/events', blob);
+            log('sendBeacon result:', sent);
         } else {
             fetch(BASE_URL + '/api/analytics/events', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ events }),
+                body: payload,
                 keepalive: true
-            }).catch(() => {});
+            }).catch((e) => logError('Analytics fetch failed:', e));
         }
     }
 

@@ -27,6 +27,10 @@ class MeiliProductSearchTool
         try {
             $index = $this->meiliClient->client()->index('products');
             
+            // Request more results to allow for deduplication by title
+            // Since variants (size/color) are separate docs, we need 5x to get enough unique models
+            $meiliLimit = $limit * 5;
+            
             // Detect brand in query and enhance search
             $brandInfo = $this->brandDetection->detectBrand($query);
             $enhancedQuery = $this->expandQuerySynonyms($brandInfo['enhanced_query'] ?? $query);
@@ -65,7 +69,7 @@ class MeiliProductSearchTool
             $filterString = implode(' AND ', $filterParts);
             
             $searchParams = [
-                'limit' => $limit,
+                'limit' => $meiliLimit, // Request more to allow dedup
                 'attributesToRetrieve' => [
                     'id',
                     'article',
@@ -91,7 +95,7 @@ class MeiliProductSearchTool
                 'detected_brand' => $brandInfo['brand'],
                 'enhanced_query' => $enhancedQuery,
                 'filter' => $filterString,
-                'limit' => $limit
+                'limit' => $meiliLimit
             ]);
             
             $result = $index->search($enhancedQuery, $searchParams);

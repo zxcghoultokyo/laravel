@@ -10,6 +10,8 @@ use App\Models\Brand;
 use App\Models\Category;
 use App\Models\WidgetSettings;
 use App\Models\ProductSynonym;
+use App\Models\ChatSession;
+use App\Models\ChatMessage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -59,6 +61,14 @@ class StreamingFunctionCallingAgent
      */
     public function stream(string $message, ?string $sessionId = null): Generator
     {
+        // Log user message to DB
+        $this->logUserMessage($sessionId, $message);
+        
+        // Track response data for logging
+        $responseText = '';
+        $responseProducts = [];
+        $responseIntent = 'streaming';
+        
         if (empty($this->apiKey)) {
             Log::warning('StreamingAgent: no API key, using fallback');
             yield from $this->fallbackStream($message);
@@ -145,9 +155,15 @@ class StreamingFunctionCallingAgent
             // Parse the collected response for structured output
             $structured = $this->parseStructuredResponse($collectedText, $allProducts);
             
+            // Track for logging
+            $responseText = $collectedText;
+            $responseProducts = $structured['products'] ?? [];
+            $responseIntent = 'product_search';
+            
             // If no text was streamed but we have intro, send it
             if (!$sentChunks && !empty($structured['intro'])) {
                 yield ['type' => 'chunk', 'data' => ['text' => $structured['intro']]];
+                $responseText = $structured['intro'];
             }
             
             // Send products
@@ -161,22 +177,31 @@ class StreamingFunctionCallingAgent
             // Send outro if exists
             if (!empty($structured['outro'])) {
                 yield ['type' => 'chunk', 'data' => ['text' => "\n\n" . $structured['outro']]];
+                $responseText .= "\n\n" . $structured['outro'];
             }
             
         } else {
             // No tool calls - just stream the text response
             $content = $assistantMessage['content'] ?? '';
+            $collectedText = '';
             
             if (!empty($content)) {
                 // Already have the full response from non-streaming call
                 // Let's do a streaming call for better UX
                 foreach ($this->streamGptResponse($messages) as $chunk) {
                     if ($chunk['type'] === 'content') {
+                        $collectedText .= $chunk['text'];
                         yield ['type' => 'chunk', 'data' => ['text' => $chunk['text']]];
                     }
                 }
             }
+            
+            $responseText = $collectedText ?: $content;
+            $responseIntent = 'general';
         }
+        
+        // Log assistant message to DB
+        $this->logAssistantMessage($sessionId, $responseText, $responseProducts, $responseIntent);
         
         yield ['type' => 'done', 'data' => ['session_id' => $sessionId]];
     }
@@ -739,5 +764,89 @@ PROMPT;
         }
         
         yield ['type' => 'done', 'data' => []];
+    }
+    
+    /**
+     * Log user message to database.
+     */
+    private function logUserMessage(?string $sessionId, string $content): void
+    {
+        if (!$sessionId) return;
+        
+        try {
+            $session = ChatSession::firstOrCreate(
+                ['session_id' => $sessionId],
+                [
+                    'language' => 'uk',
+                    'status' => 'open',
+                    'meta' => [],
+                ]
+            );
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'user',
+                'content' => $content,
+                'meta' => [],
+            ]);
+
+            $session->increment('messages_count');
+            $session->update([
+                'last_user_query' => $content,
+                'last_message_at' => now(),
+            ]);
+            
+            Log::info('StreamingAgent: user message logged', ['session_id' => $sessionId]);
+        } catch (\Exception $e) {
+            Log::error('StreamingAgent: failed to log user message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+    
+    /**
+     * Log assistant message to database.
+     */
+    private function logAssistantMessage(?string $sessionId, string $content, array $products, string $intent): void
+    {
+        if (!$sessionId) return;
+        
+        try {
+            $session = ChatSession::where('session_id', $sessionId)->first();
+            if (!$session) return;
+
+            $meta = [
+                'intent' => $intent,
+                'products_shown' => count($products),
+                'products' => array_map(fn($p) => [
+                    'id' => $p['id'] ?? null,
+                    'article' => $p['article'] ?? null,
+                    'title' => $p['title'] ?? null,
+                    'price' => $p['price'] ?? null,
+                    'image' => $p['image'] ?? $p['images'][0] ?? null,
+                ], array_slice($products, 0, 10)),
+            ];
+
+            ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'assistant',
+                'content' => $content,
+                'meta' => $meta,
+            ]);
+
+            $session->increment('messages_count');
+            $session->update([
+                'last_intent' => $intent,
+                'last_message_at' => now(),
+            ]);
+            
+            Log::info('StreamingAgent: assistant message logged', ['session_id' => $sessionId]);
+        } catch (\Exception $e) {
+            Log::error('StreamingAgent: failed to log assistant message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

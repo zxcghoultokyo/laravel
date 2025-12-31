@@ -418,6 +418,104 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Coming Soon Section */
+        .coming-soon {
+            margin-top: 3rem;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .coming-soon-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .coming-soon-header h3 {
+            font-size: 1rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .coming-soon-header .badge-coming {
+            padding: 0.25rem 0.75rem;
+            background: rgba(251, 191, 36, 0.15);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 9999px;
+            font-size: 0.625rem;
+            color: #fbbf24;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .coming-soon-header .arrow {
+            transition: transform 0.3s ease;
+            color: var(--text-muted);
+        }
+
+        .coming-soon.expanded .coming-soon-header .arrow {
+            transform: rotate(180deg);
+        }
+
+        .coming-soon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: all 0.4s ease;
+        }
+
+        .coming-soon.expanded .coming-soon-grid {
+            max-height: 600px;
+            opacity: 1;
+            padding-top: 0.5rem;
+        }
+
+        .coming-feature {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            background: var(--surface);
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            opacity: 0.7;
+            transition: all 0.2s;
+        }
+
+        .coming-feature:hover {
+            opacity: 1;
+            border-color: rgba(251, 191, 36, 0.4);
+            background: rgba(251, 191, 36, 0.05);
+        }
+
+        .coming-feature-icon {
+            font-size: 1.25rem;
+            filter: grayscale(0.3);
+        }
+
+        .coming-feature-text {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .coming-feature-badge {
+            margin-left: auto;
+            padding: 0.125rem 0.5rem;
+            background: rgba(251, 191, 36, 0.1);
+            border-radius: 4px;
+            font-size: 0.625rem;
+            color: #fbbf24;
+        }
+
         .tech-stack {
             margin-top: 2rem;
             margin-left: auto;
@@ -664,6 +762,70 @@
             </div>
         </div>
 
+        <!-- Coming Soon Section -->
+        <div class="coming-soon" id="comingSoon">
+            <div class="coming-soon-header" onclick="toggleComingSoon()">
+                <h3>
+                    <span>🚀</span>
+                    Що ще буде
+                    <span class="badge-coming">Coming Soon</span>
+                </h3>
+                <span class="arrow">▼</span>
+            </div>
+            <div class="coming-soon-grid">
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🎯</span>
+                    <span class="coming-feature-text">UTM/поведінкові тригери чату</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🛒</span>
+                    <span class="coming-feature-text">Add to Cart із чату</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🧩</span>
+                    <span class="coming-feature-text">Міні-квіз для підбору</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🏷️</span>
+                    <span class="coming-feature-text">Промокоди в чаті</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🎙️</span>
+                    <span class="coming-feature-text">Speech-to-Text</span>
+                    <span class="coming-feature-badge">Q2</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">📅</span>
+                    <span class="coming-feature-text">Запис/бронювання</span>
+                    <span class="coming-feature-badge">Q2</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">📞</span>
+                    <span class="coming-feature-text">Phone/Voice Agent</span>
+                    <span class="coming-feature-badge">Q2</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">⚙️</span>
+                    <span class="coming-feature-text">Пресети атрибутів пошуку</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🎨</span>
+                    <span class="coming-feature-text">Кастомізація UI та персони</span>
+                    <span class="coming-feature-badge">Q1</span>
+                </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🔥</span>
+                    <span class="coming-feature-text">Social proof «щойно купили»</span>
+                    <span class="coming-feature-badge">Q2</span>
+                </div>
+            </div>
+        </div>
+
         <div class="cta-group">
             <button class="btn btn-primary" onclick="openChat()">
                 💬 Спробувати чат
@@ -897,6 +1059,12 @@
             });
             
             currentFeature = null;
+        }
+
+        // Coming Soon toggle
+        function toggleComingSoon() {
+            const section = document.getElementById('comingSoon');
+            section.classList.toggle('expanded');
         }
 
         // Handle window resize - only react to WIDTH changes (not height)

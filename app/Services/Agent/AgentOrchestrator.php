@@ -1611,36 +1611,44 @@ class AgentOrchestrator
     /**
      * Handle popular products request - show bestsellers from different categories.
      * Focus on common/mass items, not rare sizes or configurations.
+     * Updated: 2025-12-31 v2 - better filtering
      */
     private function handlePopularProductsRequest(string $originalMessage, ?string $sessionId): array
     {
-        Log::info('AgentOrchestrator: handling popular products request', ['message' => $originalMessage]);
+        Log::info('AgentOrchestrator: handling popular products request v2', ['message' => $originalMessage]);
 
         // Curated list of popular/essential items that are commonly purchased
         // These are mass market items, not rare sizes
         $popularQueries = [
             'турнікет',           // Medical - always in demand
-            'плитоноска НАТО',    // Basic plate carrier
-            'підсумок',           // Pouches - universal
-            'рукавички тактичні', // Gloves
-            'шолом',              // Helmets
-            'аптечка',            // First aid
+            'плитоноска',         // Plate carriers - universal
+            'підсумок магазин',   // Magazine pouches - essential
+            'рукавички',          // Gloves - everyone needs
+            'аптечка ІФАК',       // First aid kit
         ];
         
         $popularProducts = [];
         
         foreach ($popularQueries as $query) {
-            $results = $this->searchTool->search($query, [], 10);
+            $results = $this->searchTool->search($query, [], 15);
             if (!empty($results)) {
-                // Filter out rare sizes (50+, XXL, etc.) and sort by popularity
+                // Filter out rare sizes and expensive items for "mass market" feel
                 $filtered = array_filter($results, function($p) {
                     $size = strtolower($p['size'] ?? '');
                     $title = strtolower($p['title'] ?? '');
+                    $price = (float) ($p['price'] ?? 0);
+                    
                     // Exclude very large sizes (50+, XXL, XXXL) - they are rare
-                    if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl)\b/i', $size . ' ' . $title)) {
+                    if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl|us\s*1[4-9]|us\s*16)\b/i', $size . ' ' . $title)) {
                         return false;
                     }
-                    // Prefer items with universal size or common sizes
+                    
+                    // Exclude very expensive items for top products (>20k)
+                    if ($price > 20000) {
+                        return false;
+                    }
+                    
+                    // Prefer items with universal/common sizes
                     return true;
                 });
                 

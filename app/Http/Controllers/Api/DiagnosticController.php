@@ -342,4 +342,48 @@ class DiagnosticController extends Controller
             'raw_keys' => is_array($raw) ? array_keys($raw) : [],
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/reindex-meili
+     * Trigger Meilisearch reindex
+     */
+    public function reindexMeili(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $chunk = min((int) $request->query('chunk', 500), 1000);
+        $total = Product::count();
+
+        if ($total === 0) {
+            return response()->json([
+                'status' => 'skipped',
+                'message' => 'No products found',
+            ]);
+        }
+
+        $jobs = 0;
+
+        Product::query()
+            ->select('id')
+            ->orderBy('id')
+            ->chunk($chunk, function ($rows) use (&$jobs, $chunk) {
+                $fromId = (int) $rows->first()->id;
+                $toId   = (int) $rows->last()->id;
+
+                \App\Jobs\IndexProductsToMeiliJob::dispatch($fromId, $toId, $chunk)
+                    ->onQueue('meili');
+
+                $jobs++;
+            });
+
+        return response()->json([
+            'status' => 'dispatched',
+            'jobs' => $jobs,
+            'total_products' => $total,
+            'chunk_size' => $chunk,
+            'message' => "Dispatched {$jobs} job(s) to queue=meili for {$total} product(s)",
+        ]);
+    }
 }

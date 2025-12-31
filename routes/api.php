@@ -60,6 +60,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/category-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryProducts']);
     Route::get('/test-chat', [\App\Http\Controllers\Api\DiagnosticController::class, 'testChat']);
     Route::get('/sync-sample', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncSample']);
+    Route::post('/reindex-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'reindexMeili']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

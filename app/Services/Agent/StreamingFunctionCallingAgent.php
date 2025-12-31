@@ -304,7 +304,8 @@ class StreamingFunctionCallingAgent
 
 ПРАВИЛА:
 - НЕ вигадуй товари, використовуй ТІЛЬКИ результати search_products
-- Максимум 5 товарів у відповіді
+- Показуй 3-5 РІЗНИХ моделей (якщо є) — клієнт хоче ВИБІР!
+- Якщо в результатах є товари різних брендів/типів — покажи всі (до 5)
 - Коментарі короткі та корисні (МОВОЮ КОРИСТУВАЧА!)
 - Ціни та наявність беруться з результатів пошуку
 
@@ -438,7 +439,7 @@ PROMPT;
     private function toolSearchProducts(array $args): array
     {
         $query = $args['query'] ?? '';
-        $limit = $args['limit'] ?? 10;
+        $limit = $args['limit'] ?? 20; // Increased to show more variety
         
         $filters = [];
         if (!empty($args['price_min'])) $filters['price_min'] = (float) $args['price_min'];

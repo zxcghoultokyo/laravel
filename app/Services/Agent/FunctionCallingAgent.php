@@ -613,7 +613,7 @@ PROMPT;
     private function toolSearchProducts(array $args): array
     {
         $query = $args['query'] ?? '';
-        $limit = $args['limit'] ?? 10;
+        $limit = $args['limit'] ?? 20; // Increased to show more variety
         
         Log::info('toolSearchProducts: args', ['args' => $args]);
         

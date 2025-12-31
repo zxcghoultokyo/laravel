@@ -26,7 +26,7 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-5 gap-4">
             <div>
                 <input 
                     type="text" 
@@ -41,6 +41,13 @@
                     <option value="open">Відкриті</option>
                     <option value="closed">Закриті</option>
                     <option value="flagged">Позначені</option>
+                </select>
+            </div>
+            <div>
+                <select wire:model.live="escalationFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="all">Всі чати</option>
+                    <option value="escalated">🚨 Потребують допомоги</option>
+                    <option value="not_escalated">✅ Звичайні</option>
                 </select>
             </div>
             <div>
@@ -98,13 +105,20 @@
                         {{ $session->messages_count }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
-                        <span class="px-2 py-1 text-xs font-medium rounded-full
-                            @if($session->status === 'open') bg-green-100 text-green-800
-                            @elseif($session->status === 'closed') bg-gray-100 text-gray-800
-                            @else bg-red-100 text-red-800
-                            @endif">
-                            {{ ucfirst($session->status) }}
-                        </span>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full
+                                @if($session->status === 'open') bg-green-100 text-green-800
+                                @elseif($session->status === 'closed') bg-gray-100 text-gray-800
+                                @else bg-red-100 text-red-800
+                                @endif">
+                                {{ ucfirst($session->status) }}
+                            </span>
+                            @if($session->needs_human)
+                                <span class="px-2 py-1 text-xs font-bold rounded-full bg-orange-500 text-white animate-pulse" title="{{ $session->escalation_reason ?? 'Потрібна допомога оператора' }}">
+                                    🚨 ЕСКАЛАЦІЯ
+                                </span>
+                            @endif
+                        </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {{ $session->last_message_at?->diffForHumans() }}

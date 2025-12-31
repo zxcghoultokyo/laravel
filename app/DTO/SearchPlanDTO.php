@@ -16,6 +16,8 @@ readonly class SearchPlanDTO
         public bool $ambiguous,
         public float $confidence,
         public ?string $orderId = null,
+        public bool $needsHuman = false,
+        public ?string $escalationReason = null,
     ) {}
 
     /**
@@ -34,6 +36,8 @@ readonly class SearchPlanDTO
             ambiguous: (bool) ($data['ambiguous'] ?? false),
             confidence: (float) ($data['confidence'] ?? $intent->defaultConfidence()),
             orderId: $data['order_id'] ?? null,
+            needsHuman: (bool) ($data['needs_human'] ?? false),
+            escalationReason: $data['escalation_reason'] ?? null,
         );
     }
 
@@ -63,6 +67,8 @@ readonly class SearchPlanDTO
             'ambiguous' => $this->ambiguous,
             'confidence' => $this->confidence,
             'order_id' => $this->orderId,
+            'needs_human' => $this->needsHuman,
+            'escalation_reason' => $this->escalationReason,
         ];
     }
 

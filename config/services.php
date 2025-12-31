@@ -54,4 +54,10 @@ return [
         'api_token' => env('ADMIN_API_TOKEN'),
     ],
 
+    // Escalation settings
+    'escalation' => [
+        'notify_email' => env('ESCALATION_NOTIFY_EMAIL'),
+        'enabled' => env('ESCALATION_ENABLED', true),
+    ],
+
 ];

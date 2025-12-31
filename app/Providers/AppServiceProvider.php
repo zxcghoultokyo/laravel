@@ -205,6 +205,11 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(\App\Services\Agent\Handlers\NarrativeBuilder::class)
             );
         });
+
+        // Escalation Service for human operator handover
+        $this->app->singleton(\App\Services\Escalation\EscalationService::class, function ($app) {
+            return new \App\Services\Escalation\EscalationService();
+        });
     }
 
     public function boot(): void

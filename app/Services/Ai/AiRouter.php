@@ -93,6 +93,8 @@ class AiRouter
             'intent'           => 'PRODUCT_SEARCH',
             'normalized_query' => $message,
             'order_id'         => null,
+            'needs_human'      => false,
+            'escalation_reason' => null,
         ];
 
         if (empty($this->apiKey)) {
@@ -168,8 +170,19 @@ class AiRouter
 {
   \"intent\": \"PRODUCT_SEARCH | PRODUCT_COMPARISON | ORDER_STATUS | FAQ | SMALL_TALK | FALLBACK\",
   \"normalized_query\": \"очищені ключові слова або null\",
-  \"order_id\": null або номер
+  \"order_id\": null або номер,
+  \"needs_human\": true/false,
+  \"escalation_reason\": \"причина ескалації або null\"
 }
+
+ВИЗНАЧИ needs_human: true КОЛИ:
+- Запит на великий опт (більше 10 шт), корпоративне замовлення, B2B
+- Торг/знижка ('дорого', 'скинете', 'знижка', 'акція')
+- Скарга, незадоволення ('погане', 'брак', 'не влаштовує', 'повернення')
+- Складне технічне питання яке не стосується товарів
+- Юзер прямо просить оператора ('людина', 'менеджер', 'оператор')
+- Не можеш впевнено відповісти
+В інших випадках needs_human: false.
 
 Запит: \"{$message}\"
 ";

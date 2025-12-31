@@ -15,8 +15,9 @@ class ChatsList extends Component
     public $statusFilter = 'all';
     public $intentFilter = 'all';
     public $dateFilter = 'all';
+    public $escalationFilter = 'all'; // new: filter by needs_human
 
-    protected $queryString = ['search', 'statusFilter', 'intentFilter', 'dateFilter'];
+    protected $queryString = ['search', 'statusFilter', 'intentFilter', 'dateFilter', 'escalationFilter'];
 
     public function updatingSearch()
     {
@@ -66,6 +67,15 @@ class ChatsList extends Component
         // Intent filter
         if ($this->intentFilter !== 'all') {
             $query->where('last_intent', $this->intentFilter);
+        }
+
+        // Escalation filter (needs_human)
+        if ($this->escalationFilter === 'escalated') {
+            $query->where('needs_human', true);
+        } elseif ($this->escalationFilter === 'not_escalated') {
+            $query->where(function ($q) {
+                $q->where('needs_human', false)->orWhereNull('needs_human');
+            });
         }
 
         // Date filter

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\Chat\ChatService;
 use App\Services\Metrics\MetricsService;
+use App\Services\Escalation\EscalationService;
 use App\Events\NewChatMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +17,7 @@ class ChatController extends Controller
     public function __construct(
         protected ChatService $chatService,
         protected MetricsService $metricsService,
+        protected EscalationService $escalationService,
     ) {}
 
     private const MAX_MESSAGE_LENGTH = 2000;
@@ -82,6 +84,11 @@ class ChatController extends Controller
             $startTime = microtime(true);
             $response = $this->chatService->handleMessage($message, $sessionId);
             $responseTime = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Check if session needs escalation to human operator
+            if (config('services.escalation.enabled', true)) {
+                $this->escalationService->checkAndEscalate($sessionId, $response, $message);
+            }
 
             // Record metrics
             $this->metricsService->recordRequest([

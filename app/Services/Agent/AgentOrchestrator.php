@@ -105,10 +105,17 @@ class AgentOrchestrator
         // Convert AgentResponseDTO to array if needed
         $result = $response instanceof AgentResponseDTO ? $response->toArray() : $response;
 
+        // Add escalation info to meta (from classification result)
+        if ($plan->needsHuman || !empty($plan->escalationReason)) {
+            $result['meta']['needs_human'] = $plan->needsHuman;
+            $result['meta']['escalation_reason'] = $plan->escalationReason;
+        }
+
         Log::info('AgentOrchestrator: result generated', [
             'intent' => $plan->intent->value,
             'products_count' => count($result['products'] ?? []),
-            'message_length' => strlen($result['message'] ?? '')
+            'message_length' => strlen($result['message'] ?? ''),
+            'needs_human' => $plan->needsHuman,
         ]);
 
         return $result;
@@ -183,6 +190,8 @@ class AgentOrchestrator
             ambiguous: $ambiguous,
             confidence: (float) ($classification['confidence'] ?? $intent->defaultConfidence()),
             orderId: $classification['order_id'] ?? null,
+            needsHuman: (bool) ($classification['needs_human'] ?? false),
+            escalationReason: $classification['escalation_reason'] ?? null,
         );
     }
 

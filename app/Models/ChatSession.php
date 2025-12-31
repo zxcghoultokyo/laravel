@@ -16,12 +16,16 @@ class ChatSession extends Model
         'status',
         'meta',
         'last_message_at',
+        'needs_human',
+        'escalation_reason',
+        'operator_id',
     ];
 
     protected $casts = [
         'meta' => 'array',
         'last_message_at' => 'datetime',
         'messages_count' => 'integer',
+        'needs_human' => 'boolean',
     ];
 
     public function messages(): HasMany

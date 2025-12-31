@@ -721,7 +721,17 @@ class MeiliProductSearchTool
             $q = preg_replace('/\bрукавиц[іи]\b/iu', 'рукавички', $q);
         }
         if (preg_match('/\bботинки\b/iu', $l)) {
-            $q = preg_replace('/\bботинки\b/iu', 'берці', $q);
+            $q = preg_replace('/\bботинки\b/iu', 'черевики', $q);
+        }
+        // Footwear synonyms - normalize to "черевики" which is in product titles
+        if (preg_match('/\bберц[іиы]\b/iu', $l)) {
+            $q = preg_replace('/\bберц[іиы]\b/iu', 'черевики', $q);
+        }
+        if (preg_match('/\bвзуття\b/iu', $l)) {
+            $q = preg_replace('/\bвзуття\b/iu', 'черевики', $q);
+        }
+        if (preg_match('/\bобувь\b/iu', $l)) {
+            $q = preg_replace('/\bобувь\b/iu', 'черевики', $q);
         }
         
         // 2. Use QueryExpander ONLY for product type normalization (not expansion)

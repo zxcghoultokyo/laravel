@@ -369,6 +369,9 @@
                                 box-shadow: 0 2px 8px ${s.primary_color}40;
                             ">➤</button>
                         </div>
+                        <div style="text-align: center; margin-top: 8px; font-size: 10px; color: #9ca3af;">
+                            Powered by <a href="https://aintento.com" target="_blank" style="color: #6b7280; text-decoration: none;">Aintento</a> AI
+                        </div>
                     </div>
                 </div>
             </div>

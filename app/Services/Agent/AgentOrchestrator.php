@@ -1610,37 +1610,63 @@ class AgentOrchestrator
 
     /**
      * Handle popular products request - show bestsellers from different categories.
+     * Focus on common/mass items, not rare sizes or configurations.
      */
     private function handlePopularProductsRequest(string $originalMessage, ?string $sessionId): array
     {
         Log::info('AgentOrchestrator: handling popular products request', ['message' => $originalMessage]);
 
-        // Get top products by popularity/orders from different categories
-        $popularProducts = [];
-        $categories = ['плитоноска', 'шолом', 'берці', 'рюкзак'];
+        // Curated list of popular/essential items that are commonly purchased
+        // These are mass market items, not rare sizes
+        $popularQueries = [
+            'турнікет',           // Medical - always in demand
+            'плитоноска НАТО',    // Basic plate carrier
+            'підсумок',           // Pouches - universal
+            'рукавички тактичні', // Gloves
+            'шолом',              // Helmets
+            'аптечка',            // First aid
+        ];
         
-        foreach ($categories as $category) {
-            $results = $this->searchTool->search($category, [], 5);
+        $popularProducts = [];
+        
+        foreach ($popularQueries as $query) {
+            $results = $this->searchTool->search($query, [], 10);
             if (!empty($results)) {
-                // Sort by popularity/orders and take top 1-2
-                usort($results, function($a, $b) {
-                    $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                    $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                    return $popB <=> $popA;
+                // Filter out rare sizes (50+, XXL, etc.) and sort by popularity
+                $filtered = array_filter($results, function($p) {
+                    $size = strtolower($p['size'] ?? '');
+                    $title = strtolower($p['title'] ?? '');
+                    // Exclude very large sizes (50+, XXL, XXXL) - they are rare
+                    if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl)\b/i', $size . ' ' . $title)) {
+                        return false;
+                    }
+                    // Prefer items with universal size or common sizes
+                    return true;
                 });
-                $popularProducts = array_merge($popularProducts, array_slice($results, 0, 2));
+                
+                // Sort by popularity + orders + cart adds
+                usort($filtered, function($a, $b) {
+                    $scoreA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10) + (($a['added_to_cart_count'] ?? 0) * 5);
+                    $scoreB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10) + (($b['added_to_cart_count'] ?? 0) * 5);
+                    return $scoreB <=> $scoreA;
+                });
+                
+                // Take top 1 from each category
+                if (!empty($filtered)) {
+                    $popularProducts[] = $filtered[0];
+                }
             }
         }
 
-        // If no results from categories, fallback to general popular search
-        if (empty($popularProducts)) {
-            $popularProducts = $this->searchTool->search('', ['in_stock' => true], 20);
-            usort($popularProducts, function($a, $b) {
-                $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                return $popB <=> $popA;
+        // If no results, fallback to general popular search
+        if (count($popularProducts) < 3) {
+            $fallback = $this->searchTool->search('тактичне спорядження', ['in_stock' => true], 20);
+            usort($fallback, function($a, $b) {
+                $scoreA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
+                $scoreB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
+                return $scoreB <=> $scoreA;
             });
-            $popularProducts = array_slice($popularProducts, 0, 6);
+            $popularProducts = array_merge($popularProducts, array_slice($fallback, 0, 6 - count($popularProducts)));
         }
 
         // Deduplicate
@@ -1674,8 +1700,8 @@ class AgentOrchestrator
         }
 
         // Generate message
-        $message = "Ось топ-товари з різних категорій 🔥\n\n";
-        $message .= "Це найпопулярніші позиції, які найчастіше замовляють. Якщо хочете звузити пошук — напишіть категорію (плитоноски, шоломи, берці) або бюджет.";
+        $message = "Зараз найчастіше беруть базове спорядження:\n\n";
+        $message .= "Це перевірені позиції, які рекомендуємо в першу чергу. Підкажіть категорію чи бюджет — підберу точніше.";
 
         return AgentResponseDTO::productSearch(
             message: $message,

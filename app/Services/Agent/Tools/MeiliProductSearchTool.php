@@ -607,15 +607,33 @@ class MeiliProductSearchTool
         $builder->orderBy('popularity', 'desc')
                 ->orderBy('quantity', 'desc');
         
-        $products = $builder->limit($limit)->get();
+        // Get more results to allow deduplication by title
+        $products = $builder->limit($limit * 5)->get();
         
         Log::info('MeiliProductSearchTool: Eloquent fallback found', [
             'count' => $products->count(),
             'keywords' => $keywords ?? []
         ]);
         
+        // Deduplicate by title to show different models (not just size variants)
+        $seen = [];
+        $deduped = [];
+        foreach ($products as $product) {
+            $titleKey = md5(mb_strtolower($product->title));
+            if (!isset($seen[$titleKey])) {
+                $seen[$titleKey] = true;
+                $deduped[] = $product;
+                if (count($deduped) >= $limit) break;
+            }
+        }
+        
+        Log::info('MeiliProductSearchTool: After title dedup', [
+            'before' => $products->count(),
+            'after' => count($deduped)
+        ]);
+        
         // Map to same format as Meilisearch
-        return $products->map(function($product) {
+        return array_map(function($product) {
             return [
                 'id' => $product->id,
                 'article' => $product->article,
@@ -629,7 +647,7 @@ class MeiliProductSearchTool
                 'ai_product_type' => $product->ai_product_type ?? '__unknown__',
                 'display_in_showcase' => $product->display_in_showcase ?? false,
             ];
-        })->toArray();
+        }, $deduped);
     }
 
     /**

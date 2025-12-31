@@ -1975,6 +1975,8 @@
 
         const payload = JSON.stringify({ events });
         log('Flushing analytics:', events.length, 'events', events.map(e => e.event_type));
+        log('Payload size:', payload.length, 'bytes');
+        log('Payload preview:', payload.substring(0, 200));
 
         // Use fetch with keepalive for reliable delivery
         fetch(BASE_URL + '/api/analytics/events', {

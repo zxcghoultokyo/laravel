@@ -1,15 +1,18 @@
 /**
- * AIntento Chat Widget v2.3.6
+ * AIntento Chat Widget v2.3.7
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.6"></script>
+ *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.7"></script>
+ * 
+ * API: window.openChat() - opens the chat widget
+ *      window.aintentoClose() - closes the chat widget
  */
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.6';
+    const WIDGET_VERSION = '2.3.7';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -963,6 +966,11 @@
             document.removeEventListener('keydown', handleKeydown);
             log('Widget cleaned up');
         };
+
+        // Expose openChat function globally for external buttons
+        window.openChat = openWidget;
+        window.aintentoOpen = openWidget;
+        window.aintentoClose = closeWidget;
     }
 
     function addQuickActions(messagesContainer, settings, onActionClick) {

@@ -1940,6 +1940,7 @@
     let analyticsFlushTimeout = null;
 
     function sendAnalyticsEvent(eventType, data = {}) {
+        log('Analytics event queued:', eventType);
         const event = {
             session_id: localStorage.getItem('aintento_session_id') || '',
             client_id: getOrCreateClientId(),
@@ -1954,6 +1955,7 @@
         };
 
         analyticsQueue.push(event);
+        log('Analytics queue size:', analyticsQueue.length);
 
         // Debounced flush
         if (analyticsFlushTimeout) clearTimeout(analyticsFlushTimeout);

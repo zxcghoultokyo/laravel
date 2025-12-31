@@ -955,6 +955,7 @@ class ChatService
             }
 
             // Мета-дані з AgentOrchestrator мають пріоритет
+            $products = $response['data']['products'] ?? $response['products'] ?? [];
             $meta = [
                 'intent'            => $agentMeta['intent'] ?? $response['intent'] ?? 'unknown',
                 'ambiguous'         => $agentMeta['ambiguous'] ?? false,
@@ -963,8 +964,15 @@ class ChatService
                 'refined_query'     => $agentMeta['refined_query'] ?? null,
                 'filters'           => $agentMeta['filters'] ?? [],
                 'search_debug'      => $agentMeta['search_debug'] ?? [],
-                // FIX: products are in data.products, not response.products
-                'products_shown'    => count($response['data']['products'] ?? $response['products'] ?? []),
+                'products_shown'    => count($products),
+                // Зберігаємо скорочену інфу про продукти для відображення в адмінці
+                'products'          => array_map(fn($p) => [
+                    'id' => $p['id'] ?? null,
+                    'article' => $p['article'] ?? null,
+                    'title' => $p['title'] ?? null,
+                    'price' => $p['price'] ?? null,
+                    'image' => $p['image'] ?? $p['images'][0] ?? null,
+                ], array_slice($products, 0, 10)), // Максимум 10 продуктів
             ];
 
             ChatMessage::create([

@@ -1,5 +1,5 @@
 /**
- * AIntento Chat Widget v2.3.7
+ * AIntento Chat Widget v2.3.8
  * Embeddable chat widget for e-commerce sites
  * SSE Streaming support for real-time responses
  * 
@@ -1254,18 +1254,46 @@
             }
         }
         
-        // Build color display (if color exists and not already in summary)
+        const cardId = 'card-' + product.id + '-' + Date.now();
+        
+        // Build color variants HTML (if multiple colors available)
         let colorHtml = '';
-        if (product.color && !summaryText.includes(product.color)) {
+        const colorVariants = product.color_variants || [];
+        const hasMultipleColors = colorVariants.length > 1;
+        
+        if (hasMultipleColors) {
+            // Clickable color buttons
+            const colorButtons = colorVariants.map(cv => {
+                const isActive = cv.is_current;
+                const activeStyle = isActive 
+                    ? `background: ${settings.primary_color}; color: white; border-color: ${settings.primary_color};`
+                    : 'background: #f3f4f6; color: #374151; border-color: #e5e7eb;';
+                return `<button type="button" class="color-btn" 
+                    data-color="${cv.color}" 
+                    data-sizes='${JSON.stringify(cv.sizes || [])}'
+                    style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid; cursor: pointer; ${activeStyle}"
+                >${cv.color}</button>`;
+            }).join('');
+            colorHtml = `<div class="color-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; align-items: center;">
+                <span style="font-size: 10px; color: #6b7280;">Колір:</span>${colorButtons}
+            </div>`;
+        } else if (product.color && !summaryText.includes(product.color)) {
+            // Single color - just display
             colorHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Колір: </span><span style="font-size: 11px; font-weight: 500;">${product.color}</span></div>`;
         }
         
         // Build size variants HTML (clickable buttons that switch the card)
-        let sizeHtml = '';
-        const cardId = 'card-' + product.id + '-' + Date.now();
+        // Use current color's sizes if available, otherwise use flat size_variants
+        let currentColorSizes = [];
+        if (hasMultipleColors) {
+            const currentColorVariant = colorVariants.find(cv => cv.is_current);
+            currentColorSizes = currentColorVariant?.sizes || [];
+        }
+        const sizesToShow = currentColorSizes.length > 0 ? currentColorSizes : (product.size_variants || []);
         
-        if (product.size_variants && product.size_variants.length > 1) {
-            const buttons = product.size_variants.map(v => {
+        let sizeHtml = '';
+        if (sizesToShow.length > 1) {
+            const buttons = sizesToShow.map(v => {
                 const isActive = v.id === product.id || v.article === product.article;
                 const activeStyle = isActive 
                     ? `background: ${settings.primary_color}; color: white; border-color: ${settings.primary_color};`
@@ -1287,6 +1315,7 @@
 
         // Store all variants data on the card for switching
         card.dataset.variants = JSON.stringify(product.size_variants || []);
+        card.dataset.colorVariants = JSON.stringify(product.color_variants || []);
         card.dataset.currentLink = product.link || '#';
         card.id = cardId;
 
@@ -1297,14 +1326,73 @@
                     <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
                     ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${summaryText}</div>` : ''}
                     ${colorHtml}
-                    ${sizeHtml}
+                    <div class="size-container">${sizeHtml}</div>
                     <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px; margin-top: 4px;">${product.price} ₴</div>
                 </div>
             </div>
         `;
 
-        // Add click handlers for size buttons
+        // Add click handlers for color and size buttons
         setTimeout(() => {
+            const primaryColor = settings.primary_color;
+            
+            // Color button handlers
+            const colorButtons = card.querySelectorAll('.color-btn');
+            colorButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Update color button styles
+                    colorButtons.forEach(b => {
+                        b.style.background = '#f3f4f6';
+                        b.style.color = '#374151';
+                        b.style.borderColor = '#e5e7eb';
+                    });
+                    btn.style.background = primaryColor;
+                    btn.style.color = 'white';
+                    btn.style.borderColor = primaryColor;
+                    
+                    // Get sizes for this color
+                    const sizes = JSON.parse(btn.dataset.sizes || '[]');
+                    const sizeContainer = card.querySelector('.size-container');
+                    
+                    if (sizes.length > 0) {
+                        // Update size buttons for this color
+                        const sizeButtons = sizes.map((v, idx) => {
+                            const isFirst = idx === 0;
+                            const activeStyle = isFirst 
+                                ? `background: ${primaryColor}; color: white; border-color: ${primaryColor};`
+                                : 'background: #f3f4f6; color: #374151; border-color: #e5e7eb;';
+                            return `<button type="button" class="size-btn" 
+                                data-size="${v.size}" 
+                                data-link="${v.link || ''}" 
+                                data-id="${v.id}"
+                                data-article="${v.article || ''}"
+                                style="padding: 2px 6px; font-size: 10px; border-radius: 4px; border: 1px solid; cursor: pointer; ${activeStyle}"
+                            >${v.size}</button>`;
+                        }).join('');
+                        sizeContainer.innerHTML = `<div class="size-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${sizeButtons}</div>`;
+                        
+                        // Update card link to first size of selected color
+                        if (sizes[0]?.link) {
+                            card.href = sizes[0].link;
+                            card.dataset.currentLink = sizes[0].link;
+                        }
+                        
+                        // Re-attach size button handlers
+                        attachSizeHandlers(card, primaryColor);
+                    } else {
+                        sizeContainer.innerHTML = '';
+                    }
+                });
+            });
+            
+            // Size button handlers
+            attachSizeHandlers(card, primaryColor);
+        }, 0);
+        
+        function attachSizeHandlers(card, primaryColor) {
             const sizeButtons = card.querySelectorAll('.size-btn');
             sizeButtons.forEach(btn => {
                 btn.addEventListener('click', (e) => {
@@ -1312,13 +1400,12 @@
                     e.stopPropagation();
                     
                     const newLink = btn.dataset.link;
-                    const primaryColor = settings.primary_color;
                     
                     // Update card link
                     card.href = newLink || '#';
                     card.dataset.currentLink = newLink;
                     
-                    // Update button styles - deactivate all, activate clicked
+                    // Update button styles
                     sizeButtons.forEach(b => {
                         b.style.background = '#f3f4f6';
                         b.style.color = '#374151';
@@ -1329,7 +1416,7 @@
                     btn.style.borderColor = primaryColor;
                 });
             });
-        }, 0);
+        }
 
         return card;
     }

@@ -734,6 +734,14 @@ class MeiliProductSearchTool
             $q = preg_replace('/\bобувь\b/iu', 'черевики', $q);
         }
         
+        // Socks synonyms - normalize to "шкарпетки"
+        if (preg_match('/\bноск[иі]\b/iu', $l)) {
+            $q = preg_replace('/\bноск[иі]\b/iu', 'шкарпетки', $q);
+        }
+        if (preg_match('/\bшкарпетки\b/iu', $l)) {
+            // already correct
+        }
+        
         // 2. Use QueryExpander ONLY for product type normalization (not expansion)
         // This helps with "бронік" → finds "плитоноска" products via search_index
         $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk');

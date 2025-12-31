@@ -1261,7 +1261,7 @@
         
         // Build color variants HTML (if multiple colors available)
         let colorHtml = '';
-        const colorVariants = product.color_variants || [];
+        const colorVariants = (product.color_variants || []).filter(cv => cv.color && cv.color !== 'null' && cv.color.trim() !== '');
         const hasMultipleColors = colorVariants.length > 1;
         
         if (hasMultipleColors) {
@@ -1280,7 +1280,7 @@
             colorHtml = `<div class="color-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; align-items: center;">
                 <span style="font-size: 10px; color: #6b7280;">Колір:</span>${colorButtons}
             </div>`;
-        } else if (product.color && !summaryText.includes(product.color)) {
+        } else if (product.color && product.color !== 'null' && !summaryText.includes(product.color)) {
             // Single color - just display
             colorHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Колір: </span><span style="font-size: 11px; font-weight: 500;">${product.color}</span></div>`;
         }
@@ -1295,8 +1295,10 @@
         const sizesToShow = currentColorSizes.length > 0 ? currentColorSizes : (product.size_variants || []);
         
         let sizeHtml = '';
-        if (sizesToShow.length > 1) {
-            const buttons = sizesToShow.map(v => {
+        // Filter out variants with null/empty size
+        const validSizes = sizesToShow.filter(v => v.size && v.size !== 'null' && v.size !== '-');
+        if (validSizes.length > 1) {
+            const buttons = validSizes.map(v => {
                 const isActive = v.id === product.id || v.article === product.article;
                 const activeStyle = isActive 
                     ? `background: ${settings.primary_color}; color: white; border-color: ${settings.primary_color};`
@@ -1311,7 +1313,7 @@
                 >${v.size}</button>`;
             }).join('');
             sizeHtml = `<div class="size-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${buttons}</div>`;
-        } else if (product.size) {
+        } else if (product.size && product.size !== '-' && product.size !== 'null') {
             // Single size, just show label
             sizeHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Розмір: </span><span style="font-size: 11px; font-weight: 500;">${product.size}</span></div>`;
         }

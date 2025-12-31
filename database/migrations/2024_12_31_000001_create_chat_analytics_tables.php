@@ -9,6 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         // Chat events - всі події в чаті
+        if (!Schema::hasTable('chat_events')) {
         Schema::create('chat_events', function (Blueprint $table) {
             $table->id();
             $table->string('session_id', 64)->index();
@@ -43,8 +44,10 @@ return new class extends Migration
             $table->index(['merchant_id', 'created_at']);
             $table->index(['client_id', 'created_at']);
         });
+        }
 
         // Conversions - атрибутовані конверсії
+        if (!Schema::hasTable('chat_conversions')) {
         Schema::create('chat_conversions', function (Blueprint $table) {
             $table->id();
             $table->string('session_id', 64)->index();
@@ -78,8 +81,10 @@ return new class extends Migration
             $table->index(['merchant_id', 'conversion_type', 'created_at']);
             $table->index(['session_id', 'conversion_type']);
         });
+        }
 
         // Session outcomes - результат сесії
+        if (!Schema::hasTable('chat_session_outcomes')) {
         Schema::create('chat_session_outcomes', function (Blueprint $table) {
             $table->id();
             $table->string('session_id', 64)->unique();
@@ -114,8 +119,10 @@ return new class extends Migration
             
             $table->index(['merchant_id', 'outcome', 'created_at']);
         });
+        }
 
         // Daily aggregates for dashboards
+        if (!Schema::hasTable('chat_daily_stats')) {
         Schema::create('chat_daily_stats', function (Blueprint $table) {
             $table->id();
             $table->date('date')->index();
@@ -156,6 +163,7 @@ return new class extends Migration
             
             $table->unique(['date', 'merchant_id']);
         });
+        }
     }
 
     public function down(): void

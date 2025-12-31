@@ -1976,23 +1976,20 @@
         const payload = JSON.stringify({ events });
         log('Flushing analytics:', events.length, 'events', events.map(e => e.event_type));
 
-        // Use sendBeacon with text/plain to avoid CORS preflight entirely
-        // Server will parse JSON from text/plain body
-        if (navigator.sendBeacon) {
-            const blob = new Blob([payload], { type: 'text/plain' });
-            const sent = navigator.sendBeacon(BASE_URL + '/api/analytics/events', blob);
-            log('sendBeacon result:', sent);
-            return;
-        }
-        
-        // Fallback for browsers without sendBeacon (rare)
+        // Use fetch with keepalive for reliable delivery
         fetch(BASE_URL + '/api/analytics/events', {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
             body: payload,
-            keepalive: true,
-            mode: 'no-cors'
-        }).catch(() => {});
+            keepalive: true
+        }).then(response => {
+            log('Analytics fetch response:', response.status);
+            return response.json();
+        }).then(data => {
+            log('Analytics response data:', data);
+        }).catch(err => {
+            log('Analytics fetch error:', err.message);
+        });
     }
 
     function getOrCreateClientId() {

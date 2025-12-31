@@ -49,6 +49,19 @@ Route::post('/orders/search', [OrderSearchController::class, 'search']);
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
 
+// Diagnostic API (key protected)
+Route::prefix('diagnostic')->group(function () {
+    Route::get('/db-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'dbStats']);
+    Route::get('/search-db', [\App\Http\Controllers\Api\DiagnosticController::class, 'searchDb']);
+    Route::get('/search-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'searchMeili']);
+    Route::get('/meili-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'meiliStats']);
+    Route::get('/product/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'product']);
+    Route::get('/variants/{parentArticle}', [\App\Http\Controllers\Api\DiagnosticController::class, 'variants']);
+    Route::get('/category-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryProducts']);
+    Route::get('/test-chat', [\App\Http\Controllers\Api\DiagnosticController::class, 'testChat']);
+    Route::get('/sync-sample', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncSample']);
+});
+
 // Cross-sell suggestions (async, called after main chat response)
 Route::get('/cross-sell', [\App\Http\Controllers\Api\CrossSellController::class, 'suggestions'])
     ->middleware(['widget.cors', 'throttle:60,1']);

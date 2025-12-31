@@ -323,6 +323,9 @@
             gap: 1rem;
             flex-wrap: wrap;
             justify-content: center;
+            margin-top: 2rem;
+            position: relative;
+            z-index: 1;
         }
 
         .btn {
@@ -545,6 +548,9 @@
                 padding: 1rem;
                 max-height: 350px;
                 overflow-y: auto;
+            }
+            .cta-group {
+                margin-top: 1.5rem;
             }
             .tech-stack {
                 flex-direction: column;
@@ -894,12 +900,16 @@
             currentFeature = null;
         }
 
-        // Handle window resize
+        // Handle window resize - only react to WIDTH changes (not height)
+        // Mobile browsers change viewport height when scrolling (hiding address bar)
+        let lastWidth = window.innerWidth;
         window.addEventListener('resize', function() {
-            if (currentFeature) {
+            const newWidth = window.innerWidth;
+            // Only handle actual width changes (orientation change, etc.)
+            if (Math.abs(newWidth - lastWidth) > 50 && currentFeature) {
+                lastWidth = newWidth;
                 const feature = currentFeature;
                 hideFeatureDemo();
-                // Re-show with correct mode after resize
                 setTimeout(() => {
                     showFeatureDemo(feature, null);
                 }, 100);

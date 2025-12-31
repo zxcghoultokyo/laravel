@@ -57,6 +57,16 @@ class AnalyticsController extends Controller
                     continue;
                 }
 
+                // Convert ISO 8601 timestamp to MySQL format
+                $createdAt = now();
+                if (!empty($event['timestamp'])) {
+                    try {
+                        $createdAt = \Carbon\Carbon::parse($event['timestamp'])->format('Y-m-d H:i:s');
+                    } catch (\Exception $e) {
+                        $createdAt = now();
+                    }
+                }
+
                 $rows[] = [
                     'session_id' => substr($event['session_id'] ?? '', 0, 64),
                     'merchant_id' => substr($event['merchant_id'] ?? '', 0, 64),
@@ -77,7 +87,7 @@ class AnalyticsController extends Controller
                     'page_url' => isset($event['page_url']) ? substr($event['page_url'], 0, 500) : null,
                     'referrer' => isset($event['referrer']) ? substr($event['referrer'], 0, 500) : null,
                     'metadata' => isset($event['metadata']) ? json_encode($event['metadata']) : null,
-                    'created_at' => $event['timestamp'] ?? now(),
+                    'created_at' => $createdAt,
                 ];
             }
 

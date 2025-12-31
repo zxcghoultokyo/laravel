@@ -1,8 +1,27 @@
-<div>
+<div wire:poll.10s>
+    <!-- Navigation -->
+    <div class="mb-4 flex gap-2">
+        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Dashboard</a>
+        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📊 Аналітика</a>
+        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">💬 Чати</a>
+        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">⚙️ Віджет</a>
+    </div>
+
     <!-- Header -->
-    <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Діалоги</h2>
-        <p class="mt-1 text-sm text-gray-500">Історії чатів з користувачами</p>
+    <div class="mb-6 flex items-center justify-between">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900">Діалоги</h2>
+            <p class="mt-1 text-sm text-gray-500">Історії чатів з користувачами</p>
+        </div>
+        <button 
+            wire:click="$refresh" 
+            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+        >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Оновити
+        </button>
     </div>
 
     <!-- Filters -->

@@ -1214,7 +1214,9 @@ class AgentOrchestrator
             // "є розмір 44?" / "розмір L є?"
             '/(?:є\s+)?розмір\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*\??$/ui',
             // "такі є в 44?" / "в 44 є?"
-            '/(?:такі\s+)?(?:є\s+)?в\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*\??$/ui',
+            '/(?:такі\s+)?(?:є\s+)?в\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s*(?:є)?\s*\??$/ui',
+            // "в 46 є?" - size then є
+            '/в\s+(\d+|xs|s|m|l|xl|xxl|xxxl|3xl|4xl|5xl)\s+є\s*\??$/ui',
         ];
         
         foreach ($sizePatterns as $pattern) {

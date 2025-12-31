@@ -14,6 +14,7 @@ class Analytics extends Component
     public array $topProducts = [];
     public array $dailyChart = [];
     public bool $tablesExist = false;
+    public ?string $lastUpdated = null;
 
     public function mount()
     {
@@ -50,6 +51,9 @@ class Analytics extends Component
         
         // Daily chart data
         $this->dailyChart = $this->getDailyChart($startDate);
+        
+        // Update timestamp
+        $this->lastUpdated = now()->format('H:i:s');
     }
 
     private function getBasicStats($startDate): array

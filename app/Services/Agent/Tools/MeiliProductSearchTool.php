@@ -665,7 +665,10 @@ class MeiliProductSearchTool
             $q = preg_replace('/\bкуртка\b/iu', 'куртка', $q);
         }
         if (preg_match('/\bперчатки\b/iu', $l)) {
-            $q = preg_replace('/\bперчатки\b/iu', 'рукавиці', $q);
+            $q = preg_replace('/\bперчатки\b/iu', 'рукавички', $q);
+        }
+        if (preg_match('/\bрукавиц[іи]\b/iu', $l)) {
+            $q = preg_replace('/\bрукавиц[іи]\b/iu', 'рукавички', $q);
         }
         if (preg_match('/\bботинки\b/iu', $l)) {
             $q = preg_replace('/\bботинки\b/iu', 'берці', $q);

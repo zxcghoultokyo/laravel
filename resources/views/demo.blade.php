@@ -270,6 +270,37 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        .tech-stack {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .tech-stack h3 {
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        .tech-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tech-item {
+            padding: 0.375rem 0.75rem;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--primary);
+        }
+
         .footer {
             padding: 1.5rem;
             text-align: center;
@@ -318,7 +349,7 @@
 
     <main class="hero">
         <div class="badge">
-            🚀 GPT-5.2 Function Calling
+            🚀 GPT-4.1 + Meilisearch
         </div>
 
         <h1>
@@ -338,7 +369,7 @@
             </div>
             <div class="feature">
                 <span class="feature-icon">📦</span>
-                <span class="feature-text">Відстеження замовлень</span>
+                <span class="feature-text">Відстеження замовлень НП</span>
             </div>
             <div class="feature">
                 <span class="feature-icon">💬</span>
@@ -347,6 +378,22 @@
             <div class="feature">
                 <span class="feature-icon">🛒</span>
                 <span class="feature-text">Cross-sell пропозиції</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">📐</span>
+                <span class="feature-text">Розміри та наявність</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">🌍</span>
+                <span class="feature-text">Мультимовність (UA/EN/RU)</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">⚡</span>
+                <span class="feature-text">SSE Streaming відповіді</span>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">🧠</span>
+                <span class="feature-text">Контекст сесії</span>
             </div>
         </div>
 
@@ -364,11 +411,29 @@
                 <div class="demo-avatar">🤖</div>
                 <div class="demo-info">
                     <h3>AI Асистент</h3>
-                    <p>Онлайн • Відповідає миттєво</p>
+                    <p>Онлайн • Streaming SSE</p>
                 </div>
             </div>
             <div class="demo-message">
-                👋 Привіт! Я AI-помічник магазину тактичного спорядження. Допоможу знайти товар, відстежити замовлення або відповім на питання.
+                👋 Привіт! Я AI-помічник магазину тактичного спорядження. 
+                <br><br>
+                <strong>Що я вмію:</strong><br>
+                • Знайти товар: "плитоноска до 5000 грн"<br>
+                • Перевірити розмір: "а є в 44?"<br>
+                • Відстежити посилку: "ТТН 20450..."<br>
+                • Відповісти про доставку та оплату
+            </div>
+        </div>
+
+        <div class="tech-stack">
+            <h3>🛠 Технології</h3>
+            <div class="tech-items">
+                <span class="tech-item">Laravel 12</span>
+                <span class="tech-item">GPT-4.1</span>
+                <span class="tech-item">Meilisearch</span>
+                <span class="tech-item">SSE Streaming</span>
+                <span class="tech-item">Horoshop API</span>
+                <span class="tech-item">Nova Poshta API</span>
             </div>
         </div>
     </main>

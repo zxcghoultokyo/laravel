@@ -438,7 +438,12 @@
             toggle.style.display = 'none';
             input?.focus();
             
+            // Track chat opened
+            sendAnalyticsEvent('chat_opened');
+            
             if (!state.hasShownWelcome && savedMessages.length === 0) {
+                // Track session start (first time opening)
+                sendAnalyticsEvent('session_start');
                 addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
                 // Add quick actions after welcome message
                 addQuickActions(messages, settings, handleQuickAction);
@@ -452,6 +457,8 @@
             chatWindow.style.display = 'none';
             overlay.style.display = 'none';
             toggle.style.display = 'flex';
+            // Track chat closed
+            sendAnalyticsEvent('chat_closed');
         }
 
         // Send message function with SSE streaming support
@@ -1068,6 +1075,11 @@
             };
             
             btn.onclick = () => {
+                // Track quick action click
+                sendAnalyticsEvent('quick_action_click', {
+                    action: qa.action,
+                    label: qa.label
+                });
                 // Remove quick actions after click
                 container.remove();
                 onActionClick(qa.action);
@@ -1112,6 +1124,11 @@
 
         if (save) {
             saveMessage(sessionId, { role, content: text });
+            // Track message event for analytics
+            sendAnalyticsEvent('message', {
+                message_type: role,
+                message_text: text?.substring(0, 200) // Truncate for privacy
+            });
         }
         
         return div;
@@ -1465,6 +1482,12 @@
         
         const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
         
+        // Track cross-sell shown
+        sendAnalyticsEvent('cross_sell_shown', {
+            products_count: crossSell.suggestions.length,
+            product_ids: crossSell.suggestions.map(p => p.id).join(',')
+        });
+        
         const wrapper = document.createElement('div');
         wrapper.className = 'aintento-cross-sell';
         wrapper.style.cssText = `
@@ -1624,6 +1647,13 @@
             interestedBtn.onmouseleave = () => { interestedBtn.style.opacity = '1'; };
             interestedBtn.onclick = (e) => {
                 e.stopPropagation();
+                
+                // Track cross-sell click
+                sendAnalyticsEvent('cross_sell_click', {
+                    product_id: item.id,
+                    product_article: item.article,
+                    product_price: item.price
+                });
                 
                 // Animate card removal
                 card.style.opacity = '0';

@@ -463,7 +463,23 @@
             text-decoration: none;
         }
 
-        @media (max-width: 640px) {
+        /* Mobile demo containers - hidden by default */
+        .feature-demo-mobile {
+            display: none;
+            grid-column: 1 / -1;
+            width: 100%;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, padding 0.3s ease;
+        }
+
+        .feature-demo-mobile.visible {
+            display: block;
+            max-height: 500px;
+            padding: 1rem 0;
+        }
+
+        @media (max-width: 768px) {
             .navbar {
                 padding: 1rem;
             }
@@ -473,18 +489,77 @@
             .hero {
                 padding: 2rem 1rem;
             }
-            .features {
-                grid-template-columns: 1fr;
-            }
             .features-container {
                 flex-direction: column;
+                align-items: center;
             }
-            .feature-demo.visible {
+            .features {
+                grid-template-columns: 1fr;
+                max-width: 400px;
                 width: 100%;
-                max-width: 380px;
+                margin: 0 auto;
+                gap: 0.5rem;
+            }
+            .feature {
+                justify-content: flex-start;
+            }
+            /* Hide desktop demo panel on mobile */
+            .feature-demo {
+                display: none !important;
             }
             .features.shifted {
-                max-width: 100%;
+                max-width: 400px;
+            }
+            /* Mobile demo styling */
+            .feature-demo-mobile.visible {
+                display: block;
+            }
+            .feature-demo-mobile .feature-demo-inner {
+                background: var(--card-bg);
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                overflow: hidden;
+            }
+            .feature-demo-mobile .feature-demo-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0.75rem 1rem;
+                background: rgba(0, 122, 255, 0.1);
+                border-bottom: 1px solid var(--border-color);
+            }
+            .feature-demo-mobile .feature-demo-header h4 {
+                margin: 0;
+                font-size: 0.9rem;
+            }
+            .feature-demo-mobile .feature-demo-close {
+                background: none;
+                border: none;
+                font-size: 1.5rem;
+                color: var(--text-secondary);
+                cursor: pointer;
+                padding: 0;
+                line-height: 1;
+            }
+            .feature-demo-mobile .feature-demo-chat {
+                padding: 1rem;
+                max-height: 350px;
+                overflow-y: auto;
+            }
+            .tech-stack {
+                flex-direction: column;
+                align-items: center;
+            }
+            .tech-item {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+
+        @media (min-width: 769px) {
+            /* Hide mobile demos on desktop */
+            .feature-demo-mobile {
+                display: none !important;
             }
         }
     </style>
@@ -519,38 +594,53 @@
 
         <div class="features-container">
             <div class="features" id="featuresGrid">
-                <div class="feature" data-feature="search" onclick="showFeatureDemo('search')">
+                <div class="feature" data-feature="search" onclick="showFeatureDemo('search', this)">
                     <span class="feature-icon">🔍</span>
                     <span class="feature-text">Пошук товарів з AI-ранжуванням</span>
                 </div>
-                <div class="feature" data-feature="tracking" onclick="showFeatureDemo('tracking')">
+                <div class="feature-demo-mobile" data-for="search"></div>
+                
+                <div class="feature" data-feature="tracking" onclick="showFeatureDemo('tracking', this)">
                     <span class="feature-icon">📦</span>
                     <span class="feature-text">Відстеження замовлень НП</span>
                 </div>
-                <div class="feature" data-feature="faq" onclick="showFeatureDemo('faq')">
+                <div class="feature-demo-mobile" data-for="tracking"></div>
+                
+                <div class="feature" data-feature="faq" onclick="showFeatureDemo('faq', this)">
                     <span class="feature-icon">💬</span>
                     <span class="feature-text">FAQ та консультації</span>
                 </div>
-                <div class="feature" data-feature="crosssell" onclick="showFeatureDemo('crosssell')">
+                <div class="feature-demo-mobile" data-for="faq"></div>
+                
+                <div class="feature" data-feature="crosssell" onclick="showFeatureDemo('crosssell', this)">
                     <span class="feature-icon">🛒</span>
                     <span class="feature-text">Cross-sell пропозиції</span>
                 </div>
-                <div class="feature" data-feature="sizes" onclick="showFeatureDemo('sizes')">
+                <div class="feature-demo-mobile" data-for="crosssell"></div>
+                
+                <div class="feature" data-feature="sizes" onclick="showFeatureDemo('sizes', this)">
                     <span class="feature-icon">📐</span>
                     <span class="feature-text">Розміри та наявність</span>
                 </div>
-                <div class="feature" data-feature="multilang" onclick="showFeatureDemo('multilang')">
+                <div class="feature-demo-mobile" data-for="sizes"></div>
+                
+                <div class="feature" data-feature="multilang" onclick="showFeatureDemo('multilang', this)">
                     <span class="feature-icon">🌍</span>
                     <span class="feature-text">Мультимовність (UA/EN/RU)</span>
                 </div>
-                <div class="feature" data-feature="streaming" onclick="showFeatureDemo('streaming')">
+                <div class="feature-demo-mobile" data-for="multilang"></div>
+                
+                <div class="feature" data-feature="streaming" onclick="showFeatureDemo('streaming', this)">
                     <span class="feature-icon">⚡</span>
                     <span class="feature-text">SSE Streaming відповіді</span>
                 </div>
-                <div class="feature" data-feature="context" onclick="showFeatureDemo('context')">
+                <div class="feature-demo-mobile" data-for="streaming"></div>
+                
+                <div class="feature" data-feature="context" onclick="showFeatureDemo('context', this)">
                     <span class="feature-icon">🧠</span>
                     <span class="feature-text">Контекст сесії</span>
                 </div>
+                <div class="feature-demo-mobile" data-for="context"></div>
             </div>
 
             <div class="feature-demo" id="featureDemo">
@@ -707,35 +797,85 @@
 
         let currentFeature = null;
 
-        function showFeatureDemo(featureKey) {
+        function isMobile() {
+            return window.innerWidth <= 768;
+        }
+
+        function showFeatureDemo(featureKey, clickedElement) {
             const demo = featureDemos[featureKey];
             if (!demo) return;
+
+            // If same feature clicked - hide it
+            if (currentFeature === featureKey) {
+                hideFeatureDemo();
+                return;
+            }
 
             // Update active state
             document.querySelectorAll('.feature').forEach(f => f.classList.remove('active'));
             document.querySelector(`[data-feature="${featureKey}"]`).classList.add('active');
 
-            // Shift grid
-            document.getElementById('featuresGrid').classList.add('shifted');
+            // Generate demo content HTML
+            const demoHTML = `
+                <div class="feature-demo-inner">
+                    <div class="feature-demo-header">
+                        <h4><span>${demo.icon}</span> ${demo.title}</h4>
+                        <button class="feature-demo-close" onclick="hideFeatureDemo()">×</button>
+                    </div>
+                    <div class="feature-demo-chat">
+                        ${demo.messages.map(msg => {
+                            let html = `<div class="chat-msg ${msg.type}">${msg.text}`;
+                            if (msg.product) {
+                                html += `<div class="product-card">
+                                    <strong>${msg.product.name}</strong>
+                                    <p>${msg.product.price} • ${msg.product.desc}</p>
+                                </div>`;
+                            }
+                            html += '</div>';
+                            return html;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
 
-            // Show demo panel
-            document.getElementById('featureDemo').classList.add('visible');
-            document.getElementById('demoPanelIcon').textContent = demo.icon;
-            document.getElementById('demoPanelTitle').textContent = demo.title;
+            if (isMobile()) {
+                // Hide all mobile demos first
+                document.querySelectorAll('.feature-demo-mobile').forEach(d => {
+                    d.classList.remove('visible');
+                    d.innerHTML = '';
+                });
 
-            // Render messages
-            const chatContainer = document.getElementById('demoChatMessages');
-            chatContainer.innerHTML = demo.messages.map(msg => {
-                let html = `<div class="chat-msg ${msg.type}">${msg.text}`;
-                if (msg.product) {
-                    html += `<div class="product-card">
-                        <strong>${msg.product.name}</strong>
-                        <p>${msg.product.price} • ${msg.product.desc}</p>
-                    </div>`;
+                // Show demo below clicked card
+                const mobileDemo = document.querySelector(`.feature-demo-mobile[data-for="${featureKey}"]`);
+                if (mobileDemo) {
+                    mobileDemo.innerHTML = demoHTML;
+                    mobileDemo.classList.add('visible');
+                    // Smooth scroll to demo
+                    setTimeout(() => {
+                        mobileDemo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 100);
                 }
-                html += '</div>';
-                return html;
-            }).join('');
+            } else {
+                // Desktop - shift grid and show side panel
+                document.getElementById('featuresGrid').classList.add('shifted');
+                document.getElementById('featureDemo').classList.add('visible');
+                document.getElementById('demoPanelIcon').textContent = demo.icon;
+                document.getElementById('demoPanelTitle').textContent = demo.title;
+
+                // Render messages
+                const chatContainer = document.getElementById('demoChatMessages');
+                chatContainer.innerHTML = demo.messages.map(msg => {
+                    let html = `<div class="chat-msg ${msg.type}">${msg.text}`;
+                    if (msg.product) {
+                        html += `<div class="product-card">
+                            <strong>${msg.product.name}</strong>
+                            <p>${msg.product.price} • ${msg.product.desc}</p>
+                        </div>`;
+                    }
+                    html += '</div>';
+                    return html;
+                }).join('');
+            }
 
             currentFeature = featureKey;
         }
@@ -744,8 +884,27 @@
             document.querySelectorAll('.feature').forEach(f => f.classList.remove('active'));
             document.getElementById('featuresGrid').classList.remove('shifted');
             document.getElementById('featureDemo').classList.remove('visible');
+            
+            // Hide mobile demos
+            document.querySelectorAll('.feature-demo-mobile').forEach(d => {
+                d.classList.remove('visible');
+                d.innerHTML = '';
+            });
+            
             currentFeature = null;
         }
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            if (currentFeature) {
+                const feature = currentFeature;
+                hideFeatureDemo();
+                // Re-show with correct mode after resize
+                setTimeout(() => {
+                    showFeatureDemo(feature, null);
+                }, 100);
+            }
+        });
     </script>
 </body>
 </html>

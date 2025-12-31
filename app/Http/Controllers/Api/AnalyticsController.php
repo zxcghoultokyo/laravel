@@ -15,15 +15,17 @@ class AnalyticsController extends Controller
      */
     public function events(Request $request)
     {
+        // Read raw body directly from php://input (most reliable)
+        $rawBody = file_get_contents('php://input');
+        
         // Log incoming request for debugging
         Log::info('Analytics events received', [
             'content_type' => $request->header('Content-Type'),
-            'content_length' => strlen($request->getContent()),
-            'raw_body_preview' => substr($request->getContent(), 0, 500),
+            'content_length' => strlen($rawBody),
+            'raw_body_preview' => substr($rawBody, 0, 500),
         ]);
         
-        // Always parse raw body as JSON - handles both text/plain and application/json
-        $rawBody = $request->getContent();
+        // Parse JSON
         $data = json_decode($rawBody, true);
         
         if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
@@ -31,7 +33,7 @@ class AnalyticsController extends Controller
                 'error' => json_last_error_msg(),
                 'raw_body' => substr($rawBody, 0, 200),
             ]);
-            $data = [];
+            return response()->json(['status' => 'ok', 'received' => 0, 'error' => 'json_parse_failed']);
         }
         
         $events = $data['events'] ?? [];

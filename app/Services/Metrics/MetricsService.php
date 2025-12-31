@@ -66,6 +66,7 @@ class MetricsService
                 'status' => 'operator',
                 'operator_id' => $operatorId,
                 'operator_took_at' => now(),
+                'last_message_at' => now(),
                 'updated_at' => now(),
             ]
         );

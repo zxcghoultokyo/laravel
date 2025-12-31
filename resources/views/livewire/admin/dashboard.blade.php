@@ -195,9 +195,9 @@
             <tbody class="bg-white divide-y divide-gray-200">
                 @foreach($activeSessions as $session)
                 <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        <a href="{{ route('admin.chats.show', $session->session_id) }}" class="text-sm font-mono text-blue-600 hover:underline">
-                            {{ substr($session->session_id, 0, 12) }}...
+                    <td class="px-6 py-4">
+                        <a href="{{ route('admin.chats.show', $session->session_id) }}" class="text-xs font-mono text-blue-600 hover:underline break-all" title="Відкрити чат">
+                            {{ $session->session_id }}
                         </a>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">

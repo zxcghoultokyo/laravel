@@ -249,7 +249,13 @@
                                             {{ $eventIcon }} {{ $event->event_type }}
                                         </span>
                                     </td>
-                                    <td class="py-2 font-mono text-xs">{{ substr($event->session_id, 0, 16) }}...</td>
+                                    <td class="py-2">
+                                        <a href="{{ route('admin.chats.show', $event->session_id) }}" 
+                                           class="font-mono text-xs text-blue-600 hover:underline hover:text-blue-800"
+                                           title="Відкрити чат">
+                                            {{ $event->session_id }}
+                                        </a>
+                                    </td>
                                     <td class="py-2">{{ $event->product_id ?? '-' }}</td>
                                 </tr>
                             @endforeach

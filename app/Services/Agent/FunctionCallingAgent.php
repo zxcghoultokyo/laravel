@@ -93,6 +93,7 @@ class FunctionCallingAgent
 
     /**
      * Build messages array with system prompt
+     * Includes enhanced context for follow-up queries
      */
     private function buildMessages(string $message, array $context): array
     {
@@ -107,11 +108,74 @@ class FunctionCallingAgent
         foreach ($history as $msg) {
             $messages[] = $msg;
         }
+        
+        // Detect if this is a follow-up size/color/filter query
+        $lowerMessage = mb_strtolower(trim($message));
+        $isFollowUp = $this->detectFollowUpQuery($lowerMessage, $history);
+        
+        // If follow-up, add context hint for GPT
+        if ($isFollowUp && !empty($history)) {
+            $lastAssistant = null;
+            foreach (array_reverse($history) as $msg) {
+                if ($msg['role'] === 'assistant' && str_contains($msg['content'], '[Показані товари:')) {
+                    $lastAssistant = $msg['content'];
+                    break;
+                }
+            }
+            
+            if ($lastAssistant) {
+                // Extract product context
+                if (preg_match('/\[Показані товари: (.+?)\]/', $lastAssistant, $matches)) {
+                    $productContext = $matches[1];
+                    $message = "{$message}\n[Контекст: користувач запитує про {$productContext}]";
+                }
+            }
+        }
 
         // Add current message
         $messages[] = ['role' => 'user', 'content' => $message];
 
         return $messages;
+    }
+    
+    /**
+     * Detect if message is a follow-up query (size, color, price filter)
+     */
+    private function detectFollowUpQuery(string $message, array $history): bool
+    {
+        // Short messages that look like follow-ups
+        $followUpPatterns = [
+            '/^(в |у )?(розмір|размер)/ui', // size queries
+            '/^(в |у )?(кольор|цвет|color)/ui', // color queries  
+            '/^(які|які є|що є|а є|є ).{0,20}(L|M|S|XL|XXL|\d{2})/ui', // "які є в L"
+            '/^(дешевш|дорожч|до \d|від \d|бюджет)/ui', // price
+            '/^(ще|більше|інші|інш|варіант)/ui', // more options
+            '/^(чорн|біл|олив|мультикам|піксель|коричнев)/ui', // colors
+            '/^(L|M|S|XL|XXL|\d{2})$/ui', // just size
+        ];
+        
+        foreach ($followUpPatterns as $pattern) {
+            if (preg_match($pattern, $message)) {
+                return true;
+            }
+        }
+        
+        // Also follow-up if message is very short and we have history
+        if (mb_strlen($message) < 30 && count($history) >= 2) {
+            // Check if last message was a product search
+            $lastAssistant = null;
+            foreach (array_reverse($history) as $msg) {
+                if ($msg['role'] === 'assistant') {
+                    $lastAssistant = $msg;
+                    break;
+                }
+            }
+            if ($lastAssistant && str_contains($lastAssistant['content'], '[Показані товари:')) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**

@@ -1001,6 +1001,7 @@ class ChatService
     /**
      * Load conversation history for GPT context
      * Returns last N messages in OpenAI format
+     * Includes product context for follow-up queries
      */
     protected function loadConversationHistory(string $sessionId, int $limit = 10): array
     {
@@ -1018,6 +1019,8 @@ class ChatService
                 ->values();
 
             $history = [];
+            $lastShownProducts = null; // Track last shown products for context
+            
             foreach ($messages as $msg) {
                 // Skip if no content
                 if (empty($msg->content)) {
@@ -1026,10 +1029,25 @@ class ChatService
 
                 $role = $msg->role === 'user' ? 'user' : 'assistant';
                 
-                // For assistant messages, extract just text (not full JSON response)
+                // For assistant messages, build context-rich content
                 $content = $msg->content;
-                if ($role === 'assistant' && is_array($content)) {
-                    $content = $content['text'] ?? json_encode($content, JSON_UNESCAPED_UNICODE);
+                if ($role === 'assistant') {
+                    $meta = $msg->meta ?? [];
+                    $intent = $meta['intent'] ?? 'unknown';
+                    $products = $meta['products'] ?? [];
+                    
+                    // For product_search responses, include product titles in context
+                    if ($intent === 'product_search' && !empty($products)) {
+                        $lastShownProducts = $products;
+                        $productTitles = array_map(fn($p) => $p['title'] ?? '', $products);
+                        $productList = implode(', ', array_filter($productTitles));
+                        
+                        // Build readable context for GPT
+                        $textContent = is_string($content) ? $content : ($content['text'] ?? '');
+                        $content = trim($textContent) . "\n[Показані товари: {$productList}]";
+                    } elseif (is_array($content)) {
+                        $content = $content['text'] ?? json_encode($content, JSON_UNESCAPED_UNICODE);
+                    }
                 }
 
                 $history[] = [
@@ -1041,6 +1059,7 @@ class ChatService
             Log::info('Loaded conversation history', [
                 'session_id' => $sessionId,
                 'messages_count' => count($history),
+                'has_product_context' => $lastShownProducts !== null,
             ]);
 
             return $history;

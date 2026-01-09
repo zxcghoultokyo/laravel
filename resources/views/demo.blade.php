@@ -823,6 +823,11 @@
                     <span class="coming-feature-text">Social proof «щойно купили»</span>
                     <span class="coming-feature-badge">Q2</span>
                 </div>
+                <div class="coming-feature">
+                    <span class="coming-feature-icon">🔌</span>
+                    <span class="coming-feature-text">MCP Protocol для AI-клієнтів</span>
+                    <span class="coming-feature-badge">Q2</span>
+                </div>
             </div>
         </div>
 

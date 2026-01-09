@@ -141,7 +141,9 @@
             overlay: document.getElementById('aintento-overlay'),
             input: document.getElementById('aintento-input'),
             send: document.getElementById('aintento-send'),
-            messages: document.getElementById('aintento-messages')
+            messages: document.getElementById('aintento-messages'),
+            bubble: document.getElementById('aintento-bubble'),
+            bubbleClose: document.getElementById('aintento-bubble-close')
         };
 
         // Widget state
@@ -250,6 +252,57 @@
                 z-index: 9999;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             ">
+                <!-- Chat bubble hint -->
+                <div id="aintento-bubble" class="aintento-bubble" style="
+                    position: absolute;
+                    bottom: 70px;
+                    ${s.position === 'right' ? 'right: 0;' : 'left: 0;'}
+                    background: white;
+                    padding: 12px 16px;
+                    border-radius: 16px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                    max-width: 220px;
+                    font-size: 14px;
+                    line-height: 1.4;
+                    color: #1f2937;
+                    animation: aintento-fadeInUp 0.5s ease;
+                    cursor: pointer;
+                ">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                        <span style="font-size: 16px;">👋</span>
+                        <span style="font-weight: 600; color: ${s.primary_color};">Привіт!</span>
+                    </div>
+                    <span style="color: #4b5563;">Потрібна допомога з вибором? Запитайте мене!</span>
+                    <!-- Speech bubble tail -->
+                    <div style="
+                        position: absolute;
+                        bottom: -8px;
+                        ${s.position === 'right' ? 'right: 24px;' : 'left: 24px;'}
+                        width: 16px;
+                        height: 16px;
+                        background: white;
+                        transform: rotate(45deg);
+                        box-shadow: 4px 4px 8px rgba(0,0,0,0.08);
+                    "></div>
+                    <!-- Close bubble button -->
+                    <button id="aintento-bubble-close" style="
+                        position: absolute;
+                        top: -8px;
+                        right: -8px;
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 50%;
+                        background: #e5e7eb;
+                        border: none;
+                        font-size: 12px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #6b7280;
+                    ">×</button>
+                </div>
+                
                 <button id="aintento-toggle" class="aintento-toggle" style="
                     width: 60px;
                     height: 60px;
@@ -384,7 +437,41 @@
     }
 
     function setupEventHandlers(elements, state, settings, token, savedMessages) {
-        const { toggle, close, window: chatWindow, overlay, input, send, messages } = elements;
+        const { toggle, close, window: chatWindow, overlay, input, send, messages, bubble, bubbleClose } = elements;
+
+        // Hide bubble helper function
+        function hideBubble() {
+            if (bubble) {
+                bubble.style.display = 'none';
+                // Remember that user dismissed bubble
+                try {
+                    localStorage.setItem('aintento_bubble_dismissed', 'true');
+                } catch (e) {}
+            }
+        }
+        
+        // Check if bubble was already dismissed
+        try {
+            if (localStorage.getItem('aintento_bubble_dismissed') === 'true') {
+                if (bubble) bubble.style.display = 'none';
+            }
+        } catch (e) {}
+        
+        // Bubble close button click
+        if (bubbleClose) {
+            bubbleClose.addEventListener('click', function(e) {
+                e.stopPropagation();
+                hideBubble();
+            });
+        }
+        
+        // Bubble click opens chat
+        if (bubble) {
+            bubble.addEventListener('click', function() {
+                hideBubble();
+                openWidget();
+            });
+        }
 
         // Quick action responses
         const quickActionResponses = {
@@ -441,6 +528,7 @@
             chatWindow.style.display = 'flex';
             overlay.style.display = 'block';
             toggle.style.display = 'none';
+            hideBubble(); // Hide bubble when chat opens
             input?.focus();
             
             // Track chat opened

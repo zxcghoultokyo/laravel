@@ -77,6 +77,10 @@ class AccessoryFilterTool
             'vests' => ['жилет', 'бронік', 'vest'],
             'pouches' => ['підсумок', 'pouch', 'mag'],
             'holsters' => ['кобура', 'holster'],
+            'backpacks' => ['рюкзак', 'backpack', 'баул', 'сумка тактичн'],
+            'boots' => ['берц', 'boot', 'взуття', 'черевик'],
+            'gloves' => ['рукавиц', 'рукавич', 'glove', 'перчат'],
+            'eyewear' => ['окуляр', 'goggle', 'glasses', 'балістичн окул'],
         ];
         
         foreach ($typeKeywords as $type => $keywords) {
@@ -161,6 +165,39 @@ class AccessoryFilterTool
             return 'holsters';
         }
         
+        // Backpacks - check category or title
+        if (str_contains($combined, 'рюкзак') || str_contains($combined, 'backpack') || str_contains($combined, 'баул')) {
+            // Patches about backpacks are accessories, not backpacks
+            if (str_contains($combined, 'патч') || str_contains($combined, 'шеврон') || str_contains($combined, 'patch')) {
+                return 'patch';
+            }
+            // Covers for backpacks
+            if (str_contains($combined, 'чохол') || str_contains($combined, 'cover')) {
+                return 'backpack-accessory';
+            }
+            return 'backpacks';
+        }
+        
+        // Boots
+        if (str_contains($combined, 'берц') || str_contains($combined, 'boot') || str_contains($combined, 'черевик')) {
+            return 'boots';
+        }
+        
+        // Gloves
+        if (str_contains($combined, 'рукавиц') || str_contains($combined, 'glove') || str_contains($combined, 'перчат')) {
+            return 'gloves';
+        }
+        
+        // Eyewear
+        if (str_contains($combined, 'окуляр') || str_contains($combined, 'goggle')) {
+            return 'eyewear';
+        }
+        
+        // Patches are always accessories
+        if (str_contains($combined, 'патч') || str_contains($combined, 'шеврон') || str_contains($combined, 'patch')) {
+            return 'patch';
+        }
+        
         return '__unknown__';
     }
     
@@ -170,10 +207,14 @@ class AccessoryFilterTool
     private function isAccessoryOf(string $productType, string $primaryType): bool
     {
         $accessoryMap = [
-            'plates' => ['plate-accessory', 'plate-side', 'pouches', 'plate-carriers', 'carrier-accessory'], // side plates and carriers are accessories to main plates in discovery
+            'plates' => ['plate-accessory', 'plate-side', 'pouches', 'plate-carriers', 'carrier-accessory'],
             'helmets' => ['helmet-accessory', 'pouches'],
             'plate-carriers' => ['pouches', 'plates', 'plate-accessory', 'carrier-accessory'],
             'vests' => ['pouches'],
+            'backpacks' => ['backpack-accessory', 'patch', 'pouches'],
+            'boots' => ['patch'],
+            'gloves' => ['patch'],
+            'eyewear' => ['patch'],
         ];
         
         return in_array($productType, $accessoryMap[$primaryType] ?? []);

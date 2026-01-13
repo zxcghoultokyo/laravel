@@ -3,12 +3,17 @@
 namespace App\Services\Agent\Tools;
 
 use App\Services\Ai\AiRouter;
+use App\Services\Store\StoreContextService;
 use Illuminate\Support\Facades\Log;
 
 class AiRerankTool
 {
-    public function __construct(private AiRouter $aiRouter)
-    {}
+    private StoreContextService $storeContext;
+    
+    public function __construct(private AiRouter $aiRouter, ?StoreContextService $storeContext = null)
+    {
+        $this->storeContext = $storeContext ?? app(StoreContextService::class);
+    }
 
     /**
      * Use AI to re-rank products based on query relevance
@@ -139,128 +144,8 @@ class AiRerankTool
 
     private function buildRerankPrompt(array $candidates, string $query, array $filters, ?string $detectedBrand = null): string
     {
-        $candidatesList = [];
-        foreach (array_slice($candidates, 0, 40) as $idx => $c) {
-            $categoryPath = $c['category_path'] ?? 'N/A';
-            if (is_array($categoryPath)) {
-                $categoryPath = implode(' > ', $categoryPath);
-            }
-            
-            $brand = $c['brand'] ?? 'N/A';
-            
-            $candidatesList[] = sprintf(
-                "ID %d: %s | Бренд: %s | %s грн | %s | Popular: %d | Stock: %s",
-                $c['id'],
-                $c['title'],
-                $brand,
-                $c['price'],
-                $categoryPath,
-                $c['popularity'] ?? 0,
-                $c['in_stock'] ? 'Yes' : 'No'
-            );
-        }
-
-        $filterDesc = '';
-        if (!empty($filters['budget_max'])) {
-            $filterDesc .= "Бюджет до {$filters['budget_max']} грн. ";
-        }
-        if (!empty($filters['color'])) {
-            $filterDesc .= "Колір: {$filters['color']}. ";
-        }
-        if (!empty($filters['size'])) {
-            $filterDesc .= "Розмір: {$filters['size']}. ";
-        }
-        $qLower = mb_strtolower($query);
-        $platesQuery = (str_contains($qLower, 'sapi') || str_contains($qLower, 'esapi') || str_contains($qLower, 'плит') || str_contains($qLower, 'бронеплит'));
-        $footwearQuery = (str_contains($qLower, 'берц') || str_contains($qLower, 'черевик') || str_contains($qLower, 'взутт') || str_contains($qLower, 'boot'));
-        
-        // Brand-specific instruction
-        $brandInstruction = '';
-        if ($detectedBrand) {
-            $brandInstruction = <<<BRAND
-
-🔴 КРИТИЧНО ВАЖЛИВО — БРЕНД:
-Запит містить бренд "{$detectedBrand}" → показувати ТІЛЬКИ товари бренду "{$detectedBrand}"!
-- Бренд МАЄ АБСОЛЮТНИЙ ПРІОРИТЕТ над popularity
-- Якщо товар НЕ бренду "{$detectedBrand}" → НЕ додавай його в chosen_ids
-- Сортуй товари "{$detectedBrand}" по релевантності всередині бренду
-- Ігноруй popularity якщо бренд не співпадає
-
-BRAND;
-        }
-
-        // Precompute strings for heredoc interpolation
-        $candidateCount = count($candidates);
-        $candidateLines = implode("\n", $candidatesList);
-
-        $platesInstruction = '';
-        if ($platesQuery) {
-            $platesInstruction = <<<PLATES
-
-    🔴 ПЛИТИ: ЖОДНИХ БОКОВИХ ПЛИТ для запиту про SAPI/ESAPI/бронеплити.
-    - Бокові плити/side plates: розміри 15x15, 15x20, слова "бокова", "side" — це АКСЕСУАРИ → НЕ додавати, якщо є повнорозмірні плити.
-    - Чохли/кавери/панелі для плит — АКСЕСУАРИ → не вибирати, якщо є 3+ основних плити.
-    - Основні: повнорозмірні плити відповідного класу/форм-фактору.
-
-    PLATES;
-        }
-        $footwearInstruction = '';
-        if ($footwearQuery && !empty($filters['size'])) {
-            $footwearInstruction = <<<FOOT
-
-    🔵 ВЗУТТЯ: Пріоритет товарам з потрібним розміром у назві/характеристиках.
-    - Якщо видно розмір {$filters['size']} → став вище.
-    - Дуже великі/дуже малі (наприклад, 37, 50), якщо не збігаються з {$filters['size']} → відсунути.
-
-    FOOT;
-        }
-
-        return <<<PROMPT
-Ти — AI-експерт магазину Contractor (тактичне військове спорядження).
-
-Клієнти: військові ЗСУ, правоохоронці, добровольці, цивільні патріоти.
-
-Запит користувача: "{$query}"
-{$filterDesc}
-
-Кандидати ({$candidateCount} товарів):
-{$candidateLines}
-{$brandInstruction}
-{$platesInstruction}
-{$footwearInstruction}
-
-ДУЖЕ ВАЖЛИВО:
-- Якщо товар має в назві "ремінь", "плечовий", "одноточков", "двоточков", "слінг", "камбербанд", "панел", "кріплення", "адаптер", "ліхтарик", "ліхтар", "навушник", "гарнітур", "кавер", "чохол" — ЦЕ АКСЕСУАР, показувати ТІЛЬКИ якщо немає основних товарів
-- Основні товари: саме плитоноски (без слова "ремінь"), саме шоломи (без "кріплення"), саме плити (без "чохол")
-- Якщо є 3+ основних товарів — ігноруй всі аксесуари
-- ПРІОРИТЕТ: основні товари перші, аксесуари тільки на кінець
-
-Завдання:
-1. Обери ТІЛЬКИ справді релевантні товари (мінімум 3, максимум 10)
-2. ЯКЩО релевантних менше 10 — вибери тільки їх (НЕ заповнюй до 10!)
-3. ЯКЩО є 3-4 ідеальних товарів + 6 посередніх → вибери тільки 3-4 ідеальних
-4. СПОЧАТКУ основні товари, ПОТІМ аксесуари (якщо дуже релевантні)
-5. Враховуй: точність відповідності запиту, якість, популярність
-6. ВАЖЛИВО: Якість > кількість. 3 точні варіанти краще ніж 10 різних
-
-Приклади:
-- "шеврон група крові" → 4 шеврони з різними групами (НЕ додавай MED, СБУ, прапор)
-- "плитоноска АТАКА" → 3-4 плитоноски АТАКА (НЕ додавай інші бренди)
-- "рукавички зимові" → 5-7 зимових рукавиць (НЕ додавай тактичні літні)
-
-Поверни JSON:
-
-{
-  "chosen_ids": [123, 456, 789],
-  "reasoning": {
-    "123": "Точна відповідність запиту",
-    "456": "Альтернативний варіант",
-    ...
-  }
-}
-
-Поверни ТІЛЬКИ JSON. Кількість IDs = кількість РЕЛЕВАНТНИХ товарів (3-10, не обов'язково 10).
-PROMPT;
+        // Use dynamic prompt from StoreContextService (no hardcoded store-specific data!)
+        return $this->storeContext->buildRerankPrompt($candidates, $query, $filters, $detectedBrand);
     }
 
     private function findCandidateById(array $candidates, int $id): ?array

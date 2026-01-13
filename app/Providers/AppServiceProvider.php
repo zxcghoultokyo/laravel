@@ -14,11 +14,17 @@ use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
 use App\Services\Support\FaqContentIngestService;
+use App\Services\Store\StoreContextService;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // StoreContextService - provides dynamic store context for AI prompts
+        $this->app->singleton(StoreContextService::class, function ($app) {
+            return new StoreContextService();
+        });
+        
         // Horoshop HTTP client
         $this->app->singleton(HoroshopClient::class, function ($app) {
             $config = config('services.horoshop');

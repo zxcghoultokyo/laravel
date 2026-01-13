@@ -927,7 +927,8 @@ class AgentOrchestrator
     
     /**
      * Validate that search results are actually relevant to the query.
-     * Returns array with 'is_relevant', 'reason', 'suggestion', 'found_categories'.
+     * REDESIGNED: No hardcoded product type mappings. 
+     * Uses ai_product_type for validation when available.
      */
     private function validateResultRelevance(array $products, string $searchQuery, string $originalMessage): array
     {
@@ -935,139 +936,53 @@ class AgentOrchestrator
             return ['is_relevant' => false, 'reason' => 'no_products'];
         }
         
-        $query = mb_strtolower($searchQuery);
-        $original = mb_strtolower($originalMessage);
-        
-        // Define product type mappings: query keywords -> expected category paths (not titles!)
-        $productTypeMap = [
-            // Plate carriers - must be in plate carrier category, not accessories
-            'плитоноска' => [
-                'expected_categories' => ['плитоноск', 'plate carrier', 'бронежилет'],
-                'exclude_categories' => ['ремен', 'кріплен', 'аксесуар', '2-точков', '1-точков', 'панел'],
-                'exclude_title_patterns' => ['ремінь', 'кріплення', 'до плитоноски', 'для плитоноски', 'панель'],
-            ],
-            'плитоноску' => [
-                'expected_categories' => ['плитоноск', 'plate carrier', 'бронежилет'],
-                'exclude_categories' => ['ремен', 'кріплен', 'аксесуар', '2-точков', '1-точков', 'панел'],
-                'exclude_title_patterns' => ['ремінь', 'кріплення', 'до плитоноски', 'для плитоноски', 'панель'],
-            ],
-            'бронежилет' => [
-                'expected_categories' => ['бронежилет', 'плитоноск', 'жилет', 'vest'],
-                'exclude_categories' => ['ремен', 'аксесуар'],
-                'exclude_title_patterns' => ['ремінь', 'кріплення'],
-            ],
-            // Helmets
-            'шолом' => [
-                'expected_categories' => ['шолом', 'каска', 'helmet'],
-                'exclude_categories' => ['кріплен', 'аксесуар', 'кавер'],
-                'exclude_title_patterns' => ['кріплення для', 'до шолома', 'на шолом'],
-            ],
-            'каска' => [
-                'expected_categories' => ['шолом', 'каска', 'helmet'],
-                'exclude_categories' => ['кріплен', 'аксесуар'],
-                'exclude_title_patterns' => ['кріплення'],
-            ],
-            // Plates
-            'бронеплита' => [
-                'expected_categories' => ['плита', 'plate', 'бронеплит'],
-                'exclude_categories' => ['чохол', 'кавер'],
-                'exclude_title_patterns' => ['чохол', 'кавер'],
-            ],
-            // Boots
-            'берци' => [
-                'expected_categories' => ['берц', 'черевик', 'boot', 'взутт'],
-                'exclude_categories' => [],
-                'exclude_title_patterns' => [],
-            ],
-        ];
-        
-        // Check if query mentions a specific product type
-        $typeConfig = null;
-        $queryProductType = null;
-        foreach ($productTypeMap as $queryKey => $config) {
-            if (str_contains($query, $queryKey) || str_contains($original, $queryKey)) {
-                $typeConfig = $config;
-                $queryProductType = $queryKey;
-                break;
-            }
-        }
-        
-        // If no specific product type detected, assume relevant
-        if ($typeConfig === null) {
-            return ['is_relevant' => true, 'reason' => 'generic_query'];
-        }
-        
-        // Check if any product matches expected type (strict validation)
-        $foundCategories = [];
-        $matchCount = 0;
+        // Count products with ai_product_type
+        $withAiType = 0;
+        $aiTypes = [];
         
         foreach ($products as $product) {
-            $title = mb_strtolower($product['title'] ?? '');
-            $category = mb_strtolower($product['category_path'] ?? '');
-            
-            $foundCategories[] = $product['category_path'] ?? 'unknown';
-            
-            // First check exclusions - if product is an accessory, skip it
-            $isExcluded = false;
-            
-            // Check category exclusions
-            foreach ($typeConfig['exclude_categories'] as $excludePattern) {
-                if (str_contains($category, $excludePattern)) {
-                    $isExcluded = true;
-                    break;
-                }
-            }
-            
-            // Check title exclusions (e.g., "ремінь до плитоноски" is NOT a plate carrier)
-            if (!$isExcluded) {
-                foreach ($typeConfig['exclude_title_patterns'] as $excludePattern) {
-                    if (str_contains($title, $excludePattern)) {
-                        $isExcluded = true;
-                        break;
-                    }
-                }
-            }
-            
-            if ($isExcluded) {
-                continue; // Don't count this as a match
-            }
-            
-            // Now check if category matches expected type
-            foreach ($typeConfig['expected_categories'] as $expectedKeyword) {
-                if (str_contains($category, $expectedKeyword)) {
-                    $matchCount++;
-                    break;
-                }
+            $type = $product['ai_product_type'] ?? '';
+            if (!empty($type)) {
+                $withAiType++;
+                $aiTypes[$type] = ($aiTypes[$type] ?? 0) + 1;
             }
         }
         
-        // If less than 30% of results match expected type, consider irrelevant
-        $matchRatio = count($products) > 0 ? $matchCount / count($products) : 0;
-        
-        if ($matchRatio < 0.3) {
-            // Build suggestion based on query type
-            $suggestions = [
-                'плитоноска' => 'На жаль, плитоносок у кольорі мультикам зараз немає в наявності. Перегляньте інші кольори або зверніться до менеджера.',
-                'плитоноску' => 'На жаль, плитоносок у кольорі мультикам зараз немає в наявності. Перегляньте інші кольори або зверніться до менеджера.',
-                'шолом' => 'Шоломів за вашим запитом не знайдено. Спробуйте: "шолом балістичний", "каска".',
-                'каска' => 'Касок за вашим запитом не знайдено. Спробуйте: "шолом балістичний".',
-                'бронеплита' => 'Бронеплит за вашим запитом не знайдено. Спробуйте: "бронеплита SAPI", "керамічна плита".',
-            ];
+        // If we have ai_product_type data, use it for validation
+        if ($withAiType >= count($products) * 0.5) {
+            // At least 50% of products have ai_product_type
+            // Check if they're consistent (same or related types)
+            $dominantType = '';
+            $maxCount = 0;
+            foreach ($aiTypes as $type => $count) {
+                if ($count > $maxCount) {
+                    $maxCount = $count;
+                    $dominantType = $type;
+                }
+            }
             
-            return [
-                'is_relevant' => false,
-                'reason' => 'category_mismatch',
-                'match_ratio' => $matchRatio,
-                'expected_type' => $queryProductType,
-                'found_categories' => array_unique($foundCategories),
-                'suggestion' => $suggestions[$queryProductType] ?? 'Спробуйте уточнити назву товару.',
-            ];
+            Log::info('validateResultRelevance: using ai_product_type', [
+                'dominant_type' => $dominantType,
+                'type_counts' => $aiTypes,
+            ]);
+            
+            // If dominant type covers at least 30% of products, consider relevant
+            $dominantRatio = count($products) > 0 ? $maxCount / count($products) : 0;
+            if ($dominantRatio >= 0.3) {
+                return [
+                    'is_relevant' => true,
+                    'reason' => 'ai_type_consistent',
+                    'dominant_type' => $dominantType,
+                    'match_ratio' => $dominantRatio,
+                ];
+            }
         }
         
+        // Fallback: if no ai_product_type, assume results are relevant
+        // (let AI rerank and AccessoryFilter handle quality)
         return [
             'is_relevant' => true,
-            'reason' => 'matched',
-            'match_ratio' => $matchRatio,
+            'reason' => 'no_strict_validation', // Trust AI reranking
         ];
     }
 

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Services\Ai\CircuitBreaker;
+use App\Services\Store\StoreContextService;
 
 class AiRouter
 {
@@ -16,6 +17,7 @@ class AiRouter
     protected string $baseUrl;
     protected ?string $apiKey;
     protected CircuitBreaker $circuitBreaker;
+    protected StoreContextService $storeContext;
     
     // Timeouts from config
     protected int $timeoutFast;
@@ -31,13 +33,14 @@ class AiRouter
     private const CLASSIFY_CACHE_TTL = 300; // seconds
     private const CLASSIFY_CACHE_PREFIX = 'ai_classify_';
 
-    public function __construct(?CircuitBreaker $circuitBreaker = null)
+    public function __construct(?CircuitBreaker $circuitBreaker = null, ?StoreContextService $storeContext = null)
     {
         $config        = config('services.openai', []);
         $this->model   = $config['model'] ?? 'gpt-5.1';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         $this->apiKey  = $config['key'] ?? null;
         $this->circuitBreaker = $circuitBreaker ?? new CircuitBreaker();
+        $this->storeContext = $storeContext ?? app(StoreContextService::class);
         
         // Timeouts from config with defaults
         $this->timeoutFast   = $config['timeout_fast'] ?? 5;
@@ -122,70 +125,8 @@ class AiRouter
             return $fallback;
         }
 
-        $prompt = "
-Ти — AI-асистент магазину Contractor (тактичне військове спорядження).
-
-Контекст магазину:
-- Продаємо: бронежилети, шоломи, плитоноски, бронеплити, тактичний одяг, взуття, рюкзаки, підсумки, рукавиці, окуляри
-- Клієнти: військові ЗСУ, правоохоронці, добровольці, цивільні патріоти
-- Особливість: професійне екіпірування для екстремальних умов
-
-КАТЕГОРІЇ ТОВАРІВ (використовуй для normalized_query):
-- плитоноски (plate carrier, бронежилет)
-- шоломи (балістичний, каска, FAST, MICH)
-- бронеплити (керамічні, сталеві, 4 клас)
-- берці (тактичне взуття, черевики)
-- рюкзаки (тактичні, штурмові)
-- форма (куртки, штани, мультикам, піксель)
-- підсумки (під магазини, адмін)
-- аксесуари (рукавиці, балаклави, окуляри)
-
-Визнач намір користувача:
-- PRODUCT_SEARCH: пошук спорядження ВКЛЮЧАЮЧИ:
-  * прямі запити (плитоноска, шолом, берці)
-  * запити з питаннями (яку обрати, що порадиш, яка краще)
-  * ЗАГАЛЬНІ запити (подарунок, що купують, популярне, найкраще, хіт продажів, для полігону, для служби)
-  * коли юзер НЕ ЗНАЄ що хоче але хоче товар
-- PRODUCT_COMPARISON: ТІЛЬКИ явне порівняння конкретних моделей (порівняй X і Y, чим відрізняється, vs)
-- ORDER_STATUS: питання про замовлення (статус, трекінг, моє замовлення)
-- FAQ: доставка, оплата, повернення, контакти, графік роботи
-- SMALL_TALK: ТІЛЬКИ вітання/подяки БЕЗ запиту товарів (привіт!, дякую, бувай)
-- FALLBACK: ТІЛЬКИ якщо взагалі не про магазин (погода, політика, особисте)
-
-ВАЖЛИВО для normalized_query:
-- Для загальних запитів (подарунок, популярне, хіт) → 'популярні товари'
-- Для полігону/служби → 'плитоноска' (найпопулярніша категорія)
-- Видали службові слова: допоможи, підібрати, покажи, знайди, хочу, шукаю
-- Залиш назву товару + характеристики
-
-ПРИКЛАДИ:
-- 'подарунок для товариша' → PRODUCT_SEARCH, 'популярні товари'
-- 'що найчастіше купують' → PRODUCT_SEARCH, 'популярні товари'
-- 'для полігону щось' → PRODUCT_SEARCH, 'плитоноска'
-- 'привіт, шукаю подарунок' → PRODUCT_SEARCH, 'популярні товари'
-- 'яку плитоноску обрати' → PRODUCT_SEARCH, 'плитоноска'
-- 'просто привіт' → SMALL_TALK, null
-
-Поверни JSON:
-{
-  \"intent\": \"PRODUCT_SEARCH | PRODUCT_COMPARISON | ORDER_STATUS | FAQ | SMALL_TALK | FALLBACK\",
-  \"normalized_query\": \"очищені ключові слова або null\",
-  \"order_id\": null або номер,
-  \"needs_human\": true/false,
-  \"escalation_reason\": \"причина ескалації або null\"
-}
-
-ВИЗНАЧИ needs_human: true КОЛИ:
-- Запит на великий опт (більше 10 шт), корпоративне замовлення, B2B
-- Торг/знижка ('дорого', 'скинете', 'знижка', 'акція')
-- Скарга, незадоволення ('погане', 'брак', 'не влаштовує', 'повернення')
-- Складне технічне питання яке не стосується товарів
-- Юзер прямо просить оператора ('людина', 'менеджер', 'оператор')
-- Не можеш впевнено відповісти
-В інших випадках needs_human: false.
-
-Запит: \"{$message}\"
-";
+        // Build dynamic prompt from store context (no hardcoded store-specific data!)
+        $prompt = $this->storeContext->buildClassifyPrompt($message);
 
         try {
             // Record API attempt for rate limiting
@@ -225,6 +166,7 @@ class AiRouter
             Cache::put($cacheKey, $result, self::CLASSIFY_CACHE_TTL);
             Log::debug('AiRouter::classify cached result', ['message' => $message, 'intent' => $result['intent']]);
 
+
             return $result;
         } catch (\Throwable $e) {
             // Record failure for circuit breaker
@@ -248,52 +190,8 @@ class AiRouter
             return $this->extractKeywordsFromMessage($message);
         }
 
-        $prompt = "
-Ти — асистент пошуку для магазину військового спорядження.
-
-Завдання: витягни з запиту користувача ТІЛЬКИ ключові пошукові терміни для Meilisearch.
-
-ОБОВ'ЯЗКОВО:
-1. ВИПРАВЛЯЙ друкарські помилки (прро → про, шолм → шолом, плитонска → плитоноска)
-2. РОЗПІЗНАВАЙ бренди написані кирилицею та переводь у правильне написання:
-   - опс коре, опскор → Ops-Core
-   - салзмон, саломон → Salomon
-   - фірст спір → FirstSpear
-   - генте, гентекс → Gentex
-   - край, край пресижн → Crye Precision
-   - 3м пелтор, пелтор → 3M Peltor
-   - есапі, есапай → ESAPI
-   - сестан буш, сестан → SESTAN BUSCH
-   - хайлікс, хайлекс → Hailex
-   - арморком → ArmorCom
-   - уар, юар → UaR
-   - темпларс гір → Templars Gear
-   - пецл, петцль → Petzl
-   - смт → SMT
-   
-ПРИБРАТИ:
-- Привітання: привіт, хей, добрий день
-- Допоміжні: допоможи, покажи, розкажи, знайди, підбери, порадь
-- Питальні: яку обрати, яка краще, що порадиш, який вибрати, а яку, яку
-- Займенники: мені, мене, мій, твій
-- Прийменники: про, для, в, на, до, із, з
-
-ЗАЛИШИТИ:
-- Назви товарів: плитоноска, шолом, берці, броня
-- Характеристики: колір, розмір, модель, бренд
-- Цифри: 43, 4 клас, 25x30
-
-ФОРМАТ: тільки чистий пошуковий запит, без лапок
-
-ПРИКЛАДИ:
-'а яку обрати плитоноску в пікселі' → 'плитоноска піксель'
-'розкажи прро шолом опс коре' → 'шолом Ops-Core'
-'шукаю берці салзмон 43' → 'берці Salomon 43'
-'покажи есапі плити' → 'ESAPI плити'
-'Привіт, допоможи підібрати плитоноску' → 'плитоноска'
-
-Запит: \"{$message}\"
-";
+        // Build dynamic prompt from store context (no hardcoded brands!)
+        $prompt = $this->storeContext->buildNormalizePrompt($message);
 
         try {
             $response = Http::timeout(3)->withToken($this->apiKey)

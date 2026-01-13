@@ -40,6 +40,10 @@ Route::delete('/chat/session/{sessionId}', [\App\Http\Controllers\Api\ChatContro
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
     ->middleware('widget.cors');
 
+// AI context settings (admin)
+Route::get('/widget/ai-context', [WidgetController::class, 'getAiContext']);
+Route::put('/widget/ai-context', [WidgetController::class, 'updateAiContext']);
+
 // Статус замовлення по order_id
 Route::post('/order-status', [OrderStatusController::class, 'show']);
 

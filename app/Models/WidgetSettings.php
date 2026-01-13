@@ -36,6 +36,18 @@ class WidgetSettings extends Model
         'faq_contacts_text',
         'faq_about_url',
         'faq_about_text',
+        // AI context fields
+        'store_name',
+        'store_context',
+        'store_description',
+        'customer_types',
+        'product_categories',
+        'accessory_keywords',
+        'main_product_keywords',
+        'brand_transliterations',
+        'store_hours',
+        'ai_use_dynamic_prompts',
+        'ai_strict_category_filter',
     ];
 
     protected $casts = [
@@ -44,6 +56,14 @@ class WidgetSettings extends Model
         'enable_delivery_tracking' => 'boolean',
         'enable_faq_from_horoshop' => 'boolean',
         'enable_faq_custom_content' => 'boolean',
+        // JSON fields for AI context
+        'customer_types' => 'array',
+        'product_categories' => 'array',
+        'accessory_keywords' => 'array',
+        'main_product_keywords' => 'array',
+        'brand_transliterations' => 'array',
+        'ai_use_dynamic_prompts' => 'boolean',
+        'ai_strict_category_filter' => 'boolean',
     ];
 
     protected static function boot()

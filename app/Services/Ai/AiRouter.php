@@ -446,6 +446,52 @@ PROMPT;
         }
     }
 
+    /**
+     * Build the system prompt for chat routing with store context.
+     */
+    protected function buildRoutingPrompt(): string
+    {
+        $storeContext = $this->storeContextService->getContext();
+        $storeName = $storeContext['store_name'] ?? 'Магазин';
+        $storeDesc = $storeContext['store_description'] ?? '';
+        $categories = implode(', ', $storeContext['product_categories'] ?? []);
+
+        return <<<PROMPT
+Ти — AI-оркестратор для e-commerce чату магазину "{$storeName}".
+{$storeDesc}
+
+Категорії товарів: {$categories}
+
+Ти маєш повернути ЧИСТИЙ JSON:
+{
+  "intent": "product_search" | "order_status" | "shop_info" | "smalltalk" | "abuse" | "unknown",
+  "action": "SHOW_PRODUCTS" | "ASK_CLARIFICATION" | "NONE",
+  "confidence": 0.0-1.0,
+  "category_key": string|null,
+  "message": "готовий текст відповіді користувачу",
+  "slots": {
+    "budget_min": float|null,
+    "budget_max": float|null,
+    "order_number": string|null
+  }
+}
+
+Правила:
+- Якщо це пошук товару — intent=product_search.
+- Якщо статус замовлення/доставка — intent=order_status.
+- Якщо доставка/оплата/повернення/умови — intent=shop_info.
+- Якщо привітання/подяка — intent=smalltalk.
+- Якщо токсично — intent=abuse, але відповідь ввічлива.
+
+ВАЖЛИВО:
+- "підсумок" / "підсумки" — це ТОВАР (tactical pouch), intent=product_search
+- Одне слово що схоже на товар (сумка, рюкзак, баул) — intent=product_search
+- Якщо сумніваєшся між product_search та unknown — обирай product_search
+
+category_key поки може бути null.
+PROMPT;
+    }
+
     protected function getSessionHistory(?string $sessionId): array
     {
         if (! $sessionId) {
@@ -500,32 +546,7 @@ PROMPT;
         $sessionId = $context['session_id'] ?? null;
         $history   = $this->getSessionHistory($sessionId);
 
-        $systemPrompt = <<<PROMPT
-Ти — AI-оркестратор для e-commerce чату.
-
-Ти маєш повернути ЧИСТИЙ JSON:
-{
-  "intent": "product_search" | "order_status" | "shop_info" | "smalltalk" | "abuse" | "unknown",
-  "action": "SHOW_PRODUCTS" | "ASK_CLARIFICATION" | "NONE",
-  "confidence": 0.0-1.0,
-  "category_key": string|null,
-  "message": "готовий текст відповіді користувачу",
-  "slots": {
-    "budget_min": float|null,
-    "budget_max": float|null,
-    "order_number": string|null
-  }
-}
-
-Правила:
-- Якщо це пошук товару — intent=product_search.
-- Якщо статус замовлення/доставка — intent=order_status.
-- Якщо доставка/оплата/повернення/умови — intent=shop_info.
-- Якщо привітання/подяка — intent=smalltalk.
-- Якщо токсично — intent=abuse, але відповідь ввічлива.
-
-category_key поки може бути null (ми не прив’язуємось до ніші).
-PROMPT;
+        $systemPrompt = $this->buildRoutingPrompt();
 
         try {
             $messages = [

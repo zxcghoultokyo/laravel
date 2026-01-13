@@ -69,6 +69,16 @@ class StoreContextService
             'accessory_keywords' => $this->parseJson($settings->accessory_keywords, []),
             'main_product_keywords' => $this->parseJson($settings->main_product_keywords, []),
             
+            // AI product types for filtering (uses ai_product_type field values)
+            'accessory_ai_types' => $this->parseJson($settings->accessory_ai_types, $this->getDefaultAccessoryAiTypes()),
+            'main_ai_types' => $this->parseJson($settings->main_ai_types, $this->getDefaultMainAiTypes()),
+            
+            // Product type keywords for detectPrimaryType
+            'product_type_keywords' => $this->parseJson($settings->product_type_keywords, $this->getDefaultProductTypeKeywords()),
+            
+            // Popular queries
+            'popular_queries' => $this->parseJson($settings->popular_queries, []),
+            
             // Brand transliterations
             'brand_transliterations' => $this->parseJson($settings->brand_transliterations, []),
             

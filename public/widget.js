@@ -254,6 +254,8 @@
             ">
                 <!-- Chat bubble hint -->
                 <div id="aintento-bubble" class="aintento-bubble" style="
+                    display: none;
+                    opacity: 0;
                     position: absolute;
                     bottom: 70px;
                     ${s.position === 'right' ? 'right: 0;' : 'left: 0;'}
@@ -265,25 +267,25 @@
                     font-size: 14px;
                     line-height: 1.4;
                     color: #1f2937;
-                    animation: aintento-fadeInUp 0.5s ease;
                     cursor: pointer;
+                    transition: opacity 0.4s ease;
                 ">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                         <span style="font-size: 16px;">👋</span>
                         <span style="font-weight: 600; color: ${s.primary_color};">Привіт!</span>
                     </div>
                     <span style="color: #4b5563;">Потрібна допомога з вибором? Запитайте мене!</span>
-                    <!-- Speech bubble tail -->
-                    <div style="
+                    <!-- Speech bubble tail - SVG arrow -->
+                    <svg style="
                         position: absolute;
-                        bottom: -8px;
-                        ${s.position === 'right' ? 'right: 24px;' : 'left: 24px;'}
-                        width: 16px;
-                        height: 16px;
-                        background: white;
-                        transform: rotate(45deg);
-                        box-shadow: 4px 4px 8px rgba(0,0,0,0.08);
-                    "></div>
+                        bottom: -10px;
+                        ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                        width: 20px;
+                        height: 12px;
+                        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+                    " viewBox="0 0 20 12">
+                        <path d="M10 12 L0 0 L20 0 Z" fill="white"/>
+                    </svg>
                     <!-- Close bubble button -->
                     <button id="aintento-bubble-close" style="
                         position: absolute;
@@ -451,11 +453,26 @@
         }
         
         // Check if bubble was already dismissed
+        let bubbleDismissed = false;
         try {
-            if (localStorage.getItem('aintento_bubble_dismissed') === 'true') {
-                if (bubble) bubble.style.display = 'none';
-            }
+            bubbleDismissed = localStorage.getItem('aintento_bubble_dismissed') === 'true';
         } catch (e) {}
+        
+        // Show bubble after 30 second delay (if not dismissed and chat is closed)
+        if (!bubbleDismissed && bubble) {
+            setTimeout(function() {
+                // Only show if chat is still closed and bubble wasn't dismissed
+                if (!state.isOpen) {
+                    try {
+                        if (localStorage.getItem('aintento_bubble_dismissed') === 'true') return;
+                    } catch (e) {}
+                    bubble.style.display = 'block';
+                    // Trigger reflow then animate
+                    bubble.offsetHeight;
+                    bubble.style.opacity = '1';
+                }
+            }, 30000); // 30 seconds delay
+        }
         
         // Bubble close button click
         if (bubbleClose) {

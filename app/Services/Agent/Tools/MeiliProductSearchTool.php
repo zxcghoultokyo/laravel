@@ -185,172 +185,95 @@ class MeiliProductSearchTool
     }
 
     /**
-     * Context-aware accessory filtering
-     * If user searches for specific gear (straps, pouches), don't filter them out
-     * Otherwise, REMOVE accessories if there are 3+ main products
+     * Context-aware accessory filtering using ai_product_type
+     * Groups products by dominant ai_product_type and filters out accessories when there are enough main products
      */
     private function filterAccessories(array $hits, string $query): array
     {
-        $queryLower = mb_strtolower($query);
-        $primaryType = $this->detectPrimaryType($queryLower);
-        
-        // Detect if user is SPECIFICALLY searching for accessories (not just mentioning them)
-        // Must be primary search term, not just context word
-        $accessorySearchPatterns = [
-            // Primary accessory search (accessory word at start or standalone)
-            '/^ремінь/', '/^ремен/', '/^слінг/', '/^sling/',
-            '/^пояс/', '/^belt/',
-            '/^підсумок/', '/^підсумки/', '/^pouch/',
-            '/^кишен/', '/^кишені/', '/^pocket/',
-            '/^панел/', '/^panel/', '/^камбербанд/',
-            '/^ліхтар/', '/^flashlight/',
-            '/^адаптер/', '/^adapter/', '/^кріплення/', '/^mount/',
-            '/^чохол/', '/^cover/', '/^кавер/',
-            '/^сумка/', '/^bag/', '/^напашник/',
-            '/^модуль/', '/^module/',
-            // Patterns with "для" (searching FOR accessory)
-            '/ремінь для/', '/ремен для/', '/sling for/',
-            '/панел для/', '/panel for/',
-            '/кріплення для/', '/mount for/', '/кріплення на/', '/mount on/',
-            '/чохол для/', '/cover for/',
-            '/сумка для/', '/bag for/',
-            '/адаптер для/', '/adapter for/',
-        ];
-        
-        foreach ($accessorySearchPatterns as $pattern) {
-            if (preg_match($pattern . 'u', $queryLower)) {
-                // User is searching FOR this type of gear, don't filter
-                Log::info('MeiliProductSearchTool: user searching for accessories, skipping filter', [
-                    'query' => $query,
-                    'pattern' => $pattern
-                ]);
-                return $hits;
-            }
+        if (empty($hits)) {
+            return $hits;
         }
-        
-        // Build list of accessory words mentioned IN THE QUERY - don't filter these out
-        $queryAccessoryWords = [];
-        $allAccessoryKeywords = [
-            'напашник', 'сумка', 'сумк', 'bag',
-            'чохол', 'чохл', 'cover', 'кавер',
-            'ремінь', 'ремен', 'strap', 'sling',
-            'підсумок', 'підсумки', 'pouch',
-            'камбербанд', 'cummerbund',
-            'панел', 'panel',
-            'модуль', 'module',
-            'адаптер', 'adapter',
-        ];
-        foreach ($allAccessoryKeywords as $keyword) {
-            if (str_contains($queryLower, $keyword)) {
-                $queryAccessoryWords[] = $keyword;
-            }
-        }
-        if (!empty($queryAccessoryWords)) {
-            Log::info('MeiliProductSearchTool: query contains accessory words, will preserve matching products', [
-                'query' => $query,
-                'accessory_words_in_query' => $queryAccessoryWords
-            ]);
-        }
-        
-        // User is searching for main gear (plate carriers, helmets, plates, etc.)
-        // Categorize products into main/accessory with primary type awareness
-        $mainProducts = [];
-        $accessories = [];
-        $others = [];
-        
-        foreach ($hits as $hit) {
-            $titleLower = mb_strtolower($hit['title'] ?? '');
-            $categoryLower = mb_strtolower($hit['category_path'] ?? '');
-            $combined = $titleLower . ' ' . $categoryLower;
 
-            // Detect side plates early
-            $isSidePlate = false;
-            foreach (['бокова', 'side', '15x15', '15х15', '15x20', '15х20'] as $hint) {
-                if (str_contains($combined, $hint)) { $isSidePlate = true; break; }
-            }
-            
-            // Check if this product matches any accessory word from the USER'S QUERY
-            // If so, DON'T filter it out - user explicitly asked for this
-            $matchesQueryAccessoryWord = false;
-            foreach ($queryAccessoryWords as $queryWord) {
-                if (str_contains($combined, $queryWord)) {
-                    $matchesQueryAccessoryWord = true;
-                    break;
-                }
-            }
-            
-            // Strict accessory detection: these words ALWAYS mean accessory
-            $strictAccessoryWords = [
-                'камбербанд', 'cummerbund', 'каммербанд',
-                'кап ', ' кап', 'cap ', ' cap', // side caps
-                'комплект кап', 'комплект кріплень',
-                'чохол', 'чохл', 'cover', 'кавер',
-                'сумка', 'сумк', 'bag', 'напашник',
-                'кішень', 'кишен', 'pocket',
-                'кріплення ', 'кріплен ', 'mount ', 'mounting',
-                'платформа кріплен', 'адаптер кріплен',
-                'тримач ', 'holder ',
-                'планка пікатінн', 'picatinny rail',
-                'адаптер', 'adapter', 'переходник',
-                'рейка ', 'rail ',
-                'подушк', 'pad ', 'padding',
-                'накладк', 'overlay',
-                'ремінь', 'ремен', 'strap', 'sling',
-                'модуль ', 'module ',
-            ];
-            
-            $isAccessory = false;
-            // Only mark as accessory if it DOESN'T match query accessory words
-            if (!$matchesQueryAccessoryWord) {
-                foreach ($strictAccessoryWords as $word) {
-                    if (str_contains($combined, $word)) {
-                        $isAccessory = true;
-                        break;
-                    }
-                }
-            }
-            
-            // Additional check: if title has "для/під/до" + main product → accessory
-            if (!$isAccessory && (
-                str_contains($titleLower, 'для плитоноск') ||
-                str_contains($titleLower, 'для шолом') ||
-                str_contains($titleLower, 'до плитоноск') ||
-                str_contains($titleLower, 'до шолом') ||
-                str_contains($titleLower, 'під шолом') ||
-                str_contains($titleLower, 'на шолом')
-            )) {
-                $isAccessory = true;
-            }
-            
-            if ($isAccessory || ($primaryType === 'plates' && $isSidePlate)) {
-                $accessories[] = $hit;
-            } else {
-                // If we know primary type, treat non-matching types as others
-                if ($primaryType && !$this->matchesPrimaryType($combined, $primaryType)) {
-                    $others[] = $hit;
-                } else {
-                    $mainProducts[] = $hit;
-                }
-            }
+        $queryLower = mb_strtolower($query);
+        
+        // Count products by ai_product_type
+        $typeCounts = [];
+        foreach ($hits as $hit) {
+            $type = $hit['ai_product_type'] ?? '__unknown__';
+            $typeCounts[$type] = ($typeCounts[$type] ?? 0) + 1;
         }
         
-        Log::info('MeiliProductSearchTool: categorized products', [
-            'main' => count($mainProducts),
-            'accessories' => count($accessories),
-            'query' => $query
+        // Find the dominant type (most common)
+        arsort($typeCounts);
+        $dominantType = array_key_first($typeCounts);
+        $dominantCount = $typeCounts[$dominantType] ?? 0;
+        
+        Log::info('MeiliProductSearchTool: filterAccessories ai_product_type analysis', [
+            'query' => $query,
+            'type_counts' => $typeCounts,
+            'dominant_type' => $dominantType,
+            'dominant_count' => $dominantCount,
         ]);
         
-        // If we have 3+ main products of the primary type, EXCLUDE accessories and others
-        if (count($mainProducts) >= 3) {
-            Log::info('MeiliProductSearchTool: removing accessories, enough main products', [
-                'main_count' => count($mainProducts),
-                'removed_accessories' => count($accessories)
+        // Accessory ai_product_types that should be filtered when we have main products
+        $accessoryTypes = [
+            'patch', 'chevron', 'patch_pvc', 'patch_embroidery',
+            'pouch', 'magazine_pouch', 'admin_pouch', 'medical_pouch', 'dump_pouch',
+            'strap', 'sling', 'shoulder_strap',
+            'adapter', 'mount', 'rail',
+            'cover', 'case',
+            'panel', 'cummerbund',
+            'accessory', '__unknown__',
+        ];
+        
+        // Main product types (not accessories)
+        $mainTypes = [
+            'backpack', 'tactical_backpack', 'medical_backpack', 'assault_pack',
+            'sling_bag', 'messenger_bag', 'duffel_bag',
+            'plate_carrier', 'chest_rig', 'vest',
+            'helmet', 'ballistic_helmet', 'bump_helmet',
+            'plate', 'armor_plate', 'ballistic_plate',
+            'boots', 'tactical_boots', 'footwear',
+            'uniform', 'pants', 'jacket', 'shirt',
+            'gloves', 'belt', 'holster',
+            'hydration_pack', 'hydration_bladder',
+        ];
+        
+        // If dominant type is a main product type with 3+ items, filter accessories
+        $dominantIsMain = in_array($dominantType, $mainTypes, true);
+        
+        if ($dominantIsMain && $dominantCount >= 3) {
+            // Keep only products of the dominant type (or similar main types)
+            $filtered = array_filter($hits, function ($hit) use ($accessoryTypes) {
+                $type = $hit['ai_product_type'] ?? '__unknown__';
+                return !in_array($type, $accessoryTypes, true);
+            });
+            
+            Log::info('MeiliProductSearchTool: filtered accessories by ai_product_type', [
+                'query' => $query,
+                'before' => count($hits),
+                'after' => count($filtered),
+                'dominant_type' => $dominantType,
             ]);
-            return $mainProducts;
+            
+            // Return filtered if we still have results
+            if (count($filtered) >= 3) {
+                return array_values($filtered);
+            }
         }
         
-        // Otherwise prefer mains first, then others, then accessories
-        return array_merge($mainProducts, $others, $accessories);
+        // Fallback: sort by putting main products first, accessories last
+        usort($hits, function ($a, $b) use ($accessoryTypes) {
+            $aIsAccessory = in_array($a['ai_product_type'] ?? '__unknown__', $accessoryTypes, true);
+            $bIsAccessory = in_array($b['ai_product_type'] ?? '__unknown__', $accessoryTypes, true);
+            
+            if ($aIsAccessory === $bIsAccessory) {
+                return 0;
+            }
+            return $aIsAccessory ? 1 : -1;
+        });
+        
+        return $hits;
     }
     
     /**

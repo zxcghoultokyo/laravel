@@ -647,6 +647,18 @@ class DiagnosticController extends Controller
             ->take(15)
             ->get();
         
+        // Products needing slang enrichment
+        $missingSlangCount = \App\Models\Product::where('display_in_showcase', true)
+            ->whereHas('aiIndex', function ($ai) {
+                $ai->where(function ($q) {
+                    $q->whereNull('slang')
+                      ->orWhere('slang', '[]')
+                      ->orWhere('slang', 'null')
+                      ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                });
+            })
+            ->count();
+        
         return response()->json([
             'total_products' => $totalProducts,
             'in_stock_products' => $inStockProducts,
@@ -655,6 +667,7 @@ class DiagnosticController extends Controller
                 'total_records' => $totalAiIndex,
                 'with_product_type' => $withProductType,
                 'with_slang' => $withSlang,
+                'missing_slang' => $missingSlangCount,
                 'with_keywords' => $withKeywords,
                 'coverage_percent' => $showcaseProducts > 0 
                     ? round(($totalAiIndex / $showcaseProducts) * 100, 1) 

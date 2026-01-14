@@ -86,8 +86,12 @@ class BuildProductAiIndex extends Command
                 $ai->where(function ($q) {
                     $q->whereNull('slang')
                       ->orWhere('slang', '[]')
-                      ->orWhere('slang', 'null')
-                      ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                      ->orWhere('slang', 'null');
+                    
+                    // JSON_LENGTH works on MySQL but not SQLite
+                    if (config('database.default') === 'mysql') {
+                        $q->orWhereRaw("JSON_LENGTH(slang) = 0");
+                    }
                 });
             });
         }

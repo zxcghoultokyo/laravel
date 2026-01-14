@@ -63,6 +63,14 @@ class ProductIndexBuilder
                 'temperature' => 0.1,
                 'model' => $analyzeModel,
             ]);
+            
+            // Log AI response for debugging
+            Log::info('ProductIndexBuilder AI response', [
+                'product_id' => $product->id,
+                'model' => $analyzeModel,
+                'slang' => $aiData['slang'] ?? 'MISSING',
+                'product_type' => $aiData['product_type'] ?? 'MISSING',
+            ]);
         } catch (\Throwable $e) {
             Log::warning('ProductIndexBuilder::buildForProduct AI error: ' . $e->getMessage());
         }

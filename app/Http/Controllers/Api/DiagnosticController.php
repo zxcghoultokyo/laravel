@@ -667,7 +667,14 @@ class DiagnosticController extends Controller
     
     /**
      * POST /api/diagnostic/run-enrichment
-     * Run AI enrichment for products without index
+     * Run AI enrichment for products
+     * 
+     * Modes:
+     * - missing: products without AI index (default)
+     * - incomplete: products with empty product_type
+     * - missing_slang: products with empty slang
+     * 
+     * Set async=1 to dispatch as queue job (recommended for large batches)
      */
     public function runEnrichment(Request $request): JsonResponse
     {
@@ -678,33 +685,51 @@ class DiagnosticController extends Controller
         $limit = (int) $request->input('limit', 100);
         $timeout = (int) $request->input('timeout', 300);
         $noAi = (bool) $request->input('no_ai', false);
+        $async = (bool) $request->input('async', false);
         $mode = $request->input('mode', 'missing'); // missing, incomplete, missing_slang
         
+        // Build options based on mode
+        $options = [
+            '--limit' => $limit,
+            '--timeout' => $timeout,
+            '--batch' => 10,
+        ];
+        
+        switch ($mode) {
+            case 'missing_slang':
+                $options['--missing-slang'] = true;
+                break;
+            case 'incomplete':
+                $options['--incomplete'] = true;
+                break;
+            case 'missing':
+            default:
+                $options['--only-missing'] = true;
+                break;
+        }
+        
+        if ($noAi) {
+            $options['--no-ai'] = true;
+        }
+        
         try {
-            // Build options based on mode
-            $options = [
-                '--limit' => $limit,
-                '--timeout' => $timeout,
-                '--batch' => 10,
-            ];
-            
-            switch ($mode) {
-                case 'missing_slang':
-                    $options['--missing-slang'] = true;
-                    break;
-                case 'incomplete':
-                    $options['--incomplete'] = true;
-                    break;
-                case 'missing':
-                default:
-                    $options['--only-missing'] = true;
-                    break;
+            if ($async) {
+                // Dispatch as queue job to avoid HTTP timeout
+                dispatch(function () use ($options) {
+                    \Illuminate\Support\Facades\Artisan::call('products:build-ai-index', $options);
+                })->onQueue('default');
+                
+                return response()->json([
+                    'success' => true,
+                    'async' => true,
+                    'message' => 'Enrichment job dispatched to queue',
+                    'mode' => $mode,
+                    'limit' => $limit,
+                    'timeout' => $timeout,
+                ]);
             }
             
-            if ($noAi) {
-                $options['--no-ai'] = true;
-            }
-            
+            // Sync execution (will timeout on large batches)
             \Illuminate\Support\Facades\Artisan::call('products:build-ai-index', $options);
             
             $output = \Illuminate\Support\Facades\Artisan::output();

@@ -718,4 +718,67 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * GET /api/diagnostic/slang-stats?type=plate_carrier
+     * Get slang statistics by product type
+     */
+    public function slangStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $productType = $request->query('type');
+        
+        $query = \App\Models\ProductAiIndex::query();
+        
+        if ($productType) {
+            $query->where('product_type', $productType);
+        }
+        
+        $records = $query->whereNotNull('slang')
+            ->whereRaw("JSON_LENGTH(slang) > 0")
+            ->with('product:id,title,category_path')
+            ->take(20)
+            ->get(['id', 'product_id', 'product_type', 'slang', 'keywords']);
+        
+        // Aggregate all slang terms
+        $allSlang = [];
+        foreach ($records as $r) {
+            $slangArray = is_array($r->slang) ? $r->slang : [];
+            foreach ($slangArray as $term) {
+                $term = mb_strtolower(trim($term));
+                if ($term) {
+                    $allSlang[$term] = ($allSlang[$term] ?? 0) + 1;
+                }
+            }
+        }
+        arsort($allSlang);
+        
+        // Products without slang for this type
+        $withoutSlang = \App\Models\ProductAiIndex::query()
+            ->when($productType, fn($q) => $q->where('product_type', $productType))
+            ->where(function($q) {
+                $q->whereNull('slang')
+                  ->orWhereRaw("JSON_LENGTH(slang) = 0");
+            })
+            ->with('product:id,title')
+            ->take(10)
+            ->get(['id', 'product_id', 'product_type']);
+        
+        return response()->json([
+            'product_type' => $productType ?? 'all',
+            'with_slang_count' => $records->count(),
+            'slang_terms' => array_slice($allSlang, 0, 30, true),
+            'examples' => $records->take(5)->map(fn($r) => [
+                'title' => $r->product->title ?? 'N/A',
+                'slang' => $r->slang,
+            ]),
+            'without_slang' => $withoutSlang->map(fn($r) => [
+                'title' => $r->product->title ?? 'N/A',
+                'product_type' => $r->product_type,
+            ]),
+        ]);
+    }
 }

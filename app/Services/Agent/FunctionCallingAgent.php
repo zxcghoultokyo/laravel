@@ -913,8 +913,9 @@ PROMPT;
                     return false;
                 }
                 
-                // Exclude expensive items (>15k) - not mass market
-                if ($price > 15000) {
+                // Exclude expensive items (>20k) - not mass market
+                // Note: Aegis plates ~16k are popular, so limit is 20k
+                if ($price > 20000) {
                     return false;
                 }
                 

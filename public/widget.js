@@ -151,7 +151,10 @@
             isOpen: false,
             hasShownWelcome: false,
             sessionId: sessionId,
-            eventListeners: [] // Track listeners for cleanup
+            eventListeners: [], // Track listeners for cleanup
+            operatorMode: false,
+            lastOperatorMessageId: 0,
+            pollInterval: null
         };
 
         // Setup event handlers with cleanup tracking
@@ -670,6 +673,13 @@
                             const chunkText = data.text || '';
                             accumulatedText += chunkText;
                             
+                            // Check if this is operator mode notification
+                            if (chunkText.includes('оператору') || chunkText.includes('Очікуйте відповіді')) {
+                                state.operatorMode = true;
+                                // Start polling for operator messages
+                                startOperatorPolling();
+                            }
+                            
                             // Create or update text element
                             if (!currentTextElement) {
                                 currentTextElement = createStreamingTextElement(messages);
@@ -972,6 +982,58 @@
                 return text;
             }
             return '';
+        }
+        
+        // Poll for operator messages
+        function startOperatorPolling() {
+            if (state.pollInterval) {
+                clearInterval(state.pollInterval);
+            }
+            
+            log('Starting operator message polling');
+            
+            function pollOperator() {
+                const pollUrl = BASE_URL + '/api/chat/poll/' + encodeURIComponent(state.sessionId) + 
+                    '?last_message_id=' + state.lastOperatorMessageId;
+                
+                fetch(pollUrl)
+                    .then(res => res.json())
+                    .then(data => {
+                        log('Poll response:', data);
+                        
+                        state.operatorMode = data.operator_mode;
+                        
+                        // Display new operator messages
+                        if (data.messages && data.messages.length > 0) {
+                            data.messages.forEach(msg => {
+                                // Add operator message to chat
+                                addMessage(messages, '👤 Оператор: ' + msg.content, 'assistant', state.sessionId, true);
+                                state.lastOperatorMessageId = Math.max(state.lastOperatorMessageId, msg.id);
+                            });
+                        }
+                        
+                        // If no longer in operator mode, stop polling
+                        if (!data.operator_mode) {
+                            stopOperatorPolling();
+                        }
+                    })
+                    .catch(err => {
+                        logError('Poll error:', err);
+                    });
+            }
+            
+            // Poll immediately and then every 3 seconds
+            pollOperator();
+            state.pollInterval = setInterval(pollOperator, 3000);
+        }
+        
+        function stopOperatorPolling() {
+            if (state.pollInterval) {
+                log('Stopping operator message polling');
+                clearInterval(state.pollInterval);
+                state.pollInterval = null;
+            }
+            state.operatorMode = false;
         }
         
         // Fallback fetch version (non-streaming)

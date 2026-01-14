@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Agent\StreamingFunctionCallingAgent;
+use App\Services\Metrics\MetricsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -37,6 +38,7 @@ class StreamingChatController extends Controller
 
     public function __construct(
         protected StreamingFunctionCallingAgent $streamingAgent,
+        protected MetricsService $metricsService,
     ) {}
 
     /**
@@ -76,6 +78,21 @@ class StreamingChatController extends Controller
                     'text' => 'Напишіть, будь ласка, запит 🙂',
                     'session_id' => $sessionId,
                     'request_id' => $requestId,
+                ]);
+                $this->sendEvent('done', ['session_id' => $sessionId]);
+                return;
+            }
+
+            // Check if operator has taken over this session
+            $session = $this->metricsService->getSession($sessionId);
+            if ($session && $session->status === 'operator') {
+                Log::info('StreamingChatController: operator mode active, skipping AI', [
+                    'request_id' => $requestId,
+                    'session_id' => $sessionId,
+                ]);
+                
+                $this->sendEvent('chunk', [
+                    'text' => 'Ваше повідомлення передано оператору. Очікуйте відповіді.',
                 ]);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
                 return;

@@ -226,4 +226,49 @@ class ChatController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Poll for new operator messages and operator mode status.
+     * Called periodically by widget to receive operator responses.
+     */
+    public function poll(Request $request, string $sessionId)
+    {
+        $lastMessageId = (int) $request->input('last_message_id', 0);
+        
+        // Check operator mode status
+        $activeSession = $this->metricsService->getSession($sessionId);
+        $isOperatorMode = $activeSession && $activeSession->status === 'operator';
+        
+        // Get new messages if in operator mode
+        $newMessages = [];
+        if ($isOperatorMode) {
+            $chatSession = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+            if ($chatSession) {
+                $query = \App\Models\ChatMessage::where('chat_session_id', $chatSession->id)
+                    ->where('role', 'operator')
+                    ->orderBy('id', 'asc');
+                    
+                if ($lastMessageId > 0) {
+                    $query->where('id', '>', $lastMessageId);
+                }
+                
+                $messages = $query->get();
+                
+                foreach ($messages as $msg) {
+                    $newMessages[] = [
+                        'id' => $msg->id,
+                        'content' => $msg->content,
+                        'role' => 'operator',
+                        'created_at' => $msg->created_at->toIso8601String(),
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'operator_mode' => $isOperatorMode,
+            'messages' => $newMessages,
+            'session_id' => $sessionId,
+        ]);
+    }
 }

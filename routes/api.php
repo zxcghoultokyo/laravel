@@ -36,6 +36,10 @@ Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::c
 Route::delete('/chat/session/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'clearSession'])
     ->middleware(['widget.cors']);
 
+// Poll for operator messages (used by widget when operator takes over)
+Route::get('/chat/poll/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'poll'])
+    ->middleware(['widget.cors', 'throttle:60,1']);
+
 // Віджет налаштування
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
     ->middleware('widget.cors');

@@ -1215,4 +1215,60 @@ class DiagnosticController extends Controller
             'experiment' => $experiment,
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/clear-product-shown
+     * Clear all product_shown events (to fix inflated stats from bug)
+     */
+    public function clearProductShown(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        // Get counts before deletion
+        $totalEvents = DB::table('chat_events')->count();
+        $productShownCount = DB::table('chat_events')
+            ->where('event_type', 'product_shown')
+            ->count();
+        
+        // Delete all product_shown events
+        $deleted = DB::table('chat_events')
+            ->where('event_type', 'product_shown')
+            ->delete();
+        
+        return response()->json([
+            'success' => true,
+            'total_events_before' => $totalEvents,
+            'product_shown_deleted' => $deleted,
+            'total_events_after' => DB::table('chat_events')->count(),
+            'message' => "Deleted {$deleted} product_shown events",
+        ]);
+    }
+    
+    /**
+     * GET /api/diagnostic/chat-events-stats
+     * Get statistics about chat_events table
+     */
+    public function chatEventsStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $stats = DB::table('chat_events')
+            ->selectRaw('event_type, COUNT(*) as count')
+            ->groupBy('event_type')
+            ->orderByDesc('count')
+            ->get();
+        
+        $total = DB::table('chat_events')->count();
+        $uniqueSessions = DB::table('chat_events')->distinct('session_id')->count('session_id');
+        
+        return response()->json([
+            'total_events' => $total,
+            'unique_sessions' => $uniqueSessions,
+            'by_event_type' => $stats,
+        ]);
+    }
 }

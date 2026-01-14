@@ -78,6 +78,10 @@ class AnalyticsController extends Controller
                 if (!empty($event['chat_session_id'])) {
                     $metadata['chat_session_id'] = $event['chat_session_id'];
                 }
+                // Store product title for display in analytics
+                if (!empty($event['product_title'])) {
+                    $metadata['product_title'] = $event['product_title'];
+                }
 
                 $rows[] = [
                     'session_id' => substr($event['session_id'] ?? '', 0, 64),

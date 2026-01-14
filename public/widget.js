@@ -234,6 +234,7 @@
     
     /**
      * Extract product info from add-to-cart button
+     * Supports Horoshop product pages and listing pages
      */
     function extractProductFromButton(button) {
         const data = {};
@@ -249,56 +250,93 @@
         if (button.dataset.productId) data.id = button.dataset.productId;
         if (button.dataset.article) data.article = button.dataset.article;
         
-        // CRITICAL: Extract article from page (Horoshop shows "Артикул: XXX")
-        // This is the key identifier we use in chat recommendations
-        const articleSelectors = [
-            '.product-article',           // Common class
-            '[class*="article"]',         // Any article class
-            '.j-product-article',         // Horoshop specific
-            '.sku',                        // SKU field
-            '[itemprop="sku"]'            // Schema.org
-        ];
+        // ============ HOROSHOP PRODUCT PAGE DETECTION ============
+        // Check if we're on a product page (has product schema or specific elements)
+        const isProductPage = document.querySelector('[itemtype*="schema.org/Product"]') || 
+                              document.querySelector('.product-title') ||
+                              document.querySelector('.product-header');
         
-        for (const selector of articleSelectors) {
-            const el = document.querySelector(selector);
-            if (el) {
-                const text = el.textContent.trim();
-                // Extract article value (may be "Артикул: 975-104" or just "975-104")
+        if (isProductPage) {
+            // --- Extract Article (SKU) ---
+            // Horoshop: <div class="product-header__code">Артикул: g6l-k26-0bd</div>
+            const articleEl = document.querySelector('.product-header__code, [itemprop="sku"], .product-article, .sku');
+            if (articleEl) {
+                const text = articleEl.textContent.trim();
                 const articleMatch = text.match(/(?:Артикул[:\s]*)?([a-zA-Z0-9_-]+)/i);
-                if (articleMatch) {
-                    data.article = articleMatch[1];
-                    break;
+                if (articleMatch) data.article = articleMatch[1];
+            }
+            
+            // --- Extract Title ---
+            // Horoshop: <h1 class="product-title" itemprop="name">...</h1>
+            const titleEl = document.querySelector('h1.product-title, [itemprop="name"], h1');
+            if (titleEl) data.title = titleEl.textContent.trim();
+            
+            // --- Extract Price ---
+            // Horoshop: <meta itemprop="price" content="1300">
+            const priceMeta = document.querySelector('[itemprop="price"]');
+            if (priceMeta) {
+                data.price = parseFloat(priceMeta.getAttribute('content')) || null;
+            }
+            if (!data.price) {
+                const priceEl = document.querySelector('.product-price__item, .product-price');
+                if (priceEl) {
+                    const priceText = priceEl.textContent.replace(/[^\d.,]/g, '').replace(',', '.');
+                    data.price = parseFloat(priceText) || null;
+                }
+            }
+            
+            // --- Extract Brand ---
+            const brandEl = document.querySelector('[itemprop="brand"] [itemprop="name"]');
+            if (brandEl) data.brand = brandEl.getAttribute('content') || brandEl.textContent.trim();
+            
+            // --- Extract Category ---
+            const categoryEl = document.querySelector('[itemprop="category"]');
+            if (categoryEl) data.category = categoryEl.getAttribute('content') || categoryEl.textContent.trim();
+            
+            // --- Extract Image ---
+            const imageEl = document.querySelector('.gallery__photo-img, [itemprop="image"]');
+            if (imageEl) data.image = imageEl.src;
+        }
+        
+        // ============ FALLBACK: Article from page text ============
+        if (!data.article) {
+            const pageText = document.body.innerText;
+            const articleMatch = pageText.match(/Артикул[:\s]*([a-zA-Z0-9_-]+)/i);
+            if (articleMatch) data.article = articleMatch[1];
+        }
+        
+        // ============ PRODUCT BLOCK (listing pages) ============
+        const productBlock = button.closest('[data-id], .j-product-block, .product-card, .product, .productsSlider-i');
+        if (productBlock) {
+            if (productBlock.dataset.id && !data.id) data.id = productBlock.dataset.id;
+            
+            // Title from block
+            if (!data.title) {
+                const titleEl = productBlock.querySelector('.product-title, .productsSlider-title, h1, h2, h3, a');
+                if (titleEl) data.title = titleEl.textContent.trim();
+            }
+            
+            // Price from block
+            if (!data.price) {
+                const priceEl = productBlock.querySelector('.product-price, .productsSlider-price, [class*="price"]');
+                if (priceEl) {
+                    const priceText = priceEl.textContent.replace(/[^\d.,]/g, '').replace(',', '.');
+                    data.price = parseFloat(priceText) || null;
+                }
+            }
+            
+            // Article from link href
+            if (!data.article) {
+                const link = productBlock.querySelector('a[href]');
+                if (link) {
+                    // Try to extract article from URL or data
+                    const href = link.getAttribute('href');
+                    data.page_url = href;
                 }
             }
         }
         
-        // Fallback: search page for "Артикул:" text
-        if (!data.article) {
-            const pageText = document.body.innerText;
-            const articleMatch = pageText.match(/Артикул[:\s]*([a-zA-Z0-9_-]+)/i);
-            if (articleMatch) {
-                data.article = articleMatch[1];
-            }
-        }
-        
-        // Try parent container (Horoshop: j-product-block)
-        const productBlock = button.closest('[data-id], .j-product-block, .product-card, .product');
-        if (productBlock) {
-            if (productBlock.dataset.id) data.id = productBlock.dataset.id;
-            
-            // Try to find title
-            const titleEl = productBlock.querySelector('.product-title, .product__title, h1, h2, h3');
-            if (titleEl) data.title = titleEl.textContent.trim();
-            
-            // Try to find price
-            const priceEl = productBlock.querySelector('.product-price, .price, [class*="price"]');
-            if (priceEl) {
-                const priceText = priceEl.textContent.replace(/[^\d.,]/g, '').replace(',', '.');
-                data.price = parseFloat(priceText) || null;
-            }
-        }
-        
-        // Also try to get title from page H1
+        // ============ FINAL FALLBACK: Page H1 ============
         if (!data.title) {
             const h1 = document.querySelector('h1');
             if (h1) data.title = h1.textContent.trim();
@@ -306,7 +344,10 @@
         
         // Try counter sibling (Horoshop structure)
         const counter = button.closest('.product-order__row')?.querySelector('[data-id]');
-        if (counter?.dataset.id) data.id = counter.dataset.id;
+        if (counter?.dataset.id && !data.id) data.id = counter.dataset.id;
+        
+        // Get current page URL
+        data.page_url = data.page_url || window.location.href;
         
         log('Extracted product data:', data);
         return data;

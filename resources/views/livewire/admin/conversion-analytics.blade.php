@@ -69,11 +69,15 @@
                         <div class="flex justify-between items-start">
                             <div>
                                 <div class="text-sm font-medium text-gray-900">
-                                    Товар #{{ $conv['product_id'] }}
-                                    @if($conv['product_article'])
-                                        <span class="text-gray-500">({{ $conv['product_article'] }})</span>
+                                    @if($conv['product_title'])
+                                        {{ Str::limit($conv['product_title'], 50) }}
+                                    @else
+                                        Товар #{{ $conv['product_id'] ?? $conv['product_article'] ?? 'Unknown' }}
                                     @endif
                                 </div>
+                                @if($conv['product_article'])
+                                    <div class="text-xs text-gray-500">Арт: {{ $conv['product_article'] }}</div>
+                                @endif
                                 @if($conv['product_price'])
                                     <div class="text-sm text-green-600 font-medium">{{ number_format($conv['product_price'], 0) }} ₴</div>
                                 @endif

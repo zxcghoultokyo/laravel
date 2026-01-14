@@ -28,18 +28,37 @@ class ConversionAnalytics extends Component
         $startDate = now()->subDays($this->days)->startOfDay();
         
         // Get all add_to_cart events with chat context
-        $this->conversions = DB::table('chat_events')
+        $events = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->where('event_type', 'add_to_cart')
             ->orderByDesc('created_at')
-            ->get()
-            ->map(function ($event) {
+            ->get();
+        
+        // Get product titles by article (most reliable method)
+        $articles = $events->pluck('product_article')->unique()->filter()->toArray();
+        $productTitlesByArticle = [];
+        if (!empty($articles)) {
+            $productTitlesByArticle = DB::table('products')
+                ->whereIn('article', $articles)
+                ->pluck('title', 'article')
+                ->toArray();
+        }
+        
+        $this->conversions = $events->map(function ($event) use ($productTitlesByArticle) {
                 $meta = json_decode($event->metadata ?? '{}', true);
+                
+                // Get title: 1) from metadata, 2) from products table by article
+                $title = $meta['product_title'] ?? null;
+                if (!$title && $event->product_article) {
+                    $title = $productTitlesByArticle[$event->product_article] ?? null;
+                }
+                
                 return [
                     'id' => $event->id,
                     'session_id' => $event->session_id,
                     'product_id' => $event->product_id,
                     'product_article' => $event->product_article,
+                    'product_title' => $title,
                     'product_price' => $event->product_price,
                     'had_chat' => $meta['had_chat_conversation'] ?? false,
                     'from_chat' => $meta['product_from_chat'] ?? false,
@@ -109,16 +128,31 @@ class ConversionAnalytics extends Component
             ->get()
             ->toArray();
         
-        // Get add to cart events for this session
+        // Get add to cart events for this session (with metadata for title)
         $addedToCart = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'add_to_cart')
-            ->whereNotNull('product_id')
-            ->select('product_id', 'product_article', 'product_price', 'created_at')
+            ->select('product_id', 'product_article', 'product_price', 'created_at', 'metadata')
             ->get()
             ->toArray();
         
-        // Get product titles
+        // Get product titles - by article (primary) and by product_id (fallback)
+        $productArticles = collect($productsShown)
+            ->merge($productsClicked)
+            ->merge($addedToCart)
+            ->pluck('product_article')
+            ->unique()
+            ->filter()
+            ->toArray();
+        
+        $productTitlesByArticle = [];
+        if (!empty($productArticles)) {
+            $productTitlesByArticle = DB::table('products')
+                ->whereIn('article', $productArticles)
+                ->pluck('title', 'article')
+                ->toArray();
+        }
+        
         $productIds = collect($productsShown)
             ->merge($productsClicked)
             ->merge($addedToCart)
@@ -127,34 +161,54 @@ class ConversionAnalytics extends Component
             ->filter()
             ->toArray();
         
-        $productTitles = [];
+        $productTitlesById = [];
         if (!empty($productIds)) {
-            $productTitles = DB::table('products')
+            $productTitlesById = DB::table('products')
                 ->whereIn('id', $productIds)
                 ->pluck('title', 'id')
                 ->toArray();
         }
         
+        // Helper to get title from various sources
+        $getTitle = function ($item) use ($productTitlesByArticle, $productTitlesById) {
+            // 1. Try metadata (stored from widget)
+            if (isset($item->metadata)) {
+                $meta = json_decode($item->metadata, true);
+                if (!empty($meta['product_title'])) {
+                    return $meta['product_title'];
+                }
+            }
+            // 2. Try by article (most reliable)
+            if (!empty($item->product_article) && isset($productTitlesByArticle[$item->product_article])) {
+                return $productTitlesByArticle[$item->product_article];
+            }
+            // 3. Try by product_id
+            if (!empty($item->product_id) && isset($productTitlesById[$item->product_id])) {
+                return $productTitlesById[$item->product_id];
+            }
+            return 'Unknown';
+        };
+        
         $this->selectedSession = [
             'session_id' => $sessionId,
             'created_at' => $session->created_at ?? null,
             'messages' => $messages,
-            'products_shown' => array_map(function ($p) use ($productTitles) {
+            'products_shown' => array_map(function ($p) use ($getTitle) {
                 return [
                     ...(array)$p,
-                    'title' => $productTitles[$p->product_id] ?? 'Unknown'
+                    'title' => $getTitle($p)
                 ];
             }, $productsShown),
-            'products_clicked' => array_map(function ($p) use ($productTitles) {
+            'products_clicked' => array_map(function ($p) use ($getTitle) {
                 return [
                     ...(array)$p,
-                    'title' => $productTitles[$p->product_id] ?? 'Unknown'
+                    'title' => $getTitle($p)
                 ];
             }, $productsClicked),
-            'added_to_cart' => array_map(function ($p) use ($productTitles) {
+            'added_to_cart' => array_map(function ($p) use ($getTitle) {
                 return [
                     ...(array)$p,
-                    'title' => $productTitles[$p->product_id] ?? 'Unknown'
+                    'title' => $getTitle($p)
                 ];
             }, $addedToCart),
         ];

@@ -574,6 +574,11 @@
                 addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
                 state.hasShownWelcome = true;
             }
+            
+            // Always scroll to bottom when opening chat (show latest messages)
+            setTimeout(() => {
+                messages.scrollTo({ top: messages.scrollHeight, behavior: 'auto' });
+            }, 50);
         }
 
         // Close widget function
@@ -616,6 +621,7 @@
             let accumulatedText = '';
             let hasReceivedProducts = false;
             let receivedProducts = [];
+            let textAlreadySaved = false; // Track if text was saved before products
             
             // Smooth scroll to loader on start
             setTimeout(() => {
@@ -677,6 +683,15 @@
                             // Remove loader if still present
                             if (loader && loader.parentNode) {
                                 removeLoader(loader);
+                            }
+                            
+                            // FIRST: Save accumulated text BEFORE products (for correct order in history)
+                            if (accumulatedText.trim() && currentTextElement) {
+                                const displayText = extractDisplayText(accumulatedText);
+                                if (displayText && displayText !== 'Шукаю для вас...') {
+                                    saveMessage(state.sessionId, { role: 'assistant', content: displayText });
+                                }
+                                textAlreadySaved = true;
                             }
                             
                             // Store products for later display
@@ -925,13 +940,38 @@
             // If no readable text, hide the element
             if (!displayText || displayText.trim().startsWith('{') || displayText === 'Шукаю для вас...') {
                 element.style.display = 'none';
-            } else {
-                // Save the finalized text to localStorage for history restoration
-                const sessionId = localStorage.getItem('aintento_session_id');
-                if (sessionId && displayText.trim()) {
-                    saveMessage(sessionId, { role: 'assistant', content: displayText });
-                }
             }
+            // Note: text is now saved in 'products' event handler to preserve correct order
+        }
+        
+        // Extract display text from accumulated stream text (helper function)
+        function extractDisplayText(text) {
+            if (!text) return '';
+            
+            const looksLikeJson = text.trim().startsWith('{') || 
+                                  text.includes('```') ||
+                                  text.includes('"action"') ||
+                                  text.includes('"tool"') ||
+                                  text.includes('search_products') ||
+                                  text.includes('function_call');
+            
+            if (text.includes('"intro"')) {
+                try {
+                    const firstBrace = text.indexOf('{');
+                    const lastBrace = text.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace > firstBrace) {
+                        const jsonStr = text.substring(firstBrace, lastBrace + 1);
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.intro) return parsed.intro;
+                    }
+                } catch (e) {
+                    const introMatch = text.match(/"intro"\s*:\s*"([^"]+)"/);
+                    if (introMatch) return introMatch[1];
+                }
+            } else if (!looksLikeJson) {
+                return text;
+            }
+            return '';
         }
         
         // Fallback fetch version (non-streaming)

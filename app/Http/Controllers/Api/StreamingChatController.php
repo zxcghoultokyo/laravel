@@ -91,6 +91,9 @@ class StreamingChatController extends Controller
                     'session_id' => $sessionId,
                 ]);
                 
+                // Still save the user message to DB for operator to see
+                $this->saveUserMessage($sessionId, $message);
+                
                 $this->sendEvent('chunk', [
                     'text' => 'Ваше повідомлення передано оператору. Очікуйте відповіді.',
                 ]);
@@ -178,5 +181,42 @@ class StreamingChatController extends Controller
         }
 
         return substr($normalized, 0, 64);
+    }
+
+    /**
+     * Save user message to DB (for operator mode).
+     */
+    private function saveUserMessage(string $sessionId, string $content): void
+    {
+        try {
+            $chatSession = \App\Models\ChatSession::firstOrCreate(
+                ['session_id' => $sessionId],
+                [
+                    'status' => 'open',
+                    'started_at' => now(),
+                ]
+            );
+
+            \App\Models\ChatMessage::create([
+                'chat_session_id' => $chatSession->id,
+                'role' => 'user',
+                'content' => $content,
+                'meta' => ['operator_mode' => true],
+            ]);
+
+            $chatSession->update([
+                'last_message_at' => now(),
+                'messages_count' => $chatSession->messages_count + 1,
+            ]);
+
+            Log::info('StreamingChatController: user message saved in operator mode', [
+                'session_id' => $sessionId,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('StreamingChatController: failed to save user message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

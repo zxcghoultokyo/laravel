@@ -7,6 +7,7 @@ use App\Services\Search\MeiliClient;
 use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
 use App\Services\Search\QueryExpander;
+use App\Services\Search\SemanticSearchService;
 use Illuminate\Support\Facades\Log;
 
 class MeiliProductSearchTool
@@ -15,8 +16,18 @@ class MeiliProductSearchTool
         private MeiliClient $meiliClient,
         private BrandDetectionService $brandDetection,
         private ColorService $colorService,
-        private QueryExpander $queryExpander
-    ) {}
+        private QueryExpander $queryExpander,
+        private ?SemanticSearchService $semanticSearch = null
+    ) {
+        // Try to get semantic search service (may not be bound if embeddings disabled)
+        if (!$this->semanticSearch) {
+            try {
+                $this->semanticSearch = app(SemanticSearchService::class);
+            } catch (\Throwable $e) {
+                $this->semanticSearch = null;
+            }
+        }
+    }
 
     /**
      * Search products in Meilisearch
@@ -170,6 +181,31 @@ class MeiliProductSearchTool
             
             // Deduplicate by title to show different models (not just size/color variants)
             $filtered = $this->dedupeByTitle($filtered, $limit);
+            
+            // If keyword search returned few results, try semantic search fallback
+            if (count($filtered) < 3 && $this->semanticSearch?->isAvailable()) {
+                Log::info('MeiliProductSearchTool: trying semantic search fallback', [
+                    'keyword_results' => count($filtered),
+                    'query' => $query,
+                ]);
+                
+                $semanticResults = $this->semanticSearchFallback($query, $filters, $limit);
+                
+                if (count($semanticResults) > count($filtered)) {
+                    Log::info('MeiliProductSearchTool: semantic search found more results', [
+                        'semantic_results' => count($semanticResults),
+                    ]);
+                    
+                    // Merge semantic results with keyword results (keyword first)
+                    $mergedIds = array_column($filtered, 'id');
+                    foreach ($semanticResults as $result) {
+                        if (!in_array($result['id'], $mergedIds) && count($filtered) < $limit) {
+                            $filtered[] = $result;
+                            $mergedIds[] = $result['id'];
+                        }
+                    }
+                }
+            }
             
             return $filtered;
             
@@ -683,5 +719,55 @@ class MeiliProductSearchTool
         ]);
         
         return $expanded;
+    }
+
+    /**
+     * Semantic search fallback using embeddings.
+     * Used when keyword search returns few/no results.
+     */
+    private function semanticSearchFallback(string $query, array $filters, int $limit): array
+    {
+        if (!$this->semanticSearch) {
+            return [];
+        }
+
+        try {
+            $semanticFilters = [
+                'in_stock' => true,
+            ];
+
+            if (!empty($filters['budget_min'])) {
+                $semanticFilters['price_min'] = $filters['budget_min'];
+            }
+            if (!empty($filters['budget_max'])) {
+                $semanticFilters['price_max'] = $filters['budget_max'];
+            }
+
+            $results = $this->semanticSearch->search($query, $limit, $semanticFilters, 0.35);
+
+            // Map to same format as Meilisearch results
+            return $results->map(function ($product) {
+                return [
+                    'id' => $product->id,
+                    'article' => $product->article,
+                    'parent_article' => $product->parent_article,
+                    'title' => $product->title,
+                    'brand' => $product->brand,
+                    'price' => $product->price,
+                    'category_path' => $product->category_path,
+                    'in_stock' => $product->in_stock,
+                    'popularity' => $product->popularity ?? 0,
+                    'ai_product_type' => $product->aiIndex->product_type ?? '__unknown__',
+                    'display_in_showcase' => $product->display_in_showcase ?? false,
+                    '_semantic_score' => $product->semantic_similarity ?? 0,
+                ];
+            })->toArray();
+
+        } catch (\Throwable $e) {
+            Log::warning('MeiliProductSearchTool: semantic search fallback failed', [
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
     }
 }

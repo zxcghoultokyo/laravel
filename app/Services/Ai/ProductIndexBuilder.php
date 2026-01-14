@@ -5,6 +5,7 @@ namespace App\Services\Ai;
 use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Services\Search\SlangDictionaryService;
+use App\Services\Ai\EmbeddingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -14,6 +15,8 @@ class ProductIndexBuilder
     protected int $retryDelayMs = 100;
     protected ?\Closure $onLockRetry = null;
     protected ?SlangDictionaryService $slangDictionary = null;
+    protected ?EmbeddingService $embeddingService = null;
+    protected bool $generateEmbeddings = true;
 
     /**
      * Встановити callback для виводу при lock retry.
@@ -21,6 +24,15 @@ class ProductIndexBuilder
     public function onLockRetry(\Closure $callback): self
     {
         $this->onLockRetry = $callback;
+        return $this;
+    }
+    
+    /**
+     * Enable or disable embedding generation.
+     */
+    public function withEmbeddings(bool $enabled = true): self
+    {
+        $this->generateEmbeddings = $enabled;
         return $this;
     }
     
@@ -33,6 +45,84 @@ class ProductIndexBuilder
             $this->slangDictionary = app(SlangDictionaryService::class);
         }
         return $this->slangDictionary;
+    }
+    
+    /**
+     * Get or create embedding service.
+     */
+    protected function getEmbeddingService(): EmbeddingService
+    {
+        if (!$this->embeddingService) {
+            $this->embeddingService = app(EmbeddingService::class);
+        }
+        return $this->embeddingService;
+    }
+    
+    /**
+     * Generate embedding for a product.
+     */
+    protected function generateEmbedding(Product $product, array $payload): ?array
+    {
+        if (!$this->generateEmbeddings) {
+            return null;
+        }
+        
+        try {
+            $service = $this->getEmbeddingService();
+            
+            if (!$service->isAvailable()) {
+                return null;
+            }
+            
+            // Build text for embedding
+            $text = $service->buildProductText([
+                'title' => $product->title,
+                'category_path' => $product->category_path,
+                'brand' => $product->brand,
+                'keywords' => $payload['keywords'] ?? [],
+                'slang' => $payload['slang'] ?? [],
+                'description' => $this->extractDescription($product),
+            ]);
+            
+            $embedding = $service->embed($text);
+            
+            if ($embedding) {
+                Log::debug('ProductIndexBuilder: generated embedding', [
+                    'product_id' => $product->id,
+                    'text_length' => mb_strlen($text),
+                    'dimensions' => count($embedding),
+                ]);
+            }
+            
+            return $embedding;
+            
+        } catch (\Throwable $e) {
+            Log::warning('ProductIndexBuilder: embedding generation failed', [
+                'product_id' => $product->id,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+    
+    /**
+     * Extract description from product raw data.
+     */
+    protected function extractDescription(Product $product): ?string
+    {
+        $raw = $product->raw ?? [];
+        
+        $description = $raw['description']['ua'] 
+            ?? $raw['description']['ru'] 
+            ?? $raw['short_description']['ua']
+            ?? $raw['short_description']['ru']
+            ?? null;
+            
+        if (is_string($description)) {
+            return strip_tags($description);
+        }
+        
+        return null;
     }
 
     public function buildForProduct(Product $product): ProductAiIndex
@@ -108,6 +198,9 @@ class ProductIndexBuilder
             ]);
         }
 
+        // Generate embedding for semantic search
+        $embedding = $this->generateEmbedding($product, $payload);
+
         // Забезпечити наявність raw_ai_json для аудиту/дебагу
         $rawJson = null;
         try {
@@ -124,7 +217,7 @@ class ProductIndexBuilder
             'slang'        => $payload['slang'] ?? null,
             'keywords'     => $payload['keywords'] ?? null,
             'usage'        => $payload['usage'] ?? null,
-            'embedding'    => $payload['embedding'] ?? null,
+            'embedding'    => $embedding,
             'raw_ai_json'  => $rawJson,
         ]);
     }

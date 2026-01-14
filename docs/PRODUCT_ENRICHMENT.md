@@ -292,7 +292,7 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 
 1. [x] **Автоматичний enrichment** після sync нових товарів — додано в Kernel.php (щоденно о 04:00)
 2. [x] **Slang dictionary** — ручний словник сленгу `config/slang_dictionary.php` + SlangDictionaryService
-3. [ ] **Embeddings** — semantic search
+3. [x] **Embeddings** — EmbeddingService + SemanticSearchService (semantic search fallback)
 4. [x] **Quality scoring** — EnrichmentQualityService з score 0-100 та grade A-F
 5. [ ] **A/B testing** — порівняння search quality з/без AI
 6. [x] **Parent-based enrichment** — ParentBasedEnrichmentJob (один запит на parent_article)
@@ -408,6 +408,100 @@ $problems = $service->findProblems(50);
 // Рекомендації
 $recs = $service->getRecommendations();
 // [['priority' => 'high', 'action' => 'Run AI enrichment', ...]]
+```
+
+## 🧠 Embeddings (Semantic Search)
+
+### Концепція
+
+Embeddings — векторні представлення тексту, що дозволяють знаходити товари за змістом, а не тільки за ключовими словами.
+
+**Приклади:**
+| Запит | Keyword search | Semantic search |
+|-------|---------------|-----------------|
+| "захист для голови" | ❌ | ✅ шоломи, каски |
+| "щось теплое на зиму" | ❌ | ✅ куртки, флісові кофти |
+| "для ніг на полігон" | ❌ | ✅ черевики, наколінники |
+
+### Використання
+
+```bash
+# Статистика embeddings
+php artisan products:generate-embeddings --stats
+
+# Генерація embeddings (async через queue)
+php artisan products:generate-embeddings
+
+# Генерація синхронно
+php artisan products:generate-embeddings --sync --batch=50
+
+# Обмежити кількість
+php artisan products:generate-embeddings --limit=100 --sync
+```
+
+### EmbeddingService
+
+```php
+use App\Services\Ai\EmbeddingService;
+
+$service = app(EmbeddingService::class);
+
+// Генерація одного embedding
+$embedding = $service->embed("плитоноска тактична");
+// [0.023, -0.156, 0.892, ...] // 1536 чисел
+
+// Batch генерація
+$embeddings = $service->embedBatch(["плитоноска", "шолом", "черевики"]);
+
+// Cosine similarity
+$similarity = $service->cosineSimilarity($embedding1, $embedding2);
+// 0.0 - 1.0
+```
+
+### SemanticSearchService
+
+```php
+use App\Services\Search\SemanticSearchService;
+
+$search = app(SemanticSearchService::class);
+
+// Семантичний пошук
+$results = $search->search("захист для голови", limit: 10, filters: ['in_stock' => true]);
+
+// Знайти схожі товари
+$similar = $search->findSimilar($product, limit: 5);
+
+// Гібридний пошук (keyword + semantic)
+$hybrid = $search->hybridSearch($query, $keywordResults, limit: 20);
+```
+
+### Інтеграція з Agent
+
+`MeiliProductSearchTool` автоматично використовує semantic search як fallback коли keyword search повертає < 3 результатів:
+
+```
+User: "щось для захисту очей"
+↓
+MeiliSearch: 0 results (no "захист очей" in titles)
+↓
+SemanticSearchService: finds "Окуляри балістичні" (similar meaning)
+↓
+User: отримує релевантні товари
+```
+
+### Вартість
+
+- **Model:** text-embedding-3-small
+- **Cost:** ~$0.00002 / 1000 токенів
+- **~2300 товарів:** ~$0.10-0.50 разова генерація
+- Embeddings кешуються на 30 днів
+
+### Налаштування
+
+```env
+# В .env (опціонально)
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_EMBEDDING_DIMENSIONS=1536
 ```
 
 ## 🔄 Parent-based Enrichment

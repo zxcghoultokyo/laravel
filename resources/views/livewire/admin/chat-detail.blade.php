@@ -25,12 +25,25 @@
                 </button>
             @endif
             @if($session->status === 'open')
-            <button wire:click="markAsResolved" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                Позначити вирішеним
+            <button wire:click="markAsResolved" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2" title="Закриває сесію - клієнт більше не зможе писати в цей чат">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Закрити чат
             </button>
+            @else
+            <span class="px-4 py-2 bg-gray-200 text-gray-600 rounded-lg flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Чат закрито
+            </span>
             @endif
-            <button wire:click="flagSession" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700">
-                Позначити
+            <button wire:click="flagSession" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 flex items-center gap-2" title="Позначити для перегляду пізніше">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                </svg>
+                Закладка
             </button>
             <button wire:click="copySessionSummary" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
                 Копіювати звіт

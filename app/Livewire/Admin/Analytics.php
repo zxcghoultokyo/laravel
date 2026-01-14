@@ -12,7 +12,9 @@ class Analytics extends Component
     public array $stats = [];
     public array $outcomes = [];
     public array $topProducts = [];
+    public array $topViewedProducts = [];
     public array $dailyChart = [];
+    public array $recentChatEvents = [];
     public bool $tablesExist = false;
     public ?string $lastUpdated = null;
 
@@ -48,6 +50,12 @@ class Analytics extends Component
         
         // Top clicked products
         $this->topProducts = $this->getTopProducts($startDate);
+        
+        // Top viewed products (for ranking)
+        $this->topViewedProducts = $this->getTopViewedProducts($startDate);
+        
+        // Recent chat events only
+        $this->recentChatEvents = $this->getRecentChatEvents();
         
         // Daily chart data
         $this->dailyChart = $this->getDailyChart($startDate);
@@ -214,6 +222,50 @@ class Analytics extends Component
                 'clicks' => $row->clicks,
             ];
         })->toArray();
+    }
+    
+    private function getTopViewedProducts($startDate): array
+    {
+        $productViews = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->where('event_type', 'product_shown')
+            ->whereNotNull('product_id')
+            ->selectRaw('product_id, COUNT(*) as views')
+            ->groupBy('product_id')
+            ->orderByDesc('views')
+            ->limit(10)
+            ->get();
+
+        if ($productViews->isEmpty()) {
+            return [];
+        }
+
+        $productIds = $productViews->pluck('product_id')->toArray();
+        $products = DB::table('products')
+            ->whereIn('id', $productIds)
+            ->get(['id', 'title', 'price', 'article'])
+            ->keyBy('id');
+
+        return $productViews->map(function ($row) use ($products) {
+            $product = $products->get($row->product_id);
+            return [
+                'id' => $row->product_id,
+                'title' => $product?->title ?? 'Unknown',
+                'price' => $product?->price ?? 0,
+                'article' => $product?->article ?? '',
+                'views' => $row->views,
+            ];
+        })->toArray();
+    }
+    
+    private function getRecentChatEvents(): array
+    {
+        return DB::table('chat_events')
+            ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click'])
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get(['event_type', 'session_id', 'created_at', 'message_type'])
+            ->toArray();
     }
 
     private function getDailyChart($startDate): array

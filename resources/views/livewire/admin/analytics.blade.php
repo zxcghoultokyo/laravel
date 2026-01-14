@@ -98,34 +98,47 @@
         </div>
 
         <!-- Conversion Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="text-2xl">🛒</span>
-                    <span class="text-sm text-green-700">Add to Cart</span>
-                </div>
-                <div class="text-3xl font-bold text-green-700">{{ $stats['add_to_cart'] ?? 0 }}</div>
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-semibold text-gray-500">💰 Конверсії</h3>
+                <span class="text-xs text-gray-400" title="Для трекінгу конверсій потрібна інтеграція на сайті магазину">ℹ️ Потребує інтеграції</span>
             </div>
-            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg shadow p-4 border border-blue-200">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="text-2xl">💰</span>
-                    <span class="text-sm text-blue-700">Покупок</span>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🛒</span>
+                        <span class="text-sm text-green-700">Add to Cart</span>
+                    </div>
+                    <div class="text-3xl font-bold text-green-700">{{ $stats['add_to_cart'] ?? 0 }}</div>
+                    @if(($stats['add_to_cart'] ?? 0) == 0)
+                    <p class="text-xs text-green-600 mt-1">Потрібен JS callback</p>
+                    @endif
                 </div>
-                <div class="text-3xl font-bold text-blue-700">{{ $stats['purchases'] ?? 0 }}</div>
-            </div>
-            <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg shadow p-4 border border-purple-200">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="text-2xl">💵</span>
-                    <span class="text-sm text-purple-700">Виручка</span>
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">💰</span>
+                        <span class="text-sm text-blue-700">Покупок</span>
+                    </div>
+                    <div class="text-3xl font-bold text-blue-700">{{ $stats['purchases'] ?? 0 }}</div>
+                    @if(($stats['purchases'] ?? 0) == 0)
+                    <p class="text-xs text-blue-600 mt-1">Потрібен webhook</p>
+                    @endif
                 </div>
-                <div class="text-3xl font-bold text-purple-700">{{ number_format($stats['revenue'] ?? 0, 0, '.', ' ') }} ₴</div>
-            </div>
-            <div class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg shadow p-4 border border-amber-200">
-                <div class="flex items-center gap-2 mb-1">
-                    <span class="text-2xl">📊</span>
-                    <span class="text-sm text-amber-700">CTR товарів</span>
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">💵</span>
+                        <span class="text-sm text-purple-700">Виручка</span>
+                    </div>
+                    <div class="text-3xl font-bold text-purple-700">{{ number_format($stats['revenue'] ?? 0, 0, '.', ' ') }} ₴</div>
                 </div>
-                <div class="text-3xl font-bold text-amber-700">{{ $stats['ctr'] ?? 0 }}%</div>
+                <div class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">📊</span>
+                        <span class="text-sm text-amber-700">CTR товарів</span>
+                    </div>
+                    <div class="text-3xl font-bold text-amber-700">{{ $stats['ctr'] ?? 0 }}%</div>
+                    <p class="text-xs text-amber-600 mt-1">кліків / показів</p>
+                </div>
             </div>
         </div>
 
@@ -151,6 +164,30 @@
                 @endif
             </div>
 
+            <!-- Top Viewed Products (NEW) -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 mb-4">👁️ Найчастіше переглядають</h2>
+                @if(count($topViewedProducts) > 0)
+                    <div class="space-y-2">
+                        @foreach($topViewedProducts as $product)
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-medium text-gray-800 truncate">{{ $product['title'] }}</div>
+                                    <div class="text-xs text-gray-500">{{ $product['article'] }} • {{ number_format($product['price'], 0) }} ₴</div>
+                                </div>
+                                <div class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-sm font-medium">
+                                    {{ $product['views'] }} показів
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="text-gray-400 text-center py-8">Немає даних</div>
+                @endif
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             <!-- Top Clicked Products -->
             <div class="bg-white rounded-lg shadow p-4">
                 <h2 class="font-semibold text-gray-700 mb-4">🔥 Топ кліки по товарах</h2>
@@ -170,6 +207,38 @@
                     </div>
                 @else
                     <div class="text-gray-400 text-center py-8">Немає даних про кліки</div>
+                @endif
+            </div>
+            
+            <!-- Recent Chat Events Only -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 mb-4">💬 Останні події чатів</h2>
+                @if(count($recentChatEvents) > 0)
+                    <div class="space-y-1 max-h-80 overflow-y-auto">
+                        @foreach($recentChatEvents as $event)
+                            @php
+                                $eventIcon = match($event->event_type) {
+                                    'message' => '💬',
+                                    'chat_opened' => '📬',
+                                    'chat_closed' => '📭',
+                                    'session_start' => '🚀',
+                                    'quick_action_click' => '⚡',
+                                    default => '📌'
+                                };
+                            @endphp
+                            <div class="flex items-center gap-2 text-sm py-1 border-b border-gray-50">
+                                <span class="text-xs text-gray-400 w-16">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</span>
+                                <span>{{ $eventIcon }}</span>
+                                <span class="text-gray-600">{{ $event->event_type }}</span>
+                                <a href="{{ route('admin.chats.show', $event->session_id) }}" 
+                                   class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                    {{ substr($event->session_id, -12) }}
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <div class="text-gray-400 text-center py-8">Немає подій</div>
                 @endif
             </div>
         </div>
@@ -209,62 +278,5 @@
                 </div>
             </div>
         @endif
-
-        <!-- Recent Events -->
-        <div class="bg-white rounded-lg shadow p-4 mt-6">
-            <h2 class="font-semibold text-gray-700 mb-4">🕐 Останні події</h2>
-            @php
-                $recentEvents = \Illuminate\Support\Facades\DB::table('chat_events')
-                    ->orderByDesc('created_at')
-                    ->limit(20)
-                    ->get(['event_type', 'session_id', 'product_id', 'created_at']);
-            @endphp
-            @if($recentEvents->count() > 0)
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="text-gray-500 text-left">
-                            <tr>
-                                <th class="pb-2">Час</th>
-                                <th class="pb-2">Подія</th>
-                                <th class="pb-2">Сесія</th>
-                                <th class="pb-2">Товар</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-gray-700">
-                            @foreach($recentEvents as $event)
-                                <tr class="border-t border-gray-100">
-                                    <td class="py-2 text-xs text-gray-500">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</td>
-                                    <td class="py-2">
-                                        @php
-                                            $eventIcon = match($event->event_type) {
-                                                'product_shown' => '👁️',
-                                                'product_click' => '👆',
-                                                'message' => '💬',
-                                                'session_start' => '🚀',
-                                                'add_to_cart' => '🛒',
-                                                default => '📌'
-                                            };
-                                        @endphp
-                                        <span class="inline-flex items-center gap-1">
-                                            {{ $eventIcon }} {{ $event->event_type }}
-                                        </span>
-                                    </td>
-                                    <td class="py-2">
-                                        <a href="{{ route('admin.chats.show', $event->session_id) }}" 
-                                           class="font-mono text-xs text-blue-600 hover:underline hover:text-blue-800"
-                                           title="Відкрити чат">
-                                            {{ $event->session_id }}
-                                        </a>
-                                    </td>
-                                    <td class="py-2">{{ $event->product_id ?? '-' }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            @else
-                <div class="text-gray-400 text-center py-8">Немає подій</div>
-            @endif
-        </div>
     @endif
 </div>

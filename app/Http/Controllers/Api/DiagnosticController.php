@@ -391,4 +391,49 @@ class DiagnosticController extends Controller
             'message' => "Dispatched 1 job to queue=meili for {$total} product(s)",
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/chat-history/{sessionId}
+     * View chat history for debugging context issues
+     */
+    public function chatHistory(Request $request, string $sessionId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $session = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+        
+        if (!$session) {
+            return response()->json([
+                'error' => 'Session not found',
+                'session_id' => $sessionId,
+            ], 404);
+        }
+
+        $messages = \App\Models\ChatMessage::where('chat_session_id', $session->id)
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($msg) {
+                return [
+                    'id' => $msg->id,
+                    'role' => $msg->role,
+                    'content' => mb_substr($msg->content, 0, 500) . (mb_strlen($msg->content) > 500 ? '...' : ''),
+                    'intent' => $msg->meta['intent'] ?? null,
+                    'products_shown' => $msg->meta['products_shown'] ?? null,
+                    'product_titles' => array_map(fn($p) => $p['title'] ?? '', $msg->meta['products'] ?? []),
+                    'created_at' => $msg->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        return response()->json([
+            'session_id' => $sessionId,
+            'db_id' => $session->id,
+            'messages_count' => $messages->count(),
+            'status' => $session->status,
+            'created_at' => $session->created_at->format('Y-m-d H:i:s'),
+            'last_message_at' => $session->last_message_at?->format('Y-m-d H:i:s'),
+            'messages' => $messages,
+        ]);
+    }
 }

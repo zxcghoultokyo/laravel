@@ -44,6 +44,10 @@ Route::get('/chat/poll/{sessionId}', [\App\Http\Controllers\Api\ChatController::
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
     ->middleware('widget.cors');
 
+// Dynamic greeting based on visitor context
+Route::get('/widget/greeting', [WidgetController::class, 'greeting'])
+    ->middleware('widget.cors');
+
 // AI context settings (admin)
 Route::get('/widget/ai-context', [WidgetController::class, 'getAiContext']);
 Route::put('/widget/ai-context', [WidgetController::class, 'updateAiContext']);

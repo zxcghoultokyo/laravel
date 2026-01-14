@@ -96,10 +96,10 @@
 
 ---
 
-### Phase 3: Система Привітань — Greetings (5-7 днів)
+### Phase 3: Система Привітань — Greetings ✅ DONE (5-7 днів)
 > **Пріоритет:** ВИСОКИЙ — конверсія залежить від першого контакту
 
-#### 3.1 Greetings Manager
+#### 3.1 Greetings Manager ✅
 ```
 ┌────────────────────────────────────────────────────────┐
 │ 👋 Привітання                              [+ Додати] │
@@ -123,29 +123,30 @@
 ```
 
 #### 3.2 Greeting Editor
-- [ ] Назва привітання
-- [ ] Текст привітання (з emoji)
-- [ ] Quick Actions (кнопки): до 3 кнопок з текстом і дією
-- [ ] Умови показу:
-  - [ ] UTM campaign/source/medium
-  - [ ] Категорія сторінки (regex або contains)
-  - [ ] Мова браузера
-  - [ ] Новий/повернувся користувач
-  - [ ] Device (mobile/desktop)
-  - [ ] Час доби
-- [ ] Пріоритет (drag & drop сортування)
-- [ ] Активний/неактивний toggle
+- [x] Назва привітання
+- [x] Текст привітання (з emoji)
+- [x] Quick Actions (кнопки): до 3+ кнопок з текстом і дією
+- [x] Умови показу:
+  - [x] UTM campaign/source/medium
+  - [x] Категорія сторінки (URL contains)
+  - [x] Мова браузера
+  - [x] Новий/повернувся користувач
+  - [x] Device (mobile/desktop)
+  - [x] Час доби (time range)
+- [x] Пріоритет (чим вищий — перевіряється раніше)
+- [x] Активний/неактивний toggle
 - [ ] Preview з обраними умовами
 
 #### 3.3 Greeting Templates (готові шаблони)
-- [ ] 5-10 готових шаблонів для швидкого старту
-- [ ] "Black Friday", "Категорія товару", "Подарунки", "Повернувся клієнт"
-- [ ] Клонування шаблонів
+- [x] Seeder з базовими шаблонами (default, Facebook, returning, mobile)
+- [x] Клонування (дублювання) шаблонів
+- [ ] UI для імпорту preset шаблонів
 
 #### 3.4 Backend логіка
-- [ ] API endpoint для отримання greeting по context
-- [ ] Віджет передає: URL, UTM, категорію, visitor ID
-- [ ] Сервер повертає: greeting + quick actions
+- [x] API endpoint GET /api/widget/greeting для отримання greeting по context
+- [x] Віджет передає: URL, UTM, категорію, visitor ID, device, language
+- [x] Сервер повертає: greeting + quick actions
+- [x] Greeting model з matchContext() логікою
 - [ ] Caching з TTL
 
 ---

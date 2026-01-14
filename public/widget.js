@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.4.1';
+    const WIDGET_VERSION = '2.5.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -769,8 +769,9 @@
             if (!state.hasShownWelcome && savedMessages.length === 0) {
                 // Track session start (first time opening)
                 sendAnalyticsEvent('session_start');
-                addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
-                state.hasShownWelcome = true;
+                
+                // Fetch dynamic greeting based on context
+                fetchDynamicGreeting(settings, messages, state);
             }
             
             // Always scroll to bottom when opening chat (show latest messages)
@@ -2553,6 +2554,147 @@
 
     function removeLoader(loader) {
         loader?.parentNode?.removeChild(loader);
+    }
+
+    /**
+     * Fetch dynamic greeting based on visitor context
+     * Falls back to settings.welcome_message if API fails
+     */
+    function fetchDynamicGreeting(settings, messagesEl, state) {
+        // Collect context for greeting matching
+        const urlParams = new URLSearchParams(window.location.search);
+        const context = {
+            utm_campaign: urlParams.get('utm_campaign') || '',
+            utm_source: urlParams.get('utm_source') || '',
+            utm_medium: urlParams.get('utm_medium') || '',
+            url: window.location.href,
+            category: extractCategoryFromUrl(),
+            device: window.innerWidth <= 768 ? 'mobile' : 'desktop',
+            is_returning: hasVisitedBefore(),
+            language: navigator.language || navigator.userLanguage || ''
+        };
+        
+        // Build query string
+        const params = new URLSearchParams();
+        Object.keys(context).forEach(key => {
+            if (context[key]) params.append(key, context[key]);
+        });
+        
+        const greetingUrl = BASE_URL + '/api/widget/greeting?' + params.toString();
+        
+        log('Fetching dynamic greeting:', greetingUrl);
+        
+        fetch(greetingUrl, {
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            log('Greeting received:', data);
+            
+            const greetingMessage = data.message || settings.welcome_message;
+            addMessage(messagesEl, greetingMessage, 'assistant', state.sessionId, true);
+            state.hasShownWelcome = true;
+            
+            // If greeting has quick actions, update them
+            if (data.quick_actions && data.quick_actions.length > 0) {
+                updateQuickActionsFromGreeting(data.quick_actions);
+            }
+            
+            // Track which greeting was shown
+            if (data.matched_greeting_id) {
+                sendAnalyticsEvent('greeting_shown', {
+                    greeting_id: data.matched_greeting_id,
+                    greeting_name: data.matched_greeting_name,
+                    context: context
+                });
+            }
+        })
+        .catch(err => {
+            logError('Failed to fetch greeting, using default:', err);
+            addMessage(messagesEl, settings.welcome_message, 'assistant', state.sessionId, true);
+            state.hasShownWelcome = true;
+        });
+    }
+    
+    /**
+     * Try to extract category path from URL
+     * e.g., /plate-carriers/crye-precision -> plate-carriers
+     */
+    function extractCategoryFromUrl() {
+        const path = window.location.pathname;
+        // Common patterns: /category/subcategory or /product/category
+        const parts = path.split('/').filter(p => p && !['product', 'products', 'p', 'item'].includes(p.toLowerCase()));
+        return parts[0] || '';
+    }
+    
+    /**
+     * Check if user has visited before (returning visitor)
+     */
+    function hasVisitedBefore() {
+        try {
+            const visited = localStorage.getItem('aintento_has_visited');
+            if (!visited) {
+                localStorage.setItem('aintento_has_visited', 'true');
+                return false;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Update quick actions bar from greeting-specific actions
+     */
+    function updateQuickActionsFromGreeting(actions) {
+        const bar = document.getElementById('aintento-quick-actions-bar');
+        if (!bar || !actions || actions.length === 0) return;
+        
+        // Create greeting-specific quick action buttons
+        const actionsHTML = actions.map(action => `
+            <button class="aintento-greeting-action" style="
+                flex-shrink: 0;
+                background: white;
+                border: 1px solid #e5e7eb;
+                border-radius: 20px;
+                padding: 8px 16px;
+                font-size: 14px;
+                cursor: pointer;
+                white-space: nowrap;
+                transition: all 0.2s ease;
+                margin-right: 8px;
+            " data-query="${action.query}">${action.label}</button>
+        `).join('');
+        
+        // Prepend greeting actions to the bar
+        const greetingActionsContainer = document.createElement('div');
+        greetingActionsContainer.id = 'aintento-greeting-actions';
+        greetingActionsContainer.style.cssText = 'display: inline-flex; margin-right: 12px; padding-right: 12px; border-right: 1px solid #e5e7eb;';
+        greetingActionsContainer.innerHTML = actionsHTML;
+        
+        // Remove existing greeting actions if any
+        const existingGreetingActions = document.getElementById('aintento-greeting-actions');
+        if (existingGreetingActions) existingGreetingActions.remove();
+        
+        bar.insertBefore(greetingActionsContainer, bar.firstChild);
+        
+        // Add click handlers
+        greetingActionsContainer.querySelectorAll('.aintento-greeting-action').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const query = this.dataset.query;
+                if (query) {
+                    // Simulate sending this query
+                    const input = document.getElementById('aintento-input');
+                    if (input) {
+                        input.value = query;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        document.getElementById('aintento-send')?.click();
+                    }
+                }
+            });
+        });
+        
+        bar.style.display = 'block';
     }
 
     // Session management - support both old and new keys for backward compatibility

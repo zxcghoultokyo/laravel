@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Greeting;
 use App\Models\WidgetSettings;
 use App\Services\Store\StoreContextService;
 use Illuminate\Http\JsonResponse;
@@ -143,6 +144,51 @@ class WidgetController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'AI context updated successfully',
+        ]);
+    }
+
+    /**
+     * Get appropriate greeting based on visitor context.
+     * 
+     * Query params:
+     * - utm_campaign, utm_source, utm_medium: UTM parameters
+     * - url: Current page URL
+     * - category: Current category path
+     * - device: 'mobile' or 'desktop'
+     * - is_returning: boolean (based on session storage)
+     * - language: Browser language
+     */
+    public function greeting(Request $request): JsonResponse
+    {
+        $context = [
+            'utm_campaign' => $request->query('utm_campaign'),
+            'utm_source' => $request->query('utm_source'),
+            'utm_medium' => $request->query('utm_medium'),
+            'url' => $request->query('url'),
+            'category' => $request->query('category'),
+            'device' => $request->query('device'),
+            'is_returning' => filter_var($request->query('is_returning'), FILTER_VALIDATE_BOOLEAN),
+            'language' => $request->query('language'),
+        ];
+
+        $greeting = Greeting::matchContext($context);
+
+        if (!$greeting) {
+            // No greetings in DB, return default
+            $settings = WidgetSettings::first();
+            return response()->json([
+                'message' => $settings?->welcome_message ?? 'Вітаю! 👋 Чим можу допомогти?',
+                'quick_actions' => [],
+                'matched_greeting_id' => null,
+                'matched_greeting_name' => null,
+            ]);
+        }
+
+        return response()->json([
+            'message' => $greeting->message,
+            'quick_actions' => $greeting->quick_actions ?? [],
+            'matched_greeting_id' => $greeting->id,
+            'matched_greeting_name' => $greeting->name,
         ]);
     }
 }

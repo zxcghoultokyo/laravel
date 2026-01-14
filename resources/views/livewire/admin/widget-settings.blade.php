@@ -1,21 +1,42 @@
-<div>
+<div x-data="{ showToast: false, toastMessage: '' }" 
+     x-on:notify.window="showToast = true; toastMessage = $event.detail; setTimeout(() => showToast = false, 3000)">
+    
+    <!-- Toast Notification -->
+    <div x-show="showToast" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2"
+         class="fixed bottom-4 right-4 z-50 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span x-text="toastMessage"></span>
+    </div>
+
     <!-- Navigation -->
     <div class="mb-4 flex gap-2">
-        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Dashboard</a>
-        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📊 Аналітика</a>
-        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🛒 Конверсії</a>
-        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">💬 Чати</a>
-        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">⚙️ Віджет</a>
+        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">Dashboard</a>
+        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">📊 Аналітика</a>
+        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">🛒 Конверсії</a>
+        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">💬 Чати</a>
+        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm shadow-sm">⚙️ Віджет</a>
     </div>
 
     <!-- Header -->
     <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">Налаштування віджета</h2>
-        <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд чат-віджета</p>
+        <h2 class="text-2xl font-bold text-gray-900">⚙️ Налаштування віджета</h2>
+        <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
     </div>
 
     @if (session()->has('message'))
-    <div class="mb-4 p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg">
+    <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => { show = false; $dispatch('notify', '{{ session('message') }}') }, 100)"
+         class="mb-4 p-4 bg-green-50 border border-green-200 text-green-800 rounded-lg flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
         {{ session('message') }}
     </div>
     @endif
@@ -26,45 +47,78 @@
             <form wire:submit="save">
                 <!-- Appearance -->
                 <div class="bg-white rounded-lg shadow-sm p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Зовнішній вигляд</h3>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎨 Зовнішній вигляд</h3>
                     
                     <div class="space-y-4">
+                        <!-- Color Presets -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Основний колір</label>
-                            <input type="color" wire:model.live="primary_color" class="h-10 w-full rounded border-gray-300">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Готові схеми кольорів</label>
+                            <div class="flex gap-2 flex-wrap">
+                                <button type="button" wire:click="$set('primary_color', '#2563eb'); $set('text_color', '#ffffff')" 
+                                        class="w-10 h-10 rounded-lg bg-blue-600 border-2 {{ $primary_color === '#2563eb' ? 'border-gray-900 ring-2 ring-offset-2 ring-blue-600' : 'border-transparent' }} hover:scale-110 transition-transform" title="Синій"></button>
+                                <button type="button" wire:click="$set('primary_color', '#0f0f0f'); $set('text_color', '#f78c5e')" 
+                                        class="w-10 h-10 rounded-lg bg-gray-900 border-2 {{ $primary_color === '#0f0f0f' ? 'border-gray-900 ring-2 ring-offset-2 ring-gray-900' : 'border-transparent' }} hover:scale-110 transition-transform" title="Contractor"></button>
+                                <button type="button" wire:click="$set('primary_color', '#059669'); $set('text_color', '#ffffff')" 
+                                        class="w-10 h-10 rounded-lg bg-emerald-600 border-2 {{ $primary_color === '#059669' ? 'border-gray-900 ring-2 ring-offset-2 ring-emerald-600' : 'border-transparent' }} hover:scale-110 transition-transform" title="Зелений"></button>
+                                <button type="button" wire:click="$set('primary_color', '#dc2626'); $set('text_color', '#ffffff')" 
+                                        class="w-10 h-10 rounded-lg bg-red-600 border-2 {{ $primary_color === '#dc2626' ? 'border-gray-900 ring-2 ring-offset-2 ring-red-600' : 'border-transparent' }} hover:scale-110 transition-transform" title="Червоний"></button>
+                                <button type="button" wire:click="$set('primary_color', '#7c3aed'); $set('text_color', '#ffffff')" 
+                                        class="w-10 h-10 rounded-lg bg-violet-600 border-2 {{ $primary_color === '#7c3aed' ? 'border-gray-900 ring-2 ring-offset-2 ring-violet-600' : 'border-transparent' }} hover:scale-110 transition-transform" title="Фіолетовий"></button>
+                                <button type="button" wire:click="$set('primary_color', '#ea580c'); $set('text_color', '#ffffff')" 
+                                        class="w-10 h-10 rounded-lg bg-orange-600 border-2 {{ $primary_color === '#ea580c' ? 'border-gray-900 ring-2 ring-offset-2 ring-orange-600' : 'border-transparent' }} hover:scale-110 transition-transform" title="Помаранчевий"></button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Основний колір</label>
+                                <div class="flex gap-2">
+                                    <input type="color" wire:model.live="primary_color" class="h-10 w-16 rounded border-gray-300 cursor-pointer">
+                                    <input type="text" wire:model.live="primary_color" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="#2563eb">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Колір тексту</label>
+                                <div class="flex gap-2">
+                                    <input type="color" wire:model.live="text_color" class="h-10 w-16 rounded border-gray-300 cursor-pointer">
+                                    <input type="text" wire:model.live="text_color" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="#ffffff">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Позиція</label>
+                                <select wire:model.live="position" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <option value="left">← Зліва</option>
+                                    <option value="right">Справа →</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Початковий стан</label>
+                                <select wire:model.live="start_state" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <option value="closed">🔒 Закритий</option>
+                                    <option value="open">🔓 Відкритий</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Колір тексту</label>
-                            <input type="color" wire:model.live="text_color" class="h-10 w-full rounded border-gray-300">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Позиція</label>
-                            <select wire:model.live="position" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="left">Зліва</option>
-                                <option value="right">Справа</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Початковий стан</label>
-                            <select wire:model.live="start_state" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="open">Відкритий</option>
-                                <option value="closed">Закритий</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Радіус закруглення (px)</label>
-                            <input type="number" wire:model.live="border_radius" min="0" max="50" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Радіус закруглення: {{ $border_radius }}px</label>
+                            <input type="range" wire:model.live="border_radius" min="0" max="24" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                            <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                <span>Квадратний</span>
+                                <span>Заокруглений</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Branding -->
                 <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎨 Брендинг</h3>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🤖 Брендинг бота</h3>
                     
                     <div class="space-y-4">
                         <div>
@@ -275,37 +329,85 @@
 
         <!-- Preview -->
         <div class="sticky top-6">
-            <div class="bg-gray-100 rounded-lg p-6 h-[600px] flex items-end justify-{{ $position === 'left' ? 'start' : 'end' }}">
-                <div class="bg-white rounded-lg shadow-xl w-96 h-[500px] flex flex-col" style="border-radius: {{ $border_radius }}px;">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">👁️ Попередній перегляд</h3>
+            <div class="bg-gray-200 rounded-lg p-6 h-[650px] flex items-end justify-{{ $position === 'left' ? 'start' : 'end' }}" style="background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px;">
+                <div class="bg-white flex flex-col overflow-hidden" style="border-radius: {{ $border_radius }}px; width: 380px; height: 520px; {{ $show_shadow ? 'box-shadow: 0 12px 48px rgba(0,0,0,0.25);' : '' }}">
                     <!-- Header -->
-                    <div class="p-4 rounded-t-lg flex items-center gap-3" style="background-color: {{ $primary_color }}; color: {{ $text_color }}; border-radius: {{ $border_radius }}px {{ $border_radius }}px 0 0;">
-                        <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                            </svg>
+                    <div class="p-4 flex items-center gap-3" style="background: linear-gradient(135deg, {{ $primary_color }} 0%, {{ $primary_color }}dd 100%); color: {{ $text_color }}; border-radius: {{ $border_radius }}px {{ $border_radius }}px 0 0;">
+                        <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center border-2 border-cyan-400/60">
+                            @if($bot_avatar_url)
+                                <img src="{{ $bot_avatar_url }}" alt="{{ $bot_name }}" class="w-8 h-8 rounded-full">
+                            @else
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                </svg>
+                            @endif
                         </div>
-                        <div>
-                            <h4 class="font-semibold text-sm">AIntento</h4>
-                            <span class="text-xs opacity-80">Онлайн</span>
+                        <div class="flex flex-col">
+                            <h4 class="font-semibold text-[15px]" style="color: {{ $text_color }}">{{ $bot_name ?: 'AIntento' }}</h4>
+                            <span class="text-xs opacity-90" style="color: {{ $text_color }}">🟢 {{ $bot_status_text ?: 'Завжди онлайн' }}</span>
                         </div>
+                        <button class="ml-auto w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-lg" style="color: {{ $text_color }}">✕</button>
                     </div>
                     
                     <!-- Messages -->
-                    <div class="flex-1 p-4 overflow-y-auto">
-                        <div class="bg-gray-100 rounded-lg p-3 mb-3 text-sm">
-                            {{ $welcome_message ?: 'Вітаю! 👋' }}
+                    <div class="flex-1 p-4 overflow-y-auto bg-gray-50">
+                        <div class="flex gap-2 mb-3">
+                            <div class="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                                @if($bot_avatar_url)
+                                    <img src="{{ $bot_avatar_url }}" alt="" class="w-8 h-8 rounded-full">
+                                @else
+                                    <span class="text-sm">🤖</span>
+                                @endif
+                            </div>
+                            <div class="bg-white rounded-2xl rounded-tl-sm p-3 text-sm shadow-sm max-w-[85%]">
+                                {{ $welcome_message ?: 'Вітаю! 👋' }}
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Actions Preview -->
+                        <div class="flex flex-wrap gap-2 ml-10">
+                            <button class="px-3 py-1.5 text-xs rounded-full border-2 transition-all" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
+                                🔍 Пошук товару
+                            </button>
+                            <button class="px-3 py-1.5 text-xs rounded-full border-2 transition-all" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
+                                📦 Статус замовлення
+                            </button>
                         </div>
                     </div>
                     
                     <!-- Input -->
-                    <div class="p-4 border-t">
-                        <input type="text" placeholder="{{ $input_placeholder }}" disabled class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <div class="p-4 border-t bg-white">
+                        <div class="flex gap-2">
+                            <input type="text" placeholder="{{ $input_placeholder }}" disabled class="flex-1 px-4 py-2.5 border border-gray-300 rounded-full text-sm bg-gray-50">
+                            <button class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: {{ $primary_color }}">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                </svg>
+                            </button>
+                        </div>
                         @if($consent_notice)
-                        <p class="mt-2 text-xs text-gray-500">{{ $consent_notice }}</p>
+                        <p class="mt-2 text-xs text-gray-500 text-center">{{ $consent_notice }}</p>
                         @endif
                     </div>
                 </div>
             </div>
+            
+            <!-- Tone Preview -->
+            @if($tone)
+            <div class="mt-4 p-4 bg-white rounded-lg shadow-sm">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">🎭 Приклад тону "{{ $tone === 'official' ? 'Офіційний' : ($tone === 'spartan' ? 'Лаконічний' : 'Дружній') }}"</h4>
+                <div class="text-sm text-gray-600 italic">
+                    @if($tone === 'official')
+                        "Доброго дня! Із задоволенням допоможу вам підібрати товар. Які ваші побажання?"
+                    @elseif($tone === 'spartan')
+                        "Привіт. Що шукаєте?"
+                    @else
+                        "Привіт! 👋 Радий бачити! Давай підберемо щось круте — що тебе цікавить?"
+                    @endif
+                </div>
+            </div>
+            @endif
         </div>
     </div>
 </div>

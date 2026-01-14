@@ -216,6 +216,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Escalation\EscalationService::class, function ($app) {
             return new \App\Services\Escalation\EscalationService();
         });
+        
+        // A/B Testing Service
+        $this->app->singleton(\App\Services\Analytics\ABTestingService::class, function ($app) {
+            return new \App\Services\Analytics\ABTestingService();
+        });
     }
 
     public function boot(): void

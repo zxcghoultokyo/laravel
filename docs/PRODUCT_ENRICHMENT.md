@@ -294,7 +294,7 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 2. [x] **Slang dictionary** — ручний словник сленгу `config/slang_dictionary.php` + SlangDictionaryService
 3. [x] **Embeddings** — EmbeddingService + SemanticSearchService (semantic search fallback)
 4. [x] **Quality scoring** — EnrichmentQualityService з score 0-100 та grade A-F
-5. [ ] **A/B testing** — порівняння search quality з/без AI
+5. [x] **A/B testing** — ABTestingService для порівняння search quality з/без AI
 6. [x] **Parent-based enrichment** — ParentBasedEnrichmentJob (один запит на parent_article)
 7. [x] **Incremental sync** — IncrementalProductSyncJob (кожні 4 години, тільки змінені товари)
 8. [x] **Monitoring dashboard** — Quality Score в Analytics + diagnostic API endpoints

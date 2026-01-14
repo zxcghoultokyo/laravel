@@ -82,6 +82,10 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/slang-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'slangStats']);
     Route::get('/embedding-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'embeddingStats']);
     Route::post('/generate-embeddings', [\App\Http\Controllers\Api\DiagnosticController::class, 'generateEmbeddings']);
+    Route::get('/ab-test-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestStats']);
+    Route::post('/ab-test-reset', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestReset']);
+    Route::get('/ab-test-variant', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestVariant']);
+    Route::post('/ab-test-force', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestForce']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

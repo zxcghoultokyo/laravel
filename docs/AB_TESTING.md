@@ -1,222 +1,343 @@
-# A/B Testing System for AI Models
+# A/B Testing System for Search Quality
 
 ## Overview
 
-This system allows comparing different AI configurations (models, prompts, parameters) to find the best performing variant for your users.
+Система A/B тестування для порівняння якості пошуку з AI features (semantic search, slang expansion, AI reranking) vs без них.
 
-## Database Schema
+## Імплементація
 
-```
-ab_experiments     - Experiment definitions
-ab_assignments     - Which user got which variant
-ab_conversions     - Success events (clicks, purchases)
-ab_metrics         - Performance metrics (response time, tokens)
-```
-
-## How It Works
+### Основні компоненти
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   User      │────▶│  Experiment  │────▶│   Variant   │
-│ (session)   │     │   Router     │     │   (A or B)  │
-└─────────────┘     └──────────────┘     └─────────────┘
+ABTestingService           - Керування експериментами та варіантами
+ab_test_events table      - Зберігання подій для аналізу
+MeiliProductSearchTool    - Інтеграція з пошуком (conditional features)
+```
+
+### Архітектура
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   User      │────▶│  ABTestingService│────▶│   Variant       │
+│ (session)   │     │  getVariant()    │     │   (control/     │
+└─────────────┘     └──────────────────┘     │    treatment)   │
+                           │                 └─────────────────┘
+                           ▼
+                    ┌──────────────────┐
+                    │   Feature Flags   │
+                    │ - semantic_search │
+                    │ - slang_expansion │
+                    │ - ai_reranking    │
+                    └──────────────────┘
                            │
                            ▼
-                    ┌──────────────┐
-                    │   Metrics    │
-                    │   Tracking   │
-                    └──────────────┘
+                    ┌──────────────────┐
+                    │  Event Tracking   │
+                    │ - search_performed│
+                    │ - product_click   │
+                    │ - add_to_cart     │
+                    └──────────────────┘
 ```
 
-1. User sends chat message
-2. System checks if active experiment exists
-3. Assigns user to variant based on session_id hash (deterministic)
-4. Applies variant config (different model, temperature, etc.)
-5. Records metrics (response time, success)
-6. Tracks conversions (product clicks, purchases)
+## Активний експеримент
 
-## Creating an Experiment
+### `search_ai_features`
+
+Порівнює пошук з AI features vs базовий keyword search:
+
+| Variant | Features | Опис |
+|---------|----------|------|
+| `control` | keyword only | Базовий Meilisearch без AI |
+| `treatment` | keyword + AI | Semantic search fallback, slang expansion, AI reranking |
+
+### Feature Flags
 
 ```php
-use App\Models\AbExperiment;
+'control' => [
+    'semantic_search' => false,    // Не використовувати embeddings fallback
+    'slang_expansion' => false,    // Не розширювати сленг
+    'ai_reranking' => false,       // Не ререйтити результати через AI
+],
+'treatment' => [
+    'semantic_search' => true,     // Semantic search при < 3 результатах
+    'slang_expansion' => true,     // Розширювати сленг запити
+    'ai_reranking' => true,        // AI reranking для кращої релевантності
+]
+```
 
-$experiment = AbExperiment::create([
-    'name' => 'gpt4_vs_gpt4mini',
-    'description' => 'Compare GPT-4.1 vs GPT-4.1-mini for product search',
-    'is_active' => true,
-    'traffic_percent' => 50, // Only 50% of users in experiment
-    'variants' => [
-        'control' => [
-            'model' => 'gpt-4.1',
-            'temperature' => 0.3,
-        ],
-        'treatment' => [
-            'model' => 'gpt-4.1-mini',
-            'temperature' => 0.5,
-        ],
-    ],
-    'started_at' => now(),
+## Варіант призначення
+
+Варіант призначається детерміновано по `session_id`:
+
+```php
+// Той самий юзер завжди отримує той самий варіант
+$hash = crc32($sessionId);
+$variantIndex = $hash % count($variants); // 0 або 1
+```
+
+50/50 розподіл забезпечує статистичну валідність.
+
+## Метрики
+
+### Основні KPIs
+
+| Метрика | Формула | Мета |
+|---------|---------|------|
+| Zero Results Rate | searches_with_zero / total_searches | Менше = краще |
+| Click-Through Rate | clicks / total_searches | Більше = краще |
+| Add-to-Cart Rate | add_to_carts / total_searches | Більше = краще |
+| Query Refinement Rate | refinements / total_searches | Менше = краще |
+| Avg Results Count | sum(results) / total_searches | Оптимум ~10-20 |
+
+### Event Types
+
+```php
+// Пошук виконано
+$this->abTesting->track($sessionId, 'search_performed', [
+    'query' => $query,
+    'results_count' => count($products),
+    'used_semantic' => $usedSemantic,
 ]);
-```
 
-## Variant Assignment Logic
-
-```php
-// Deterministic assignment based on session_id
-// Same user always gets same variant
-
-function getVariant(string $sessionId, array $variants): string
-{
-    $hash = crc32($sessionId);
-    $variantKeys = array_keys($variants);
-    $index = $hash % count($variantKeys);
-    return $variantKeys[$index];
-}
-```
-
-## Integration Points
-
-### 1. In AiRouter (Future)
-
-```php
-public function classify(string $message, ?string $sessionId = null): array
-{
-    // Get experiment variant
-    $variant = $this->abService->getVariant($sessionId, 'ai_model_experiment');
-    
-    // Apply variant config
-    $model = $variant['model'] ?? $this->model;
-    $temperature = $variant['temperature'] ?? 0.2;
-    
-    // ... use config in API call
-}
-```
-
-### 2. In ChatController (Future)
-
-```php
-// Track response time
-$startTime = microtime(true);
-$response = $this->chatService->handleMessage($message, $sessionId);
-$duration = (microtime(true) - $startTime) * 1000;
-
-// Record metric
-$this->abService->recordMetric($sessionId, $requestId, [
-    'response_time_ms' => $duration,
-    'tokens_used' => $response['meta']['tokens'] ?? null,
-]);
-```
-
-### 3. Conversion Tracking (Future)
-
-```php
-// When user clicks product
-$this->abService->trackConversion($sessionId, 'product_click', [
+// Клік на товар
+$this->abTesting->track($sessionId, 'product_click', [
     'product_id' => $productId,
 ]);
 
-// When user adds to cart
-$this->abService->trackConversion($sessionId, 'add_to_cart', [
+// Додано в кошик
+$this->abTesting->track($sessionId, 'add_to_cart', [
     'product_id' => $productId,
     'price' => $price,
 ]);
 ```
 
-## Analysis Queries
+## API Endpoints
 
-### Conversion Rate by Variant
+### Статистика A/B тесту
 
-```sql
-SELECT 
-    e.name as experiment,
-    c.variant,
-    COUNT(DISTINCT c.session_id) as conversions,
-    COUNT(DISTINCT a.session_id) as total_users,
-    ROUND(COUNT(DISTINCT c.session_id) * 100.0 / COUNT(DISTINCT a.session_id), 2) as conversion_rate
-FROM ab_experiments e
-JOIN ab_assignments a ON a.experiment_id = e.id
-LEFT JOIN ab_conversions c ON c.experiment_id = e.id AND c.session_id = a.session_id
-WHERE e.name = 'gpt4_vs_gpt4mini'
-GROUP BY e.name, c.variant;
+```bash
+GET /api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025
+
+# Response:
+{
+  "experiment": "search_ai_features",
+  "variants": {
+    "control": {
+      "sessions": 156,
+      "searches": 423,
+      "zero_results": 45,
+      "zero_results_rate": 10.6,
+      "clicks": 89,
+      "ctr": 21.0,
+      "add_to_carts": 23,
+      "add_to_cart_rate": 5.4
+    },
+    "treatment": {
+      "sessions": 148,
+      "searches": 398,
+      "zero_results": 12,
+      "zero_results_rate": 3.0,  // -72% vs control!
+      "clicks": 124,
+      "ctr": 31.2,               // +48% vs control!
+      "add_to_carts": 35,
+      "add_to_cart_rate": 8.8    // +63% vs control!
+    }
+  },
+  "comparison": {
+    "zero_results_improvement": -71.7,
+    "ctr_improvement": 48.6,
+    "add_to_cart_improvement": 63.0
+  }
+}
 ```
 
-### Average Response Time by Variant
+### Перевірка варіанту сесії
 
-```sql
-SELECT 
-    variant,
-    COUNT(*) as requests,
-    AVG(response_time_ms) as avg_response_ms,
-    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms) as p95_response_ms
-FROM ab_metrics
-WHERE experiment_id = 1
-GROUP BY variant;
+```bash
+GET /api/diagnostic/ab-test-variant?key=diagnostic_secret_key_2025&session_id=abc123
+
+# Response:
+{
+  "session_id": "abc123",
+  "experiment": "search_ai_features",
+  "variant": "treatment",
+  "features": {
+    "semantic_search": true,
+    "slang_expansion": true,
+    "ai_reranking": true
+  }
+}
 ```
 
-### Statistical Significance (Chi-Square)
+### Форсування варіанту (для тестування)
+
+```bash
+POST /api/diagnostic/ab-test-force?key=diagnostic_secret_key_2025
+Content-Type: application/json
+
+{
+  "session_id": "test123",
+  "variant": "control"
+}
+```
+
+### Скидання даних експерименту
+
+```bash
+POST /api/diagnostic/ab-test-reset?key=diagnostic_secret_key_2025
+# Очищає всі events для поточного експерименту
+```
+
+## Інтеграція в код
+
+### MeiliProductSearchTool
 
 ```php
-// To determine if results are statistically significant:
-// - Need at least 100 samples per variant
-// - Use chi-square test for conversion rates
-// - p-value < 0.05 = statistically significant
+class MeiliProductSearchTool
+{
+    private ?ABTestingService $abTesting = null;
+    private ?string $currentSessionId = null;
+    
+    public function setSessionId(string $sessionId): void
+    {
+        $this->currentSessionId = $sessionId;
+    }
+    
+    public function search(array $params): array
+    {
+        // Отримати features для варіанту
+        $features = $this->getABFeatures();
+        
+        // Keyword search
+        $results = $this->meilisearch->search($query);
+        
+        // Semantic fallback тільки якщо enabled
+        if (count($results) < 3 && ($features['semantic_search'] ?? true)) {
+            $semanticResults = $this->semanticSearch->search($query, 5);
+            $results = array_merge($results, $semanticResults);
+        }
+        
+        // Track для A/B
+        $this->trackSearchForAB($query, $results, $usedSemantic);
+        
+        return $results;
+    }
+}
+```
 
-// Example with 2 variants:
+### ChatController → AgentOrchestrator → Tool
+
+```php
+// ChatController
+$response = $orchestrator->handleMessage($message, [
+    'session_id' => $sessionId,
+]);
+
+// AgentOrchestrator
+public function handleMessage(string $message, array $context): array
+{
+    if (isset($context['session_id'])) {
+        $this->searchTool->setSessionId($context['session_id']);
+    }
+    // ...
+}
+```
+
+## Статистична значущість
+
+### Мінімальний sample size
+
+- **1000+ сесій на варіант** для надійних висновків
+- **7+ днів** щоб врахувати денні/тижневі патерни
+
+### Chi-Square Test
+
+```php
+// Приклад розрахунку значущості
 $controlConversions = 45;
 $controlTotal = 500;
 $treatmentConversions = 62;
 $treatmentTotal = 500;
 
-// Calculate chi-square (simplified)
-// Use library like php-stats for proper calculation
+// p-value < 0.05 = статистично значущо
+// Використовуйте онлайн калькулятор або бібліотеку
 ```
 
-## Experiment Lifecycle
+## Workflow
 
 ```
-1. DRAFT     - Experiment created, not active
-2. RUNNING   - is_active=true, collecting data
-3. PAUSED    - is_active=false, can resume
-4. COMPLETED - ended_at set, winner declared
-5. ARCHIVED  - Data retained for historical analysis
+1. START      - Експеримент активний, збираємо дані
+2. COLLECT    - Чекаємо 1000+ сесій на варіант
+3. ANALYZE    - Рахуємо метрики, перевіряємо significance
+4. DECIDE     - Winner очевидний → деплоїмо
+5. ROLLOUT    - Treatment стає default для всіх
 ```
 
-## Best Practices
+## Приклад аналізу
 
-### 1. Run One Experiment at a Time
-Multiple experiments on same users can interfere with each other.
+Після 2 тижнів збору даних:
 
-### 2. Minimum Sample Size
-Wait for at least 1000 sessions per variant before making decisions.
+| Метрика | Control | Treatment | Δ |
+|---------|---------|-----------|---|
+| Sessions | 1,234 | 1,189 | - |
+| Searches | 3,456 | 3,298 | - |
+| Zero Results | 345 (10.0%) | 99 (3.0%) | **-70%** ✅ |
+| Clicks | 691 (20.0%) | 989 (30.0%) | **+50%** ✅ |
+| Add to Cart | 173 (5.0%) | 264 (8.0%) | **+60%** ✅ |
 
-### 3. Duration
-Run experiment for at least 7 days to account for weekly patterns.
+**Висновок:** Treatment (AI features) значно покращує всі метрики. Рекомендовано зробити AI features default.
 
-### 4. Document Hypotheses
-Before starting, write down:
-- What you're testing
-- Why you expect treatment to be better
-- Primary metric (conversion rate, response time, etc.)
+## Розширення
 
-### 5. Don't Peek
-Decide sample size upfront. Don't stop early just because results look good.
-
-## Future Admin Panel Features
-
-- [ ] Create/edit experiments
-- [ ] Real-time dashboard with metrics
-- [ ] Statistical significance calculator
-- [ ] Auto-stop when significance reached
-- [ ] Winner deployment (make treatment the new default)
-
-## Config Reference
+### Додавання нового експерименту
 
 ```php
-// config/ab_testing.php (future)
-return [
-    'enabled' => env('AB_TESTING_ENABLED', false),
-    'default_traffic_percent' => 100,
-    'min_sample_size' => 1000,
-    'significance_level' => 0.05,
+// ABTestingService.php
+private const EXPERIMENTS = [
+    'search_ai_features' => [/* ... */],
+    
+    // Новий експеримент
+    'new_model_comparison' => [
+        'variants' => ['gpt4', 'gpt4mini'],
+        'config' => [
+            'gpt4' => ['model' => 'gpt-4.1'],
+            'gpt4mini' => ['model' => 'gpt-4.1-mini'],
+        ],
+    ],
 ];
 ```
+
+### Додавання нової метрики
+
+```php
+// Track custom event
+$abTesting->track($sessionId, 'custom_event', [
+    'custom_field' => $value,
+]);
+
+// Analyze in getStats()
+$customRate = $this->calculateRate($events, 'custom_event');
+```
+
+## Troubleshooting
+
+### Варіант не призначається
+
+```bash
+# Перевірити чи session_id передається
+curl "https://example.com/api/diagnostic/ab-test-variant?key=...&session_id=test"
+```
+
+### Events не записуються
+
+```bash
+# Перевірити таблицю
+php artisan tinker
+>>> \DB::table('ab_test_events')->count()
+```
+
+### Неочікувані результати
+
+1. Перевірте sample size (мінімум 1000/варіант)
+2. Перевірте 50/50 розподіл
+3. Перевірте що features реально вмикаються/вимикаються

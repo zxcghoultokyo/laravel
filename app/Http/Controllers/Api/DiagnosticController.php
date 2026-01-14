@@ -1117,4 +1117,102 @@ class DiagnosticController extends Controller
                 : "All embeddings generated!",
         ]);
     }
+    
+    /**
+     * GET /api/diagnostic/ab-test-stats
+     * Get A/B testing statistics
+     */
+    public function abTestStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $experiment = $request->input('experiment', 'search_ai_features');
+        
+        $abService = app(\App\Services\Analytics\ABTestingService::class);
+        $stats = $abService->getStats($experiment);
+        
+        return response()->json($stats);
+    }
+    
+    /**
+     * POST /api/diagnostic/ab-test-reset
+     * Reset A/B test data (for testing)
+     */
+    public function abTestReset(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $experiment = $request->input('experiment', 'search_ai_features');
+        
+        $abService = app(\App\Services\Analytics\ABTestingService::class);
+        $abService->resetExperiment($experiment);
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Experiment '{$experiment}' data reset",
+        ]);
+    }
+    
+    /**
+     * GET /api/diagnostic/ab-test-variant
+     * Get variant for a specific session
+     */
+    public function abTestVariant(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $sessionId = $request->input('session_id');
+        if (!$sessionId) {
+            return response()->json(['error' => 'session_id required'], 400);
+        }
+        
+        $experiment = $request->input('experiment', 'search_ai_features');
+        
+        $abService = app(\App\Services\Analytics\ABTestingService::class);
+        $variant = $abService->getVariant($sessionId, $experiment);
+        $features = $abService->getFeatures($sessionId, $experiment);
+        
+        return response()->json([
+            'session_id' => $sessionId,
+            'experiment' => $experiment,
+            'variant' => $variant,
+            'features' => $features,
+        ]);
+    }
+    
+    /**
+     * POST /api/diagnostic/ab-test-force
+     * Force a specific variant for a session (for testing)
+     */
+    public function abTestForce(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $sessionId = $request->input('session_id');
+        $variant = $request->input('variant');
+        
+        if (!$sessionId || !$variant) {
+            return response()->json(['error' => 'session_id and variant required'], 400);
+        }
+        
+        $experiment = $request->input('experiment', 'search_ai_features');
+        
+        $abService = app(\App\Services\Analytics\ABTestingService::class);
+        $abService->forceVariant($sessionId, $variant, $experiment);
+        
+        return response()->json([
+            'success' => true,
+            'session_id' => $sessionId,
+            'variant' => $variant,
+            'experiment' => $experiment,
+        ]);
+    }
 }

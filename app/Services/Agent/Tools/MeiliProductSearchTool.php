@@ -8,10 +8,15 @@ use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
 use App\Services\Search\QueryExpander;
 use App\Services\Search\SemanticSearchService;
+use App\Services\Analytics\ABTestingService;
 use Illuminate\Support\Facades\Log;
 
 class MeiliProductSearchTool
 {
+    protected ?ABTestingService $abTesting = null;
+    protected ?string $currentSessionId = null;
+    protected array $searchMeta = [];
+
     public function __construct(
         private MeiliClient $meiliClient,
         private BrandDetectionService $brandDetection,
@@ -27,6 +32,30 @@ class MeiliProductSearchTool
                 $this->semanticSearch = null;
             }
         }
+        
+        // Try to get A/B testing service
+        try {
+            $this->abTesting = app(ABTestingService::class);
+        } catch (\Throwable $e) {
+            $this->abTesting = null;
+        }
+    }
+
+    /**
+     * Set session ID for A/B testing.
+     */
+    public function setSessionId(?string $sessionId): self
+    {
+        $this->currentSessionId = $sessionId;
+        return $this;
+    }
+
+    /**
+     * Get metadata about last search (for A/B tracking).
+     */
+    public function getSearchMeta(): array
+    {
+        return $this->searchMeta;
     }
 
     /**
@@ -35,6 +64,18 @@ class MeiliProductSearchTool
      */
     public function search(string $query, array $filters = [], int $limit = 40): array
     {
+        // Reset search meta
+        $this->searchMeta = [
+            'query' => $query,
+            'used_semantic' => false,
+            'used_slang' => false,
+            'variant' => 'treatment', // default
+        ];
+        
+        // Get A/B variant features
+        $features = $this->getABFeatures();
+        $this->searchMeta['variant'] = $this->getABVariant();
+        
         try {
             $index = $this->meiliClient->client()->index('products');
             
@@ -183,10 +224,14 @@ class MeiliProductSearchTool
             $filtered = $this->dedupeByTitle($filtered, $limit);
             
             // If keyword search returned few results, try semantic search fallback
-            if (count($filtered) < 3 && $this->semanticSearch?->isAvailable()) {
+            // BUT only if A/B variant allows semantic search
+            $semanticEnabled = $features['semantic_search'] ?? true;
+            
+            if (count($filtered) < 3 && $semanticEnabled && $this->semanticSearch?->isAvailable()) {
                 Log::info('MeiliProductSearchTool: trying semantic search fallback', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
+                    'ab_variant' => $this->searchMeta['variant'],
                 ]);
                 
                 $semanticResults = $this->semanticSearchFallback($query, $filters, $limit);
@@ -195,6 +240,8 @@ class MeiliProductSearchTool
                     Log::info('MeiliProductSearchTool: semantic search found more results', [
                         'semantic_results' => count($semanticResults),
                     ]);
+                    
+                    $this->searchMeta['used_semantic'] = true;
                     
                     // Merge semantic results with keyword results (keyword first)
                     $mergedIds = array_column($filtered, 'id');
@@ -206,6 +253,9 @@ class MeiliProductSearchTool
                     }
                 }
             }
+            
+            // Track search for A/B testing
+            $this->trackSearchForAB($query, count($filtered));
             
             return $filtered;
             
@@ -768,6 +818,59 @@ class MeiliProductSearchTool
                 'error' => $e->getMessage(),
             ]);
             return [];
+        }
+    }
+
+    /**
+     * Get A/B testing features for current session.
+     */
+    protected function getABFeatures(): array
+    {
+        if (!$this->abTesting || !$this->currentSessionId) {
+            return [
+                'semantic_search' => true,
+                'slang_expansion' => true,
+                'ai_reranking' => true,
+            ];
+        }
+
+        return $this->abTesting->getFeatures($this->currentSessionId);
+    }
+
+    /**
+     * Get A/B variant name for current session.
+     */
+    protected function getABVariant(): string
+    {
+        if (!$this->abTesting || !$this->currentSessionId) {
+            return 'treatment';
+        }
+
+        return $this->abTesting->getVariant($this->currentSessionId);
+    }
+
+    /**
+     * Track search event for A/B testing.
+     */
+    protected function trackSearchForAB(string $query, int $resultsCount): void
+    {
+        if (!$this->abTesting || !$this->currentSessionId) {
+            return;
+        }
+
+        try {
+            $this->abTesting->trackSearch(
+                $this->currentSessionId,
+                $query,
+                $resultsCount,
+                $this->searchMeta['used_semantic'] ?? false,
+                $this->searchMeta['used_slang'] ?? false
+            );
+        } catch (\Throwable $e) {
+            // Don't let tracking errors break search
+            Log::debug('MeiliProductSearchTool: A/B tracking failed', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

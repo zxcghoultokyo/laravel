@@ -4,18 +4,24 @@ namespace App\Livewire\Admin;
 
 use Livewire\Component;
 use App\Services\Metrics\MetricsService;
+use App\Services\Metrics\DashboardMetricsService;
 use App\Services\Ai\CircuitBreaker;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Meilisearch\Client as MeiliClient;
 
 class Dashboard extends Component
 {
-    public array $metrics = [];
+    public string $period = '7d';
+    public array $kpis = [];
+    public array $chartData = [];
+    public array $topProducts = [];
+    public array $recentChats = [];
+    public array $liveStats = [];
     public array $health = [];
-    public array $activeSessions = [];
     public bool $loading = true;
+
+    protected $queryString = ['period'];
 
     public function mount()
     {
@@ -25,37 +31,50 @@ class Dashboard extends Component
     public function loadData()
     {
         $this->loading = true;
-        $this->metrics = app(MetricsService::class)->getDashboardMetrics();
+        
+        $metricsService = app(DashboardMetricsService::class);
+        
+        $this->kpis = $metricsService->getKPIs($this->period);
+        $this->chartData = $metricsService->getChartData($this->period);
+        $this->topProducts = $metricsService->getTopProducts(5, $this->period);
+        $this->recentChats = $metricsService->getRecentChats(8);
+        $this->liveStats = $metricsService->getLiveStats();
         $this->health = $this->checkHealth();
-        $this->activeSessions = app(MetricsService::class)->getActiveSessions(10);
+        
         $this->loading = false;
+    }
+
+    public function setPeriod(string $period)
+    {
+        $this->period = $period;
+        $this->clearCaches();
+        $this->loadData();
     }
 
     public function refreshData()
     {
-        Cache::forget('dashboard_metrics');
+        $this->clearCaches();
         $this->loadData();
         $this->dispatch('data-refreshed');
     }
 
-    public function resetCircuitBreaker(string $service)
+    private function clearCaches()
     {
-        app(CircuitBreaker::class)->reset($service);
-        Cache::forget('dashboard_metrics');
-        $this->loadData();
-        $this->dispatch('circuit-reset', service: $service);
+        Cache::forget("dashboard_kpis:{$this->period}");
+        Cache::forget("dashboard_chart:{$this->period}");
+        Cache::forget("dashboard_top_products:{$this->period}:5");
+        Cache::forget("dashboard_recent_chats:8");
     }
 
     private function checkHealth(): array
     {
         $health = [
             'database' => $this->checkDatabase(),
-            'cache' => $this->checkCache(),
             'meilisearch' => $this->checkMeilisearch(),
             'openai' => $this->checkOpenAI(),
         ];
 
-        $health['overall'] = collect($health)->every(fn($s) => $s['status'] === 'ok') ? 'healthy' : 'degraded';
+        $health['overall'] = collect($health)->every(fn($s) => in_array($s['status'], ['ok', 'disabled'])) ? 'healthy' : 'degraded';
 
         return $health;
     }
@@ -67,19 +86,6 @@ class Dashboard extends Component
             DB::select('SELECT 1');
             $latency = round((microtime(true) - $start) * 1000, 2);
             return ['status' => 'ok', 'latency_ms' => $latency];
-        } catch (\Throwable $e) {
-            return ['status' => 'error', 'error' => $e->getMessage()];
-        }
-    }
-
-    private function checkCache(): array
-    {
-        try {
-            $key = 'health_check_' . time();
-            Cache::put($key, 'ok', 5);
-            $value = Cache::get($key);
-            Cache::forget($key);
-            return ['status' => $value === 'ok' ? 'ok' : 'error'];
         } catch (\Throwable $e) {
             return ['status' => 'error', 'error' => $e->getMessage()];
         }

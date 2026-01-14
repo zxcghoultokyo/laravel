@@ -1,214 +1,380 @@
-<div wire:poll.60s="loadData">
+<div wire:poll.60s="loadData" x-data="dashboardCharts()" x-init="initCharts()">
     <!-- Navigation -->
     <div class="mb-4 flex gap-2 flex-wrap">
-        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">Dashboard</a>
-        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📊 Аналітика</a>
+        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">📊 Dashboard</a>
+        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📈 Аналітика</a>
         <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🛒 Конверсії</a>
         <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">💬 Чати</a>
         <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">⚙️ Віджет</a>
         <a href="{{ route('admin.greetings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🎯 Привітання</a>
     </div>
 
-    <!-- Header -->
+    <!-- Header with Period Selector -->
     <div class="flex items-center justify-between mb-6">
         <div>
             <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
-            <p class="mt-1 text-sm text-gray-500">Моніторинг системи в реальному часі</p>
+            <p class="mt-1 text-sm text-gray-500">Бізнес-метрики та аналітика</p>
         </div>
-        <button 
-            wire:click="refreshData" 
-            wire:loading.attr="disabled"
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-        >
-            <svg wire:loading wire:target="refreshData" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            Оновити
-        </button>
+        <div class="flex items-center gap-3">
+            <!-- Period Selector -->
+            <div class="flex bg-gray-100 rounded-lg p-1">
+                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    Сьогодні
+                </button>
+                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    7 днів
+                </button>
+                <button wire:click="setPeriod('30d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '30d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    30 днів
+                </button>
+                <button wire:click="setPeriod('90d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '90d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    90 днів
+                </button>
+            </div>
+            <button 
+                wire:click="refreshData" 
+                wire:loading.attr="disabled"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+                <svg wire:loading wire:target="refreshData" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span wire:loading.remove wire:target="refreshData">🔄</span>
+                Оновити
+            </button>
+        </div>
     </div>
 
-    <!-- Health Status (только важные сервисы) -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-500">Загальний стан</span>
-                @if($health['overall'] === 'healthy')
-                    <span class="flex h-3 w-3 relative">
+    <!-- Live Stats Bar -->
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4 mb-6 text-white">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-8">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2 w-2 relative">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
                     </span>
-                @else
-                    <span class="flex h-3 w-3 relative">
-                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                        <span class="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
-                    </span>
-                @endif
-            </div>
-            <p class="mt-2 text-xl font-semibold {{ $health['overall'] === 'healthy' ? 'text-green-600' : 'text-yellow-600' }}">
-                {{ $health['overall'] === 'healthy' ? 'Все працює' : 'Є проблеми' }}
-            </p>
-        </div>
-
-        {{-- Meilisearch - пошук --}}
-        <div class="bg-white rounded-lg shadow-sm p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-500">🔍 Пошук (Meili)</span>
-                @if(($health['meilisearch']['status'] ?? 'error') === 'ok')
-                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
-                @elseif(($health['meilisearch']['status'] ?? 'error') === 'disabled')
-                    <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
-                @else
-                    <span class="w-2 h-2 bg-red-500 rounded-full"></span>
-                @endif
-            </div>
-            <p class="mt-2 text-lg font-semibold text-gray-900">
-                @if(isset($health['meilisearch']['documents']))
-                    {{ number_format($health['meilisearch']['documents']) }} товарів
-                @elseif(($health['meilisearch']['status'] ?? '') === 'disabled')
-                    Вимкнено
-                @else
-                    {{ ucfirst($health['meilisearch']['status'] ?? 'error') }}
-                @endif
-            </p>
-        </div>
-
-        {{-- OpenAI - AI --}}
-        <div class="bg-white rounded-lg shadow-sm p-4">
-            <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-500">🤖 AI (OpenAI)</span>
-                @if(($health['openai']['status'] ?? 'error') === 'ok')
-                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
-                @elseif(($health['openai']['status'] ?? 'error') === 'circuit_open')
-                    <span class="w-2 h-2 bg-red-500 rounded-full"></span>
-                @else
-                    <span class="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                @endif
-            </div>
-            <p class="mt-2 text-lg font-semibold text-gray-900">
-                @if(isset($health['openai']['latency_ms']))
-                    {{ $health['openai']['latency_ms'] }}ms
-                @elseif(($health['openai']['status'] ?? '') === 'circuit_open')
-                    Перевантажено
-                @else
-                    {{ ucfirst($health['openai']['status'] ?? 'unknown') }}
-                @endif
-            </p>
-        </div>
-    </div>
-
-    <!-- Circuit Breakers (убрано, не нужно для бизнес-юзера) -->
-
-    <!-- Основні метрики -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
-        <!-- Last Hour Stats -->
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">💬 Запитів за годину</p>
-            <p class="mt-2 text-3xl font-bold text-gray-900">{{ number_format($metrics['last_hour']['requests'] ?? 0) }}</p>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">⚡ Середній час відповіді</p>
-            <p class="mt-2 text-3xl font-bold text-gray-900">{{ $metrics['last_hour']['avg_response_ms'] ?? 0 }}<span class="text-lg font-normal text-gray-500">ms</span></p>
-        </div>
-    </div>
-
-    <!-- Live Sessions -->
-    <div class="grid grid-cols-2 gap-6 mb-6">
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">👥 Активні сесії</h3>
-                <span class="px-3 py-1 text-sm font-bold bg-blue-100 text-blue-800 rounded-full">
-                    {{ $metrics['live']['active_sessions'] ?? 0 }}
-                </span>
+                    <span class="text-sm font-medium">{{ $liveStats['active_now'] ?? 0 }} активних зараз</span>
+                </div>
+                <div class="text-sm">
+                    <span class="opacity-70">Оператор веде:</span>
+                    <span class="font-medium">{{ $liveStats['operator_sessions'] ?? 0 }}</span>
+                </div>
+                <div class="text-sm">
+                    <span class="opacity-70">Запитів сьогодні:</span>
+                    <span class="font-medium">{{ number_format($liveStats['today_requests'] ?? 0) }}</span>
+                </div>
             </div>
             <div class="flex items-center gap-4">
-                <div class="flex-1 text-center p-4 bg-gray-50 rounded-lg">
-                    <p class="text-2xl font-bold text-gray-900">{{ ($metrics['live']['active_sessions'] ?? 0) - ($metrics['live']['operator_sessions'] ?? 0) }}</p>
-                    <p class="text-xs text-gray-500">AI обробляє</p>
-                </div>
-                <div class="flex-1 text-center p-4 bg-green-50 rounded-lg">
-                    <p class="text-2xl font-bold text-green-600">{{ $metrics['live']['operator_sessions'] ?? 0 }}</p>
-                    <p class="text-xs text-gray-500">Оператор веде</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Сьогодні</h3>
-            <div class="grid grid-cols-3 gap-4">
-                <div>
-                    <p class="text-sm text-gray-500">Всього повідомлень</p>
-                    <p class="text-xl font-bold text-gray-900">{{ number_format($metrics['today']['total_requests'] ?? 0) }}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500">Унікальних сесій</p>
-                    <p class="text-xl font-bold text-gray-900">{{ number_format($metrics['today']['unique_sessions'] ?? 0) }}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500">Пошуків товарів</p>
-                    <p class="text-xl font-bold text-gray-900">{{ number_format($metrics['today']['product_searches'] ?? 0) }}</p>
-                </div>
+                @if(($health['overall'] ?? 'healthy') === 'healthy')
+                    <span class="flex items-center gap-1 text-sm bg-white/20 px-3 py-1 rounded-full">
+                        <span class="w-2 h-2 bg-green-400 rounded-full"></span>
+                        Все працює
+                    </span>
+                @else
+                    <span class="flex items-center gap-1 text-sm bg-yellow-500/30 px-3 py-1 rounded-full">
+                        <span class="w-2 h-2 bg-yellow-400 rounded-full"></span>
+                        Є проблеми
+                    </span>
+                @endif
             </div>
         </div>
     </div>
 
-    <!-- Recent Active Sessions List -->
-    @if(count($activeSessions) > 0)
-    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200">
-            <h3 class="text-lg font-semibold text-gray-900">Останні активні чати</h3>
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        @foreach($kpis as $key => $kpi)
+        <div class="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-2xl">{{ $kpi['icon'] }}</span>
+                @if($kpi['change'] != 0)
+                    <span class="text-xs px-2 py-0.5 rounded-full {{ $kpi['change'] > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+                        {{ $kpi['change'] > 0 ? '+' : '' }}{{ $kpi['change'] }}%
+                    </span>
+                @endif
+            </div>
+            <p class="text-2xl font-bold text-gray-900">
+                @if(($kpi['format'] ?? '') === 'currency')
+                    ₴{{ number_format($kpi['value'], 0, ',', ' ') }}
+                @elseif(($kpi['format'] ?? '') === 'percent')
+                    {{ $kpi['value'] }}%
+                @elseif(($kpi['format'] ?? '') === 'ms')
+                    {{ $kpi['value'] }}<span class="text-sm font-normal text-gray-500">ms</span>
+                @else
+                    {{ number_format($kpi['value']) }}
+                @endif
+            </p>
+            <p class="text-sm text-gray-500 mt-1">{{ $kpi['label'] }}</p>
         </div>
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сесія</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Остання активність</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Дії</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                @foreach($activeSessions as $session)
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4">
-                        <a href="{{ route('admin.chats.show', $session->session_id) }}" class="text-xs font-mono text-blue-600 hover:underline break-all" title="Відкрити чат">
-                            {{ $session->session_id }}
-                        </a>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        @if(($session->status ?? 'ai') === 'operator')
-                            <span class="px-2 py-1 text-xs font-bold bg-green-100 text-green-800 rounded-full">
-                                Оператор
-                            </span>
-                        @else
-                            <span class="px-2 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">
-                                AI
-                            </span>
-                        @endif
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {{ \Carbon\Carbon::parse($session->last_message_at)->diffForHumans() }}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right">
-                        <a href="{{ route('admin.chats.show', $session->session_id) }}" class="text-blue-600 hover:text-blue-900 text-sm font-medium">
-                            Переглянути →
-                        </a>
-                    </td>
-                </tr>
-                @endforeach
-            </tbody>
-        </table>
+        @endforeach
     </div>
-    @endif
 
-    <!-- Quick Actions -->
-    <div class="mt-6 flex gap-4">
-        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium">
-            Всі діалоги →
-        </a>
-        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium">
-            Налаштування віджету →
-        </a>
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Conversations Chart -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">📈 Діалоги</h3>
+            <div class="h-64">
+                <canvas id="conversationsChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Revenue Chart -->
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">💰 Конверсії та виручка</h3>
+            <div class="h-64">
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
     </div>
+
+    <!-- Bottom Row: Top Products & Recent Chats -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Top Products -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="text-lg font-semibold text-gray-900">🔥 Топ товарів у чаті</h3>
+            </div>
+            <div class="divide-y divide-gray-100">
+                @forelse($topProducts as $product)
+                <div class="px-6 py-3 hover:bg-gray-50 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{{ $product['title'] }}</p>
+                            <p class="text-xs text-gray-500">арт. {{ $product['article'] }}</p>
+                        </div>
+                        <div class="flex items-center gap-4 text-sm">
+                            <div class="text-center">
+                                <p class="font-medium text-gray-900">{{ $product['shows'] }}</p>
+                                <p class="text-xs text-gray-500">показів</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="font-medium text-blue-600">{{ $product['ctr'] }}%</p>
+                                <p class="text-xs text-gray-500">CTR</p>
+                            </div>
+                            @if($product['price'])
+                            <div class="text-right">
+                                <p class="font-medium text-green-600">₴{{ number_format($product['price'], 0) }}</p>
+                            </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+                @empty
+                <div class="px-6 py-8 text-center text-gray-500">
+                    <p class="text-4xl mb-2">📦</p>
+                    <p>Ще немає даних про товари</p>
+                </div>
+                @endforelse
+            </div>
+        </div>
+
+        <!-- Recent Chats -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-900">💬 Останні чати</h3>
+                <a href="{{ route('admin.chats.index') }}" class="text-sm text-blue-600 hover:text-blue-700">
+                    Всі чати →
+                </a>
+            </div>
+            <div class="divide-y divide-gray-100">
+                @forelse($recentChats as $chat)
+                <a href="{{ route('admin.chats.show', $chat['session_id']) }}" class="block px-6 py-3 hover:bg-gray-50 transition">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm text-gray-900 truncate">{{ $chat['preview'] }}</p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span class="text-xs text-gray-500">{{ $chat['messages_count'] }} повідомлень</span>
+                                @if($chat['outcome'])
+                                    <span class="text-xs px-2 py-0.5 rounded-full 
+                                        {{ $chat['outcome_category'] === 'success' ? 'bg-green-100 text-green-700' : '' }}
+                                        {{ $chat['outcome_category'] === 'failure' ? 'bg-red-100 text-red-700' : '' }}
+                                        {{ !in_array($chat['outcome_category'], ['success', 'failure']) ? 'bg-gray-100 text-gray-600' : '' }}
+                                    ">
+                                        {{ $chat['outcome'] }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-1 text-xs rounded-full {{ $chat['status'] === 'operator' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700' }}">
+                                {{ $chat['status'] === 'operator' ? 'Оператор' : 'AI' }}
+                            </span>
+                            <p class="text-xs text-gray-400 mt-1">{{ $chat['time_ago'] }}</p>
+                        </div>
+                    </div>
+                </a>
+                @empty
+                <div class="px-6 py-8 text-center text-gray-500">
+                    <p class="text-4xl mb-2">💭</p>
+                    <p>Ще немає чатів</p>
+                </div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Status (collapsed by default) -->
+    <details class="mt-6 bg-white rounded-xl shadow-sm">
+        <summary class="px-6 py-4 cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900">
+            ⚙️ Технічний статус сервісів
+        </summary>
+        <div class="px-6 pb-4 grid grid-cols-3 gap-4">
+            <div class="p-3 rounded-lg {{ ($health['database']['status'] ?? 'error') === 'ok' ? 'bg-green-50' : 'bg-red-50' }}">
+                <p class="text-sm font-medium {{ ($health['database']['status'] ?? 'error') === 'ok' ? 'text-green-700' : 'text-red-700' }}">
+                    Database: {{ ($health['database']['status'] ?? 'error') === 'ok' ? '✓ OK' : '✗ Error' }}
+                </p>
+                @if(isset($health['database']['latency_ms']))
+                    <p class="text-xs text-gray-500">{{ $health['database']['latency_ms'] }}ms</p>
+                @endif
+            </div>
+            <div class="p-3 rounded-lg {{ ($health['meilisearch']['status'] ?? 'error') === 'ok' ? 'bg-green-50' : (($health['meilisearch']['status'] ?? '') === 'disabled' ? 'bg-gray-50' : 'bg-red-50') }}">
+                <p class="text-sm font-medium {{ ($health['meilisearch']['status'] ?? 'error') === 'ok' ? 'text-green-700' : (($health['meilisearch']['status'] ?? '') === 'disabled' ? 'text-gray-500' : 'text-red-700') }}">
+                    Meilisearch: {{ ($health['meilisearch']['status'] ?? 'error') === 'ok' ? '✓ OK' : (($health['meilisearch']['status'] ?? '') === 'disabled' ? '— Disabled' : '✗ Error') }}
+                </p>
+                @if(isset($health['meilisearch']['documents']))
+                    <p class="text-xs text-gray-500">{{ number_format($health['meilisearch']['documents']) }} документів</p>
+                @endif
+            </div>
+            <div class="p-3 rounded-lg {{ ($health['openai']['status'] ?? 'error') === 'ok' ? 'bg-green-50' : (($health['openai']['status'] ?? '') === 'circuit_open' ? 'bg-yellow-50' : 'bg-red-50') }}">
+                <p class="text-sm font-medium {{ ($health['openai']['status'] ?? 'error') === 'ok' ? 'text-green-700' : (($health['openai']['status'] ?? '') === 'circuit_open' ? 'text-yellow-700' : 'text-red-700') }}">
+                    OpenAI: {{ ($health['openai']['status'] ?? 'error') === 'ok' ? '✓ OK' : (($health['openai']['status'] ?? '') === 'circuit_open' ? '⚠ Circuit Open' : '✗ Error') }}
+                </p>
+            </div>
+        </div>
+    </details>
+
+    <!-- Chart.js Script -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        function dashboardCharts() {
+            return {
+                conversationsChart: null,
+                revenueChart: null,
+                
+                initCharts() {
+                    this.$nextTick(() => {
+                        this.createConversationsChart();
+                        this.createRevenueChart();
+                    });
+                    
+                    // Re-init charts when Livewire updates
+                    Livewire.on('data-refreshed', () => {
+                        this.$nextTick(() => {
+                            this.createConversationsChart();
+                            this.createRevenueChart();
+                        });
+                    });
+                },
+                
+                createConversationsChart() {
+                    const ctx = document.getElementById('conversationsChart');
+                    if (!ctx) return;
+                    
+                    if (this.conversationsChart) {
+                        this.conversationsChart.destroy();
+                    }
+                    
+                    const chartData = @json($chartData);
+                    
+                    this.conversationsChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: chartData.labels || [],
+                            datasets: [{
+                                label: 'Діалоги',
+                                data: chartData.datasets?.conversations || [],
+                                borderColor: '#3B82F6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                fill: true,
+                                tension: 0.4,
+                                borderWidth: 2,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#F3F4F6' }
+                                },
+                                x: {
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                },
+                
+                createRevenueChart() {
+                    const ctx = document.getElementById('revenueChart');
+                    if (!ctx) return;
+                    
+                    if (this.revenueChart) {
+                        this.revenueChart.destroy();
+                    }
+                    
+                    const chartData = @json($chartData);
+                    
+                    this.revenueChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: chartData.labels || [],
+                            datasets: [
+                                {
+                                    label: 'Конверсії',
+                                    data: chartData.datasets?.conversions || [],
+                                    backgroundColor: '#10B981',
+                                    borderRadius: 4,
+                                    yAxisID: 'y',
+                                },
+                                {
+                                    label: 'Виручка (₴)',
+                                    data: chartData.datasets?.revenue || [],
+                                    type: 'line',
+                                    borderColor: '#F59E0B',
+                                    backgroundColor: 'transparent',
+                                    borderWidth: 2,
+                                    tension: 0.4,
+                                    yAxisID: 'y1',
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { usePointStyle: true, padding: 20 }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    position: 'left',
+                                    grid: { color: '#F3F4F6' },
+                                    title: { display: true, text: 'Конверсії' }
+                                },
+                                y1: {
+                                    beginAtZero: true,
+                                    position: 'right',
+                                    grid: { display: false },
+                                    title: { display: true, text: 'Виручка (₴)' }
+                                },
+                                x: {
+                                    grid: { display: false }
+                                }
+                            }
+                        }
+                    });
+                }
+            };
+        }
+    </script>
 </div>

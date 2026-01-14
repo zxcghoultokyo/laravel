@@ -90,7 +90,7 @@
 - [x] Shadow on/off
 
 #### 2.2 Збереження медіа
-- [ ] File upload для лого/аватар
+- [x] File upload для лого/аватар (WithFileUploads trait)
 - [ ] Image optimization (resize, compress)
 - [ ] CDN delivery
 
@@ -216,10 +216,10 @@
 
 ---
 
-### Phase 6: Dashboard & Analytics Redesign (5-7 днів)
+### Phase 6: Dashboard & Analytics Redesign ✅ DONE (5-7 днів)
 > **Пріоритет:** СЕРЕДНІЙ — бізнес-метрики
 
-#### 6.1 New Dashboard
+#### 6.1 New Dashboard ✅
 ```
 ┌────────────────────────────────────────────────────────┐
 │ 📊 Dashboard                           Період: 7 днів │
@@ -244,10 +244,14 @@
 └────────────────────────────────────────────────────────┘
 ```
 
-- [ ] KPI cards з trend indicators
-- [ ] Date range picker (сьогодні, 7д, 30д, custom)
-- [ ] Charts (Chart.js або ApexCharts)
-- [ ] Real-time updates (Livewire polling)
+- [x] KPI cards з trend indicators
+- [x] Date range picker (сьогодні, 7д, 30д, 90д)
+- [x] Charts (Chart.js) - діалоги та конверсії/виручка
+- [x] Real-time updates (Livewire polling)
+- [x] Топ товарів у чаті з CTR
+- [x] Останні чати з preview та outcome
+- [x] Live stats bar (активні зараз, оператор веде)
+- [x] Health status (collapsed)
 - [ ] Export to CSV/PDF
 
 #### 6.2 Conversion Funnel

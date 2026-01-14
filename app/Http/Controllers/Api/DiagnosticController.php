@@ -436,4 +436,99 @@ class DiagnosticController extends Controller
             'messages' => $messages,
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/sync-faq
+     * Sync FAQ content from URLs
+     */
+    public function syncFaq(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $settings = \App\Models\WidgetSettings::first();
+        if (!$settings) {
+            return response()->json(['error' => 'No WidgetSettings found'], 404);
+        }
+
+        // Set default URLs if empty
+        if (empty($settings->faq_payment_delivery_url)) {
+            $settings->faq_payment_delivery_url = 'https://contractor.kiev.ua/oplata-i-dostavka/';
+        }
+        if (empty($settings->faq_contacts_url)) {
+            $settings->faq_contacts_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/';
+        }
+        if (empty($settings->faq_about_url)) {
+            $settings->faq_about_url = 'https://contractor.kiev.ua/pro-nas/';
+        }
+        $settings->save();
+
+        // Ingest content from URLs
+        try {
+            $ingestService = app(\App\Services\Support\FaqContentIngestService::class);
+            $ingestService->ingest($settings);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => 'Ingest failed',
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+
+        $settings->refresh();
+
+        // Set returns text manually if still empty
+        if (empty($settings->faq_returns_text)) {
+            $settings->faq_returns_text = "Повернення та обмін\n\nМи приймаємо повернення та обмін товарів протягом 14 днів з моменту отримання.\n\nУмови повернення:\n• Товар має бути в оригінальній упаковці\n• Товар не використовувався\n• Наявність чеку або підтвердження замовлення\n\nДля оформлення повернення зверніться до нас:\n• Телефон: +380 63 631 9919\n• Telegram: @sturmtig\n• Email: vigser2@gmail.com";
+            $settings->save();
+        }
+
+        // Clear cache
+        \Illuminate\Support\Facades\Cache::forget('widget_settings_faq');
+
+        return response()->json([
+            'success' => true,
+            'faq_lengths' => [
+                'faq_payment_delivery_text' => strlen($settings->faq_payment_delivery_text ?? ''),
+                'faq_returns_text' => strlen($settings->faq_returns_text ?? ''),
+                'faq_contacts_text' => strlen($settings->faq_contacts_text ?? ''),
+                'faq_about_text' => strlen($settings->faq_about_text ?? ''),
+            ],
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/widget-settings
+     * Get widget settings (FAQ texts)
+     */
+    public function widgetSettings(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $settings = \App\Models\WidgetSettings::first();
+        if (!$settings) {
+            return response()->json(['error' => 'No WidgetSettings found'], 404);
+        }
+
+        return response()->json([
+            'store_name' => $settings->store_name,
+            'store_description' => $settings->store_description,
+            'shop_phone' => $settings->shop_phone,
+            'store_hours' => $settings->store_hours,
+            'faq_urls' => [
+                'payment_delivery' => $settings->faq_payment_delivery_url,
+                'returns' => $settings->faq_returns_url,
+                'contacts' => $settings->faq_contacts_url,
+                'about' => $settings->faq_about_url,
+            ],
+            'faq_texts' => [
+                'payment_delivery' => $settings->faq_payment_delivery_text,
+                'returns' => $settings->faq_returns_text,
+                'contacts' => $settings->faq_contacts_text,
+                'about' => $settings->faq_about_text,
+            ],
+        ]);
+    }
 }

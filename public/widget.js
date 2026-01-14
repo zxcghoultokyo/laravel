@@ -160,10 +160,117 @@
         // Setup event handlers with cleanup tracking
         setupEventHandlers(elements, state, settings, token, savedMessages);
         
+        // Setup add-to-cart tracking on the page
+        setupAddToCartTracking();
+        
         // Track page view (widget loaded on page)
         sendAnalyticsEvent('page_view', {
             widget_version: WIDGET_VERSION
         });
+    }
+    
+    /**
+     * Setup tracking for add-to-cart buttons on the merchant's site
+     */
+    function setupAddToCartTracking() {
+        // Common selectors for add-to-cart buttons
+        const cartSelectors = [
+            '.add-to-cart',
+            '.btn-cart',
+            '[data-action="add-to-cart"]',
+            'button[name="add"]',
+            '.product-buy',
+            '.buy-button',
+            // Horoshop specific
+            '.j-buy-button-add',
+            '.j-buy-button',
+            '[id^="j-buy-button"]',
+            '[class*="j-buy"]',
+            '.hs-btn-cart',
+            '.hs-add-to-cart',
+            '[data-hs-action="cart"]',
+            // Generic patterns
+            'button[class*="buy"]',
+            'a[class*="buy"]',
+            '.btn-buy',
+            '.product-buy-btn'
+        ];
+
+        // Click listener for cart buttons
+        document.addEventListener('click', (e) => {
+            const target = e.target.closest(cartSelectors.join(','));
+            if (target) {
+                log('Add to cart button clicked:', target);
+                
+                // Extract product info
+                const productData = extractProductFromButton(target);
+                
+                // Check if user had chat conversation
+                const sessionId = localStorage.getItem('aintento_session_id');
+                const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
+                const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
+                const hadChatConversation = messages && JSON.parse(messages).length > 0;
+                
+                // Check if product was shown in chat
+                const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
+                const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
+                const productFromChat = shownProducts.includes(productData.id) || shownProducts.includes(productData.article);
+                
+                sendAnalyticsEvent('add_to_cart', {
+                    product_id: productData.id,
+                    product_article: productData.article,
+                    product_title: productData.title,
+                    product_price: productData.price,
+                    product_from_chat: productFromChat,
+                    had_chat_conversation: hadChatConversation
+                });
+                
+                log('Add to cart tracked:', productData, { hadChatConversation, productFromChat });
+            }
+        }, true);
+        
+        log('Add-to-cart tracking initialized');
+    }
+    
+    /**
+     * Extract product info from add-to-cart button
+     */
+    function extractProductFromButton(button) {
+        const data = {};
+        
+        // Try button ID (Horoshop: j-buy-button-widget-2784)
+        if (button.id) {
+            const match = button.id.match(/(\d+)/);
+            if (match) data.id = match[1];
+        }
+        
+        // Try data attributes
+        if (button.dataset.id) data.id = button.dataset.id;
+        if (button.dataset.productId) data.id = button.dataset.productId;
+        if (button.dataset.article) data.article = button.dataset.article;
+        
+        // Try parent container (Horoshop: j-product-block)
+        const productBlock = button.closest('[data-id], .j-product-block, .product-card, .product');
+        if (productBlock) {
+            if (productBlock.dataset.id) data.id = productBlock.dataset.id;
+            
+            // Try to find title
+            const titleEl = productBlock.querySelector('.product-title, .product__title, h1, h2, h3');
+            if (titleEl) data.title = titleEl.textContent.trim();
+            
+            // Try to find price
+            const priceEl = productBlock.querySelector('.product-price, .price, [class*="price"]');
+            if (priceEl) {
+                const priceText = priceEl.textContent.replace(/[^\d.,]/g, '').replace(',', '.');
+                data.price = parseFloat(priceText) || null;
+            }
+        }
+        
+        // Try counter sibling (Horoshop structure)
+        const counter = button.closest('.product-order__row')?.querySelector('[data-id]');
+        if (counter?.dataset.id) data.id = counter.dataset.id;
+        
+        return data;
     }
 
     function injectStyles(settings) {
@@ -2465,6 +2572,24 @@
      * Track products shown in chat
      */
     function trackProductsShown(products) {
+        const sessionId = localStorage.getItem('aintento_session_id');
+        if (sessionId) {
+            // Save shown products to localStorage for add-to-cart attribution
+            const shownKey = 'aintento_shown_products_' + sessionId;
+            const existingShown = JSON.parse(localStorage.getItem(shownKey) || '[]');
+            
+            products.forEach(product => {
+                if (product.id && !existingShown.includes(String(product.id))) {
+                    existingShown.push(String(product.id));
+                }
+                if (product.article && !existingShown.includes(product.article)) {
+                    existingShown.push(product.article);
+                }
+            });
+            
+            localStorage.setItem(shownKey, JSON.stringify(existingShown));
+        }
+        
         products.forEach(product => {
             sendAnalyticsEvent('product_shown', {
                 product_id: product.id,

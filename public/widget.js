@@ -160,34 +160,10 @@
         // Setup event handlers with cleanup tracking
         setupEventHandlers(elements, state, settings, token, savedMessages);
         
-        // Check if session is in operator mode on init
-        checkOperatorModeOnInit(state.sessionId, state);
-        
         // Track page view (widget loaded on page)
         sendAnalyticsEvent('page_view', {
             widget_version: WIDGET_VERSION
         });
-    }
-    
-    // Check if session is already in operator mode
-    function checkOperatorModeOnInit(sessionId, state) {
-        const pollUrl = BASE_URL + '/api/chat/poll/' + encodeURIComponent(sessionId) + '?last_message_id=0';
-        
-        fetch(pollUrl)
-            .then(res => res.json())
-            .then(data => {
-                if (data.operator_mode) {
-                    state.operatorMode = true;
-                    // Find the max message id to avoid duplicates
-                    if (data.messages && data.messages.length > 0) {
-                        state.lastOperatorMessageId = Math.max(...data.messages.map(m => m.id));
-                    }
-                    log('Session already in operator mode, starting polling');
-                }
-            })
-            .catch(err => {
-                // Ignore errors on init check
-            });
     }
 
     function injectStyles(settings) {
@@ -592,6 +568,9 @@
             // Track chat opened
             sendAnalyticsEvent('chat_opened');
             
+            // Start polling for operator messages (will auto-stop if not in operator mode)
+            startOperatorPolling();
+            
             // Always show quick actions bar (persistent)
             addQuickActions(messages, settings, handleQuickAction);
             
@@ -614,6 +593,8 @@
             chatWindow.style.display = 'none';
             overlay.style.display = 'none';
             toggle.style.display = 'flex';
+            // Stop polling when chat closed
+            stopOperatorPolling();
             // Track chat closed
             sendAnalyticsEvent('chat_closed');
         }
@@ -1039,19 +1020,17 @@
                             messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
                         }
                         
-                        // If no longer in operator mode, stop polling
-                        if (!data.operator_mode) {
-                            stopOperatorPolling();
-                        }
+                        // Keep polling regardless of operator_mode - it's lightweight
+                        // This ensures we catch when operator takes over
                     })
                     .catch(err => {
                         logError('Poll error:', err);
                     });
             }
             
-            // Poll immediately and then every 3 seconds
+            // Poll immediately and then every 5 seconds
             pollOperator();
-            state.pollInterval = setInterval(pollOperator, 3000);
+            state.pollInterval = setInterval(pollOperator, 5000);
         }
         
         function stopOperatorPolling() {

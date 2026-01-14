@@ -6,6 +6,7 @@ use Livewire\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Services\Ai\EnrichmentQualityService;
+use App\Services\Analytics\ABTestingService;
 
 class Analytics extends Component
 {
@@ -21,6 +22,9 @@ class Analytics extends Component
     
     // AI Index Quality
     public array $aiQuality = [];
+    
+    // A/B Testing
+    public array $abTestStats = [];
 
     public function mount()
     {
@@ -67,6 +71,9 @@ class Analytics extends Component
         // AI Index Quality Score
         $this->loadAiQuality();
         
+        // A/B Testing Stats
+        $this->loadABTestStats();
+        
         // Update timestamp
         $this->lastUpdated = now()->format('H:i:s');
     }
@@ -95,6 +102,30 @@ class Analytics extends Component
                 'score' => 0,
                 'grade' => 'N/A',
                 'error' => $e->getMessage(),
+            ];
+        }
+    }
+    
+    private function loadABTestStats(): void
+    {
+        try {
+            $service = app(ABTestingService::class);
+            $stats = $service->getStats();
+            
+            $this->abTestStats = [
+                'experiment' => $stats['experiment'] ?? 'search_ai_features',
+                'name' => $stats['name'] ?? 'AI Search Features',
+                'enabled' => $stats['enabled'] ?? false,
+                'control' => $stats['variants']['control'] ?? [],
+                'treatment' => $stats['variants']['treatment'] ?? [],
+                'comparison' => $stats['comparison'] ?? [],
+                'has_data' => ($stats['variants']['control']['total_searches'] ?? 0) > 0 ||
+                              ($stats['variants']['treatment']['total_searches'] ?? 0) > 0,
+            ];
+        } catch (\Throwable $e) {
+            $this->abTestStats = [
+                'error' => $e->getMessage(),
+                'has_data' => false,
             ];
         }
     }

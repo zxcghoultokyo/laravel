@@ -207,6 +207,137 @@
         </div>
         @endif
 
+        <!-- A/B Testing Stats -->
+        @if(!empty($abTestStats) && !isset($abTestStats['error']))
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-semibold text-gray-500">🧪 A/B Тестування пошуку</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs px-2 py-1 rounded {{ $abTestStats['enabled'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                        {{ $abTestStats['enabled'] ? '✓ Активний' : '○ Неактивний' }}
+                    </span>
+                    <a href="{{ url('/api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025') }}" 
+                       target="_blank" 
+                       class="text-xs text-blue-600 hover:underline">JSON →</a>
+                </div>
+            </div>
+            
+            @if($abTestStats['has_data'])
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Control Variant -->
+                <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-lg">🔵</span>
+                        <span class="font-semibold text-gray-700">Control</span>
+                        <span class="text-xs text-gray-500">(тільки keyword)</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <div class="text-2xl font-bold text-gray-700">{{ $abTestStats['control']['total_searches'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500">Пошуків</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-gray-700">{{ $abTestStats['control']['unique_sessions'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500">Сесій</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-bold {{ ($abTestStats['control']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600' : 'text-gray-700' }}">
+                                {{ $abTestStats['control']['zero_results_rate'] ?? 0 }}%
+                            </div>
+                            <div class="text-xs text-gray-500">Zero Results</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-bold text-blue-600">{{ $abTestStats['control']['click_through_rate'] ?? 0 }}%</div>
+                            <div class="text-xs text-gray-500">CTR</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Treatment Variant -->
+                <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-lg">🟢</span>
+                        <span class="font-semibold text-blue-700">Treatment</span>
+                        <span class="text-xs text-blue-500">(keyword + AI)</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <div class="text-2xl font-bold text-blue-700">{{ $abTestStats['treatment']['total_searches'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500">Пошуків</div>
+                        </div>
+                        <div>
+                            <div class="text-2xl font-bold text-blue-700">{{ $abTestStats['treatment']['unique_sessions'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500">Сесій</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-bold {{ ($abTestStats['treatment']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600' : 'text-green-600' }}">
+                                {{ $abTestStats['treatment']['zero_results_rate'] ?? 0 }}%
+                            </div>
+                            <div class="text-xs text-gray-500">Zero Results</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-bold text-green-600">{{ $abTestStats['treatment']['click_through_rate'] ?? 0 }}%</div>
+                            <div class="text-xs text-gray-500">CTR</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Comparison Summary -->
+            @if(!empty($abTestStats['comparison']) && $abTestStats['comparison']['winner'] !== 'tie')
+            <div class="mt-4 p-3 rounded-lg {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200' }}">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg">{{ $abTestStats['comparison']['winner'] === 'treatment' ? '🏆' : '📊' }}</span>
+                        <span class="font-medium {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'text-green-700' : 'text-gray-700' }}">
+                            Лідер: {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'Treatment (AI)' : 'Control' }}
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-500">
+                        {{ $abTestStats['comparison']['confidence'] ?? 'insufficient_data' }}
+                    </div>
+                </div>
+                @if(isset($abTestStats['comparison']['zero_results_improvement']))
+                <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <div class="text-center">
+                        <div class="font-bold {{ $abTestStats['comparison']['zero_results_improvement'] < 0 ? 'text-green-600' : 'text-red-600' }}">
+                            {{ $abTestStats['comparison']['zero_results_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['zero_results_improvement'] }}%
+                        </div>
+                        <div class="text-gray-500">Zero Results</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="font-bold {{ $abTestStats['comparison']['ctr_improvement'] > 0 ? 'text-green-600' : 'text-red-600' }}">
+                            {{ $abTestStats['comparison']['ctr_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['ctr_improvement'] }}%
+                        </div>
+                        <div class="text-gray-500">CTR</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="font-bold {{ $abTestStats['comparison']['add_to_cart_improvement'] > 0 ? 'text-green-600' : 'text-red-600' }}">
+                            {{ $abTestStats['comparison']['add_to_cart_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['add_to_cart_improvement'] }}%
+                        </div>
+                        <div class="text-gray-500">Add to Cart</div>
+                    </div>
+                </div>
+                @endif
+            </div>
+            @else
+            <div class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-sm text-gray-500">
+                📊 Недостатньо даних для визначення переможця. Потрібно мінімум 100 пошуків на варіант.
+            </div>
+            @endif
+            
+            @else
+            <div class="text-center py-8">
+                <div class="text-4xl mb-2">🧪</div>
+                <div class="text-gray-500">Експеримент активний, але ще немає даних</div>
+                <div class="text-xs text-gray-400 mt-2">
+                    Дані з'являться після того як користувачі почнуть шукати товари
+                </div>
+            </div>
+            @endif
+        </div>
+        @endif
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Daily Chart -->
             <div class="bg-white rounded-lg shadow p-4">

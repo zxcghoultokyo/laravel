@@ -531,4 +531,80 @@ class DiagnosticController extends Controller
             ],
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/sync-orders
+     * Sync orders from Horoshop and update orders_count
+     */
+    public function syncOrders(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $days = (int) $request->input('days', 90);
+        
+        try {
+            // Run the sync command
+            \Illuminate\Support\Facades\Artisan::call('orders:sync', [
+                '--days' => $days,
+                '--update-counts' => true,
+                '--timeout' => 300,
+            ]);
+            
+            $output = \Illuminate\Support\Facades\Artisan::output();
+            
+            // Get stats after sync
+            $ordersCount = \App\Models\Order::count();
+            $itemsCount = \App\Models\OrderItem::count();
+            $productsWithOrders = \App\Models\Product::where('orders_count', '>', 0)->count();
+            $topProducts = \App\Models\Product::where('orders_count', '>', 0)
+                ->orderBy('orders_count', 'desc')
+                ->take(10)
+                ->get(['article', 'title', 'orders_count']);
+            
+            return response()->json([
+                'success' => true,
+                'days_synced' => $days,
+                'orders_count' => $ordersCount,
+                'items_count' => $itemsCount,
+                'products_with_orders' => $productsWithOrders,
+                'top_10_products' => $topProducts,
+                'output' => $output,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    
+    /**
+     * GET /api/diagnostic/orders-stats
+     * Get orders statistics
+     */
+    public function ordersStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $ordersCount = \App\Models\Order::count();
+        $itemsCount = \App\Models\OrderItem::count();
+        $productsWithOrders = \App\Models\Product::where('orders_count', '>', 0)->count();
+        
+        $topProducts = \App\Models\Product::where('orders_count', '>', 0)
+            ->where('in_stock', true)
+            ->orderBy('orders_count', 'desc')
+            ->take(20)
+            ->get(['article', 'title', 'orders_count', 'price', 'category_path']);
+        
+        return response()->json([
+            'orders_count' => $ordersCount,
+            'items_count' => $itemsCount,
+            'products_with_orders' => $productsWithOrders,
+            'top_20_products' => $topProducts,
+        ]);
+    }
 }

@@ -888,7 +888,7 @@ PROMPT;
 
     /**
      * Tool: Get popular products
-     * Cached for 5 minutes to reduce response time
+     * Uses real orders_count when available, falls back to curated queries.
      */
     private function toolGetPopularProducts(array $args): array
     {
@@ -896,7 +896,7 @@ PROMPT;
         $limit = $args['limit'] ?? 5;
 
         // Cache key based on category and limit
-        $cacheKey = 'popular_products_v4:' . ($category ?? 'all') . ':' . $limit;
+        $cacheKey = 'popular_products_v5:' . ($category ?? 'all') . ':' . $limit;
         
         // Cache popular products for 5 minutes
         return Cache::remember($cacheKey, 300, function () use ($category, $limit) {
@@ -925,46 +925,91 @@ PROMPT;
                 
                 return true;
             };
-
-            if ($category) {
-                // Search in specific category
-                $results = $this->searchTool->search($category, [], $limit * 3);
-                $results = array_filter($results, $filterProduct);
+            
+            // Check if we have real sales data
+            $hasOrdersData = Product::where('orders_count', '>', 0)->exists();
+            
+            if ($hasOrdersData) {
+                // USE REAL SALES DATA - query products by orders_count
+                $query = Product::where('in_stock', true)
+                    ->where('orders_count', '>', 0)
+                    ->where('quantity', '>', 0);
                 
-                // Sort by popularity
-                usort($results, function ($a, $b) {
-                    $popA = ($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10);
-                    $popB = ($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10);
-                    return $popB <=> $popA;
-                });
+                if ($category) {
+                    $query->where(function($q) use ($category) {
+                        $q->where('category_path', 'like', "%{$category}%")
+                          ->orWhere('title', 'like', "%{$category}%")
+                          ->orWhere('search_index', 'like', "%{$category}%");
+                    });
+                }
                 
-                $products = array_slice($results, 0, $limit);
-            } else {
-                // Curated popular queries - affordable, common items
-                $popularQueries = [
-                    'плитоноска НАТО',    // Basic plate carrier
-                    'підсумок магазин',   // Magazine pouches
-                    'рукавички тактичні', // Tactical gloves
-                    'аптечка ІФАК',       // First aid
-                ];
+                $topSellers = $query->orderBy('orders_count', 'desc')
+                    ->take($limit * 3)
+                    ->get();
                 
-                foreach ($popularQueries as $query) {
-                    $results = $this->searchTool->search($query, [], 10);
-                    $results = array_filter($results, $filterProduct);
-                    if (!empty($results)) {
-                        // Sort by optimal price (mid-range preferred)
-                        usort($results, function($a, $b) {
-                            $priceA = (float) ($a['price'] ?? 0);
-                            $priceB = (float) ($b['price'] ?? 0);
-                            $scoreA = abs($priceA - 3000) + (10000 - ($a['popularity'] ?? 0));
-                            $scoreB = abs($priceB - 3000) + (10000 - ($b['popularity'] ?? 0));
-                            return $scoreA <=> $scoreB;
-                        });
-                        $products[] = array_values($results)[0];
+                foreach ($topSellers as $p) {
+                    $item = [
+                        'id' => $p->id,
+                        'article' => $p->article,
+                        'title' => $p->title,
+                        'price' => $p->price,
+                        'in_stock' => $p->in_stock,
+                        'size' => $p->size,
+                        'orders_count' => $p->orders_count,
+                        'popularity' => $p->popularity,
+                    ];
+                    if ($filterProduct($item)) {
+                        $products[] = $item;
                     }
-                    
-                    if (count($products) >= $limit) {
-                        break;
+                    if (count($products) >= $limit) break;
+                }
+            }
+            
+            // Fallback: curated queries if no sales data or not enough products
+            if (count($products) < $limit) {
+                if ($category) {
+                    $results = $this->searchTool->search($category, [], $limit * 3);
+                    $results = array_filter($results, $filterProduct);
+                    usort($results, fn($a, $b) => 
+                        (($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10)) <=> 
+                        (($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10))
+                    );
+                    $needed = $limit - count($products);
+                    $existingIds = array_column($products, 'id');
+                    foreach ($results as $r) {
+                        if (!in_array($r['id'], $existingIds)) {
+                            $products[] = $r;
+                            if (count($products) >= $limit) break;
+                        }
+                    }
+                } else {
+                    // Curated popular queries - affordable, common items
+                    $popularQueries = [
+                        'плитоноска НАТО',    // Basic plate carrier
+                        'підсумок магазин',   // Magazine pouches
+                        'рукавички тактичні', // Tactical gloves
+                        'аптечка ІФАК',       // First aid
+                    ];
+                    $existingIds = array_column($products, 'id');
+                    foreach ($popularQueries as $query) {
+                        $results = $this->searchTool->search($query, [], 10);
+                        $results = array_filter($results, $filterProduct);
+                        if (!empty($results)) {
+                            // Sort by optimal price (mid-range preferred)
+                            usort($results, function($a, $b) {
+                                $priceA = (float) ($a['price'] ?? 0);
+                                $priceB = (float) ($b['price'] ?? 0);
+                                $scoreA = abs($priceA - 3000) + (10000 - ($a['popularity'] ?? 0));
+                                $scoreB = abs($priceB - 3000) + (10000 - ($b['popularity'] ?? 0));
+                                return $scoreA <=> $scoreB;
+                            });
+                            $best = array_values($results)[0];
+                            if (!in_array($best['id'], $existingIds)) {
+                                $products[] = $best;
+                                $existingIds[] = $best['id'];
+                            }
+                        }
+                        if (count($products) >= $limit) break;
                     }
                 }
             }

@@ -269,6 +269,13 @@ FOLLOW-UP (розрізняй типи):
 - "також потрібен рюкзак" → search_products(query="рюкзак")
 НЕ ВИКЛИКАЙ search_products для товарів що вже показані!
 
+ЗГОДА/ПІДТВЕРДЖЕННЯ (КРИТИЧНО!):
+Коли користувач каже "давай", "ок", "добре", "так", "покажи" — це ЗГОДА на дію!
+- Якщо запитали уточнення і отримали "давай" → ПОКАЖИ ТОВАРИ з контексту розмови!
+- НЕ питай знову "що саме вас цікавить" — це помилка!
+- Приклад: "подарунок для дружини" → бот: "чим цікавиться?" → "давай" → search_products(query="топ товари для жінок") або search_products(query="подарунок")
+- Коротка відповідь = згода на попередню пропозицію
+
 ФОРМАТ ВІДПОВІДІ:
 1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}], "_context": "короткий опис контексту"}
 2. Текстові питання → JSON: {"text": "...", "_context": "короткий опис контексту"}
@@ -1264,6 +1271,24 @@ PROMPT;
             'термо' => 'термобілизну',
             'балістич' => 'балістичний захист',
             'вогнестійк' => 'вогнестійкий одяг',
+            'подарун' => 'подарунок',
+            'подар' => 'подарунок',
+        ];
+        
+        // Intent patterns (what user wants to do)
+        $intentPatterns = [
+            '/подарун\w*/ui' => 'шукає подарунок',
+            '/для\s+(дружини|жінки|дівчини)/ui' => 'для жінки',
+            '/для\s+(чоловіка|хлопця|друга)/ui' => 'для чоловіка',
+            '/для\s+(сина|дочки|дитини)/ui' => 'для дитини',
+            '/необмежен\w*\s*бюджет/ui' => 'бюджет необмежений',
+            '/без\s*обмежень/ui' => 'бюджет необмежений',
+            '/до\s*(\d+)\s*(грн|₴|тис)?/ui' => 'бюджет до $1',
+            '/бюджет\s*(\d+)/ui' => 'бюджет $1',
+            '/туризм/ui' => 'для туризму',
+            '/полюванн/ui' => 'для полювання',
+            '/служб/ui' => 'для служби',
+            '/стріл/ui' => 'для стрільби',
         ];
         
         // Size patterns
@@ -1276,6 +1301,7 @@ PROMPT;
         
         $foundProduct = null;
         $foundParams = [];
+        $foundIntents = [];
         
         foreach ($history as $msg) {
             $content = $msg['content'] ?? '';
@@ -1286,6 +1312,18 @@ PROMPT;
                 foreach ($productPatterns as $pattern => $name) {
                     if (mb_strpos($contentLower, $pattern) !== false) {
                         $foundProduct = $name;
+                    }
+                }
+                
+                // Look for intents
+                foreach ($intentPatterns as $pattern => $intent) {
+                    if (preg_match($pattern, $content, $matches)) {
+                        // Replace $1 with captured group if exists
+                        $intentValue = $intent;
+                        if (isset($matches[1]) && strpos($intent, '$1') !== false) {
+                            $intentValue = str_replace('$1', $matches[1], $intent);
+                        }
+                        $foundIntents[$intentValue] = true;
                     }
                 }
                 
@@ -1309,6 +1347,11 @@ PROMPT;
         // Build context string
         if ($foundProduct) {
             $context[] = "шукає {$foundProduct}";
+        }
+        
+        // Add found intents
+        if (!empty($foundIntents)) {
+            $context = array_merge($context, array_keys($foundIntents));
         }
         
         if (!empty($foundParams)) {

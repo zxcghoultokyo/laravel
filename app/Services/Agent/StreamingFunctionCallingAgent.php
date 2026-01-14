@@ -75,11 +75,36 @@ class StreamingFunctionCallingAgent
             return;
         }
 
-        // Build conversation
+        // Load conversation history for context
+        $history = $this->loadConversationHistory($sessionId);
+        $conversationContext = $this->extractConversationContext($history);
+        
+        Log::info('StreamingAgent: loaded history', [
+            'session_id' => $sessionId,
+            'history_count' => count($history),
+            'context' => $conversationContext,
+        ]);
+
+        // Build conversation with history
         $messages = [
             ['role' => 'system', 'content' => $this->getSystemPrompt()],
-            ['role' => 'user', 'content' => $message],
         ];
+        
+        // Add context hint if we have one
+        if ($conversationContext) {
+            $messages[] = [
+                'role' => 'system', 
+                'content' => "[КОНТЕКСТ РОЗМОВИ: {$conversationContext}]\nПАМ'ЯТАЙ ЦЕЙ КОНТЕКСТ! Не питай користувача що він шукає якщо це вже відомо з контексту!"
+            ];
+        }
+        
+        // Add history messages
+        foreach ($history as $msg) {
+            $messages[] = $msg;
+        }
+        
+        // Add current message
+        $messages[] = ['role' => 'user', 'content' => $message];
 
         yield ['type' => 'status', 'data' => ['text' => 'Аналізую запит...', 'phase' => 'thinking']];
 
@@ -848,5 +873,156 @@ PROMPT;
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+    
+    /**
+     * Load conversation history from database.
+     */
+    private function loadConversationHistory(?string $sessionId, int $limit = 10): array
+    {
+        if (!$sessionId) return [];
+        
+        try {
+            $session = ChatSession::where('session_id', $sessionId)->first();
+            if (!$session) return [];
+
+            $messages = ChatMessage::where('chat_session_id', $session->id)
+                ->orderBy('created_at', 'desc')
+                ->limit($limit)
+                ->get()
+                ->reverse()
+                ->values();
+
+            $history = [];
+            
+            foreach ($messages as $msg) {
+                if (empty($msg->content)) continue;
+
+                $role = $msg->role === 'user' ? 'user' : 'assistant';
+                $content = $msg->content;
+                
+                // For assistant messages, add product context
+                if ($role === 'assistant') {
+                    $meta = $msg->meta ?? [];
+                    $products = $meta['products'] ?? [];
+                    
+                    if (!empty($products)) {
+                        $productTitles = array_map(fn($p) => $p['title'] ?? '', $products);
+                        $productList = implode(', ', array_filter($productTitles));
+                        $textContent = is_string($content) ? $content : ($content['text'] ?? '');
+                        $content = trim($textContent) . "\n[Показані товари: {$productList}]";
+                    } elseif (is_array($content)) {
+                        $content = $content['text'] ?? json_encode($content, JSON_UNESCAPED_UNICODE);
+                    }
+                }
+
+                $history[] = [
+                    'role' => $role,
+                    'content' => is_string($content) ? $content : json_encode($content, JSON_UNESCAPED_UNICODE),
+                ];
+            }
+
+            return $history;
+        } catch (\Exception $e) {
+            Log::error('StreamingAgent: failed to load history', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
+    }
+    
+    /**
+     * Extract conversation context from history.
+     */
+    private function extractConversationContext(array $history): ?string
+    {
+        if (empty($history)) return null;
+
+        $productPatterns = [
+            'футболк' => 'футболки',
+            'штан' => 'штани',
+            'плитоноск' => 'плитоноски',
+            'берц' => 'взуття',
+            'черевик' => 'взуття',
+            'рюкзак' => 'рюкзаки',
+            'шолом' => 'шоломи',
+            'каск' => 'шоломи',
+            'сорочк' => 'сорочки',
+            'куртк' => 'куртки',
+            'підсум' => 'підсумки',
+            'рукавиц' => 'рукавиці',
+            'рукавичк' => 'рукавиці',
+            'кепк' => 'кепки',
+            'кросівк' => 'кросівки',
+        ];
+
+        $context = [];
+        $foundProduct = null;
+        $shownProductCategory = null;
+        $foundParams = [];
+
+        foreach ($history as $msg) {
+            $content = $msg['content'] ?? '';
+            $contentLower = mb_strtolower($content);
+            
+            // Extract shown products from assistant messages
+            if ($msg['role'] === 'assistant') {
+                if (preg_match('/\[Показані товари:\s*(.+?)\]/ui', $content, $matches)) {
+                    $shownProducts = $matches[1];
+                    foreach ($productPatterns as $pattern => $name) {
+                        if (mb_strpos(mb_strtolower($shownProducts), $pattern) !== false) {
+                            $shownProductCategory = $name;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Look for product mentions in user messages
+            if ($msg['role'] === 'user') {
+                foreach ($productPatterns as $pattern => $name) {
+                    if (mb_strpos($contentLower, $pattern) !== false) {
+                        $foundProduct = $name;
+                        break;
+                    }
+                }
+                
+                // Look for size parameters
+                if (preg_match('/(\d{2,3})\s*(см|кг|см)/ui', $content, $matches)) {
+                    if (preg_match('/зріст\s*(\d+)/ui', $content, $m)) {
+                        $foundParams['зріст'] = $m[1] . 'см';
+                    }
+                    if (preg_match('/ваг[аою]\s*(\d+)/ui', $content, $m)) {
+                        $foundParams['вага'] = $m[1] . 'кг';
+                    }
+                }
+                
+                // XL, L, M sizes
+                if (preg_match('/\b(XXL|XL|L|M|S)\b/ui', $content, $matches)) {
+                    $foundParams['розмір'] = strtoupper($matches[1]);
+                }
+            }
+        }
+
+        // Build context
+        if ($foundProduct) {
+            $context[] = "шукає {$foundProduct}";
+        } elseif ($shownProductCategory) {
+            $context[] = "обговорюємо {$shownProductCategory}";
+        }
+        
+        if ($shownProductCategory && $foundProduct) {
+            $context[] = "показані {$shownProductCategory}";
+        }
+        
+        if (!empty($foundParams)) {
+            $paramsStr = implode(', ', array_map(fn($k, $v) => "{$k}: {$v}", array_keys($foundParams), array_values($foundParams)));
+            $context[] = $paramsStr;
+        }
+        
+        if (empty($context)) return null;
+        
+        return implode('; ', $context);
     }
 }

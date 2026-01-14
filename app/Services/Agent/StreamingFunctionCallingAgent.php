@@ -346,6 +346,13 @@ class StreamingFunctionCallingAgent
 - Якщо клієнт питає про товар якого немає — скажи "цього немає в нашому асортименті" і запропонуй те що Є
 - Ти працюєш НА МАГАЗИН — твоя задача продавати ТЕ ЩО Є, а не давати загальні поради
 
+КОНТЕКСТ РОЗМОВИ - ДУЖЕ ВАЖЛИВО:
+- В історії чату є маркери [Показані товари: ...] з артикулами
+- Якщо клієнт каже "розкажи про нього/це/останнє/перше" — ШУКай артикул в маркері [Показані товари:]
+- "Аптечка" = набір з турнікета, бандажа, пластира якщо вони були в показаних товарах
+- При "розкажи детальніше" — використай get_product_details(article) з контексту!
+- НІКОЛИ не кажи "я не пропонував" якщо товари є в [Показані товари:]!
+
 КОЛИ ОДРАЗУ ПОКАЗУВАТИ ТОВАРИ (search_products):
 - "я військовий", "що потрібно на фронті", "базовий набір" → search_products("тактичне спорядження")
 - Будь-який запит про категорію товарів → одразу search_products()
@@ -365,11 +372,12 @@ class StreamingFunctionCallingAgent
 3. Замовлення → get_order_status()
 4. Загальне питання про магазин → короткий текст з FAQ
 5. "дай посилання", "купити", "замовити цей товар" → get_product_details(article) з контексту розмови
+6. "розкажи про нього", "деталі", "характеристики" → get_product_details(article) з [Показані товари:]
 
 ВАЖЛИВО: ПОСИЛАННЯ = КАРТКА ТОВАРУ!
 - Коли клієнт просить "посилання", "купити", "замовити" на товар з контексту — використай get_product_details(article) 
 - НІКОЛИ не пиши URL текстом! Завжди показуй КАРТКУ ТОВАРУ через get_product_details!
-- Артикул бери з попередньої відповіді (той що вказаний в products[].article)
+- Артикул бери з попередньої відповіді (той що вказаний в products[].article або в [Показані товари: ... (арт. XXX)])
 
 ФОРМАТ ВІДПОВІДІ ПІСЛЯ search_products:
 {"intro": "Короткий опис (1 речення)", "products": [{"article": "...", "comment": "чому підходить"}], "outro": "Опційно"}
@@ -995,14 +1003,19 @@ PROMPT;
                 $role = $msg->role === 'user' ? 'user' : 'assistant';
                 $content = $msg->content;
                 
-                // For assistant messages, add product context
+                // For assistant messages, add product context with articles
                 if ($role === 'assistant') {
                     $meta = $msg->meta ?? [];
                     $products = $meta['products'] ?? [];
                     
                     if (!empty($products)) {
-                        $productTitles = array_map(fn($p) => $p['title'] ?? '', $products);
-                        $productList = implode(', ', array_filter($productTitles));
+                        // Include article codes for better context recognition
+                        $productDescriptions = array_map(function($p) {
+                            $title = $p['title'] ?? '';
+                            $article = $p['article'] ?? '';
+                            return $article ? "{$title} (арт. {$article})" : $title;
+                        }, $products);
+                        $productList = implode(', ', array_filter($productDescriptions));
                         $textContent = is_string($content) ? $content : ($content['text'] ?? '');
                         $content = trim($textContent) . "\n[Показані товари: {$productList}]";
                     } elseif (is_array($content)) {

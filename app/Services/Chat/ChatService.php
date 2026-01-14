@@ -1036,11 +1036,16 @@ class ChatService
                     $intent = $meta['intent'] ?? 'unknown';
                     $products = $meta['products'] ?? [];
                     
-                    // For product_search responses, include product titles in context
+                    // For product_search responses, include product titles AND articles in context
                     if ($intent === 'product_search' && !empty($products)) {
                         $lastShownProducts = $products;
-                        $productTitles = array_map(fn($p) => $p['title'] ?? '', $products);
-                        $productList = implode(', ', array_filter($productTitles));
+                        // Include article codes for better context recognition
+                        $productDescriptions = array_map(function($p) {
+                            $title = $p['title'] ?? '';
+                            $article = $p['article'] ?? '';
+                            return $article ? "{$title} (арт. {$article})" : $title;
+                        }, $products);
+                        $productList = implode(', ', array_filter($productDescriptions));
                         
                         // Build readable context for GPT
                         $textContent = is_string($content) ? $content : ($content['text'] ?? '');

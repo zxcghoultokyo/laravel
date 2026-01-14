@@ -323,6 +323,12 @@ _context (ОБОВ'ЯЗКОВО!):
 - Якщо клієнт хоче товар з замовлення в каталозі - ОДРАЗУ шукай через search_products по назві товару
 - Не пропонуй те, що не можеш зробити!
 
+ВАЖЛИВО: ПОСИЛАННЯ = КАРТКА ТОВАРУ!
+- Коли клієнт просить "посилання", "купити", "замовити" конкретний товар з контексту → get_product_details(article)
+- НІКОЛИ не пиши URL текстом! Завжди показуй КАРТКУ ТОВАРУ через get_product_details!
+- Артикул бери з попередньої відповіді (products[].article)
+- Приклад: "дай посилання на плитоноску" → get_product_details(article="se6-4lj-2i9")
+
 ІНФОРМАЦІЯ ПРО МАГАЗИН (використовуй для відповідей на питання):
 {$faqInfo}
 PROMPT;
@@ -588,6 +594,10 @@ PROMPT;
             // Collect products from search tools
             if (in_array($functionName, ['search_products', 'get_popular_products']) && !empty($result['products'])) {
                 $products = array_merge($products, $result['products']);
+            }
+            // Handle single product from get_product_details
+            if ($functionName === 'get_product_details' && !empty($result['product'])) {
+                $products[] = $result['product'];
             }
 
             $toolResults[] = [

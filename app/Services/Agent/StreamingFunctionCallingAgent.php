@@ -137,9 +137,13 @@ class StreamingFunctionCallingAgent
                 
                 $result = $this->executeTool($functionName, $args);
                 
-                // Collect products
+                // Collect products from various tools
                 if (in_array($functionName, ['search_products', 'get_popular_products']) && !empty($result['products'])) {
                     $allProducts = array_merge($allProducts, $result['products']);
+                }
+                // Handle single product from get_product_details
+                if ($functionName === 'get_product_details' && !empty($result['product'])) {
+                    $allProducts[] = $result['product'];
                 }
                 
                 $toolResults[] = [
@@ -360,6 +364,12 @@ class StreamingFunctionCallingAgent
 2. "Топ товари", "популярне" → get_popular_products()
 3. Замовлення → get_order_status()
 4. Загальне питання про магазин → короткий текст з FAQ
+5. "дай посилання", "купити", "замовити цей товар" → get_product_details(article) з контексту розмови
+
+ВАЖЛИВО: ПОСИЛАННЯ = КАРТКА ТОВАРУ!
+- Коли клієнт просить "посилання", "купити", "замовити" на товар з контексту — використай get_product_details(article) 
+- НІКОЛИ не пиши URL текстом! Завжди показуй КАРТКУ ТОВАРУ через get_product_details!
+- Артикул бери з попередньої відповіді (той що вказаний в products[].article)
 
 ФОРМАТ ВІДПОВІДІ ПІСЛЯ search_products:
 {"intro": "Короткий опис (1 речення)", "products": [{"article": "...", "comment": "чому підходить"}], "outro": "Опційно"}

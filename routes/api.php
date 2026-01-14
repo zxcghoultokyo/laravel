@@ -81,6 +81,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/enrich-one', [\App\Http\Controllers\Api\DiagnosticController::class, 'enrichOne']);
     Route::get('/slang-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'slangStats']);
     Route::get('/embedding-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'embeddingStats']);
+    Route::post('/generate-embeddings', [\App\Http\Controllers\Api\DiagnosticController::class, 'generateEmbeddings']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

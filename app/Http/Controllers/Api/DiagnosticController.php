@@ -1014,4 +1014,107 @@ class DiagnosticController extends Controller
             'samples_with_embedding' => $samplesWithEmbedding,
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/generate-embeddings
+     * Generate embeddings for products (sync, limited batch for HTTP timeout)
+     */
+    public function generateEmbeddings(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $limit = min((int) $request->input('limit', 50), 100); // Max 100 per request
+        $batchSize = min((int) $request->input('batch', 20), 50);
+        
+        $embeddingService = app(\App\Services\Ai\EmbeddingService::class);
+        
+        if (!$embeddingService->isAvailable()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Embedding service not available (check OPENAI_API_KEY)',
+            ], 500);
+        }
+        
+        $startTime = microtime(true);
+        $processed = 0;
+        $success = 0;
+        $failed = 0;
+        
+        // Get products without embeddings
+        $aiIndexes = \App\Models\ProductAiIndex::whereNull('embedding')
+            ->orWhere('embedding', '[]')
+            ->with('product')
+            ->limit($limit)
+            ->get();
+        
+        $totalNeeding = \App\Models\ProductAiIndex::whereNull('embedding')
+            ->orWhere('embedding', '[]')
+            ->count();
+        
+        foreach ($aiIndexes->chunk($batchSize) as $chunk) {
+            $texts = [];
+            $indexMap = [];
+            
+            foreach ($chunk as $aiIndex) {
+                $product = $aiIndex->product;
+                if (!$product) {
+                    $failed++;
+                    continue;
+                }
+                
+                $text = $embeddingService->buildProductText([
+                    'title' => $product->title,
+                    'category_path' => $product->category_path,
+                    'brand' => $product->brand,
+                    'keywords' => $aiIndex->keywords ?? [],
+                    'slang' => $aiIndex->slang ?? [],
+                ]);
+                
+                if (!empty($text)) {
+                    $texts[] = $text;
+                    $indexMap[count($texts) - 1] = $aiIndex;
+                }
+            }
+            
+            if (empty($texts)) {
+                continue;
+            }
+            
+            // Batch embed
+            $embeddings = $embeddingService->embedBatch($texts);
+            
+            // Save embeddings
+            foreach ($embeddings as $i => $embedding) {
+                $aiIndex = $indexMap[$i] ?? null;
+                if (!$aiIndex) continue;
+                
+                $processed++;
+                
+                if ($embedding && is_array($embedding)) {
+                    $aiIndex->embedding = $embedding;
+                    $aiIndex->save();
+                    $success++;
+                } else {
+                    $failed++;
+                }
+            }
+        }
+        
+        $elapsed = round(microtime(true) - $startTime, 2);
+        $remaining = $totalNeeding - $success;
+        
+        return response()->json([
+            'success' => true,
+            'processed' => $processed,
+            'success_count' => $success,
+            'failed_count' => $failed,
+            'elapsed_seconds' => $elapsed,
+            'remaining' => $remaining,
+            'message' => $remaining > 0 
+                ? "Generated {$success} embeddings. {$remaining} remaining. Run again to continue."
+                : "All embeddings generated!",
+        ]);
+    }
 }

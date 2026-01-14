@@ -160,10 +160,34 @@
         // Setup event handlers with cleanup tracking
         setupEventHandlers(elements, state, settings, token, savedMessages);
         
+        // Check if session is in operator mode on init
+        checkOperatorModeOnInit(state.sessionId, state);
+        
         // Track page view (widget loaded on page)
         sendAnalyticsEvent('page_view', {
             widget_version: WIDGET_VERSION
         });
+    }
+    
+    // Check if session is already in operator mode
+    function checkOperatorModeOnInit(sessionId, state) {
+        const pollUrl = BASE_URL + '/api/chat/poll/' + encodeURIComponent(sessionId) + '?last_message_id=0';
+        
+        fetch(pollUrl)
+            .then(res => res.json())
+            .then(data => {
+                if (data.operator_mode) {
+                    state.operatorMode = true;
+                    // Find the max message id to avoid duplicates
+                    if (data.messages && data.messages.length > 0) {
+                        state.lastOperatorMessageId = Math.max(...data.messages.map(m => m.id));
+                    }
+                    log('Session already in operator mode, starting polling');
+                }
+            })
+            .catch(err => {
+                // Ignore errors on init check
+            });
     }
 
     function injectStyles(settings) {
@@ -747,8 +771,8 @@
                                 }
                             }
                             
-                            // Fetch cross-sell for first product
-                            if (receivedProducts.length > 0) {
+                            // Fetch cross-sell for first product (skip if operator mode)
+                            if (receivedProducts.length > 0 && !state.operatorMode) {
                                 const firstProduct = receivedProducts[0];
                                 const productId = firstProduct.id || firstProduct.article;
                                 if (productId) {
@@ -1006,10 +1030,13 @@
                         // Display new operator messages
                         if (data.messages && data.messages.length > 0) {
                             data.messages.forEach(msg => {
-                                // Add operator message to chat
-                                addMessage(messages, '👤 Оператор: ' + msg.content, 'assistant', state.sessionId, true);
+                                // Add operator message to chat and save to localStorage
+                                const operatorText = '👤 Оператор: ' + msg.content;
+                                addMessage(messages, operatorText, 'assistant', state.sessionId, true);
                                 state.lastOperatorMessageId = Math.max(state.lastOperatorMessageId, msg.id);
                             });
+                            // Scroll to bottom after adding messages
+                            messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
                         }
                         
                         // If no longer in operator mode, stop polling

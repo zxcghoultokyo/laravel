@@ -245,7 +245,10 @@ class ChatController extends Controller
             $chatSession = \App\Models\ChatSession::where('session_id', $sessionId)->first();
             if ($chatSession) {
                 $query = \App\Models\ChatMessage::where('chat_session_id', $chatSession->id)
-                    ->where('role', 'operator')
+                    ->where(function($q) {
+                        $q->where('role', 'operator')
+                          ->orWhere('meta->operator', true);
+                    })
                     ->orderBy('id', 'asc');
                     
                 if ($lastMessageId > 0) {

@@ -63,10 +63,9 @@ class ChatDetail extends Component
         // Save message to DB
         $message = ChatMessage::create([
             'chat_session_id' => $this->session->id,
-            'role' => 'assistant',
+            'role' => 'operator',
             'content' => $this->operatorMessage,
             'meta' => [
-                'operator' => true,
                 'operator_id' => auth()->id() ?? 1,
             ],
         ]);

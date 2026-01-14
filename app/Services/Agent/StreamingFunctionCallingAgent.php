@@ -739,12 +739,21 @@ PROMPT;
                 $article = $item['article'] ?? '';
                 $product = $productsByArticle[$article] ?? null;
                 
+                // Try partial match in allProducts
                 if (!$product) {
                     foreach ($productsByArticle as $a => $p) {
                         if (str_contains($a, $article) || str_contains($article, $a)) {
                             $product = $p;
                             break;
                         }
+                    }
+                }
+                
+                // Fallback: lookup directly in DB by article
+                if (!$product && $article) {
+                    $dbProduct = \App\Models\Product::where('article', $article)->first();
+                    if ($dbProduct) {
+                        $product = $this->detailsTool->getCards([$dbProduct->id])[0] ?? null;
                     }
                 }
                 
@@ -758,6 +767,15 @@ PROMPT;
                 'intro' => $json['intro'] ?? '',
                 'outro' => $json['outro'] ?? null,
                 'products' => !empty($orderedProducts) ? $orderedProducts : array_slice($allProducts, 0, 5),
+            ];
+        }
+        
+        // Handle JSON with 'text' key (no products found response)
+        if ($json && isset($json['text'])) {
+            return [
+                'intro' => $json['text'],
+                'outro' => null,
+                'products' => array_slice($allProducts, 0, 5),
             ];
         }
         

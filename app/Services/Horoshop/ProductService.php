@@ -79,10 +79,19 @@ class ProductService
      */
     protected function upsertProductFromHoroshop(array $item): void
     {
+        $this->upsertProductFromHoroshopPublic($item);
+    }
+
+    /**
+     * Публічна версія upsert для IncrementalProductSyncJob.
+     * Повертає Product для подальшої обробки.
+     */
+    public function upsertProductFromHoroshopPublic(array $item): ?Product
+    {
         $article = $item['article'] ?? null;
 
         if (! $article) {
-            return;
+            return null;
         }
 
         /** @var Product $product */
@@ -127,6 +136,8 @@ class ProductService
         $product->search_index = $this->buildSearchIndex($item, $product);
 
         $product->save();
+        
+        return $product;
     }
     
     /**

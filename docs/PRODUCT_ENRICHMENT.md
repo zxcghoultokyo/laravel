@@ -296,8 +296,8 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 4. [x] **Quality scoring** — EnrichmentQualityService з score 0-100 та grade A-F
 5. [ ] **A/B testing** — порівняння search quality з/без AI
 6. [x] **Parent-based enrichment** — ParentBasedEnrichmentJob (один запит на parent_article)
-7. [ ] **Incremental sync** — тільки змінені товари
-8. [ ] **Monitoring dashboard** — coverage, quality, costs (є diagnostic API)
+7. [x] **Incremental sync** — IncrementalProductSyncJob (кожні 4 години, тільки змінені товари)
+8. [x] **Monitoring dashboard** — Quality Score в Analytics + diagnostic API endpoints
 
 ## 📚 Пов'язані файли
 
@@ -443,4 +443,66 @@ ParentBasedEnrichmentJob::dispatch(
     offset: 0,        // Offset для resume
     onlyMissing: true // Тільки ті що немають індексу
 );
+```
+
+## 🔄 Incremental Sync
+
+### Концепція
+
+Замість повної синхронізації всіх ~2300+ товарів щодня:
+1. Порівнюємо хеш товару (price, quantity, title) з кешованим
+2. Оновлюємо тільки змінені/нові товари
+3. Позначаємо видалені як `in_stock: false`
+4. Автоматично тригеримо AI enrichment та Meili reindex
+
+**Переваги:**
+- Швидше (~секунди замість хвилин для малих змін)
+- Менше навантаження на БД
+- Частіші оновлення (кожні 4 години)
+
+### Використання
+
+```bash
+# Через artisan (синхронно, з виводом статистики)
+php artisan products:incremental-sync --sync
+
+# Через Job (асинхронно)
+php artisan products:incremental-sync
+
+# Без AI enrichment
+php artisan products:incremental-sync --no-enrichment
+
+# Без Meili reindex
+php artisan products:incremental-sync --no-meili
+```
+
+### IncrementalProductSyncJob
+
+```php
+use App\Jobs\IncrementalProductSyncJob;
+
+// Повний sync з enrichment та reindex
+IncrementalProductSyncJob::dispatch(true, true);
+
+// Тільки sync без додаткових jobs
+IncrementalProductSyncJob::dispatch(false, false);
+```
+
+### Scheduler
+
+Запускається автоматично кожні 4 години в production:
+- 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+
+Повна синхронізація (`SyncHoroshopProductsJob`) запускається о 03:00 щодня як fallback.
+
+### Статистика останнього sync
+
+```php
+// Отримати статистику
+$stats = Cache::get('incremental_sync_stats');
+// [
+//   'stats' => ['new' => 5, 'updated' => 12, 'unchanged' => 2280, 'deleted' => 0],
+//   'elapsed_seconds' => 45.2,
+//   'completed_at' => '2025-01-14T12:00:00+00:00'
+// ]
 ```

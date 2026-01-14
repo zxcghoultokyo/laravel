@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Jobs\GenerateCategoryScenariosJob;
 use App\Jobs\GenerateCategoryScriptsJob;
 use App\Jobs\SyncHoroshopProductsJob;
+use App\Jobs\IncrementalProductSyncJob;
 use App\Jobs\SyncBrandsJob;
 use App\Jobs\AnalyzeProductsWithAiJob;
 use App\Jobs\IndexProductsToMeiliJob;
@@ -40,6 +41,12 @@ class Kernel extends ConsoleKernel
         $schedule->job(new IndexProductsToMeiliJob())
             ->dailyAt('05:00')
             ->environments(['production']);
+
+        // 5. Incremental sync every 4 hours (faster updates for price/stock changes)
+        $schedule->job(new IncrementalProductSyncJob(true, true))
+            ->cron('0 */4 * * *')  // Every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+            ->environments(['production'])
+            ->withoutOverlapping();
 
         // Category scenarios
         $schedule->job(new GenerateCategoryScenariosJob())

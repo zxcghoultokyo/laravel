@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use App\Services\Ai\EnrichmentQualityService;
 
 class Analytics extends Component
 {
@@ -17,6 +18,9 @@ class Analytics extends Component
     public array $recentChatEvents = [];
     public bool $tablesExist = false;
     public ?string $lastUpdated = null;
+    
+    // AI Index Quality
+    public array $aiQuality = [];
 
     public function mount()
     {
@@ -60,8 +64,39 @@ class Analytics extends Component
         // Daily chart data
         $this->dailyChart = $this->getDailyChart($startDate);
         
+        // AI Index Quality Score
+        $this->loadAiQuality();
+        
         // Update timestamp
         $this->lastUpdated = now()->format('H:i:s');
+    }
+    
+    private function loadAiQuality(): void
+    {
+        try {
+            $service = app(EnrichmentQualityService::class);
+            $quality = $service->getOverallScore();
+            $recommendations = $service->getRecommendations();
+            
+            $this->aiQuality = [
+                'score' => $quality['score'],
+                'grade' => $quality['grade'],
+                'coverage' => $quality['stats']['coverage_percent'] ?? 0,
+                'slang_coverage' => $quality['stats']['slang_coverage_percent'] ?? 0,
+                'type_coverage' => $quality['stats']['type_coverage_percent'] ?? 0,
+                'avg_slang' => $quality['stats']['avg_slang_count'] ?? 0,
+                'total_products' => $quality['stats']['total_products'] ?? 0,
+                'total_indexed' => $quality['stats']['total_ai_index'] ?? 0,
+                'recommendations_count' => count($recommendations),
+                'high_priority_issues' => count(array_filter($recommendations, fn($r) => $r['priority'] === 'high')),
+            ];
+        } catch (\Throwable $e) {
+            $this->aiQuality = [
+                'score' => 0,
+                'grade' => 'N/A',
+                'error' => $e->getMessage(),
+            ];
+        }
     }
 
     private function getBasicStats($startDate): array

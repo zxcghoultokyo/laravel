@@ -143,6 +143,70 @@
             </div>
         </div>
 
+        <!-- AI Index Quality Score -->
+        @if(!empty($aiQuality) && !isset($aiQuality['error']))
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-sm font-semibold text-gray-500">🤖 Якість AI-пошуку</h3>
+                <a href="{{ url('/api/diagnostic/ai-index-problems?key=diagnostic_secret_key_2025') }}" 
+                   target="_blank" 
+                   class="text-xs text-blue-600 hover:underline">Детальніше →</a>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <!-- Overall Score -->
+                <div class="text-center p-3 rounded-lg {{ 
+                    $aiQuality['score'] >= 90 ? 'bg-green-50 border border-green-200' : 
+                    ($aiQuality['score'] >= 70 ? 'bg-yellow-50 border border-yellow-200' : 
+                    'bg-red-50 border border-red-200') 
+                }}">
+                    <div class="text-3xl font-bold {{ 
+                        $aiQuality['score'] >= 90 ? 'text-green-600' : 
+                        ($aiQuality['score'] >= 70 ? 'text-yellow-600' : 'text-red-600') 
+                    }}">
+                        {{ $aiQuality['grade'] }}
+                    </div>
+                    <div class="text-lg font-semibold text-gray-700">{{ $aiQuality['score'] }}%</div>
+                    <div class="text-xs text-gray-500">Quality Score</div>
+                </div>
+                
+                <!-- Coverage -->
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-gray-700">{{ $aiQuality['coverage'] }}%</div>
+                    <div class="text-xs text-gray-500">Покриття</div>
+                    <div class="text-xs text-gray-400">{{ number_format($aiQuality['total_indexed']) }}/{{ number_format($aiQuality['total_products']) }}</div>
+                </div>
+                
+                <!-- Type Coverage -->
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600">{{ $aiQuality['type_coverage'] }}%</div>
+                    <div class="text-xs text-gray-500">З типом</div>
+                </div>
+                
+                <!-- Slang Coverage -->
+                <div class="text-center p-3 bg-gray-50 rounded-lg">
+                    <div class="text-2xl font-bold text-purple-600">{{ $aiQuality['slang_coverage'] }}%</div>
+                    <div class="text-xs text-gray-500">Зі сленгом</div>
+                    <div class="text-xs text-gray-400">avg {{ $aiQuality['avg_slang'] }} слів</div>
+                </div>
+                
+                <!-- Issues -->
+                <div class="text-center p-3 rounded-lg {{ $aiQuality['high_priority_issues'] > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50' }}">
+                    <div class="text-2xl font-bold {{ $aiQuality['high_priority_issues'] > 0 ? 'text-red-600' : 'text-green-600' }}">
+                        {{ $aiQuality['high_priority_issues'] }}
+                    </div>
+                    <div class="text-xs text-gray-500">Критичних</div>
+                    <div class="text-xs text-gray-400">{{ $aiQuality['recommendations_count'] }} всього</div>
+                </div>
+            </div>
+            
+            @if($aiQuality['score'] < 70)
+            <div class="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                ⚠️ Низький score впливає на якість пошуку. Запустіть: <code class="bg-yellow-100 px-1 rounded">php artisan products:build-ai-index --only-missing</code>
+            </div>
+            @endif
+        </div>
+        @endif
+
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Daily Chart -->
             <div class="bg-white rounded-lg shadow p-4">

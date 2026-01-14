@@ -233,16 +233,34 @@
                 '.hs-btn-cart',
                 '.hs-add-to-cart',
                 '[data-hs-action="cart"]',
-                // Horoshop "Купити" button
+                // Horoshop "Купити" button - various patterns
                 '.j-buy-button-add',
+                '.j-buy-button',
                 '.product-order__block--buy .btn',
-                '[id^="j-buy-button"]'
+                '[id^="j-buy-button"]',
+                '[class*="j-buy"]',
+                '[class*="buy-button"]',
+                // Generic patterns
+                'button[class*="buy"]',
+                'a[class*="buy"]',
+                '.btn-buy',
+                '.product-buy-btn',
+                // Data attributes
+                '[data-buy]',
+                '[data-cart]',
+                '[data-add-cart]'
             ];
 
             // Click listener
             document.addEventListener('click', (e) => {
+                // Debug: log all clicks to see what's being clicked
+                if (this.debug) {
+                    console.log('[AIntento Analytics] Click detected:', e.target.tagName, e.target.className, e.target.id);
+                }
+                
                 const target = e.target.closest(cartSelectors.join(','));
                 if (target) {
+                    console.log('[AIntento Analytics] Cart button matched:', target);
                     this.handleAddToCartClick(target);
                 }
             }, true);
@@ -453,7 +471,11 @@
                 /\/api.*cart/i,
                 // Horoshop
                 /\/hs-api.*cart/i,
-                /action=cart/i
+                /action=cart/i,
+                /AddCart/i,
+                /add_to_cart/i,
+                /product.*add/i,
+                /cart.*add/i
             ];
             return cartPatterns.some(pattern => pattern.test(url));
         }

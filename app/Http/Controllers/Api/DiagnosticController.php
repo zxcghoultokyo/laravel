@@ -607,4 +607,115 @@ class DiagnosticController extends Controller
             'top_20_products' => $topProducts,
         ]);
     }
+    
+    /**
+     * GET /api/diagnostic/ai-index-stats
+     * Get AI enrichment statistics
+     */
+    public function aiIndexStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $totalProducts = \App\Models\Product::count();
+        $inStockProducts = \App\Models\Product::where('in_stock', true)->count();
+        $showcaseProducts = \App\Models\Product::where('display_in_showcase', true)->count();
+        
+        $totalAiIndex = \App\Models\ProductAiIndex::count();
+        $withProductType = \App\Models\ProductAiIndex::whereNotNull('product_type')
+            ->where('product_type', '!=', '')
+            ->count();
+        $withSlang = \App\Models\ProductAiIndex::whereNotNull('slang')
+            ->whereRaw("JSON_LENGTH(slang) > 0")
+            ->count();
+        $withKeywords = \App\Models\ProductAiIndex::whereNotNull('keywords')
+            ->whereRaw("JSON_LENGTH(keywords) > 0")
+            ->count();
+        
+        // Products without AI index
+        $withoutAiIndex = \App\Models\Product::where('display_in_showcase', true)
+            ->whereDoesntHave('aiIndex')
+            ->count();
+        
+        // Top product types
+        $topProductTypes = \App\Models\ProductAiIndex::selectRaw('product_type, COUNT(*) as cnt')
+            ->whereNotNull('product_type')
+            ->where('product_type', '!=', '')
+            ->groupBy('product_type')
+            ->orderByDesc('cnt')
+            ->take(15)
+            ->get();
+        
+        return response()->json([
+            'total_products' => $totalProducts,
+            'in_stock_products' => $inStockProducts,
+            'showcase_products' => $showcaseProducts,
+            'ai_index' => [
+                'total_records' => $totalAiIndex,
+                'with_product_type' => $withProductType,
+                'with_slang' => $withSlang,
+                'with_keywords' => $withKeywords,
+                'coverage_percent' => $showcaseProducts > 0 
+                    ? round(($totalAiIndex / $showcaseProducts) * 100, 1) 
+                    : 0,
+            ],
+            'missing_ai_index' => $withoutAiIndex,
+            'top_product_types' => $topProductTypes,
+        ]);
+    }
+    
+    /**
+     * POST /api/diagnostic/run-enrichment
+     * Run AI enrichment for products without index
+     */
+    public function runEnrichment(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $limit = (int) $request->input('limit', 100);
+        $timeout = (int) $request->input('timeout', 300);
+        $noAi = (bool) $request->input('no_ai', false);
+        
+        try {
+            // Run the enrichment command
+            $options = [
+                '--only-missing' => true,
+                '--limit' => $limit,
+                '--timeout' => $timeout,
+                '--batch' => 10,
+            ];
+            
+            if ($noAi) {
+                $options['--no-ai'] = true;
+            }
+            
+            \Illuminate\Support\Facades\Artisan::call('products:build-ai-index', $options);
+            
+            $output = \Illuminate\Support\Facades\Artisan::output();
+            
+            // Get updated stats
+            $totalAiIndex = \App\Models\ProductAiIndex::count();
+            $withProductType = \App\Models\ProductAiIndex::whereNotNull('product_type')
+                ->where('product_type', '!=', '')
+                ->count();
+            
+            return response()->json([
+                'success' => true,
+                'limit' => $limit,
+                'timeout' => $timeout,
+                'no_ai' => $noAi,
+                'ai_index_count' => $totalAiIndex,
+                'with_product_type' => $withProductType,
+                'output' => $output,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

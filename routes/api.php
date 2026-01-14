@@ -70,6 +70,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/widget-settings', [\App\Http\Controllers\Api\DiagnosticController::class, 'widgetSettings']);
     Route::post('/sync-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncOrders']);
     Route::get('/orders-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'ordersStats']);
+    Route::get('/ai-index-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiIndexStats']);
+    Route::post('/run-enrichment', [\App\Http\Controllers\Api\DiagnosticController::class, 'runEnrichment']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

@@ -8,6 +8,32 @@ Big Picture
 - Data sources: Horoshop → MySQL (`products.raw`) → AI enrichment (`product_ai_index`) → Meilisearch indexing.
 - Fallbacks everywhere: if OpenAI or Meili are off, keyword parsing and Eloquent search kick in.
 
+## ⚠️ CRITICAL: Chat Architecture (TWO AGENTS!)
+
+**Widget uses SSE streaming by default!** There are TWO separate agents:
+
+| Endpoint | Agent | File |
+|----------|-------|------|
+| `POST /api/chat` | `FunctionCallingAgent` | [app/Services/Agent/FunctionCallingAgent.php](app/Services/Agent/FunctionCallingAgent.php) |
+| `GET /api/chat/stream` (SSE) | `StreamingFunctionCallingAgent` | [app/Services/Agent/StreamingFunctionCallingAgent.php](app/Services/Agent/StreamingFunctionCallingAgent.php) |
+
+**If chat context/history is broken — check BOTH agents!**
+
+- Widget ([public/widget.js](public/widget.js)) uses SSE streaming (`sendMessageStreaming()`)
+- Both agents must load history from `ChatSession`/`ChatMessage` tables
+- Context extraction: `extractConversationContext()` parses product categories, sizes from history
+- System prompt gets `[КОНТЕКСТ РОЗМОВИ: ...]` with extracted context
+
+## Chat History & Context
+
+History stored in DB, NOT in session/cache:
+- `ChatSession` - session record with `session_id`
+- `ChatMessage` - messages with `role`, `content`, `meta` (includes shown products)
+- Load: `loadConversationHistory($sessionId)` in both agents
+- Assistant messages include `[Показані товари: ...]` marker for context
+
+Diagnostic endpoint: `GET /api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025`
+
 Key Components
 - `ChatService`: orchestrates chat/session and formatting. [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php)
 - `AiRouter`: OpenAI classification/normalization/rerank with safe fallbacks. [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php)
@@ -36,6 +62,28 @@ Config & Env
 - OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt‑5.1), `OPENAI_BASE_URL`. See [config/services.php](config/services.php).
 - Meili: `MEILI_ENABLED`, `MEILI_HOST`, `MEILI_MASTER_KEY`, index name in [config/meilisearch.php](config/meilisearch.php).
 - Horoshop: `HOROSHOP_DOMAIN`, `HOROSHOP_API_LOGIN`, `HOROSHOP_API_PASSWORD`.
+
+## 🔧 Diagnostic API (Production Debugging)
+
+**Base URL:** `https://aimbot.laravel.cloud/api/diagnostic`
+**Key:** `?key=diagnostic_secret_key_2025`
+
+Quick debug commands:
+```bash
+# Check chat history for a session
+curl "https://aimbot.laravel.cloud/api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025"
+
+# Search products in DB
+curl "https://aimbot.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=футболка"
+
+# Search in Meilisearch
+curl "https://aimbot.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=футболка"
+
+# DB stats
+curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+```
+
+Full docs: [docs/DIAGNOSTIC_API.md](docs/DIAGNOSTIC_API.md)
 
 Developer Workflows
 - Dev loop: `composer run dev` (PHP server, queue listener, logs, Vite).

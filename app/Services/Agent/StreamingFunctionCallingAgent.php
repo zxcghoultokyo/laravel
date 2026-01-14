@@ -394,6 +394,12 @@ PROMPT;
         if (!empty($settings->faq_payment_delivery_text)) {
             $info[] = "ОПЛАТА ТА ДОСТАВКА:\n{$settings->faq_payment_delivery_text}";
         }
+        if (!empty($settings->faq_returns_text)) {
+            $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";
+        }
+        if (!empty($settings->store_hours)) {
+            $info[] = "ГРАФІК РОБОТИ: {$settings->store_hours}";
+        }
 
         return empty($info) ? "Актуальну інформацію дивіться на сайті contractor.kiev.ua" : implode("\n\n", $info);
     }

@@ -717,6 +717,24 @@ PROMPT;
             ];
         }
         
+        // Handle JSON with 'text' key (no products found response)
+        if ($json && isset($json['text'])) {
+            $textContent = $json['text'];
+            $messages = [['type' => 'text', 'content' => $textContent]];
+            
+            // Still show available products if any
+            foreach (array_slice($allProducts, 0, 5) as $product) {
+                $messages[] = ['type' => 'product', 'product' => $product, 'comment' => ''];
+            }
+            
+            return [
+                'intro' => $textContent,
+                'outro' => null,
+                'products' => array_slice($allProducts, 0, 5),
+                'messages' => $messages,
+            ];
+        }
+        
         // Fallback: plain text response
         $messages = [];
         if ($responseText) {

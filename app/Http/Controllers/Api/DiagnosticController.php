@@ -1271,4 +1271,32 @@ class DiagnosticController extends Controller
             'by_event_type' => $stats,
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/clear-all-analytics
+     * Nuclear option: clear ALL analytics data and start fresh
+     */
+    public function clearAllAnalytics(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $stats = [
+            'chat_events' => DB::table('chat_events')->count(),
+            'chat_conversions' => DB::table('chat_conversions')->count(),
+            'ab_test_events' => DB::table('ab_test_events')->count(),
+        ];
+        
+        // Clear all analytics tables
+        DB::table('chat_events')->truncate();
+        DB::table('chat_conversions')->truncate();
+        DB::table('ab_test_events')->truncate();
+        
+        return response()->json([
+            'success' => true,
+            'deleted' => $stats,
+            'message' => '🔥 All analytics data cleared! Starting fresh.',
+        ]);
+    }
 }

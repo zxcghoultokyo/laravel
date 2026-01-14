@@ -31,18 +31,21 @@ class ProductIndexBuilder
             $ai = app(AiClient::class);
 
             $system = implode("\n", [
-                'You are an AI enrichment service for a tactical e-commerce catalog.',
+                'You are an AI enrichment service for a Ukrainian tactical/military e-commerce catalog.',
                 'Return a STRICT JSON object with keys:',
-                'product_type: short snake_case type (e.g., helmet, plate_carrier, armor_plate, tshirt)',
-                'ai_category: broad category (e.g., helmets, armor, apparel, accessories)',
+                'product_type: short snake_case type (e.g., helmet, plate_carrier, armor_plate, tshirt, pouch, gloves)',
+                'ai_category: broad category (e.g., helmets, armor, apparel, accessories, pouches)',
                 'materials: JSON array of strings ["nylon", "cordura"] or null',
                 'standards: JSON array of strings ["NIJ III+", "DSTU"] or null',
-                'slang: JSON array of slang names in Ukrainian ["чебурашка", "планка"] or null',
-                'keywords: JSON array of search keywords ["keyword1", "keyword2"] or null',
+                'slang: JSON array of UKRAINIAN slang/jargon names that people use to search for this product.',
+                '  Examples: plate_carrier -> ["плитка", "бронік", "pc", "розгрузка", "жилетка"]',
+                '  Examples: helmet -> ["каска", "шолом", "кевлар", "бумпер"]',
+                '  Examples: armor_plate -> ["плита", "броня", "кераміка", "сталевка"]',
+                '  IMPORTANT: Generate 5-10 slang terms that Ukrainian military/airsoft community uses!',
+                'keywords: JSON array of search keywords in Ukrainian and English',
                 'usage: JSON array of use cases ["assault", "training", "everyday"] or null',
-                'embedding: optional vector array (omit if unavailable).',
                 'IMPORTANT: Always return arrays for materials, standards, slang, keywords, usage - never comma-separated strings!',
-                'If unsure, leave fields null but NEVER hallucinate.',
+                'If unsure about other fields, leave them null but ALWAYS generate slang for tactical products.',
             ]);
 
             $payload = [

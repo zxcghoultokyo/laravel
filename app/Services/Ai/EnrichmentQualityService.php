@@ -145,14 +145,28 @@ class EnrichmentQualityService
         }
         
         // 3. AI index without slang
-        $noSlang = ProductAiIndex::where(function ($q) {
-                $q->whereNull('slang')
-                    ->orWhereRaw("JSON_LENGTH(slang) = 0");
-            })
-            ->whereNotNull('product_type')
+        $noSlangQuery = ProductAiIndex::whereNotNull('product_type')
             ->with('product:id,title,article')
-            ->limit($limit)
-            ->get();
+            ->limit($limit);
+        
+        // Use database-agnostic JSON check (MySQL uses JSON_LENGTH, SQLite uses json_array_length)
+        $driver = DB::connection()->getDriverName();
+        if ($driver === 'mysql') {
+            $noSlangQuery->where(function ($q) {
+                $q->whereNull('slang')
+                    ->orWhereRaw("JSON_LENGTH(slang) = 0")
+                    ->orWhere('slang', '[]');
+            });
+        } else {
+            // SQLite fallback
+            $noSlangQuery->where(function ($q) {
+                $q->whereNull('slang')
+                    ->orWhere('slang', '')
+                    ->orWhere('slang', '[]');
+            });
+        }
+        
+        $noSlang = $noSlangQuery->get();
         
         if ($noSlang->isNotEmpty()) {
             $problems['no_slang'] = [

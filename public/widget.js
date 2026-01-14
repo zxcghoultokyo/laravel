@@ -876,6 +876,13 @@
                 cursor.remove();
             }
             
+            // Update bubble style to match regular messages (white background)
+            const bubble = element.querySelector('.aintento-bubble');
+            if (bubble) {
+                bubble.style.background = 'white';
+                bubble.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+            }
+            
             // Final text cleanup - extract intro from JSON if needed
             let displayText = '';
             
@@ -918,6 +925,12 @@
             // If no readable text, hide the element
             if (!displayText || displayText.trim().startsWith('{') || displayText === 'Шукаю для вас...') {
                 element.style.display = 'none';
+            } else {
+                // Save the finalized text to localStorage for history restoration
+                const sessionId = localStorage.getItem('aintento_session_id');
+                if (sessionId && displayText.trim()) {
+                    saveMessage(sessionId, { role: 'assistant', content: displayText });
+                }
             }
         }
         
@@ -1430,9 +1443,23 @@
             const parts = [];
             if (product.brand) parts.push(product.brand);
             if (product.category_path) {
-                // Extract last part of category path
+                // Extract meaningful category from path
+                // "Уніформа, одяг і взуття/Футболки/шорти" → "Футболки"
+                // Skip generic parts and last if it's a subtype
                 const cats = product.category_path.split('/');
-                if (cats.length > 0) parts.push(cats[cats.length - 1].trim());
+                // Skip first (generic), take second-to-last if 3+ parts, otherwise last
+                let catName = '';
+                if (cats.length >= 3) {
+                    catName = cats[cats.length - 2].trim(); // "Футболки" from "Футболки/шорти"
+                } else if (cats.length === 2) {
+                    catName = cats[1].trim();
+                } else if (cats.length === 1) {
+                    catName = cats[0].trim();
+                }
+                // Skip if it's the same as brand or too generic
+                if (catName && catName !== product.brand && !['шорти', 'одяг', 'взуття'].includes(catName.toLowerCase())) {
+                    parts.push(catName);
+                }
             }
             if (parts.length > 0) {
                 summaryText = parts.join(' • ');

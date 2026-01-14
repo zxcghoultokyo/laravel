@@ -3,6 +3,7 @@
     <div class="mb-4 flex gap-2">
         <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Dashboard</a>
         <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">📊 Аналітика</a>
+        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🛒 Конверсії</a>
         <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">💬 Чати</a>
         <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">⚙️ Віджет</a>
     </div>

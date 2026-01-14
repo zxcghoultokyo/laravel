@@ -7,6 +7,7 @@ use App\Livewire\Admin\ChatDetail;
 use App\Livewire\Admin\WidgetSettings;
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Analytics;
+use App\Livewire\Admin\ConversionAnalytics;
 
 Route::get('/', function () {
     return view('demo'); // AI Chat Demo landing page
@@ -45,4 +46,5 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/chats/{sessionId}', ChatDetail::class)->name('chats.show');
     Route::get('/widget', WidgetSettings::class)->name('widget.settings');
     Route::get('/analytics', Analytics::class)->name('analytics');
+    Route::get('/conversions', ConversionAnalytics::class)->name('conversions');
 });

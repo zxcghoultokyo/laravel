@@ -232,7 +232,11 @@
                 // Horoshop specific
                 '.hs-btn-cart',
                 '.hs-add-to-cart',
-                '[data-hs-action="cart"]'
+                '[data-hs-action="cart"]',
+                // Horoshop "Купити" button
+                '.j-buy-button-add',
+                '.product-order__block--buy .btn',
+                '[id^="j-buy-button"]'
             ];
 
             // Click listener
@@ -267,14 +271,71 @@
          */
         handleAddToCartClick(button) {
             // Try to extract product info from button or parent
-            const productData = this.extractProductFromElement(button);
+            let productData = this.extractProductFromElement(button);
             
-            this.trackEvent('add_to_cart_click', {
+            // Horoshop specific: extract from button ID (j-buy-button-widget-5212)
+            if (!productData?.id && button.id) {
+                const match = button.id.match(/j-buy-button-(?:widget-)?(\d+)/);
+                if (match) {
+                    productData = productData || {};
+                    productData.id = match[1];
+                }
+            }
+            
+            // Check if user had chat conversation in this session
+            const hadChatConversation = this.hadChatConversation();
+            const wasClickedInChat = this.wasProductClickedInChat(productData?.id || productData?.article);
+            
+            this.trackEvent('add_to_cart', {
                 product_id: productData?.id,
                 product_article: productData?.article,
                 product_price: productData?.price,
-                product_from_chat: this.wasProductClickedInChat(productData?.id || productData?.article)
+                product_from_chat: wasClickedInChat,
+                had_chat_conversation: hadChatConversation,
+                chat_session_id: hadChatConversation ? this.getChatSessionId() : null
             });
+            
+            // Track as conversion if related to chat
+            if (hadChatConversation || wasClickedInChat) {
+                this.trackConversion('add_to_cart', {
+                    ...productData,
+                    attributed_to_chat: true,
+                    was_shown_in_chat: wasClickedInChat
+                });
+            }
+            
+            console.log('[AIntento Analytics] Add to cart tracked:', {
+                productData,
+                hadChatConversation,
+                wasClickedInChat
+            });
+        }
+        
+        /**
+         * Check if user had chat conversation in current session
+         */
+        hadChatConversation() {
+            // Check localStorage for chat messages
+            const messagesKey = 'aintento_messages_' + (localStorage.getItem('aintento_session_id') || '');
+            const messages = localStorage.getItem(messagesKey);
+            if (messages) {
+                try {
+                    const parsed = JSON.parse(messages);
+                    // At least 2 messages (user asked + assistant replied)
+                    return parsed.length >= 2;
+                } catch (e) {}
+            }
+            
+            // Also check if chat was opened
+            const chatOpened = sessionStorage.getItem('aintento_chat_opened');
+            return chatOpened === 'true';
+        }
+        
+        /**
+         * Get chat session ID if available
+         */
+        getChatSessionId() {
+            return localStorage.getItem('aintento_session_id') || this.sessionId;
         }
 
         /**

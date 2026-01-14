@@ -67,6 +67,18 @@ class AnalyticsController extends Controller
                     }
                 }
 
+                // Build metadata from extra fields
+                $metadata = $event['metadata'] ?? [];
+                if (!empty($event['had_chat_conversation'])) {
+                    $metadata['had_chat_conversation'] = $event['had_chat_conversation'];
+                }
+                if (!empty($event['product_from_chat'])) {
+                    $metadata['product_from_chat'] = $event['product_from_chat'];
+                }
+                if (!empty($event['chat_session_id'])) {
+                    $metadata['chat_session_id'] = $event['chat_session_id'];
+                }
+
                 $rows[] = [
                     'session_id' => substr($event['session_id'] ?? '', 0, 64),
                     'merchant_id' => substr($event['merchant_id'] ?? '', 0, 64),
@@ -86,7 +98,7 @@ class AnalyticsController extends Controller
                     'device_type' => isset($event['device_type']) ? substr($event['device_type'], 0, 20) : null,
                     'page_url' => isset($event['page_url']) ? substr($event['page_url'], 0, 500) : null,
                     'referrer' => isset($event['referrer']) ? substr($event['referrer'], 0, 500) : null,
-                    'metadata' => isset($event['metadata']) ? json_encode($event['metadata']) : null,
+                    'metadata' => !empty($metadata) ? json_encode($metadata) : null,
                     'created_at' => $createdAt,
                 ];
             }

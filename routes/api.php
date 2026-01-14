@@ -80,6 +80,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/run-enrichment', [\App\Http\Controllers\Api\DiagnosticController::class, 'runEnrichment']);
     Route::post('/enrich-one', [\App\Http\Controllers\Api\DiagnosticController::class, 'enrichOne']);
     Route::get('/slang-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'slangStats']);
+    Route::get('/embedding-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'embeddingStats']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

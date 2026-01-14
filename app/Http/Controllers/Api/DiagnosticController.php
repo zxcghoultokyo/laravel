@@ -966,4 +966,52 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * GET /api/diagnostic/embedding-stats
+     * Get statistics about embeddings
+     */
+    public function embeddingStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $totalAiIndex = \App\Models\ProductAiIndex::count();
+        
+        // Count embeddings - embedding field is JSON array
+        $withEmbedding = \App\Models\ProductAiIndex::whereNotNull('embedding')
+            ->where('embedding', '!=', '[]')
+            ->where('embedding', '!=', 'null')
+            ->count();
+        
+        $withoutEmbedding = $totalAiIndex - $withEmbedding;
+        
+        // Sample of products with embeddings
+        $samplesWithEmbedding = \App\Models\ProductAiIndex::whereNotNull('embedding')
+            ->where('embedding', '!=', '[]')
+            ->with('product:id,title,article')
+            ->take(5)
+            ->get()
+            ->map(fn($ai) => [
+                'product_id' => $ai->product_id,
+                'title' => $ai->product->title ?? 'Unknown',
+                'embedding_length' => is_array($ai->embedding) ? count($ai->embedding) : 0,
+            ]);
+        
+        // Check embedding service availability
+        $embeddingService = app(\App\Services\Ai\EmbeddingService::class);
+        $serviceAvailable = $embeddingService->isAvailable();
+        
+        return response()->json([
+            'total_ai_index' => $totalAiIndex,
+            'with_embedding' => $withEmbedding,
+            'without_embedding' => $withoutEmbedding,
+            'coverage_percent' => $totalAiIndex > 0 
+                ? round(($withEmbedding / $totalAiIndex) * 100, 1) 
+                : 0,
+            'service_available' => $serviceAvailable,
+            'samples_with_embedding' => $samplesWithEmbedding,
+        ]);
+    }
 }

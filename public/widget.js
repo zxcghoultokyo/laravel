@@ -1443,22 +1443,13 @@
             const parts = [];
             if (product.brand) parts.push(product.brand);
             if (product.category_path) {
-                // Extract meaningful category from path
-                // "Уніформа, одяг і взуття/Футболки/шорти" → "Футболки"
-                // Skip generic parts and last if it's a subtype
-                const cats = product.category_path.split('/');
-                // Skip first (generic), take second-to-last if 3+ parts, otherwise last
-                let catName = '';
-                if (cats.length >= 3) {
-                    catName = cats[cats.length - 2].trim(); // "Футболки" from "Футболки/шорти"
-                } else if (cats.length === 2) {
-                    catName = cats[1].trim();
-                } else if (cats.length === 1) {
-                    catName = cats[0].trim();
-                }
-                // Skip if it's the same as brand or too generic
-                if (catName && catName !== product.brand && !['шорти', 'одяг', 'взуття'].includes(catName.toLowerCase())) {
-                    parts.push(catName);
+                // Show full category path (skip first generic part like "Уніформа, одяг і взуття")
+                // "Уніформа, одяг і взуття/Футболки/Футболки АТАКА" → "Футболки / Футболки АТАКА"
+                const cats = product.category_path.split('/').map(c => c.trim()).filter(Boolean);
+                // Skip first generic category, join the rest
+                const categoryParts = cats.length > 1 ? cats.slice(1) : cats;
+                if (categoryParts.length > 0) {
+                    parts.push(categoryParts.join(' / '));
                 }
             }
             if (parts.length > 0) {

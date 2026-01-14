@@ -104,6 +104,11 @@
             text_color: '#ffffff',
             position: 'right',
             border_radius: 12,
+            font_family: null,
+            show_shadow: true,
+            bot_name: 'AIntento',
+            bot_avatar_url: null,
+            bot_status_text: 'Завжди онлайн',
             welcome_message: 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?',
             input_placeholder: 'Напишіть повідомлення...',
             consent_notice: null,
@@ -118,8 +123,8 @@
             return;
         }
 
-        // Bot avatar uses BASE_URL
-        BOT_AVATAR = BASE_URL + '/images/aintento-avatar.svg';
+        // Bot avatar - use custom URL if provided, otherwise default
+        BOT_AVATAR = settings.bot_avatar_url || (BASE_URL + '/images/aintento-avatar.svg');
 
         // Store settings globally
         window.aintentoSettings = settings;
@@ -440,7 +445,7 @@
                 bottom: 20px;
                 ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
                 z-index: 9999;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                font-family: ${s.font_family || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"};
             ">
                 <!-- Chat bubble hint -->
                 <div id="aintento-bubble" class="aintento-bubble" style="
@@ -530,7 +535,7 @@
                 ">
                     <div class="aintento-header" style="
                         background: linear-gradient(135deg, ${s.primary_color} 0%, ${adjustBrightness(s.primary_color, -15)} 100%);
-                        color: white;
+                        color: ${s.text_color || 'white'};
                         padding: 16px;
                         display: flex;
                         justify-content: space-between;
@@ -548,17 +553,17 @@
                                 justify-content: center;
                                 border: 2px solid rgba(34, 211, 238, 0.6);
                             ">
-                                <img src="${BOT_AVATAR}" alt="AIntento" style="width: 32px; height: 32px; border-radius: 50%;">
+                                <img src="${BOT_AVATAR}" alt="${s.bot_name || 'AIntento'}" style="width: 32px; height: 32px; border-radius: 50%;">
                             </div>
                             <div style="display: flex; flex-direction: column;">
-                                <span style="font-weight: 600; font-size: 15px;">AIntento</span>
-                                <span style="font-size: 12px; opacity: 0.9;">🟢 Завжди онлайн</span>
+                                <span style="font-weight: 600; font-size: 15px; color: ${s.text_color || 'white'};">${s.bot_name || 'AIntento'}</span>
+                                <span style="font-size: 12px; opacity: 0.9; color: ${s.text_color || 'white'};">🟢 ${s.bot_status_text || 'Завжди онлайн'}</span>
                             </div>
                         </div>
                         <button id="aintento-close" style="
                             background: rgba(255,255,255,0.2);
                             border: none;
-                            color: white;
+                            color: ${s.text_color || 'white'};
                             font-size: 18px;
                             cursor: pointer;
                             padding: 4px;

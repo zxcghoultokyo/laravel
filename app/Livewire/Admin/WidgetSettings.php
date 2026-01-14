@@ -20,6 +20,15 @@ class WidgetSettings extends Component
     public $consent_notice = '';
     public $enabled = true;
     public $api_token = '';
+    
+    // Branding fields (Phase 1)
+    public $bot_name = 'AIntento';
+    public $bot_avatar_url = '';
+    public $bot_status_text = 'Завжди онлайн';
+    public $font_family = '';
+    public $show_shadow = true;
+    public $tone = 'official';
+    
     public $shop_phone = '+380 63 631 9919';
     public $callback_form_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/#callback';
     public $nova_poshta_tracking_url = 'https://tracking.novaposhta.ua/';
@@ -48,6 +57,8 @@ class WidgetSettings extends Component
                 'primary_color', 'text_color', 'position', 'start_state',
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
+                'bot_name', 'bot_avatar_url', 'bot_status_text', 
+                'font_family', 'show_shadow', 'tone',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
                 'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain',
                 'enable_faq_custom_content',
@@ -82,6 +93,11 @@ class WidgetSettings extends Component
             'border_radius' => 'required|integer|min:0|max:50',
             'welcome_message' => 'required|string|max:500',
             'input_placeholder' => 'required|string|max:200',
+            'bot_name' => 'nullable|string|max:100',
+            'bot_avatar_url' => 'nullable|url|max:500',
+            'bot_status_text' => 'nullable|string|max:100',
+            'font_family' => 'nullable|string|max:100',
+            'tone' => 'nullable|in:official,spartan,friendly',
             'shop_phone' => 'required|string|max:50',
             'callback_form_url' => 'required|url|max:255',
             'nova_poshta_tracking_url' => 'required|url|max:255',
@@ -108,6 +124,12 @@ class WidgetSettings extends Component
                 'input_placeholder' => $this->input_placeholder,
                 'consent_notice' => $this->consent_notice,
                 'enabled' => $this->enabled,
+                'bot_name' => $this->bot_name ?: 'AIntento',
+                'bot_avatar_url' => $this->bot_avatar_url ?: null,
+                'bot_status_text' => $this->bot_status_text ?: 'Завжди онлайн',
+                'font_family' => $this->font_family ?: null,
+                'show_shadow' => $this->show_shadow,
+                'tone' => $this->tone ?: 'official',
                 'shop_phone' => $this->shop_phone,
                 'callback_form_url' => $this->callback_form_url,
                 'nova_poshta_tracking_url' => $this->nova_poshta_tracking_url,

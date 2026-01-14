@@ -62,6 +62,56 @@
                     </div>
                 </div>
 
+                <!-- Branding -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎨 Брендинг</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Ім'я бота</label>
+                            <input type="text" wire:model.live="bot_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="AIntento" maxlength="100">
+                            <p class="mt-1 text-xs text-gray-500">Відображається в заголовку віджету</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">URL аватарки бота</label>
+                            <input type="url" wire:model.live="bot_avatar_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://example.com/avatar.png" maxlength="500">
+                            <p class="mt-1 text-xs text-gray-500">Рекомендований розмір: 80x80px</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Статус бота</label>
+                            <input type="text" wire:model.live="bot_status_text" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Завжди онлайн" maxlength="100">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Шрифт</label>
+                            <select wire:model.live="font_family" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="">Системний (за замовчуванням)</option>
+                                <option value="'Inter', sans-serif">Inter</option>
+                                <option value="'Roboto', sans-serif">Roboto</option>
+                                <option value="'Open Sans', sans-serif">Open Sans</option>
+                                <option value="'Montserrat', sans-serif">Montserrat</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Тон відповідей</label>
+                            <select wire:model.live="tone" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="official">Офіційний — ввічливий, формальний</option>
+                                <option value="spartan">Лаконічний — коротко, по суті</option>
+                                <option value="friendly">Дружній — неформальний, позитивний</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Впливає на стиль відповідей AI</p>
+                        </div>
+
+                        <div class="flex items-center">
+                            <input type="checkbox" wire:model.live="show_shadow" id="show_shadow" class="rounded border-gray-300">
+                            <label for="show_shadow" class="ml-2 text-sm text-gray-700">Показувати тінь віджету</label>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Content -->
                 <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">Тексти</h3>

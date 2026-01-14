@@ -112,19 +112,28 @@ class FunctionCallingAgent
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        // Add saved conversation context summary if available
+        // Add conversation history if available
+        $history = $context['history'] ?? [];
+        
+        // Extract conversation context from history (more reliable than GPT-generated _context)
+        $conversationContext = $this->extractConversationContext($history);
+        if ($conversationContext) {
+            $messages[] = [
+                'role' => 'system', 
+                'content' => "[КОНТЕКСТ РОЗМОВИ: {$conversationContext}]\nПАМ'ЯТАЙ ЦЕЙ КОНТЕКСТ! Не питай користувача що він шукає якщо це вже відомо з контексту!"
+            ];
+        }
+        
+        // Also try saved context summary as backup
         $sessionId = $context['session_id'] ?? null;
         $savedContext = $sessionId ? $this->loadContextSummary($sessionId) : null;
-        
-        if ($savedContext) {
+        if ($savedContext && !$conversationContext) {
             $messages[] = [
                 'role' => 'system', 
                 'content' => "[КОНТЕКСТ РОЗМОВИ: {$savedContext}]"
             ];
         }
 
-        // Add conversation history if available
-        $history = $context['history'] ?? [];
         foreach ($history as $msg) {
             $messages[] = $msg;
         }
@@ -1222,5 +1231,95 @@ PROMPT;
         if ($context && is_string($context) && mb_strlen($context) > 3) {
             $this->saveContextSummary($sessionId, $context);
         }
+    }
+
+    /**
+     * Extract conversation context from message history
+     * More reliable than GPT-generated _context
+     */
+    private function extractConversationContext(array $history): ?string
+    {
+        if (empty($history)) {
+            return null;
+        }
+
+        $context = [];
+        
+        // Product patterns to detect what user is looking for
+        $productPatterns = [
+            'сорочк' => 'сорочку',
+            'штан' => 'штани',
+            'берц' => 'берці',
+            'шолом' => 'шолом',
+            'каск' => 'шолом/каску',
+            'плитоноск' => 'плитоноску',
+            'рюкзак' => 'рюкзак',
+            'підсумок' => 'підсумок',
+            'бронеплит' => 'бронеплиту',
+            'форм' => 'форму',
+            'куртк' => 'куртку',
+            'взутт' => 'взуття',
+            'рукавиц' => 'рукавиці',
+            'окуляр' => 'окуляри',
+            'термо' => 'термобілизну',
+            'балістич' => 'балістичний захист',
+            'вогнестійк' => 'вогнестійкий одяг',
+        ];
+        
+        // Size patterns
+        $sizePatterns = [
+            '/розмір\s*(M|L|S|XL|XXL|\d{2,3})/ui' => 'розмір',
+            '/зріст\s*(\d{2,3})/ui' => 'зріст',
+            '/обхват\s*(грудей|талії)/ui' => 'обміри',
+            '/вага\s*(\d{2,3})/ui' => 'вага',
+        ];
+        
+        $foundProduct = null;
+        $foundParams = [];
+        
+        foreach ($history as $msg) {
+            $content = $msg['content'] ?? '';
+            $contentLower = mb_strtolower($content);
+            
+            // Look for product mentions in user messages
+            if ($msg['role'] === 'user') {
+                foreach ($productPatterns as $pattern => $name) {
+                    if (mb_strpos($contentLower, $pattern) !== false) {
+                        $foundProduct = $name;
+                    }
+                }
+                
+                // Look for size/params
+                foreach ($sizePatterns as $pattern => $paramType) {
+                    if (preg_match($pattern, $content, $matches)) {
+                        $foundParams[$paramType] = $matches[1] ?? $matches[0];
+                    }
+                }
+                
+                // Extract height specifically
+                if (preg_match('/(\d{3})\s*(см)?/u', $content, $matches)) {
+                    $height = (int) $matches[1];
+                    if ($height >= 150 && $height <= 210) {
+                        $foundParams['зріст'] = $height . ' см';
+                    }
+                }
+            }
+        }
+        
+        // Build context string
+        if ($foundProduct) {
+            $context[] = "шукає {$foundProduct}";
+        }
+        
+        if (!empty($foundParams)) {
+            $paramsStr = implode(', ', array_map(fn($k, $v) => "{$k}: {$v}", array_keys($foundParams), array_values($foundParams)));
+            $context[] = $paramsStr;
+        }
+        
+        if (empty($context)) {
+            return null;
+        }
+        
+        return implode('; ', $context);
     }
 }

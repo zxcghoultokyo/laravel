@@ -31,26 +31,26 @@
 > **Пріоритет:** КРИТИЧНИЙ — без цього продукт не працює
 
 #### 1.1 Widget Settings → Реальний віджет
-- [ ] **Зробити щоб налаштування реально застосовувались до віджета**
+- [x] **Зробити щоб налаштування реально застосовувались до віджета**
   - Віджет має читати налаштування з API `/api/widget/settings`
   - Live-reload при зміні налаштувань
-- [ ] Primary color → header, buttons, links у віджеті
-- [ ] Text color → текст у header
-- [ ] Position (left/right) → позиція віджета
-- [ ] Border radius → заокруглення
-- [ ] Welcome message → перше повідомлення бота
-- [ ] Input placeholder → placeholder поля вводу
+- [x] Primary color → header, buttons, links у віджеті
+- [x] Text color → текст у header
+- [x] Position (left/right) → позиція віджета
+- [x] Border radius → заокруглення
+- [x] Welcome message → перше повідомлення бота
+- [x] Input placeholder → placeholder поля вводу
 
 #### 1.2 Live Preview в адмінці
-- [ ] Реальний інтерактивний preview (не статичний HTML)
+- [x] Реальний інтерактивний preview (не статичний HTML)
 - [ ] Mobile/Desktop переключатель
-- [ ] Оновлення в реальному часі при зміні налаштувань
+- [x] Оновлення в реальному часі при зміні налаштувань
 
 #### 1.3 Базовий UI Polish
 - [ ] Консистентна навігація (sidebar замість tabs)
 - [ ] Breadcrumbs
-- [ ] Toast notifications замість flash messages
-- [ ] Loading states для всіх дій
+- [x] Toast notifications замість flash messages
+- [x] Loading states для всіх дій
 - [ ] Empty states з CTA
 
 ---
@@ -80,14 +80,14 @@
 └────────────────────────────────────────────────────────┘
 ```
 
-- [ ] Upload логотипу (S3/local storage)
-- [ ] Upload/вибір аватара бота
-- [ ] Назва бота (замість "AIntento")
-- [ ] Preset кольорові схеми (5-6 варіантів)
-- [ ] Custom color picker з HEX/RGB
-- [ ] Font family selection (Google Fonts subset)
-- [ ] Border radius slider
-- [ ] Shadow on/off
+- [x] Upload логотипу (S3/local storage)
+- [x] Upload/вибір аватара бота
+- [x] Назва бота (замість "AIntento")
+- [x] Preset кольорові схеми (5-6 варіантів)
+- [x] Custom color picker з HEX/RGB
+- [x] Font family selection (Google Fonts subset)
+- [x] Border radius slider
+- [x] Shadow on/off
 
 #### 2.2 Збереження медіа
 - [ ] File upload для лого/аватар

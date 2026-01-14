@@ -117,6 +117,12 @@ class FunctionCallingAgent
         
         // Extract conversation context from history (more reliable than GPT-generated _context)
         $conversationContext = $this->extractConversationContext($history);
+        
+        Log::info('FunctionCallingAgent: extracted context', [
+            'context' => $conversationContext,
+            'history_count' => count($history),
+        ]);
+        
         if ($conversationContext) {
             $messages[] = [
                 'role' => 'system', 
@@ -1255,6 +1261,7 @@ PROMPT;
         // Product patterns to detect what user is looking for
         $productPatterns = [
             'сорочк' => 'сорочку',
+            'футболк' => 'футболку',
             'штан' => 'штани',
             'берц' => 'берці',
             'шолом' => 'шолом',
@@ -1273,6 +1280,17 @@ PROMPT;
             'вогнестійк' => 'вогнестійкий одяг',
             'подарун' => 'подарунок',
             'подар' => 'подарунок',
+            'trident' => 'футболку TRIDENT',
+            'ataka' => 'товар ATAKA',
+            'кепк' => 'кепку',
+            'шапк' => 'шапку',
+            'кросівк' => 'кросівки',
+            'черевик' => 'черевики',
+            'жилет' => 'жилет',
+            'бушлат' => 'бушлат',
+            'парк' => 'парку',
+            'худі' => 'худі',
+            'світшот' => 'світшот',
         ];
         
         // Intent patterns (what user wants to do)

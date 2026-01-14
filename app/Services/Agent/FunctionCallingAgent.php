@@ -67,18 +67,27 @@ class FunctionCallingAgent
         $text = $response['choices'][0]['message']['content'] ?? '';
         
         // Check if GPT returned JSON (sometimes it does for follow-ups)
-        // If so, just extract the intro as plain text
+        // If so, just extract the intro as plain text and save context
         if (preg_match('/^\s*\{/u', $text)) {
             $json = json_decode($text, true);
-            if ($json && isset($json['intro'])) {
-                $text = $json['intro'];
-                // If it has product comments, append them
-                if (!empty($json['products'])) {
-                    foreach ($json['products'] as $p) {
-                        if (!empty($p['comment'])) {
-                            $text .= "\n• " . $p['comment'];
+            if ($json) {
+                // Save context summary if present
+                if ($sessionId) {
+                    $this->extractAndSaveContext($sessionId, $json);
+                }
+                
+                if (isset($json['intro'])) {
+                    $text = $json['intro'];
+                    // If it has product comments, append them
+                    if (!empty($json['products'])) {
+                        foreach ($json['products'] as $p) {
+                            if (!empty($p['comment'])) {
+                                $text .= "\n• " . $p['comment'];
+                            }
                         }
                     }
+                } elseif (isset($json['text'])) {
+                    $text = $json['text'];
                 }
             }
         }
@@ -102,6 +111,17 @@ class FunctionCallingAgent
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
         ];
+
+        // Add saved conversation context summary if available
+        $sessionId = $context['session_id'] ?? null;
+        $savedContext = $sessionId ? $this->loadContextSummary($sessionId) : null;
+        
+        if ($savedContext) {
+            $messages[] = [
+                'role' => 'system', 
+                'content' => "[КОНТЕКСТ РОЗМОВИ: {$savedContext}]"
+            ];
+        }
 
         // Add conversation history if available
         $history = $context['history'] ?? [];
@@ -204,9 +224,15 @@ class FunctionCallingAgent
 - опс кор, опскор → Ops-Core
 - сестан буш → SESTAN BUSCH
 - берци, ботінки → берці
-- шлем, каска → шолом
+- шлем, каска, helmet → шолом (ШУК АЙ ВСІ ВАРІАНТИ: "шолом OR каска")
 - разгрузка → плитоноска
 - подсумок → підсумок
+
+СИНОНІМИ ПРИ ПОШУКУ (використовуй OR):
+- шолом → search_products(query="шолом OR каска OR helmet")
+- сорочка → search_products(query="сорочка OR shirt")
+- штани → search_products(query="штани OR брюки")
+- кросівки → search_products(query="кросівки OR кроси")
 
 СЛЕНГ І СКОРОЧЕННЯ (розумій контекст):
 - "балістика в/для напашник" → вставка в напашник
@@ -235,9 +261,15 @@ FOLLOW-UP (розрізняй типи):
 НЕ ВИКЛИКАЙ search_products для товарів що вже показані!
 
 ФОРМАТ ВІДПОВІДІ:
-1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}]}
-2. Текстові питання → КОРОТКИЙ текст (2-3 речення!)
-3. Нічого не знайдено → "На жаль, не знайшов. Спробуй інакше сформулювати."
+1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}], "_context": "короткий опис контексту"}
+2. Текстові питання → JSON: {"text": "...", "_context": "короткий опис контексту"}
+3. Нічого не знайдено → {"text": "На жаль, не знайшов. Спробуй інакше сформулювати.", "_context": "..."}
+
+_context (ОБОВ'ЯЗКОВО!):
+- Завжди додавай "_context" з коротким описом поточного контексту розмови (5-15 слів)
+- Приклад: "шукає вогнестійку сорочку, зріст 172, питає про розмір M/L"
+- Приклад: "вибирає плитоноску Crye, бюджет до 30000, показали 3 варіанти"
+- Це допоможе тобі пам'ятати контекст у наступних повідомленнях!
 
 СТИЛІСТИКА:
 - Пиши природно, як жива людина, НЕ як робот
@@ -248,6 +280,19 @@ FOLLOW-UP (розрізняй типи):
 - Максимум 2-3 речення
 - НЕ питай бюджет/розмір без потреби
 - НЕ читай лекції
+
+ПАМ'ЯТЬ КОНТЕКСТУ (КРИТИЧНО!):
+- НІКОЛИ не питай "що хочеш купити" якщо в історії розмови вже є товар (сорочка, шолом, берці...)
+- Якщо обговорювали конкретний товар — ПАМ'ЯТАЙ ЦЕ через всю розмову!
+- Коли користувач каже "немає замірів" або "не знаю розмір" → ДАЙ ПОРАДУ на основі того що знаєш (зріст, вага) + ПОКАЖИ ТОВАРИ
+- Приклад: "сорочка вогнестійка балістична, зріст 172, який розмір M чи L?" → розмір + search_products("сорочка вогнестійка балістична")
+- ЗАВЖДИ шукай товари паралельно з консультацією!
+
+КОНСУЛЬТАЦІЯ + ПОКАЗ ТОВАРІВ:
+- При питаннях про розмір/колір/вибір → ДАЙ ПОРАДУ + ПОКАЖИ ТОВАРИ одразу
+- НЕ чекай додаткових питань — клієнт хоче бачити товари!
+- Якщо немає точних замірів — рекомендуй по зросту/вазі та ПОКАЖИ варіанти
+- Формула: Консультація (2-3 речення) + search_products → товари
 
 ЗАМОВЛЕННЯ:
 - Коли показуєш деталі замовлення - показуй ВСЕ одразу (товари, статус, доставку)
@@ -550,6 +595,18 @@ PROMPT;
 
         // Parse GPT response as JSON for structured output
         $structuredResponse = $this->parseStructuredResponse($responseText, $products);
+
+        // Save context summary from response
+        if ($sessionId && $structuredResponse) {
+            // Try to extract _context from parsed JSON
+            $contextJson = null;
+            if (preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
+                $contextJson = json_decode($matches[0], true);
+            }
+            if ($contextJson) {
+                $this->extractAndSaveContext($sessionId, $contextJson);
+            }
+        }
 
         return [
             'message' => $structuredResponse['intro'] ?? 'Ось що я знайшов:',
@@ -1115,5 +1172,55 @@ PROMPT;
             'products' => [],
             'meta' => ['intent' => 'error', 'agent' => 'fallback', 'error' => 'No API key or API failed'],
         ];
+    }
+
+    /**
+     * Load saved context summary for session
+     */
+    private function loadContextSummary(string $sessionId): ?string
+    {
+        $key = "chat_context_summary_{$sessionId}";
+        return Cache::get($key);
+    }
+
+    /**
+     * Save context summary for session
+     * TTL: 2 hours (conversation lifespan)
+     */
+    private function saveContextSummary(string $sessionId, string $context): void
+    {
+        $key = "chat_context_summary_{$sessionId}";
+        Cache::put($key, $context, 7200); // 2 hours
+        
+        Log::info('FunctionCallingAgent: saved context summary', [
+            'session_id' => $sessionId,
+            'context' => $context,
+        ]);
+    }
+
+    /**
+     * Extract and save _context from GPT response
+     */
+    private function extractAndSaveContext(string $sessionId, $response): void
+    {
+        if (!$sessionId) {
+            return;
+        }
+
+        $context = null;
+
+        // Try to extract from JSON response
+        if (is_string($response)) {
+            $decoded = json_decode($response, true);
+            if ($decoded && isset($decoded['_context'])) {
+                $context = $decoded['_context'];
+            }
+        } elseif (is_array($response) && isset($response['_context'])) {
+            $context = $response['_context'];
+        }
+
+        if ($context && is_string($context) && mb_strlen($context) > 3) {
+            $this->saveContextSummary($sessionId, $context);
+        }
     }
 }

@@ -4,11 +4,15 @@ namespace App\Livewire\Admin;
 
 use App\Models\WidgetSettings as WidgetSettingsModel;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Carbon;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class WidgetSettings extends Component
 {
+    use WithFileUploads;
+    
     public $domain = 'default';
     public $primary_color = '#2563eb';
     public $text_color = '#ffffff';
@@ -24,6 +28,7 @@ class WidgetSettings extends Component
     // Branding fields (Phase 1)
     public $bot_name = 'AIntento';
     public $bot_avatar_url = '';
+    public $bot_avatar_upload = null; // For file upload
     public $bot_status_text = 'Завжди онлайн';
     public $font_family = '';
     public $show_shadow = true;
@@ -152,6 +157,39 @@ class WidgetSettings extends Component
         Cache::forget('widget_settings_faq');
         
         session()->flash('message', 'Налаштування збережено!');
+    }
+
+    public function updatedBotAvatarUpload()
+    {
+        $this->validate([
+            'bot_avatar_upload' => 'image|max:1024', // 1MB max
+        ]);
+
+        // Store the uploaded file
+        $path = $this->bot_avatar_upload->store('avatars', 'public');
+        
+        // Update the URL
+        $this->bot_avatar_url = Storage::disk('public')->url($path);
+        
+        // Save immediately
+        $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
+        if ($settings) {
+            $settings->update(['bot_avatar_url' => $this->bot_avatar_url]);
+        }
+        
+        session()->flash('message', 'Аватар завантажено!');
+    }
+
+    public function removeAvatar()
+    {
+        $this->bot_avatar_url = '';
+        
+        $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
+        if ($settings) {
+            $settings->update(['bot_avatar_url' => null]);
+        }
+        
+        session()->flash('message', 'Аватар видалено!');
     }
 
     public function regenerateToken()

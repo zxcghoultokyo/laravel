@@ -128,9 +128,39 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">URL аватарки бота</label>
-                            <input type="url" wire:model.live="bot_avatar_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://example.com/avatar.png" maxlength="500">
-                            <p class="mt-1 text-xs text-gray-500">Рекомендований розмір: 80x80px</p>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Аватар бота</label>
+                            <div class="flex items-start gap-4">
+                                <!-- Current Avatar Preview -->
+                                <div class="flex-shrink-0">
+                                    @if($bot_avatar_url)
+                                        <div class="relative">
+                                            <img src="{{ $bot_avatar_url }}" alt="Avatar" class="w-20 h-20 rounded-full object-cover border-2 border-gray-200">
+                                            <button type="button" wire:click="removeAvatar" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center">✕</button>
+                                        </div>
+                                    @else
+                                        <div class="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                                            <span class="text-2xl">🤖</span>
+                                        </div>
+                                    @endif
+                                </div>
+                                
+                                <!-- Upload Options -->
+                                <div class="flex-1 space-y-2">
+                                    <div>
+                                        <label class="block">
+                                            <span class="sr-only">Завантажити аватар</span>
+                                            <input type="file" wire:model="bot_avatar_upload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                        </label>
+                                        <div wire:loading wire:target="bot_avatar_upload" class="text-sm text-blue-600 mt-1">
+                                            ⏳ Завантаження...
+                                        </div>
+                                        @error('bot_avatar_upload') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                    </div>
+                                    <div class="text-xs text-gray-500">або вставте URL:</div>
+                                    <input type="url" wire:model.live="bot_avatar_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://example.com/avatar.png" maxlength="500">
+                                </div>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-500">Рекомендований розмір: 80×80px. Макс 1MB.</p>
                         </div>
 
                         <div>

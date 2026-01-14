@@ -238,16 +238,48 @@
     function extractProductFromButton(button) {
         const data = {};
         
-        // Try button ID (Horoshop: j-buy-button-widget-2784)
+        // Try button ID (Horoshop: j-buy-button-widget-2784) - this is Horoshop internal ID
         if (button.id) {
             const match = button.id.match(/(\d+)/);
-            if (match) data.id = match[1];
+            if (match) data.horoshop_id = match[1];
         }
         
         // Try data attributes
         if (button.dataset.id) data.id = button.dataset.id;
         if (button.dataset.productId) data.id = button.dataset.productId;
         if (button.dataset.article) data.article = button.dataset.article;
+        
+        // CRITICAL: Extract article from page (Horoshop shows "Артикул: XXX")
+        // This is the key identifier we use in chat recommendations
+        const articleSelectors = [
+            '.product-article',           // Common class
+            '[class*="article"]',         // Any article class
+            '.j-product-article',         // Horoshop specific
+            '.sku',                        // SKU field
+            '[itemprop="sku"]'            // Schema.org
+        ];
+        
+        for (const selector of articleSelectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+                const text = el.textContent.trim();
+                // Extract article value (may be "Артикул: 975-104" or just "975-104")
+                const articleMatch = text.match(/(?:Артикул[:\s]*)?([a-zA-Z0-9_-]+)/i);
+                if (articleMatch) {
+                    data.article = articleMatch[1];
+                    break;
+                }
+            }
+        }
+        
+        // Fallback: search page for "Артикул:" text
+        if (!data.article) {
+            const pageText = document.body.innerText;
+            const articleMatch = pageText.match(/Артикул[:\s]*([a-zA-Z0-9_-]+)/i);
+            if (articleMatch) {
+                data.article = articleMatch[1];
+            }
+        }
         
         // Try parent container (Horoshop: j-product-block)
         const productBlock = button.closest('[data-id], .j-product-block, .product-card, .product');
@@ -266,10 +298,17 @@
             }
         }
         
+        // Also try to get title from page H1
+        if (!data.title) {
+            const h1 = document.querySelector('h1');
+            if (h1) data.title = h1.textContent.trim();
+        }
+        
         // Try counter sibling (Horoshop structure)
         const counter = button.closest('.product-order__row')?.querySelector('[data-id]');
         if (counter?.dataset.id) data.id = counter.dataset.id;
         
+        log('Extracted product data:', data);
         return data;
     }
 

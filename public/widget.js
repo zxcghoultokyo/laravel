@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.3.10';
+    const WIDGET_VERSION = '2.4.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -393,6 +393,17 @@
                         border-top: 1px solid #e5e7eb;
                         box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
                     ">
+                        <!-- Quick Actions Carousel (persistent) -->
+                        <div id="aintento-quick-actions-bar" style="
+                            display: none;
+                            margin-bottom: 12px;
+                            overflow-x: auto;
+                            overflow-y: hidden;
+                            white-space: nowrap;
+                            -webkit-overflow-scrolling: touch;
+                            scrollbar-width: none;
+                            -ms-overflow-style: none;
+                        "></div>
                         ${s.consent_notice ? `
                         <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
                             ${s.consent_notice}
@@ -551,12 +562,13 @@
             // Track chat opened
             sendAnalyticsEvent('chat_opened');
             
+            // Always show quick actions bar (persistent)
+            addQuickActions(messages, settings, handleQuickAction);
+            
             if (!state.hasShownWelcome && savedMessages.length === 0) {
                 // Track session start (first time opening)
                 sendAnalyticsEvent('session_start');
                 addMessage(messages, settings.welcome_message, 'assistant', state.sessionId, true);
-                // Add quick actions after welcome message
-                addQuickActions(messages, settings, handleQuickAction);
                 state.hasShownWelcome = true;
             }
         }
@@ -1089,6 +1101,14 @@
                     addProducts(messages, msg.products, state.sessionId, false);
                 }
             });
+            
+            // Restore cross-sell if saved
+            const savedCrossSell = loadCrossSell(state.sessionId);
+            if (savedCrossSell) {
+                setTimeout(() => {
+                    addCrossSell(messages, savedCrossSell, settings, state.sessionId);
+                }, 100);
+            }
         }
 
         // Store cleanup function on window for potential later use
@@ -1137,39 +1157,38 @@
             }
         ];
 
-        const container = document.createElement('div');
-        container.className = 'aintento-quick-actions';
-        container.style.cssText = `
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 16px;
-            padding: 0 4px;
-            animation: aintento-fadeInUp 0.3s ease-out;
-            animation-delay: 0.2s;
-            opacity: 0;
-            animation-fill-mode: forwards;
-        `;
+        // Render to persistent bar above input instead of messages
+        const quickActionsBar = document.getElementById('aintento-quick-actions-bar');
+        if (!quickActionsBar) {
+            log('Quick actions bar not found, falling back to messages');
+            return;
+        }
+
+        quickActionsBar.innerHTML = '';
+        quickActionsBar.style.display = 'flex';
+        quickActionsBar.style.gap = '8px';
 
         quickActions.forEach(qa => {
             const btn = document.createElement('button');
             btn.className = 'aintento-quick-action';
             btn.dataset.action = qa.action;
             btn.style.cssText = `
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                padding: 10px 14px;
+                padding: 8px 12px;
                 background: white;
                 border: 1.5px solid #e5e7eb;
-                border-radius: 20px;
-                font-size: 13px;
+                border-radius: 18px;
+                font-size: 12px;
                 color: #374151;
                 cursor: pointer;
                 transition: all 0.2s;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                white-space: nowrap;
+                flex-shrink: 0;
             `;
-            btn.innerHTML = `<span style="font-size: 16px;">${qa.icon}</span><span>${qa.label}</span>`;
+            btn.innerHTML = `<span style="font-size: 14px;">${qa.icon}</span><span>${qa.label}</span>`;
             
             btn.onmouseenter = () => {
                 btn.style.borderColor = s.primary_color;
@@ -1190,15 +1209,14 @@
                     action: qa.action,
                     label: qa.label
                 });
-                // Remove quick actions after click
-                container.remove();
+                // DON'T remove - keep persistent
                 onActionClick(qa.action);
             };
             
-            container.appendChild(btn);
+            quickActionsBar.appendChild(btn);
         });
-
-        messagesContainer.appendChild(container);
+        
+        // No longer append to messagesContainer - we use the persistent bar
     }
 
     function addMessage(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
@@ -1592,6 +1610,9 @@
         
         const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
         
+        // Save cross-sell to localStorage for persistence
+        saveCrossSell(sessionId, crossSell);
+        
         // Track cross-sell shown
         sendAnalyticsEvent('cross_sell_shown', {
             products_count: crossSell.suggestions.length,
@@ -1971,6 +1992,19 @@
         const oldKey = `ailure_messages_${sessionId}`;
         const messages = localStorage.getItem(newKey) || localStorage.getItem(oldKey);
         return JSON.parse(messages || '[]');
+    }
+
+    // Cross-sell persistence
+    function saveCrossSell(sessionId, crossSell) {
+        if (!crossSell) return;
+        const key = `aintento_cross_sell_${sessionId}`;
+        localStorage.setItem(key, JSON.stringify(crossSell));
+    }
+
+    function loadCrossSell(sessionId) {
+        const key = `aintento_cross_sell_${sessionId}`;
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : null;
     }
 
     // === Analytics & Attribution ===

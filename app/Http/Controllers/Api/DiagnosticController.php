@@ -904,10 +904,14 @@ class DiagnosticController extends Controller
                 })
                 ->count();
             
+            // Get model being used
+            $analyzeModel = config('services.openai.model_analyze') ?: config('services.openai.model');
+            
             return response()->json([
                 'success' => true,
                 'product_id' => $product->id,
                 'title' => $product->title,
+                'model_used' => $analyzeModel,
                 'slang' => $result->slang ?? [],
                 'product_type' => $result->product_type,
                 'keywords' => $result->keywords ?? [],

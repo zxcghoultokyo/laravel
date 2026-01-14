@@ -70,7 +70,41 @@
                 </div>
 
                 <div class="prose prose-sm max-w-none">
-                    <p class="text-gray-900">{{ $message->content }}</p>
+                    @php
+                        $content = $message->content;
+                        $parsedContent = null;
+                        
+                        // Try to parse JSON content
+                        if (str_starts_with(trim($content), '{')) {
+                            $parsed = json_decode($content, true);
+                            if (json_last_error() === JSON_ERROR_NONE && isset($parsed['intro'])) {
+                                $parsedContent = $parsed;
+                            }
+                        }
+                    @endphp
+                    
+                    @if($parsedContent)
+                        {{-- Parsed JSON response --}}
+                        <p class="text-gray-900 mb-3">{{ $parsedContent['intro'] ?? '' }}</p>
+                        
+                        @if(!empty($parsedContent['products']))
+                        <div class="space-y-2 mt-3">
+                            @foreach($parsedContent['products'] as $product)
+                            <div class="flex items-start gap-3 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                                <span class="font-mono text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">{{ $product['article'] ?? '?' }}</span>
+                                <p class="text-sm text-gray-700 flex-1">{{ $product['comment'] ?? '' }}</p>
+                            </div>
+                            @endforeach
+                        </div>
+                        @endif
+                        
+                        @if(!empty($parsedContent['text']))
+                        <p class="text-gray-900 mt-2">{{ $parsedContent['text'] }}</p>
+                        @endif
+                    @else
+                        {{-- Plain text content --}}
+                        <p class="text-gray-900">{{ $content }}</p>
+                    @endif
                 </div>
 
                 @if($message->role === 'assistant' && isset($message->meta['intent']))

@@ -26,8 +26,8 @@
         </button>
     </div>
 
-    <!-- Health Status -->
-    <div class="grid grid-cols-5 gap-4 mb-6">
+    <!-- Health Status (только важные сервисы) -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
         <div class="bg-white rounded-lg shadow-sm p-4">
             <div class="flex items-center justify-between">
                 <span class="text-sm font-medium text-gray-500">Загальний стан</span>
@@ -44,92 +44,70 @@
                 @endif
             </div>
             <p class="mt-2 text-xl font-semibold {{ $health['overall'] === 'healthy' ? 'text-green-600' : 'text-yellow-600' }}">
-                {{ $health['overall'] === 'healthy' ? 'OK' : 'Degraded' }}
+                {{ $health['overall'] === 'healthy' ? 'Все працює' : 'Є проблеми' }}
             </p>
         </div>
 
-        @foreach(['database' => 'MySQL', 'cache' => 'Cache', 'meilisearch' => 'Meili', 'openai' => 'OpenAI'] as $key => $label)
+        {{-- Meilisearch - пошук --}}
         <div class="bg-white rounded-lg shadow-sm p-4">
             <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-500">{{ $label }}</span>
-                @if(($health[$key]['status'] ?? 'error') === 'ok')
+                <span class="text-sm font-medium text-gray-500">🔍 Пошук (Meili)</span>
+                @if(($health['meilisearch']['status'] ?? 'error') === 'ok')
                     <span class="w-2 h-2 bg-green-500 rounded-full"></span>
-                @elseif(($health[$key]['status'] ?? 'error') === 'disabled')
+                @elseif(($health['meilisearch']['status'] ?? 'error') === 'disabled')
                     <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
-                @elseif(($health[$key]['status'] ?? 'error') === 'circuit_open')
+                @else
+                    <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+                @endif
+            </div>
+            <p class="mt-2 text-lg font-semibold text-gray-900">
+                @if(isset($health['meilisearch']['documents']))
+                    {{ number_format($health['meilisearch']['documents']) }} товарів
+                @elseif(($health['meilisearch']['status'] ?? '') === 'disabled')
+                    Вимкнено
+                @else
+                    {{ ucfirst($health['meilisearch']['status'] ?? 'error') }}
+                @endif
+            </p>
+        </div>
+
+        {{-- OpenAI - AI --}}
+        <div class="bg-white rounded-lg shadow-sm p-4">
+            <div class="flex items-center justify-between">
+                <span class="text-sm font-medium text-gray-500">🤖 AI (OpenAI)</span>
+                @if(($health['openai']['status'] ?? 'error') === 'ok')
+                    <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+                @elseif(($health['openai']['status'] ?? 'error') === 'circuit_open')
                     <span class="w-2 h-2 bg-red-500 rounded-full"></span>
                 @else
                     <span class="w-2 h-2 bg-yellow-500 rounded-full"></span>
                 @endif
             </div>
             <p class="mt-2 text-lg font-semibold text-gray-900">
-                @if(isset($health[$key]['latency_ms']))
-                    {{ $health[$key]['latency_ms'] }}ms
-                @elseif(($health[$key]['status'] ?? '') === 'circuit_open')
-                    Circuit Open
+                @if(isset($health['openai']['latency_ms']))
+                    {{ $health['openai']['latency_ms'] }}ms
+                @elseif(($health['openai']['status'] ?? '') === 'circuit_open')
+                    Перевантажено
                 @else
-                    {{ ucfirst($health[$key]['status'] ?? 'unknown') }}
+                    {{ ucfirst($health['openai']['status'] ?? 'unknown') }}
                 @endif
             </p>
-            @if($key === 'meilisearch' && isset($health[$key]['documents']))
-                <p class="text-xs text-gray-500">{{ number_format($health[$key]['documents']) }} docs</p>
-            @endif
-        </div>
-        @endforeach
-    </div>
-
-    <!-- Circuit Breakers -->
-    @if(!empty($metrics['circuit_breakers']))
-    <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Circuit Breakers</h3>
-        <div class="grid grid-cols-3 gap-4">
-            @foreach($metrics['circuit_breakers'] as $service => $state)
-            <div class="border rounded-lg p-4 {{ ($state['status'] ?? 'closed') === 'closed' ? 'border-green-200 bg-green-50' : (($state['status'] ?? '') === 'open' ? 'border-red-200 bg-red-50' : 'border-yellow-200 bg-yellow-50') }}">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="font-medium text-gray-900">{{ ucfirst($service) }}</span>
-                    <span class="px-2 py-1 text-xs font-bold rounded {{ ($state['status'] ?? 'closed') === 'closed' ? 'bg-green-100 text-green-800' : (($state['status'] ?? '') === 'open' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800') }}">
-                        {{ strtoupper($state['status'] ?? 'closed') }}
-                    </span>
-                </div>
-                <div class="text-sm text-gray-600">
-                    <p>Failures: {{ $state['failures'] ?? 0 }}</p>
-                    @if(($state['status'] ?? 'closed') !== 'closed')
-                        <p>Retry after: {{ $state['retry_after'] ?? 'N/A' }}s</p>
-                        <button 
-                            wire:click="resetCircuitBreaker('{{ $service }}')"
-                            class="mt-2 px-3 py-1 text-xs bg-white border rounded hover:bg-gray-50"
-                        >
-                            Reset
-                        </button>
-                    @endif
-                </div>
-            </div>
-            @endforeach
         </div>
     </div>
-    @endif
 
-    <!-- Metrics Grid -->
-    <div class="grid grid-cols-4 gap-4 mb-6">
+    <!-- Circuit Breakers (убрано, не нужно для бизнес-юзера) -->
+
+    <!-- Основні метрики -->
+    <div class="grid grid-cols-2 gap-4 mb-6">
         <!-- Last Hour Stats -->
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">Запитів за годину</p>
+            <p class="text-sm font-medium text-gray-500">💬 Запитів за годину</p>
             <p class="mt-2 text-3xl font-bold text-gray-900">{{ number_format($metrics['last_hour']['requests'] ?? 0) }}</p>
         </div>
 
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">Середній час відповіді</p>
+            <p class="text-sm font-medium text-gray-500">⚡ Середній час відповіді</p>
             <p class="mt-2 text-3xl font-bold text-gray-900">{{ $metrics['last_hour']['avg_response_ms'] ?? 0 }}<span class="text-lg font-normal text-gray-500">ms</span></p>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">Cache Hit Rate</p>
-            <p class="mt-2 text-3xl font-bold {{ ($metrics['last_hour']['cache_hit_rate'] ?? 0) > 50 ? 'text-green-600' : 'text-gray-900' }}">{{ $metrics['last_hour']['cache_hit_rate'] ?? 0 }}%</p>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-sm p-6">
-            <p class="text-sm font-medium text-gray-500">Fallback Rate</p>
-            <p class="mt-2 text-3xl font-bold {{ ($metrics['last_hour']['fallback_rate'] ?? 0) < 10 ? 'text-green-600' : 'text-yellow-600' }}">{{ $metrics['last_hour']['fallback_rate'] ?? 0 }}%</p>
         </div>
     </div>
 
@@ -137,7 +115,7 @@
     <div class="grid grid-cols-2 gap-6 mb-6">
         <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Активні сесії</h3>
+                <h3 class="text-lg font-semibold text-gray-900">👥 Активні сесії</h3>
                 <span class="px-3 py-1 text-sm font-bold bg-blue-100 text-blue-800 rounded-full">
                     {{ $metrics['live']['active_sessions'] ?? 0 }}
                 </span>
@@ -155,10 +133,10 @@
         </div>
 
         <div class="bg-white rounded-lg shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Сьогодні</h3>
-            <div class="grid grid-cols-2 gap-4">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Сьогодні</h3>
+            <div class="grid grid-cols-3 gap-4">
                 <div>
-                    <p class="text-sm text-gray-500">Всього запитів</p>
+                    <p class="text-sm text-gray-500">Всього повідомлень</p>
                     <p class="text-xl font-bold text-gray-900">{{ number_format($metrics['today']['total_requests'] ?? 0) }}</p>
                 </div>
                 <div>
@@ -168,10 +146,6 @@
                 <div>
                     <p class="text-sm text-gray-500">Пошуків товарів</p>
                     <p class="text-xl font-bold text-gray-900">{{ number_format($metrics['today']['product_searches'] ?? 0) }}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500">AI помилок</p>
-                    <p class="text-xl font-bold {{ ($metrics['today']['ai_failures'] ?? 0) > 0 ? 'text-red-600' : 'text-green-600' }}">{{ $metrics['today']['ai_failures'] ?? 0 }}</p>
                 </div>
             </div>
         </div>

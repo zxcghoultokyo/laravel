@@ -57,10 +57,10 @@ class ProductIndexBuilder
                 'search_index'  => (string) ($product->search_index ?? ''),
             ];
 
-            // Use cheaper model for enrichment (gpt-5-nano)
-            $analyzeModel = config('services.openai.model_analyze');
+            // Use model for enrichment - try analyze model first, fallback to default
+            $analyzeModel = config('services.openai.model_analyze') ?: config('services.openai.model');
             $aiData = $ai->chatJson($system, $payload, [
-                'temperature' => 0.1,
+                'temperature' => 0.3,  // slightly higher for more creative slang
                 'model' => $analyzeModel,
             ]);
             

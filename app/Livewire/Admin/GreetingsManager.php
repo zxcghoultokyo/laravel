@@ -64,7 +64,7 @@ class GreetingsManager extends Component
 
         return view('livewire.admin.greetings-manager', [
             'greetings' => $greetings,
-        ])->layout('layouts.admin');
+        ])->layout('admin.layout');
     }
 
     public function create()

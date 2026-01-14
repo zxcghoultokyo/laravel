@@ -57,17 +57,15 @@ class ProductIndexBuilder
                 'search_index'  => (string) ($product->search_index ?? ''),
             ];
 
-            // Use model for enrichment - try analyze model first, fallback to default
-            $analyzeModel = config('services.openai.model_analyze') ?: config('services.openai.model');
+            // Use gpt-4o-mini for enrichment (cheap and reliable)
             $aiData = $ai->chatJson($system, $payload, [
-                'temperature' => 0.3,  // slightly higher for more creative slang
-                'model' => $analyzeModel,
+                'temperature' => 0.3,
+                'model' => 'gpt-4o-mini',
             ]);
             
             // Log AI response for debugging
             Log::info('ProductIndexBuilder AI response', [
                 'product_id' => $product->id,
-                'model' => $analyzeModel,
                 'slang' => $aiData['slang'] ?? 'MISSING',
                 'product_type' => $aiData['product_type'] ?? 'MISSING',
             ]);

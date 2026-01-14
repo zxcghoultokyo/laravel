@@ -72,6 +72,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/orders-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'ordersStats']);
     Route::get('/ai-index-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiIndexStats']);
     Route::post('/run-enrichment', [\App\Http\Controllers\Api\DiagnosticController::class, 'runEnrichment']);
+    Route::post('/enrich-one', [\App\Http\Controllers\Api\DiagnosticController::class, 'enrichOne']);
     Route::get('/slang-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'slangStats']);
 });
 

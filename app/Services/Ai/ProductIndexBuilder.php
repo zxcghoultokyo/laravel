@@ -54,7 +54,12 @@ class ProductIndexBuilder
                 'search_index'  => (string) ($product->search_index ?? ''),
             ];
 
-            $aiData = $ai->chatJson($system, $payload, ['temperature' => 0.1]);
+            // Use cheaper model for enrichment (gpt-5-nano)
+            $analyzeModel = config('services.openai.model_analyze');
+            $aiData = $ai->chatJson($system, $payload, [
+                'temperature' => 0.1,
+                'model' => $analyzeModel,
+            ]);
         } catch (\Throwable $e) {
             Log::warning('ProductIndexBuilder::buildForProduct AI error: ' . $e->getMessage());
         }

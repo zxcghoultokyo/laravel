@@ -837,4 +837,87 @@ class DiagnosticController extends Controller
             ]),
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/enrich-one
+     * Enrich a single product with AI (fast, avoids timeout)
+     * 
+     * Pass product_id=123 to enrich specific product
+     * Or mode=missing_slang to enrich next product without slang
+     */
+    public function enrichOne(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $productId = $request->input('product_id');
+        $mode = $request->input('mode', 'missing_slang');
+        
+        // Find product to enrich
+        $product = null;
+        
+        if ($productId) {
+            $product = \App\Models\Product::find($productId);
+        } else {
+            // Find next product based on mode
+            $query = \App\Models\Product::where('display_in_showcase', true);
+            
+            if ($mode === 'missing_slang') {
+                $query->whereHas('aiIndex', function ($ai) {
+                    $ai->where(function ($q) {
+                        $q->whereNull('slang')
+                          ->orWhere('slang', '[]')
+                          ->orWhere('slang', 'null')
+                          ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                    });
+                });
+            } elseif ($mode === 'missing') {
+                $query->whereDoesntHave('aiIndex');
+            }
+            
+            $product = $query->orderBy('id')->first();
+        }
+        
+        if (!$product) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No products to enrich',
+                'remaining' => 0,
+            ]);
+        }
+        
+        try {
+            /** @var \App\Services\Ai\ProductIndexBuilder $builder */
+            $builder = app(\App\Services\Ai\ProductIndexBuilder::class);
+            $result = $builder->buildForProduct($product);
+            
+            // Count remaining
+            $remaining = \App\Models\Product::where('display_in_showcase', true)
+                ->whereHas('aiIndex', function ($ai) {
+                    $ai->where(function ($q) {
+                        $q->whereNull('slang')
+                          ->orWhere('slang', '[]')
+                          ->orWhere('slang', 'null')
+                          ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                    });
+                })
+                ->count();
+            
+            return response()->json([
+                'success' => true,
+                'product_id' => $product->id,
+                'title' => $product->title,
+                'slang' => $result->slang ?? [],
+                'product_type' => $result->product_type,
+                'remaining' => $remaining,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'product_id' => $product->id,
+            ], 500);
+        }
+    }
 }

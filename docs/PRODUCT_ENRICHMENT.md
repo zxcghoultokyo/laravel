@@ -290,8 +290,8 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 
 ## 🛠️ TODO / Roadmap
 
-1. [ ] **Автоматичний enrichment** після sync нових товарів
-2. [ ] **Slang dictionary** — ручний словник сленгу для категорій
+1. [x] **Автоматичний enrichment** після sync нових товарів — додано в Kernel.php (щоденно о 04:00)
+2. [x] **Slang dictionary** — ручний словник сленгу `config/slang_dictionary.php` + SlangDictionaryService
 3. [ ] **Embeddings** — semantic search
 4. [ ] **Quality scoring** — оцінка якості AI-індексу
 5. [ ] **A/B testing** — порівняння search quality з/без AI
@@ -303,6 +303,58 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 
 - [app/Jobs/AnalyzeProductsWithAiJob.php](../app/Jobs/AnalyzeProductsWithAiJob.php) — Job для AI-аналізу
 - [app/Services/Ai/ProductIndexBuilder.php](../app/Services/Ai/ProductIndexBuilder.php) — Builder з fallback
+- [app/Services/Search/SlangDictionaryService.php](../app/Services/Search/SlangDictionaryService.php) — Сервіс словника сленгу
+- [config/slang_dictionary.php](../config/slang_dictionary.php) — Ручний словник сленгу
 - [app/Models/ProductAiIndex.php](../app/Models/ProductAiIndex.php) — Модель AI-індексу
 - [app/Console/Commands/BuildProductAiIndex.php](../app/Console/Commands/BuildProductAiIndex.php) — Artisan command
 - [app/Console/Commands/MeiliReindexProductsSync.php](../app/Console/Commands/MeiliReindexProductsSync.php) — Meilisearch sync
+
+## 📖 Slang Dictionary
+
+### Структура словника
+
+Словник знаходиться в `config/slang_dictionary.php` і містить:
+
+```php
+'plate_carrier' => [
+    'slang' => ['плитка', 'бронік', 'pc'],        // Жаргон
+    'synonyms' => ['плитоноска', 'бронежилет'],   // Офіційні назви
+    'typos' => ['плитноска', 'плейткеріер'],      // Помилки
+    'en' => ['plate carrier', 'body armor'],      // Англійська
+],
+```
+
+### Використання
+
+```php
+use App\Services\Search\SlangDictionaryService;
+
+$dict = app(SlangDictionaryService::class);
+
+// Знайти тип по терміну
+$type = $dict->findTypeByTerm('плитка'); // 'plate_carrier'
+
+// Розширити пошуковий запит
+$expanded = $dict->expandQuery('хочу плитку'); 
+// '(плитка OR плитоноска OR бронік) хочу'
+
+// Отримати весь сленг для типу
+$slang = $dict->getSlangForType('helmet');
+// ['шлем', 'каска', 'череп', 'helmet', ...]
+```
+
+### Augmentation в AI Index
+
+При AI enrichment автоматично доповнюється slang з словника:
+
+1. AI генерує `slang` для товару
+2. `ProductIndexBuilder` визначає `product_type`
+3. Словник доповнює slang з `config/slang_dictionary.php`
+4. Результат зберігається в `product_ai_index.slang`
+
+### Додавання нових термінів
+
+1. Відкрийте `config/slang_dictionary.php`
+2. Додайте новий тип або розширте існуючий
+3. Очистіть кеш: `php artisan cache:clear`
+4. Перезапустіть enrichment для оновлення індексу

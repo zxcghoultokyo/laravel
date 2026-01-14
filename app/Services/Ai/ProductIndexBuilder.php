@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\Product;
 use App\Models\ProductAiIndex;
+use App\Services\Search\SlangDictionaryService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -12,6 +13,7 @@ class ProductIndexBuilder
     protected int $maxRetries = 3;
     protected int $retryDelayMs = 100;
     protected ?\Closure $onLockRetry = null;
+    protected ?SlangDictionaryService $slangDictionary = null;
 
     /**
      * Встановити callback для виводу при lock retry.
@@ -20,6 +22,17 @@ class ProductIndexBuilder
     {
         $this->onLockRetry = $callback;
         return $this;
+    }
+    
+    /**
+     * Get or create slang dictionary service.
+     */
+    protected function getSlangDictionary(): SlangDictionaryService
+    {
+        if (!$this->slangDictionary) {
+            $this->slangDictionary = app(SlangDictionaryService::class);
+        }
+        return $this->slangDictionary;
     }
 
     public function buildForProduct(Product $product): ProductAiIndex
@@ -77,6 +90,23 @@ class ProductIndexBuilder
         $defaults = $this->fallbackFromProduct($product);
 
         $payload = array_merge($defaults, is_array($aiData) ? $aiData : []);
+        
+        // Augment slang from dictionary based on product_type
+        $productType = $payload['product_type'] ?? null;
+        if ($productType) {
+            $existingSlang = $payload['slang'] ?? [];
+            if (is_string($existingSlang)) {
+                $existingSlang = [$existingSlang];
+            }
+            $payload['slang'] = $this->getSlangDictionary()->getAugmentedSlang($productType, $existingSlang);
+            
+            Log::debug('ProductIndexBuilder: augmented slang', [
+                'product_id' => $product->id,
+                'product_type' => $productType,
+                'original_slang' => $existingSlang,
+                'augmented_slang' => $payload['slang'],
+            ]);
+        }
 
         // Забезпечити наявність raw_ai_json для аудиту/дебагу
         $rawJson = null;

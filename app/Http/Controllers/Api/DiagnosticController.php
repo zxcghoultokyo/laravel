@@ -910,6 +910,8 @@ class DiagnosticController extends Controller
                 'title' => $product->title,
                 'slang' => $result->slang ?? [],
                 'product_type' => $result->product_type,
+                'keywords' => $result->keywords ?? [],
+                'raw_ai_json' => $result->raw_ai_json,
                 'remaining' => $remaining,
             ]);
         } catch (\Exception $e) {

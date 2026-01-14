@@ -1626,10 +1626,9 @@
 
         messagesContainer.appendChild(container);
         
-        // Track products shown for analytics
-        trackProductsShown(products.slice(0, 3));
-        
+        // Track products shown for analytics (only for new products, not restored from history)
         if (save) {
+            trackProductsShown(products.slice(0, 3));
             saveMessage(sessionId, { role: 'products', products: products.slice(0, 3) });
         }
     }

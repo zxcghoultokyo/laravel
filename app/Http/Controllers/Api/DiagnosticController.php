@@ -393,6 +393,35 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/chat-sessions
+     * List recent chat sessions
+     */
+    public function chatSessions(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $limit = min((int) $request->query('limit', 20), 100);
+        
+        $sessions = \App\Models\ChatSession::orderByDesc('last_message_at')
+            ->take($limit)
+            ->get()
+            ->map(fn($s) => [
+                'session_id' => $s->session_id,
+                'messages_count' => $s->messages_count,
+                'status' => $s->status,
+                'last_intent' => $s->last_intent,
+                'last_message_at' => $s->last_message_at?->format('Y-m-d H:i:s'),
+            ]);
+
+        return response()->json([
+            'count' => $sessions->count(),
+            'sessions' => $sessions,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/chat-history/{sessionId}
      * View chat history for debugging context issues
      */

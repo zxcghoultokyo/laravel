@@ -1903,6 +1903,10 @@
         `;
         container.appendChild(header);
         
+        // Carousel wrapper with navigation buttons
+        const carouselWrapper = document.createElement('div');
+        carouselWrapper.style.cssText = 'position: relative;';
+        
         // Items CAROUSEL (horizontal scroll)
         const carousel = document.createElement('div');
         carousel.style.cssText = `
@@ -1913,7 +1917,73 @@
             margin: 0 -4px;
             padding: 4px;
             scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
         `;
+        // Hide scrollbar for webkit browsers
+        carousel.style.setProperty('scrollbar-width', 'none');
+        
+        // Navigation buttons (PC only)
+        const createNavButton = (direction) => {
+            const btn = document.createElement('button');
+            btn.style.cssText = `
+                position: absolute;
+                top: 50%;
+                ${direction === 'left' ? 'left: -8px' : 'right: -8px'};
+                transform: translateY(-50%);
+                width: 28px;
+                height: 28px;
+                background: white;
+                border: 1px solid #e5e7eb;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                z-index: 10;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                transition: all 0.2s;
+                font-size: 14px;
+                color: #374151;
+            `;
+            btn.innerHTML = direction === 'left' ? '‹' : '›';
+            btn.onmouseenter = () => { 
+                btn.style.background = s.primary_color; 
+                btn.style.color = 'white';
+                btn.style.borderColor = s.primary_color;
+            };
+            btn.onmouseleave = () => { 
+                btn.style.background = 'white'; 
+                btn.style.color = '#374151';
+                btn.style.borderColor = '#e5e7eb';
+            };
+            btn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const scrollAmount = 120; // card width + gap
+                carousel.scrollBy({
+                    left: direction === 'left' ? -scrollAmount : scrollAmount,
+                    behavior: 'smooth'
+                });
+            };
+            return btn;
+        };
+        
+        const leftBtn = createNavButton('left');
+        const rightBtn = createNavButton('right');
+        
+        // Update button visibility based on scroll position
+        const updateNavButtons = () => {
+            const maxScroll = carousel.scrollWidth - carousel.clientWidth;
+            leftBtn.style.display = carousel.scrollLeft > 10 ? 'flex' : 'none';
+            rightBtn.style.display = carousel.scrollLeft < maxScroll - 10 ? 'flex' : 'none';
+        };
+        
+        carousel.addEventListener('scroll', updateNavButtons);
+        
+        // Initial visibility (after items are added)
+        setTimeout(updateNavButtons, 100);
         
         crossSell.suggestions.forEach((item) => {
             const card = document.createElement('div');
@@ -2051,6 +2121,9 @@
                 setTimeout(() => {
                     card.remove();
                     
+                    // Update nav buttons after card removal
+                    updateNavButtons();
+                    
                     // Add product to chat as clickable card
                     addCrossSellProductToChat(messagesContainer, item, s, sessionId);
                     
@@ -2078,7 +2151,11 @@
             carousel.appendChild(card);
         });
         
-        container.appendChild(carousel);
+        // Add carousel and nav buttons to wrapper
+        carouselWrapper.appendChild(carousel);
+        carouselWrapper.appendChild(leftBtn);
+        carouselWrapper.appendChild(rightBtn);
+        container.appendChild(carouselWrapper);
         
         // Hint about adding to cart
         const hint = document.createElement('div');

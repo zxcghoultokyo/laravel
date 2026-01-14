@@ -639,7 +639,7 @@ class DiagnosticController extends Controller
     
     /**
      * GET /api/diagnostic/ai-index-stats
-     * Get AI enrichment statistics
+     * Get AI enrichment statistics and quality score
      */
     public function aiIndexStats(Request $request): JsonResponse
     {
@@ -647,20 +647,13 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        $qualityService = app(\App\Services\Ai\EnrichmentQualityService::class);
+        $quality = $qualityService->getOverallScore();
+        $recommendations = $qualityService->getRecommendations();
+
         $totalProducts = \App\Models\Product::count();
         $inStockProducts = \App\Models\Product::where('in_stock', true)->count();
         $showcaseProducts = \App\Models\Product::where('display_in_showcase', true)->count();
-        
-        $totalAiIndex = \App\Models\ProductAiIndex::count();
-        $withProductType = \App\Models\ProductAiIndex::whereNotNull('product_type')
-            ->where('product_type', '!=', '')
-            ->count();
-        $withSlang = \App\Models\ProductAiIndex::whereNotNull('slang')
-            ->whereRaw("JSON_LENGTH(slang) > 0")
-            ->count();
-        $withKeywords = \App\Models\ProductAiIndex::whereNotNull('keywords')
-            ->whereRaw("JSON_LENGTH(keywords) > 0")
-            ->count();
         
         // Products without AI index
         $withoutAiIndex = \App\Models\Product::where('display_in_showcase', true)
@@ -689,21 +682,39 @@ class DiagnosticController extends Controller
             ->count();
         
         return response()->json([
+            'quality_score' => $quality['score'],
+            'quality_grade' => $quality['grade'],
             'total_products' => $totalProducts,
             'in_stock_products' => $inStockProducts,
             'showcase_products' => $showcaseProducts,
-            'ai_index' => [
-                'total_records' => $totalAiIndex,
-                'with_product_type' => $withProductType,
-                'with_slang' => $withSlang,
-                'missing_slang' => $missingSlangCount,
-                'with_keywords' => $withKeywords,
-                'coverage_percent' => $showcaseProducts > 0 
-                    ? round(($totalAiIndex / $showcaseProducts) * 100, 1) 
-                    : 0,
-            ],
+            'ai_index' => $quality['stats'],
             'missing_ai_index' => $withoutAiIndex,
+            'missing_slang' => $missingSlangCount,
             'top_product_types' => $topProductTypes,
+            'recommendations' => $recommendations,
+        ]);
+    }
+    
+    /**
+     * GET /api/diagnostic/ai-index-problems
+     * Get detailed problems with AI index quality
+     */
+    public function aiIndexProblems(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $limit = (int) $request->input('limit', 50);
+        
+        $qualityService = app(\App\Services\Ai\EnrichmentQualityService::class);
+        $problems = $qualityService->findProblems($limit);
+        $recommendations = $qualityService->getRecommendations();
+        
+        return response()->json([
+            'problems' => $problems,
+            'total_issues' => array_sum(array_column($problems, 'count')),
+            'recommendations' => $recommendations,
         ]);
     }
     

@@ -293,11 +293,11 @@ curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_in
 1. [x] **Автоматичний enrichment** після sync нових товарів — додано в Kernel.php (щоденно о 04:00)
 2. [x] **Slang dictionary** — ручний словник сленгу `config/slang_dictionary.php` + SlangDictionaryService
 3. [ ] **Embeddings** — semantic search
-4. [ ] **Quality scoring** — оцінка якості AI-індексу
+4. [x] **Quality scoring** — EnrichmentQualityService з score 0-100 та grade A-F
 5. [ ] **A/B testing** — порівняння search quality з/без AI
-6. [ ] **Parent-based enrichment** — один запит на parent_article
+6. [x] **Parent-based enrichment** — ParentBasedEnrichmentJob (один запит на parent_article)
 7. [ ] **Incremental sync** — тільки змінені товари
-8. [ ] **Monitoring dashboard** — coverage, quality, costs
+8. [ ] **Monitoring dashboard** — coverage, quality, costs (є diagnostic API)
 
 ## 📚 Пов'язані файли
 
@@ -358,3 +358,89 @@ $slang = $dict->getSlangForType('helmet');
 2. Додайте новий тип або розширте існуючий
 3. Очистіть кеш: `php artisan cache:clear`
 4. Перезапустіть enrichment для оновлення індексу
+
+## 📊 Quality Scoring
+
+### Оцінка якості AI-індексу
+
+```bash
+# Отримати quality score та статистику
+curl "https://aimbot.laravel.cloud/api/diagnostic/ai-index-stats?key=..."
+
+# Отримати список проблем
+curl "https://aimbot.laravel.cloud/api/diagnostic/ai-index-problems?key=..."
+```
+
+### Метрики якості
+
+| Метрика | Вага | Опис |
+|---------|------|------|
+| coverage_percent | 30% | % товарів з AI-індексом |
+| type_coverage_percent | 25% | % з product_type |
+| slang_coverage_percent | 25% | % зі slang |
+| keywords_coverage_percent | 20% | % з keywords |
+
+### Grades
+
+| Score | Grade | Опис |
+|-------|-------|------|
+| 90-100 | A | Відмінно |
+| 80-89 | B | Добре |
+| 70-79 | C | Задовільно |
+| 60-69 | D | Потребує уваги |
+| <60 | F | Критично |
+
+### EnrichmentQualityService
+
+```php
+use App\Services\Ai\EnrichmentQualityService;
+
+$service = app(EnrichmentQualityService::class);
+
+// Загальний score
+$quality = $service->getOverallScore();
+// ['score' => 85.2, 'grade' => 'B', 'stats' => [...]]
+
+// Знайти проблеми
+$problems = $service->findProblems(50);
+// ['no_ai_index' => [...], 'no_slang' => [...], ...]
+
+// Рекомендації
+$recs = $service->getRecommendations();
+// [['priority' => 'high', 'action' => 'Run AI enrichment', ...]]
+```
+
+## 🔄 Parent-based Enrichment
+
+### Концепція
+
+Замість збагачення кожного варіанту товару (10 кольорів = 10 API запитів):
+1. Групуємо товари по `parent_article`
+2. Збагачуємо тільки "головний" товар
+3. Копіюємо AI-індекс на всі варіанти
+
+**Економія:** ~80% API викликів
+
+### Використання
+
+```bash
+# Через Job (рекомендовано)
+php artisan tinker
+>>> App\Jobs\ParentBasedEnrichmentJob::dispatch(20, 0, true);
+
+# Або artisan command
+php artisan products:build-ai-index --parent-based
+```
+
+### ParentBasedEnrichmentJob
+
+```php
+use App\Jobs\ParentBasedEnrichmentJob;
+
+// Збагатити всі parent groups без AI-індексу
+ParentBasedEnrichmentJob::dispatch(
+    batchSize: 20,    // Кількість parent_article за раз
+    offset: 0,        // Offset для resume
+    onlyMissing: true // Тільки ті що немають індексу
+);
+```

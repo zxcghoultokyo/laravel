@@ -1320,10 +1320,47 @@ PROMPT;
         $foundProduct = null;
         $foundParams = [];
         $foundIntents = [];
+        $shownProductCategory = null; // Track what category was shown
         
         foreach ($history as $msg) {
             $content = $msg['content'] ?? '';
             $contentLower = mb_strtolower($content);
+            
+            // Extract shown products from assistant messages (e.g., "[Показані товари: Футболка X, Футболка Y]")
+            if ($msg['role'] === 'assistant') {
+                // Check for shown products marker
+                if (preg_match('/\[Показані товари:\s*(.+?)\]/ui', $content, $matches)) {
+                    $shownProducts = $matches[1];
+                    // Detect category from shown products
+                    if (preg_match('/футболк/ui', $shownProducts)) {
+                        $shownProductCategory = 'футболки';
+                    } elseif (preg_match('/штан/ui', $shownProducts)) {
+                        $shownProductCategory = 'штани';
+                    } elseif (preg_match('/плитоноск/ui', $shownProducts)) {
+                        $shownProductCategory = 'плитоноски';
+                    } elseif (preg_match('/берц|черевик/ui', $shownProducts)) {
+                        $shownProductCategory = 'взуття';
+                    } elseif (preg_match('/рюкзак/ui', $shownProducts)) {
+                        $shownProductCategory = 'рюкзаки';
+                    } elseif (preg_match('/шолом|каск/ui', $shownProducts)) {
+                        $shownProductCategory = 'шоломи';
+                    } elseif (preg_match('/сорочк/ui', $shownProducts)) {
+                        $shownProductCategory = 'сорочки';
+                    } elseif (preg_match('/куртк/ui', $shownProducts)) {
+                        $shownProductCategory = 'куртки';
+                    }
+                }
+                
+                // Also check assistant text for product mentions (when describing products)
+                foreach ($productPatterns as $pattern => $name) {
+                    if (mb_strpos($contentLower, $pattern) !== false) {
+                        // Only set if user hasn't explicitly mentioned something else
+                        if (!$foundProduct) {
+                            $foundProduct = $name;
+                        }
+                    }
+                }
+            }
             
             // Look for product mentions in user messages
             if ($msg['role'] === 'user') {
@@ -1365,6 +1402,14 @@ PROMPT;
         // Build context string
         if ($foundProduct) {
             $context[] = "шукає {$foundProduct}";
+        } elseif ($shownProductCategory) {
+            // If no explicit product mentioned but we showed products - use that category
+            $context[] = "обговорюємо {$shownProductCategory}";
+        }
+        
+        // Add shown product category as separate context if exists
+        if ($shownProductCategory && $foundProduct) {
+            $context[] = "показані {$shownProductCategory}";
         }
         
         // Add found intents

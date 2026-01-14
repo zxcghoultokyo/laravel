@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.4.0';
+    const WIDGET_VERSION = '2.4.1';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -516,6 +516,9 @@
             } else if (action === 'top_products') {
                 // Send "Покажи топ товари" to backend to get popular products
                 sendMessage('покажи топ товари');
+            } else if (action === 'order_info') {
+                // Show order search form instead of text message
+                showOrderSearchForm(messages, settings, state.sessionId, token, sendMessage);
             } else {
                 const response = quickActionResponses[action];
                 if (response) {
@@ -1603,6 +1606,202 @@
         }
 
         return card;
+    }
+
+    /**
+     * Show order search form with phone (required), order number and name (optional)
+     */
+    function showOrderSearchForm(messagesContainer, settings, sessionId, token, sendMessageFn) {
+        const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'aintento-order-form';
+        wrapper.style.cssText = `
+            margin-bottom: 16px;
+            animation: aintento-fadeInUp 0.3s ease-out;
+        `;
+        
+        const container = document.createElement('div');
+        container.style.cssText = `
+            background: white;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        `;
+        
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 14px;';
+        header.innerHTML = `
+            <span style="font-size: 20px;">📦</span>
+            <div>
+                <div style="font-weight: 600; font-size: 14px; color: #1f2937;">Пошук замовлення</div>
+                <div style="font-size: 11px; color: #6b7280;">Введіть дані для пошуку</div>
+            </div>
+        `;
+        container.appendChild(header);
+        
+        // Form
+        const form = document.createElement('form');
+        form.style.cssText = 'display: flex; flex-direction: column; gap: 10px;';
+        
+        // Phone field (required)
+        const phoneGroup = document.createElement('div');
+        phoneGroup.innerHTML = `
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">
+                📱 Номер телефону <span style="color: #ef4444;">*</span>
+            </label>
+            <input type="tel" name="phone" placeholder="+380..." required style="
+                width: 100%;
+                padding: 10px 12px;
+                border: 1.5px solid #d1d5db;
+                border-radius: 8px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+            ">
+        `;
+        form.appendChild(phoneGroup);
+        
+        // Order number field (optional)
+        const orderGroup = document.createElement('div');
+        orderGroup.innerHTML = `
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">
+                📝 Номер замовлення <span style="color: #9ca3af; font-weight: 400;">(опціонально)</span>
+            </label>
+            <input type="text" name="order_number" placeholder="12345" style="
+                width: 100%;
+                padding: 10px 12px;
+                border: 1.5px solid #d1d5db;
+                border-radius: 8px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+            ">
+        `;
+        form.appendChild(orderGroup);
+        
+        // Name field (optional)
+        const nameGroup = document.createElement('div');
+        nameGroup.innerHTML = `
+            <label style="display: block; font-size: 12px; color: #374151; margin-bottom: 4px; font-weight: 500;">
+                👤 Прізвище та ім'я <span style="color: #9ca3af; font-weight: 400;">(опціонально)</span>
+            </label>
+            <input type="text" name="customer_name" placeholder="Шевченко Тарас" style="
+                width: 100%;
+                padding: 10px 12px;
+                border: 1.5px solid #d1d5db;
+                border-radius: 8px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+                box-sizing: border-box;
+            ">
+        `;
+        form.appendChild(nameGroup);
+        
+        // Submit button
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'submit';
+        submitBtn.textContent = '🔍 Знайти замовлення';
+        submitBtn.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            background: ${s.primary_color};
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 4px;
+        `;
+        submitBtn.onmouseenter = () => {
+            submitBtn.style.opacity = '0.9';
+            submitBtn.style.transform = 'translateY(-1px)';
+        };
+        submitBtn.onmouseleave = () => {
+            submitBtn.style.opacity = '1';
+            submitBtn.style.transform = 'translateY(0)';
+        };
+        form.appendChild(submitBtn);
+        
+        // Error message container
+        const errorMsg = document.createElement('div');
+        errorMsg.style.cssText = 'display: none; color: #ef4444; font-size: 12px; margin-top: 4px;';
+        form.appendChild(errorMsg);
+        
+        // Form submit handler
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const phone = formData.get('phone')?.trim();
+            const orderNumber = formData.get('order_number')?.trim();
+            const customerName = formData.get('customer_name')?.trim();
+            
+            if (!phone) {
+                errorMsg.textContent = 'Введіть номер телефону';
+                errorMsg.style.display = 'block';
+                return;
+            }
+            
+            // Hide error
+            errorMsg.style.display = 'none';
+            
+            // Disable button and show loading
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Шукаю...';
+            
+            // Build search query message
+            let searchQuery = `Знайди замовлення: телефон ${phone}`;
+            if (orderNumber) {
+                searchQuery += `, номер ${orderNumber}`;
+            }
+            if (customerName) {
+                searchQuery += `, клієнт ${customerName}`;
+            }
+            
+            // Track form submission
+            sendAnalyticsEvent('order_search_form_submit', {
+                has_order_number: !!orderNumber,
+                has_customer_name: !!customerName
+            });
+            
+            // Remove the form
+            wrapper.remove();
+            
+            // Send as message to backend
+            sendMessageFn(searchQuery);
+        };
+        
+        // Focus styling for inputs
+        const inputs = form.querySelectorAll('input');
+        inputs.forEach(input => {
+            input.onfocus = () => {
+                input.style.borderColor = s.primary_color;
+                input.style.boxShadow = `0 0 0 3px ${s.primary_color}20`;
+            };
+            input.onblur = () => {
+                input.style.borderColor = '#d1d5db';
+                input.style.boxShadow = 'none';
+            };
+        });
+        
+        container.appendChild(form);
+        wrapper.appendChild(container);
+        messagesContainer.appendChild(wrapper);
+        
+        // Scroll to form
+        setTimeout(() => {
+            wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Focus first input
+            form.querySelector('input[name="phone"]')?.focus();
+        }, 100);
     }
 
     function addCrossSell(messagesContainer, crossSell, settings, sessionId) {

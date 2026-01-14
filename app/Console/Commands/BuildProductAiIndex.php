@@ -13,6 +13,7 @@ class BuildProductAiIndex extends Command
         {--limit=0 : Max products to process}
         {--only-missing : Only products without AI index record}
         {--incomplete : Only products with empty product_type or keywords}
+        {--missing-slang : Only products with empty slang array}
         {--batch=50 : Products per batch (lower = more output)}
         {--offset=0 : Skip first N products}
         {--resume : Continue from last saved position}
@@ -77,6 +78,17 @@ class BuildProductAiIndex extends Command
                                 ->orWhere('product_type', '');
                       });
                   });
+            });
+        }
+
+        if ($this->option('missing-slang')) {
+            $query->whereHas('aiIndex', function ($ai) {
+                $ai->where(function ($q) {
+                    $q->whereNull('slang')
+                      ->orWhere('slang', '[]')
+                      ->orWhere('slang', 'null')
+                      ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                });
             });
         }
 

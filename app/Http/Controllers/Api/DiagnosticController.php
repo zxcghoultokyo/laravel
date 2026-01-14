@@ -678,15 +678,28 @@ class DiagnosticController extends Controller
         $limit = (int) $request->input('limit', 100);
         $timeout = (int) $request->input('timeout', 300);
         $noAi = (bool) $request->input('no_ai', false);
+        $mode = $request->input('mode', 'missing'); // missing, incomplete, missing_slang
         
         try {
-            // Run the enrichment command
+            // Build options based on mode
             $options = [
-                '--only-missing' => true,
                 '--limit' => $limit,
                 '--timeout' => $timeout,
                 '--batch' => 10,
             ];
+            
+            switch ($mode) {
+                case 'missing_slang':
+                    $options['--missing-slang'] = true;
+                    break;
+                case 'incomplete':
+                    $options['--incomplete'] = true;
+                    break;
+                case 'missing':
+                default:
+                    $options['--only-missing'] = true;
+                    break;
+            }
             
             if ($noAi) {
                 $options['--no-ai'] = true;
@@ -701,14 +714,19 @@ class DiagnosticController extends Controller
             $withProductType = \App\Models\ProductAiIndex::whereNotNull('product_type')
                 ->where('product_type', '!=', '')
                 ->count();
+            $withSlang = \App\Models\ProductAiIndex::whereNotNull('slang')
+                ->whereRaw("JSON_LENGTH(slang) > 0")
+                ->count();
             
             return response()->json([
                 'success' => true,
+                'mode' => $mode,
                 'limit' => $limit,
                 'timeout' => $timeout,
                 'no_ai' => $noAi,
                 'ai_index_count' => $totalAiIndex,
                 'with_product_type' => $withProductType,
+                'with_slang' => $withSlang,
                 'output' => $output,
             ]);
         } catch (\Exception $e) {

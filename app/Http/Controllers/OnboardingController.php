@@ -76,11 +76,29 @@ class OnboardingController extends Controller
             return redirect()->route('dashboard');
         }
         
-        return view('onboarding.index', [
+        // Base data for all steps
+        $data = [
             'tenant' => $tenant,
             'currentStep' => $step,
             'totalSteps' => 5,
-        ]);
+        ];
+        
+        // Add step-specific data
+        switch ($step) {
+            case 3:
+                $data['productsCount'] = $tenant->products()->count();
+                $data['categoriesCount'] = $tenant->products()->distinct('category_path')->count('category_path');
+                break;
+            case 4:
+                $data['settings'] = $tenant->widgetSettings;
+                $data['storeContext'] = $tenant->storeContext;
+                break;
+            case 5:
+                $data['embedCode'] = $tenant->getEmbedCode();
+                break;
+        }
+        
+        return view('onboarding.index', $data);
     }
 
     /**

@@ -595,14 +595,20 @@ class DiagnosticController extends Controller
             ], 404);
         }
 
+        $fullContent = $request->boolean('full');
+
         $messages = \App\Models\ChatMessage::where('chat_session_id', $session->id)
             ->orderBy('created_at', 'asc')
             ->get()
-            ->map(function ($msg) {
+            ->map(function ($msg) use ($fullContent) {
+                $content = $msg->content;
+                if (!$fullContent) {
+                    $content = mb_substr($content, 0, 500) . (mb_strlen($content) > 500 ? '...' : '');
+                }
                 return [
                     'id' => $msg->id,
                     'role' => $msg->role,
-                    'content' => mb_substr($msg->content, 0, 500) . (mb_strlen($msg->content) > 500 ? '...' : ''),
+                    'content' => $content,
                     'intent' => $msg->meta['intent'] ?? null,
                     'products_shown' => $msg->meta['products_shown'] ?? null,
                     'product_titles' => array_map(fn($p) => $p['title'] ?? '', $msg->meta['products'] ?? []),

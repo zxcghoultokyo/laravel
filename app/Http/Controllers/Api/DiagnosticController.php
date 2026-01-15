@@ -516,7 +516,6 @@ class DiagnosticController extends Controller
         try {
             $job = new \App\Jobs\IncrementalProductSyncJob();
             $job->handle(
-                app(\App\Services\Horoshop\HoroshopClient::class),
                 app(\App\Services\Horoshop\ProductService::class)
             );
             

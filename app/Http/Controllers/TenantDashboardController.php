@@ -7,6 +7,7 @@ use App\Models\ChatSession;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 /**
@@ -25,7 +26,7 @@ class TenantDashboardController extends Controller
     /**
      * Main dashboard page.
      */
-    public function index(): View
+    public function index(): View|RedirectResponse
     {
         $tenant = $this->tenant();
         $user = Auth::user();

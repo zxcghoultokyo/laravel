@@ -88,8 +88,11 @@ class OnboardingController extends Controller
      */
     public function step1(): View
     {
-        return view('onboarding.step1-platform', [
-            'tenant' => $this->tenant(),
+        $tenant = $this->tenant();
+        return view('onboarding.index', [
+            'tenant' => $tenant,
+            'currentStep' => 1,
+            'totalSteps' => 5,
         ]);
     }
 
@@ -119,8 +122,11 @@ class OnboardingController extends Controller
      */
     public function step2(): View
     {
-        return view('onboarding.step2-credentials', [
-            'tenant' => $this->tenant(),
+        $tenant = $this->tenant();
+        return view('onboarding.index', [
+            'tenant' => $tenant,
+            'currentStep' => 2,
+            'totalSteps' => 5,
         ]);
     }
 
@@ -205,8 +211,10 @@ class OnboardingController extends Controller
     {
         $tenant = $this->tenant();
         
-        return view('onboarding.step3-sync', [
+        return view('onboarding.index', [
             'tenant' => $tenant,
+            'currentStep' => 3,
+            'totalSteps' => 5,
             'productsCount' => $tenant->products()->count(),
             'categoriesCount' => $tenant->products()->distinct('category_path')->count('category_path'),
         ]);
@@ -276,8 +284,10 @@ class OnboardingController extends Controller
         $tenant = $this->tenant();
         $settings = $tenant->widgetSettings;
         
-        return view('onboarding.step4-widget', [
+        return view('onboarding.index', [
             'tenant' => $tenant,
+            'currentStep' => 4,
+            'totalSteps' => 5,
             'settings' => $settings,
             'storeContext' => $tenant->storeContext,
         ]);
@@ -317,8 +327,10 @@ class OnboardingController extends Controller
     {
         $tenant = $this->tenant();
         
-        return view('onboarding.step5-embed', [
+        return view('onboarding.index', [
             'tenant' => $tenant,
+            'currentStep' => 5,
+            'totalSteps' => 5,
             'embedCode' => $tenant->getEmbedCode(),
         ]);
     }

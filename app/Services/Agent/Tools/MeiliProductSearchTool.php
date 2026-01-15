@@ -112,8 +112,15 @@ class MeiliProductSearchTool
             //     $filterParts[] = "camo = '{$filters['camo']}'";
             // }
             
-            // If explicit brand search — strictly filter by brand in Meili
-            if (!empty($brandInfo['is_brand']) && !empty($brandInfo['brand'])) {
+            // If explicit brand-ONLY search — strictly filter by brand in Meili
+            // BUT don't filter if query contains multiple words (likely model/series name)
+            // e.g. "Aegis ESAPI Elmon" should NOT filter by Aegis - user wants specific model
+            $queryWords = preg_split('/\s+/', trim($query));
+            $isBrandOnlyQuery = !empty($brandInfo['is_brand']) 
+                && !empty($brandInfo['brand']) 
+                && count($queryWords) <= 2; // Only filter for short brand queries
+            
+            if ($isBrandOnlyQuery) {
                 $brandValue = str_replace("'", "\\'", (string) $brandInfo['brand']);
                 $filterParts[] = "brand = '{$brandValue}'";
             }
@@ -144,6 +151,7 @@ class MeiliProductSearchTool
             Log::info('MeiliProductSearchTool: searching', [
                 'original_query' => $query,
                 'is_brand_search' => $brandInfo['is_brand'],
+                'is_brand_only_query' => $isBrandOnlyQuery,
                 'detected_brand' => $brandInfo['brand'],
                 'enhanced_query' => $enhancedQuery,
                 'filter' => $filterString,

@@ -82,22 +82,26 @@ class StoreContextController extends Controller
      * Generate prompt from existing context.
      * 
      * POST /api/admin/store-context/generate-prompt
+     * 
+     * @param bool use_ai - Use GPT to generate intelligent prompt (slower, better for unusual niches)
      */
     public function generatePrompt(Request $request): JsonResponse
     {
         $contextId = $request->input('context_id');
+        $useAi = $request->boolean('use_ai', false);
         
         $context = $contextId 
             ? StoreContext::findOrFail($contextId)
             : StoreContext::latest()->firstOrFail();
 
-        $prompt = $this->generator->generatePrompt($context);
+        $prompt = $this->generator->generatePrompt($context, $useAi);
         $context->refresh();
 
         return response()->json([
             'status' => 'success',
             'prompt' => $prompt,
             'prompt_version' => $context->prompt_version,
+            'generated_with' => $useAi ? 'ai' : 'template',
         ]);
     }
 

@@ -106,21 +106,24 @@ class PromptGeneratorService
 
     /**
      * Generate prompt for a store context.
+     * 
+     * @param bool $useAi Use GPT to generate intelligent prompt (slower, better quality)
      */
-    public function generatePrompt(StoreContext $context): string
+    public function generatePrompt(StoreContext $context, bool $useAi = false): string
     {
-        $template = $this->getTemplateForType($context->store_type);
-        
-        // Replace variables
-        $variables = $this->buildVariables($context);
-        
-        $prompt = $template;
-        foreach ($variables as $key => $value) {
-            // Replace both {var} and {{var}} patterns
-            $prompt = str_replace("{{$key}}", $value, $prompt);
-            // Don't replace {{tone_section}} - it's for runtime replacement
-            if ($key !== 'tone_section') {
-                $prompt = str_replace("{{{$key}}}", $value, $prompt);
+        if ($useAi) {
+            $prompt = $this->generatePromptWithAi($context);
+        } else {
+            // Fallback to template-based generation
+            $template = $this->getTemplateForType($context->store_type);
+            $variables = $this->buildVariables($context);
+            
+            $prompt = $template;
+            foreach ($variables as $key => $value) {
+                $prompt = str_replace("{{$key}}", $value, $prompt);
+                if ($key !== 'tone_section') {
+                    $prompt = str_replace("{{{$key}}}", $value, $prompt);
+                }
             }
         }
         
@@ -131,6 +134,101 @@ class PromptGeneratorService
         ]);
         
         return $prompt;
+    }
+
+    /**
+     * Generate prompt using GPT based on store data.
+     * 
+     * Universal approach - works for ANY store type without hardcoded templates.
+     */
+    private function generatePromptWithAi(StoreContext $context): string
+    {
+        $settings = $context->widgetSettings;
+        $storeName = $settings?->store_name ?? $settings?->bot_name ?? 'магазин';
+        
+        $storeData = [
+            'name' => $storeName,
+            'categories' => implode(', ', $context->getTopCategories(15)),
+            'brands' => implode(', ', $context->getTopBrands(10)),
+            'price_min' => $context->price_segments['min'] ?? 0,
+            'price_max' => $context->price_segments['max'] ?? 0,
+            'price_avg' => $context->price_segments['mid'] ?? 0,
+            'product_count' => Product::count(),
+            'delivery' => $context->delivery_info ?: 'не вказано',
+            'returns' => $context->return_policy ?: 'не вказано',
+        ];
+
+        $metaPrompt = <<<PROMPT
+Ти — експерт з налаштування AI-асистентів для інтернет-магазинів.
+
+Згенеруй системний промпт для AI-консультанта магазину на основі цих даних:
+
+НАЗВА МАГАЗИНУ: {$storeData['name']}
+
+КАТЕГОРІЇ ТОВАРІВ:
+{$storeData['categories']}
+
+БРЕНДИ: {$storeData['brands']}
+
+ЦІНИ: від {$storeData['price_min']} до {$storeData['price_max']} грн (середня: {$storeData['price_avg']} грн)
+КІЛЬКІСТЬ ТОВАРІВ: {$storeData['product_count']}
+
+ДОСТАВКА: {$storeData['delivery']}
+ПОВЕРНЕННЯ: {$storeData['returns']}
+
+ВИМОГИ ДО ПРОМПТУ:
+1. Почни з "Ти — AI-консультант магазину {$storeData['name']}."
+2. Опиши експертизу AI виходячи з категорій (що він знає, в чому розбирається)
+3. Додай 3-5 корисних знань про товари цієї ніші які допоможуть консультувати
+4. Додай цінові сегменти (бюджетний/середній/преміум) з конкретними цінами
+5. Включи інформацію про доставку/повернення
+6. Обов'язково включи рядок: {{tone_section}}
+7. Закінчи секцією ПРАВИЛА з 3-4 правилами для AI
+
+Відповідай ТІЛЬКИ системним промптом українською мовою, без пояснень та коментарів.
+PROMPT;
+
+        try {
+            $response = app(\App\Services\Ai\AiRouter::class)->callOpenAI(
+                $metaPrompt,
+                temperature: 0.7,
+                maxTokens: 1500
+            );
+
+            $generatedPrompt = trim($response);
+            
+            if (empty($generatedPrompt) || strlen($generatedPrompt) < 100) {
+                throw new \Exception('AI response too short or empty');
+            }
+
+            // Ensure {{tone_section}} is present
+            if (!str_contains($generatedPrompt, '{{tone_section}}')) {
+                $generatedPrompt .= "\n\n{{tone_section}}";
+            }
+
+            Log::info('[PromptGenerator] AI-generated prompt', [
+                'store' => $storeName,
+                'prompt_length' => strlen($generatedPrompt),
+            ]);
+
+            return $generatedPrompt;
+
+        } catch (\Throwable $e) {
+            Log::warning('[PromptGenerator] AI generation failed, using template', [
+                'error' => $e->getMessage(),
+            ]);
+            
+            // Fallback to template
+            $template = $this->getTemplateForType($context->store_type);
+            $variables = $this->buildVariables($context);
+            
+            $prompt = $template;
+            foreach ($variables as $key => $value) {
+                $prompt = str_replace("{{$key}}", $value, $prompt);
+            }
+            
+            return $prompt;
+        }
     }
 
     /**

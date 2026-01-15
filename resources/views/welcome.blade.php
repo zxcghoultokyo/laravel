@@ -142,7 +142,7 @@
             }
             
             .hero h1 {
-                font-size: clamp(40px, 5vw, 72px);
+                font-size: clamp(36px, 5vw, 72px);
                 margin-bottom: 24px;
                 background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
                 -webkit-background-clip: text;
@@ -151,7 +151,7 @@
             }
             
             .hero p {
-                font-size: 20px;
+                font-size: 18px;
                 color: var(--text-gray);
                 max-width: 700px;
                 margin: 0 auto 40px;
@@ -164,93 +164,92 @@
                 flex-wrap: wrap;
             }
             
-            /* Features Grid */
+            /* Features Section - Split Layout */
             .features {
                 padding: 100px 0;
             }
             
             .section-title {
                 text-align: center;
-                font-size: clamp(32px, 4vw, 48px);
+                font-size: clamp(28px, 4vw, 48px);
                 margin-bottom: 16px;
             }
             
             .section-subtitle {
                 text-align: center;
-                font-size: 18px;
+                font-size: 16px;
                 color: var(--text-gray);
                 max-width: 600px;
-                margin: 0 auto 64px;
+                margin: 0 auto 48px;
             }
             
-            .features-grid {
+            .features-layout {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-                gap: 24px;
+                grid-template-columns: 1fr 1fr;
+                gap: 48px;
+                align-items: start;
             }
             
-            .feature-card {
-                background: white;
-                border-radius: 20px;
-                padding: 32px;
-                border: 2px solid var(--border-color);
-                transition: all 0.3s;
-                cursor: pointer;
-                position: relative;
-                overflow: hidden;
-            }
-            
-            .feature-card:hover {
-                border-color: var(--primary);
-                box-shadow: 0 12px 40px rgba(16, 185, 129, 0.15);
-            }
-            
-            .feature-card.expanded {
-                border-color: var(--primary);
-                box-shadow: 0 12px 40px rgba(16, 185, 129, 0.2);
-            }
-            
-            .feature-header {
+            .features-list {
                 display: flex;
-                align-items: flex-start;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .feature-item {
+                background: white;
+                border-radius: 16px;
+                padding: 20px 24px;
+                border: 2px solid var(--border-color);
+                cursor: pointer;
+                transition: all 0.3s;
+                display: flex;
+                align-items: center;
                 gap: 16px;
             }
             
-            .feature-icon {
-                width: 56px;
-                height: 56px;
-                border-radius: 14px;
+            .feature-item:hover {
+                border-color: var(--primary);
+                transform: translateX(4px);
+            }
+            
+            .feature-item.active {
+                border-color: var(--primary);
+                background: var(--bg-light);
+                box-shadow: 0 8px 30px rgba(16, 185, 129, 0.15);
+            }
+            
+            .feature-item .icon {
+                width: 48px;
+                height: 48px;
+                border-radius: 12px;
                 background: linear-gradient(135deg, var(--primary), var(--secondary));
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 28px;
+                font-size: 24px;
                 flex-shrink: 0;
             }
             
-            .feature-info {
-                flex: 1;
-            }
-            
-            .feature-card h3 {
-                font-size: 20px;
-                margin-bottom: 8px;
+            .feature-item .info h3 {
+                font-size: 16px;
+                margin-bottom: 4px;
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 8px;
             }
             
-            .feature-card p {
+            .feature-item .info p {
                 color: var(--text-gray);
-                line-height: 1.7;
-                font-size: 15px;
+                font-size: 13px;
+                line-height: 1.5;
             }
             
             .badge {
                 display: inline-block;
-                padding: 4px 12px;
+                padding: 3px 10px;
                 border-radius: 20px;
-                font-size: 11px;
+                font-size: 10px;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
@@ -266,47 +265,48 @@
                 color: #d97706;
             }
             
-            .feature-expand {
-                color: var(--primary);
-                font-size: 13px;
-                font-weight: 600;
-                margin-top: 16px;
+            /* Demo Preview */
+            .demo-preview {
+                position: sticky;
+                top: 100px;
+            }
+            
+            .demo-window {
+                background: white;
+                border-radius: 24px;
+                box-shadow: 0 25px 80px rgba(0, 0, 0, 0.12);
+                overflow: hidden;
+            }
+            
+            .demo-header {
+                background: linear-gradient(135deg, var(--primary), var(--secondary));
+                padding: 16px 20px;
+                color: white;
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 12px;
             }
             
-            .feature-expand svg {
-                transition: transform 0.3s;
+            .demo-header-icon {
+                font-size: 24px;
             }
             
-            .feature-card.expanded .feature-expand svg {
-                transform: rotate(180deg);
+            .demo-header h4 {
+                font-size: 15px;
+                margin-bottom: 2px;
             }
             
-            /* Feature Demo */
-            .feature-demo {
-                max-height: 0;
-                overflow: hidden;
-                transition: max-height 0.4s ease, margin-top 0.4s ease, padding-top 0.4s ease;
-                margin-top: 0;
-                padding-top: 0;
-                border-top: 0 solid var(--border-color);
+            .demo-header span {
+                font-size: 12px;
+                opacity: 0.9;
             }
             
-            .feature-card.expanded .feature-demo {
-                max-height: 500px;
-                margin-top: 24px;
-                padding-top: 24px;
-                border-top-width: 1px;
-            }
-            
-            .demo-chat {
-                background: var(--bg-light);
-                border-radius: 12px;
-                padding: 16px;
-                max-height: 300px;
+            .demo-body {
+                padding: 20px;
+                min-height: 320px;
+                max-height: 400px;
                 overflow-y: auto;
+                background: #fafafa;
             }
             
             .demo-message {
@@ -314,6 +314,12 @@
                 display: flex;
                 gap: 10px;
                 align-items: flex-start;
+                animation: fadeIn 0.3s ease;
+            }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
             }
             
             .demo-message.user {
@@ -340,9 +346,10 @@
                 background: white;
                 padding: 10px 14px;
                 border-radius: 12px;
-                font-size: 14px;
-                max-width: 80%;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                font-size: 13px;
+                max-width: 85%;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+                line-height: 1.5;
             }
             
             .demo-message.user .demo-bubble {
@@ -352,37 +359,63 @@
             
             .demo-product {
                 display: flex;
-                gap: 12px;
+                gap: 10px;
                 background: white;
-                padding: 12px;
+                padding: 10px;
                 border-radius: 10px;
                 margin-top: 8px;
                 border: 1px solid var(--border-color);
             }
             
             .demo-product-img {
-                width: 60px;
-                height: 60px;
+                width: 50px;
+                height: 50px;
                 background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
                 border-radius: 8px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 24px;
+                font-size: 20px;
             }
             
             .demo-product-info h5 {
-                font-size: 13px;
-                margin-bottom: 4px;
+                font-size: 12px;
+                margin-bottom: 3px;
             }
             
             .demo-product-info span {
                 color: var(--primary);
                 font-weight: 700;
-                font-size: 15px;
+                font-size: 14px;
             }
             
-            /* Interactive Demo Section */
+            .typing-indicator {
+                display: flex;
+                gap: 4px;
+                padding: 12px 14px;
+                background: white;
+                border-radius: 12px;
+                width: fit-content;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            }
+            
+            .typing-indicator span {
+                width: 6px;
+                height: 6px;
+                background: var(--primary);
+                border-radius: 50%;
+                animation: typing 1.4s infinite;
+            }
+            
+            .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+            .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+            
+            @keyframes typing {
+                0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+                30% { transform: translateY(-3px); opacity: 1; }
+            }
+            
+            /* Demo Section - Interactive Scenarios */
             .demo-section {
                 padding: 100px 0;
                 background: var(--bg-light);
@@ -398,36 +431,40 @@
             }
             
             .demo-info h2 {
-                font-size: 36px;
+                font-size: clamp(28px, 4vw, 36px);
                 margin-bottom: 16px;
             }
             
             .demo-info p {
                 color: var(--text-gray);
-                font-size: 18px;
+                font-size: 16px;
                 margin-bottom: 32px;
             }
             
             .scenario-buttons {
                 display: flex;
-                flex-wrap: wrap;
+                flex-direction: column;
                 gap: 12px;
             }
             
             .scenario-btn {
-                padding: 12px 20px;
-                border-radius: 10px;
+                padding: 16px 20px;
+                border-radius: 12px;
                 border: 2px solid var(--border-color);
                 background: white;
-                font-size: 14px;
+                font-size: 15px;
                 font-weight: 500;
                 cursor: pointer;
                 transition: all 0.2s;
+                text-align: left;
+                display: flex;
+                align-items: center;
+                gap: 12px;
             }
             
             .scenario-btn:hover {
                 border-color: var(--primary);
-                color: var(--primary);
+                transform: translateX(4px);
             }
             
             .scenario-btn.active {
@@ -436,100 +473,8 @@
                 color: white;
             }
             
-            /* Chat Widget Demo */
-            .chat-widget-demo {
-                background: white;
-                border-radius: 24px;
-                box-shadow: 0 25px 80px rgba(0, 0, 0, 0.15);
-                overflow: hidden;
-                max-width: 400px;
-                margin: 0 auto;
-            }
-            
-            .chat-widget-header {
-                background: linear-gradient(135deg, var(--primary), var(--secondary));
-                padding: 20px 24px;
-                color: white;
-            }
-            
-            .chat-widget-header h4 {
-                font-size: 18px;
-                margin-bottom: 4px;
-            }
-            
-            .chat-widget-header span {
-                font-size: 13px;
-                opacity: 0.9;
-            }
-            
-            .chat-widget-body {
-                padding: 20px;
-                min-height: 350px;
-                max-height: 350px;
-                overflow-y: auto;
-                background: #fafafa;
-            }
-            
-            .chat-widget-input {
-                padding: 16px 20px;
-                border-top: 1px solid var(--border-color);
-                display: flex;
-                gap: 12px;
-                background: white;
-            }
-            
-            .chat-widget-input input {
-                flex: 1;
-                padding: 12px 16px;
-                border: 2px solid var(--border-color);
-                border-radius: 10px;
-                font-size: 14px;
-                outline: none;
-                transition: border-color 0.2s;
-            }
-            
-            .chat-widget-input input:focus {
-                border-color: var(--primary);
-            }
-            
-            .chat-widget-input button {
-                padding: 12px 20px;
-                background: var(--primary);
-                color: white;
-                border: none;
-                border-radius: 10px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: background 0.2s;
-            }
-            
-            .chat-widget-input button:hover {
-                background: var(--primary-dark);
-            }
-            
-            .typing-indicator {
-                display: flex;
-                gap: 4px;
-                padding: 12px 16px;
-                background: white;
-                border-radius: 12px;
-                width: fit-content;
-            }
-            
-            .typing-indicator span {
-                width: 8px;
-                height: 8px;
-                background: var(--primary);
-                border-radius: 50%;
-                animation: typing 1.4s infinite;
-            }
-            
-            .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-            .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-            
-            @keyframes typing {
-                0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-                30% { transform: translateY(-4px); opacity: 1; }
+            .scenario-btn .emoji {
+                font-size: 24px;
             }
             
             /* Coming Soon */
@@ -539,8 +484,8 @@
             
             .coming-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                gap: 24px;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 20px;
                 max-width: 1000px;
                 margin: 0 auto;
             }
@@ -548,7 +493,7 @@
             .coming-card {
                 background: white;
                 border-radius: 16px;
-                padding: 28px;
+                padding: 24px;
                 border: 2px dashed var(--border-color);
                 transition: all 0.2s;
             }
@@ -559,8 +504,8 @@
             }
             
             .coming-card h4 {
-                font-size: 18px;
-                margin-bottom: 12px;
+                font-size: 16px;
+                margin-bottom: 10px;
                 display: flex;
                 align-items: center;
                 gap: 10px;
@@ -568,13 +513,13 @@
             
             .coming-card p {
                 color: var(--text-gray);
-                font-size: 14px;
-                line-height: 1.7;
+                font-size: 13px;
+                line-height: 1.6;
             }
             
             /* Footer */
             footer {
-                padding: 60px 0;
+                padding: 48px 0;
                 background: var(--bg-light);
                 border-top: 1px solid var(--border-color);
             }
@@ -589,11 +534,12 @@
             
             footer p {
                 color: var(--text-gray);
+                font-size: 14px;
             }
             
             .footer-links {
                 display: flex;
-                gap: 32px;
+                gap: 24px;
             }
             
             .footer-links a {
@@ -608,36 +554,117 @@
                 color: var(--primary);
             }
             
+            /* Mobile Styles */
             @media (max-width: 900px) {
+                .features-layout {
+                    grid-template-columns: 1fr;
+                    gap: 32px;
+                }
+                
+                .demo-preview {
+                    position: relative;
+                    top: 0;
+                    order: -1;
+                }
+                
                 .demo-container {
                     grid-template-columns: 1fr;
                 }
                 
-                .chat-widget-demo {
-                    max-width: 100%;
+                .scenario-buttons {
+                    flex-direction: row;
+                    flex-wrap: wrap;
+                }
+                
+                .scenario-btn {
+                    flex: 1;
+                    min-width: 140px;
+                    justify-content: center;
+                    text-align: center;
+                    padding: 12px 16px;
+                }
+                
+                .scenario-btn .emoji {
+                    font-size: 20px;
                 }
             }
             
             @media (max-width: 768px) {
                 nav {
-                    gap: 16px;
+                    gap: 12px;
+                }
+                
+                .btn-small {
+                    padding: 6px 12px;
+                    font-size: 12px;
                 }
                 
                 .hero {
                     padding: 100px 0 60px;
                 }
                 
+                .hero p {
+                    font-size: 16px;
+                }
+                
                 .features, .demo-section, .coming-soon {
                     padding: 60px 0;
                 }
                 
-                .features-grid {
-                    grid-template-columns: 1fr;
+                .feature-item {
+                    padding: 16px;
+                }
+                
+                .feature-item .icon {
+                    width: 40px;
+                    height: 40px;
+                    font-size: 20px;
+                }
+                
+                .feature-item .info h3 {
+                    font-size: 14px;
+                }
+                
+                .feature-item .info p {
+                    font-size: 12px;
+                }
+                
+                .demo-body {
+                    min-height: 280px;
+                    max-height: 320px;
                 }
                 
                 .footer-content {
                     flex-direction: column;
                     text-align: center;
+                }
+                
+                .footer-links {
+                    flex-wrap: wrap;
+                    justify-content: center;
+                }
+            }
+            
+            @media (max-width: 480px) {
+                .container {
+                    padding: 0 16px;
+                }
+                
+                .hero h1 {
+                    font-size: 32px;
+                }
+                
+                .hero-actions {
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+                
+                .btn {
+                    justify-content: center;
+                }
+                
+                .scenario-btn {
+                    min-width: 100%;
                 }
             }
         </style>
@@ -680,231 +707,70 @@
         <section class="features" id="features">
             <div class="container">
                 <h2 class="section-title">Що вміє AIntento</h2>
-                <p class="section-subtitle">Натисніть на картку, щоб побачити демонстрацію</p>
+                <p class="section-subtitle">Натисніть на функцію, щоб побачити демонстрацію</p>
                 
-                <div class="features-grid">
-                    <!-- Feature 1: Smart Product Search -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">🤖</div>
-                            <div class="feature-info">
+                <div class="features-layout">
+                    <div class="features-list">
+                        <div class="feature-item active" onclick="showFeatureDemo(0)">
+                            <div class="icon">🤖</div>
+                            <div class="info">
                                 <h3>Розумний підбір товарів <span class="badge badge-success">Працює</span></h3>
-                                <p>GPT аналізує запит клієнта і підбирає найкращі товари з урахуванням контексту, бюджету та вподобань.</p>
+                                <p>GPT аналізує запит і підбирає товари з урахуванням бюджету</p>
                             </div>
                         </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div class="demo-chat">
-                                <div class="demo-message user">
-                                    <div class="demo-avatar">👤</div>
-                                    <div class="demo-bubble">Шукаю тактичний рюкзак до 3000 грн</div>
-                                </div>
-                                <div class="demo-message">
-                                    <div class="demo-avatar">🤖</div>
-                                    <div class="demo-bubble">
-                                        Ось що підібрав для вас:
-                                        <div class="demo-product">
-                                            <div class="demo-product-img">🎒</div>
-                                            <div class="demo-product-info">
-                                                <h5>Рюкзак M-TAC Assault Pack</h5>
-                                                <span>2 450 ₴</span>
-                                            </div>
-                                        </div>
-                                        <div class="demo-product">
-                                            <div class="demo-product-img">🎒</div>
-                                            <div class="demo-product-info">
-                                                <h5>Рюкзак Helikon-Tex EDC</h5>
-                                                <span>2 890 ₴</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Feature 2: Streaming -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">⚡</div>
-                            <div class="feature-info">
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(1)">
+                            <div class="icon">⚡</div>
+                            <div class="info">
                                 <h3>Streaming відповіді <span class="badge badge-success">Працює</span></h3>
-                                <p>Відповіді з'являються миттєво — клієнт бачить текст у реальному часі через SSE, без затримок.</p>
+                                <p>Текст з'являється миттєво через SSE</p>
                             </div>
                         </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div class="demo-chat">
-                                <div class="demo-message user">
-                                    <div class="demo-avatar">👤</div>
-                                    <div class="demo-bubble">Розкажи про цей товар детальніше</div>
-                                </div>
-                                <div class="demo-message">
-                                    <div class="demo-avatar">🤖</div>
-                                    <div class="demo-bubble" id="streaming-demo">
-                                        <span class="typing-text"></span>
-                                        <span class="cursor">|</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <p style="font-size: 12px; color: var(--text-gray); margin-top: 12px; text-align: center;">
-                                ⚡ Текст з'являється посимвольно в реальному часі
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Feature 3: Context Memory -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">🎯</div>
-                            <div class="feature-info">
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(2)">
+                            <div class="icon">🎯</div>
+                            <div class="info">
                                 <h3>Контекстна пам'ять <span class="badge badge-success">Працює</span></h3>
-                                <p>Бот запам'ятовує історію діалогу, категорії, розміри та бюджет — природна розмова.</p>
+                                <p>Бот запам'ятовує історію, розміри та бюджет</p>
                             </div>
                         </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div class="demo-chat">
-                                <div class="demo-message user">
-                                    <div class="demo-avatar">👤</div>
-                                    <div class="demo-bubble">Покажи футболки розмір L</div>
-                                </div>
-                                <div class="demo-message">
-                                    <div class="demo-avatar">🤖</div>
-                                    <div class="demo-bubble">Ось футболки розміру L... [показано 3 товари]</div>
-                                </div>
-                                <div class="demo-message user">
-                                    <div class="demo-avatar">👤</div>
-                                    <div class="demo-bubble">А є в чорному кольорі?</div>
-                                </div>
-                                <div class="demo-message">
-                                    <div class="demo-avatar">🤖</div>
-                                    <div class="demo-bubble">Так! Ось <b>чорні футболки розміру L</b>: [показано 2 товари]</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Feature 4: Meilisearch -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">🔍</div>
-                            <div class="feature-info">
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(3)">
+                            <div class="icon">🔍</div>
+                            <div class="info">
                                 <h3>Meilisearch пошук <span class="badge badge-success">Працює</span></h3>
-                                <p>Блискавичний пошук з підтримкою фільтрів, синонімів та typo-tolerance.</p>
+                                <p>Блискавичний пошук з typo-tolerance</p>
                             </div>
                         </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div class="demo-chat">
-                                <div class="demo-message user">
-                                    <div class="demo-avatar">👤</div>
-                                    <div class="demo-bubble">тактічна разгрузка олива</div>
-                                </div>
-                                <div class="demo-message">
-                                    <div class="demo-avatar">🤖</div>
-                                    <div class="demo-bubble">
-                                        🔍 Знайдено за 12ms:
-                                        <div class="demo-product">
-                                            <div class="demo-product-img">🦺</div>
-                                            <div class="demo-product-info">
-                                                <h5>Розвантажувальний жилет Olive</h5>
-                                                <span>3 200 ₴</span>
-                                            </div>
-                                        </div>
-                                        <small style="color: var(--text-gray);">✓ Виправлено: "тактічна" → "тактична"</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Feature 5: Widget Customization -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">🎨</div>
-                            <div class="feature-info">
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(4)">
+                            <div class="icon">🎨</div>
+                            <div class="info">
                                 <h3>Кастомізація віджета <span class="badge badge-success">Працює</span></h3>
-                                <p>Кольори, шрифти, положення, привітання — все налаштовується під ваш бренд.</p>
+                                <p>Кольори, шрифти, положення під ваш бренд</p>
                             </div>
                         </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
-                                <div style="background: linear-gradient(135deg, #10b981, #059669); padding: 16px; border-radius: 12px; color: white; text-align: center; font-size: 12px;">
-                                    🌿 Green Theme
-                                </div>
-                                <div style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 16px; border-radius: 12px; color: white; text-align: center; font-size: 12px;">
-                                    💜 Purple Theme
-                                </div>
-                                <div style="background: linear-gradient(135deg, #1f2937, #111827); padding: 16px; border-radius: 12px; color: white; text-align: center; font-size: 12px;">
-                                    🖤 Dark Theme
-                                </div>
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(5)">
+                            <div class="icon">📊</div>
+                            <div class="info">
+                                <h3>Базова аналітика <span class="badge badge-success">Працює</span></h3>
+                                <p>Трекінг взаємодій та конверсій</p>
                             </div>
-                            <p style="font-size: 12px; color: var(--text-gray); margin-top: 12px; text-align: center;">
-                                + Позиція, аватар, текст привітання, анімації
-                            </p>
                         </div>
                     </div>
-
-                    <!-- Feature 6: Analytics -->
-                    <div class="feature-card" onclick="toggleFeature(this)">
-                        <div class="feature-header">
-                            <div class="feature-icon">📊</div>
-                            <div class="feature-info">
-                                <h3>Базова аналітика <span class="badge badge-success">Працює</span></h3>
-                                <p>Трекінг взаємодій, популярних запитів та конверсій. Dashboard з метриками.</p>
+                    
+                    <div class="demo-preview">
+                        <div class="demo-window">
+                            <div class="demo-header">
+                                <span class="demo-header-icon">🤖</span>
+                                <div>
+                                    <h4>AIntento Assistant</h4>
+                                    <span>Онлайн • Відповідаю миттєво</span>
+                                </div>
                             </div>
-                        </div>
-                        <div class="feature-expand">
-                            Показати демо
-                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            </svg>
-                        </div>
-                        <div class="feature-demo">
-                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                                <div style="background: var(--bg-light); padding: 16px; border-radius: 12px; text-align: center;">
-                                    <div style="font-size: 28px; font-weight: 700; color: var(--primary);">1,247</div>
-                                    <div style="font-size: 12px; color: var(--text-gray);">Діалогів сьогодні</div>
-                                </div>
-                                <div style="background: var(--bg-light); padding: 16px; border-radius: 12px; text-align: center;">
-                                    <div style="font-size: 28px; font-weight: 700; color: var(--primary);">23%</div>
-                                    <div style="font-size: 12px; color: var(--text-gray);">Конверсія в кошик</div>
-                                </div>
-                                <div style="background: var(--bg-light); padding: 16px; border-radius: 12px; text-align: center;">
-                                    <div style="font-size: 28px; font-weight: 700; color: var(--primary);">4.8s</div>
-                                    <div style="font-size: 12px; color: var(--text-gray);">Avg. response time</div>
-                                </div>
-                                <div style="background: var(--bg-light); padding: 16px; border-radius: 12px; text-align: center;">
-                                    <div style="font-size: 28px; font-weight: 700; color: var(--primary);">89%</div>
-                                    <div style="font-size: 12px; color: var(--text-gray);">Задоволених</div>
-                                </div>
+                            <div class="demo-body" id="feature-demo-body">
+                                <!-- Demo content will be inserted here -->
                             </div>
                         </div>
                     </div>
@@ -918,27 +784,35 @@
                 <div class="demo-container">
                     <div class="demo-info">
                         <h2>Спробуйте прямо зараз</h2>
-                        <p>Оберіть сценарій і подивіться, як працює AIntento у реальному діалозі з клієнтом.</p>
+                        <p>Оберіть сценарій і подивіться, як AIntento веде діалог з клієнтом магазину.</p>
                         <div class="scenario-buttons">
-                            <button class="scenario-btn active" onclick="runScenario(0)">🎒 Пошук рюкзака</button>
-                            <button class="scenario-btn" onclick="runScenario(1)">👕 Підбір одягу</button>
-                            <button class="scenario-btn" onclick="runScenario(2)">❓ Питання про доставку</button>
+                            <button class="scenario-btn active" onclick="runScenario(0)">
+                                <span class="emoji">🎒</span>
+                                <span>Пошук рюкзака</span>
+                            </button>
+                            <button class="scenario-btn" onclick="runScenario(1)">
+                                <span class="emoji">👕</span>
+                                <span>Підбір одягу</span>
+                            </button>
+                            <button class="scenario-btn" onclick="runScenario(2)">
+                                <span class="emoji">❓</span>
+                                <span>Питання про доставку</span>
+                            </button>
                         </div>
                     </div>
-                    <div class="chat-widget-demo">
-                        <div class="chat-widget-header">
-                            <h4>🤖 AIntento Assistant</h4>
-                            <span>Онлайн • Відповідаю миттєво</span>
+                    <div class="demo-window">
+                        <div class="demo-header">
+                            <span class="demo-header-icon">🤖</span>
+                            <div>
+                                <h4>AIntento Assistant</h4>
+                                <span>Онлайн • Відповідаю миттєво</span>
+                            </div>
                         </div>
-                        <div class="chat-widget-body" id="demo-chat-body">
+                        <div class="demo-body" id="demo-chat-body">
                             <div class="demo-message">
                                 <div class="demo-avatar">🤖</div>
                                 <div class="demo-bubble">Привіт! Я AI-асистент магазину. Чим можу допомогти?</div>
                             </div>
-                        </div>
-                        <div class="chat-widget-input">
-                            <input type="text" placeholder="Напишіть повідомлення..." id="demo-input" onkeypress="handleDemoInput(event)">
-                            <button onclick="sendDemoMessage()">→</button>
                         </div>
                     </div>
                 </div>
@@ -953,57 +827,33 @@
                 
                 <div class="coming-grid">
                     <div class="coming-card">
-                        <h4>
-                            <span>🧠</span>
-                            AI Рекомендації
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>Персоналізовані рекомендації на основі історії переглядів та покупок кожного клієнта.</p>
+                        <h4>🧠 AI Рекомендації <span class="badge badge-soon">Soon</span></h4>
+                        <p>Персоналізовані рекомендації на основі історії переглядів.</p>
                     </div>
 
                     <div class="coming-card">
-                        <h4>
-                            <span>🎯</span>
-                            Міні-квіз
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>Інтерактивний квіз для швидкого підбору товарів за відповідями клієнта.</p>
+                        <h4>🎯 Міні-квіз <span class="badge badge-soon">Soon</span></h4>
+                        <p>Інтерактивний квіз для швидкого підбору товарів.</p>
                     </div>
 
                     <div class="coming-card">
-                        <h4>
-                            <span>📊</span>
-                            Розширена аналітика
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>Глибокий аналіз продажів, AI-інсайти для покращення асортименту.</p>
+                        <h4>📊 Розширена аналітика <span class="badge badge-soon">Soon</span></h4>
+                        <p>Глибокий аналіз продажів, AI-інсайти.</p>
                     </div>
 
                     <div class="coming-card">
-                        <h4>
-                            <span>💡</span>
-                            Оптимізація каталогу
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>AI аналізує запити і пропонує що додати/змінити для збільшення продажів.</p>
+                        <h4>💡 Оптимізація каталогу <span class="badge badge-soon">Soon</span></h4>
+                        <p>AI пропонує що додати для збільшення продажів.</p>
                     </div>
 
                     <div class="coming-card">
-                        <h4>
-                            <span>🔔</span>
-                            Push-нотифікації
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>Розумні пуші про знижки та новинки на основі інтересів клієнта.</p>
+                        <h4>🔔 Push-нотифікації <span class="badge badge-soon">Soon</span></h4>
+                        <p>Розумні пуші про знижки та новинки.</p>
                     </div>
 
                     <div class="coming-card">
-                        <h4>
-                            <span>🎨</span>
-                            AI-контент
-                            <span class="badge badge-soon">Soon</span>
-                        </h4>
-                        <p>Автоматична генерація описів товарів та SEO-текстів.</p>
+                        <h4>🎨 AI-контент <span class="badge badge-soon">Soon</span></h4>
+                        <p>Автоматична генерація описів товарів.</p>
                     </div>
                 </div>
             </div>
@@ -1016,7 +866,6 @@
                     <p>© 2025 AIntento — AI асистент для вашого e-commerce</p>
                     <div class="footer-links">
                         <a href="/admin">Адмін-панель</a>
-                        <a href="https://laravel.com/docs" target="_blank">Документація</a>
                         <a href="mailto:support@aimbot.laravel.cloud">Підтримка</a>
                     </div>
                 </div>
@@ -1024,58 +873,147 @@
         </footer>
 
         <script>
-            // Toggle feature cards
-            function toggleFeature(card) {
-                const wasExpanded = card.classList.contains('expanded');
-                
-                // Close all
-                document.querySelectorAll('.feature-card').forEach(c => {
-                    c.classList.remove('expanded');
+            // Feature demos data
+            const featureDemos = [
+                // 0: Smart search
+                [
+                    { role: 'user', text: 'Шукаю тактичний рюкзак до 3000 грн' },
+                    { role: 'bot', text: 'Ось що підібрав для вас:', products: [
+                        { name: 'Рюкзак M-TAC Assault Pack', price: '2 450 ₴', emoji: '🎒' },
+                        { name: 'Рюкзак Helikon-Tex EDC', price: '2 890 ₴', emoji: '🎒' }
+                    ]}
+                ],
+                // 1: Streaming
+                [
+                    { role: 'user', text: 'Розкажи про цей товар' },
+                    { role: 'bot', text: 'Цей рюкзак має об\'єм 35 літрів, виготовлений з водостійкого нейлону 1000D. Є MOLLE-система для кріплення підсумків. ⚡', streaming: true }
+                ],
+                // 2: Context memory
+                [
+                    { role: 'user', text: 'Покажи футболки розмір L' },
+                    { role: 'bot', text: 'Ось футболки розміру L...' },
+                    { role: 'user', text: 'А є в чорному?' },
+                    { role: 'bot', text: 'Так! Ось чорні футболки розміру L:', products: [
+                        { name: 'Футболка M-TAC Black L', price: '650 ₴', emoji: '👕' }
+                    ]}
+                ],
+                // 3: Meilisearch
+                [
+                    { role: 'user', text: 'тактічна разгрузка олива' },
+                    { role: 'bot', text: '🔍 Знайдено за 12ms:', products: [
+                        { name: 'Розвантажувальний жилет Olive', price: '3 200 ₴', emoji: '🦺' }
+                    ], note: '✓ Виправлено: "тактічна" → "тактична"' }
+                ],
+                // 4: Customization
+                [
+                    { role: 'bot', text: 'Віджет можна налаштувати під ваш бренд:', themes: true }
+                ],
+                // 5: Analytics
+                [
+                    { role: 'bot', text: 'Статистика за сьогодні:', stats: true }
+                ]
+            ];
+            
+            let currentFeature = 0;
+            
+            function showFeatureDemo(index) {
+                // Update active state
+                document.querySelectorAll('.feature-item').forEach((item, i) => {
+                    item.classList.toggle('active', i === index);
                 });
                 
-                // Toggle clicked
-                if (!wasExpanded) {
-                    card.classList.add('expanded');
-                    
-                    // Start streaming animation if it's the streaming demo
-                    if (card.querySelector('#streaming-demo')) {
-                        startStreamingDemo();
-                    }
+                currentFeature = index;
+                const demoBody = document.getElementById('feature-demo-body');
+                demoBody.innerHTML = '';
+                
+                // Play the demo
+                playFeatureDemo(featureDemos[index], demoBody);
+            }
+            
+            function playFeatureDemo(messages, container, index = 0) {
+                if (index >= messages.length) return;
+                
+                const message = messages[index];
+                
+                // Add typing indicator for bot
+                if (message.role === 'bot' && index > 0) {
+                    showTyping(container, () => {
+                        addDemoMessage(container, message);
+                        setTimeout(() => playFeatureDemo(messages, container, index + 1), 800);
+                    });
+                } else {
+                    setTimeout(() => {
+                        addDemoMessage(container, message);
+                        setTimeout(() => playFeatureDemo(messages, container, index + 1), 600);
+                    }, index === 0 ? 0 : 400);
                 }
             }
             
-            // Streaming demo animation
-            function startStreamingDemo() {
-                const text = "Цей рюкзак має об'єм 35 літрів, виготовлений з водостійкого нейлону 1000D. Є MOLLE-система для кріплення додаткових підсумків. Відмінно підходить для походів та щоденного використання.";
-                const element = document.querySelector('#streaming-demo .typing-text');
-                if (!element) return;
+            function showTyping(container, callback) {
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'demo-message';
+                typingDiv.innerHTML = '<div class="demo-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>';
+                container.appendChild(typingDiv);
+                container.scrollTop = container.scrollHeight;
                 
-                element.textContent = '';
-                let i = 0;
-                
-                const interval = setInterval(() => {
-                    if (i < text.length) {
-                        element.textContent += text[i];
-                        i++;
-                    } else {
-                        clearInterval(interval);
-                    }
-                }, 30);
+                setTimeout(() => {
+                    typingDiv.remove();
+                    callback();
+                }, 800);
             }
             
-            // Demo scenarios
+            function addDemoMessage(container, message) {
+                const div = document.createElement('div');
+                div.className = 'demo-message ' + (message.role === 'user' ? 'user' : '');
+                
+                let content = '<div class="demo-avatar">' + (message.role === 'user' ? '👤' : '🤖') + '</div><div class="demo-bubble">';
+                
+                if (message.text) {
+                    content += message.text;
+                }
+                
+                if (message.products) {
+                    message.products.forEach(p => {
+                        content += '<div class="demo-product"><div class="demo-product-img">' + p.emoji + '</div><div class="demo-product-info"><h5>' + p.name + '</h5><span>' + p.price + '</span></div></div>';
+                    });
+                }
+                
+                if (message.note) {
+                    content += '<div style="font-size: 11px; color: var(--text-gray); margin-top: 8px;">' + message.note + '</div>';
+                }
+                
+                if (message.themes) {
+                    content += '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px;">';
+                    content += '<div style="background: linear-gradient(135deg, #10b981, #059669); padding: 12px 8px; border-radius: 8px; color: white; text-align: center; font-size: 11px;">🌿 Green</div>';
+                    content += '<div style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 12px 8px; border-radius: 8px; color: white; text-align: center; font-size: 11px;">💜 Purple</div>';
+                    content += '<div style="background: linear-gradient(135deg, #1f2937, #111827); padding: 12px 8px; border-radius: 8px; color: white; text-align: center; font-size: 11px;">🖤 Dark</div>';
+                    content += '</div>';
+                }
+                
+                if (message.stats) {
+                    content += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px;">';
+                    content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">1,247</div><div style="font-size: 10px; color: var(--text-gray);">Діалогів</div></div>';
+                    content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">23%</div><div style="font-size: 10px; color: var(--text-gray);">Конверсія</div></div>';
+                    content += '</div>';
+                }
+                
+                content += '</div>';
+                div.innerHTML = content;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            }
+            
+            // Scenario demos
             const scenarios = [
-                // Scenario 0: Backpack search
                 [
                     { role: 'user', text: 'Привіт, шукаю рюкзак для походів' },
                     { role: 'bot', text: 'Вітаю! 🎒 Який об\'єм вам потрібен? І є якийсь бюджет?' },
                     { role: 'user', text: 'Десь 30-40 літрів, до 4000 грн' },
-                    { role: 'bot', text: 'Чудово! Ось що підібрав для вас:', products: [
+                    { role: 'bot', text: 'Чудово! Ось що підібрав:', products: [
                         { name: 'Рюкзак M-TAC Large', price: '3 450 ₴', emoji: '🎒' },
                         { name: 'Helikon-Tex Raccoon', price: '3 890 ₴', emoji: '🎒' }
                     ]}
                 ],
-                // Scenario 1: Clothing
                 [
                     { role: 'user', text: 'Потрібна тактична футболка' },
                     { role: 'bot', text: 'Який розмір носите? І є переваги по кольору?' },
@@ -1085,141 +1023,63 @@
                         { name: 'Футболка M-TAC Coyote L', price: '750 ₴', emoji: '👕' }
                     ]}
                 ],
-                // Scenario 2: Delivery question
                 [
                     { role: 'user', text: 'Як швидко доставите у Львів?' },
-                    { role: 'bot', text: 'До Львова доставка займає 1-2 дні 🚚\n\n• Нова Пошта — 1-2 дні\n• УкрПошта — 3-5 днів\n• Самовивіз — безкоштовно\n\nВідправляємо в день замовлення до 15:00!' },
+                    { role: 'bot', text: 'До Львова 1-2 дні 🚚\n\n• Нова Пошта — 1-2 дні\n• УкрПошта — 3-5 днів\n• Самовивіз — безкоштовно' },
                     { role: 'user', text: 'А безкоштовна доставка є?' },
-                    { role: 'bot', text: 'Так! 🎁 Безкоштовна доставка при замовленні від 2000 грн. У вас в кошику поки що товарів немає — давайте підберемо щось?' }
+                    { role: 'bot', text: 'Так! 🎁 Безкоштовна від 2000 грн. Давайте підберемо щось?' }
                 ]
             ];
             
             let currentScenario = 0;
-            let messageIndex = 0;
+            let scenarioIndex = 0;
             let isPlaying = false;
             
             function runScenario(index) {
-                // Update buttons
                 document.querySelectorAll('.scenario-btn').forEach((btn, i) => {
                     btn.classList.toggle('active', i === index);
                 });
                 
                 currentScenario = index;
-                messageIndex = 0;
+                scenarioIndex = 0;
+                isPlaying = false;
                 
-                // Clear chat
                 const chatBody = document.getElementById('demo-chat-body');
                 chatBody.innerHTML = '<div class="demo-message"><div class="demo-avatar">🤖</div><div class="demo-bubble">Привіт! Я AI-асистент магазину. Чим можу допомогти?</div></div>';
                 
-                // Start scenario
-                playNextMessage();
+                setTimeout(playScenario, 500);
             }
             
-            function playNextMessage() {
+            function playScenario() {
                 if (isPlaying) return;
-                
                 const scenario = scenarios[currentScenario];
-                if (messageIndex >= scenario.length) return;
+                if (scenarioIndex >= scenario.length) return;
                 
                 isPlaying = true;
-                const message = scenario[messageIndex];
+                const message = scenario[scenarioIndex];
                 const chatBody = document.getElementById('demo-chat-body');
                 
-                // Add typing indicator for bot
                 if (message.role === 'bot') {
-                    const typingDiv = document.createElement('div');
-                    typingDiv.className = 'demo-message';
-                    typingDiv.id = 'typing-indicator';
-                    typingDiv.innerHTML = '<div class="demo-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>';
-                    chatBody.appendChild(typingDiv);
-                    chatBody.scrollTop = chatBody.scrollHeight;
-                    
-                    setTimeout(() => {
-                        document.getElementById('typing-indicator')?.remove();
-                        addMessage(message);
-                    }, 1000);
-                } else {
-                    setTimeout(() => addMessage(message), 500);
-                }
-            }
-            
-            function addMessage(message) {
-                const chatBody = document.getElementById('demo-chat-body');
-                const div = document.createElement('div');
-                div.className = 'demo-message ' + (message.role === 'user' ? 'user' : '');
-                
-                let content = '<div class="demo-avatar">' + (message.role === 'user' ? '👤' : '🤖') + '</div><div class="demo-bubble">' + (message.text || '');
-                
-                if (message.products) {
-                    message.products.forEach(p => {
-                        content += '<div class="demo-product"><div class="demo-product-img">' + p.emoji + '</div><div class="demo-product-info"><h5>' + p.name + '</h5><span>' + p.price + '</span></div></div>';
+                    showTyping(chatBody, () => {
+                        addDemoMessage(chatBody, message);
+                        scenarioIndex++;
+                        isPlaying = false;
+                        setTimeout(playScenario, 1200);
                     });
-                }
-                
-                content += '</div>';
-                div.innerHTML = content;
-                chatBody.appendChild(div);
-                chatBody.scrollTop = chatBody.scrollHeight;
-                
-                messageIndex++;
-                isPlaying = false;
-                
-                // Auto-play next after delay
-                setTimeout(playNextMessage, 1500);
-            }
-            
-            function handleDemoInput(event) {
-                if (event.key === 'Enter') {
-                    sendDemoMessage();
+                } else {
+                    setTimeout(() => {
+                        addDemoMessage(chatBody, message);
+                        scenarioIndex++;
+                        isPlaying = false;
+                        setTimeout(playScenario, 800);
+                    }, 400);
                 }
             }
             
-            function sendDemoMessage() {
-                const input = document.getElementById('demo-input');
-                const text = input.value.trim();
-                if (!text) return;
-                
-                const chatBody = document.getElementById('demo-chat-body');
-                
-                // Add user message
-                const userDiv = document.createElement('div');
-                userDiv.className = 'demo-message user';
-                userDiv.innerHTML = '<div class="demo-avatar">👤</div><div class="demo-bubble">' + text + '</div>';
-                chatBody.appendChild(userDiv);
-                
-                input.value = '';
-                chatBody.scrollTop = chatBody.scrollHeight;
-                
-                // Add typing indicator
-                const typingDiv = document.createElement('div');
-                typingDiv.className = 'demo-message';
-                typingDiv.id = 'typing-indicator';
-                typingDiv.innerHTML = '<div class="demo-avatar">🤖</div><div class="typing-indicator"><span></span><span></span><span></span></div>';
-                chatBody.appendChild(typingDiv);
-                chatBody.scrollTop = chatBody.scrollHeight;
-                
-                // Bot response
-                setTimeout(() => {
-                    document.getElementById('typing-indicator')?.remove();
-                    
-                    const responses = [
-                        'Цікаве питання! Давайте підберемо для вас найкращі варіанти. Який у вас бюджет?',
-                        'Зрозумів! У нас є чудові варіанти. Є якісь особливі вимоги?',
-                        'Дякую за запитання! Я можу показати вам декілька відмінних товарів.',
-                        'Чудово! Підкажіть, будь ласка, який розмір вам потрібен?'
-                    ];
-                    
-                    const botDiv = document.createElement('div');
-                    botDiv.className = 'demo-message';
-                    botDiv.innerHTML = '<div class="demo-avatar">🤖</div><div class="demo-bubble">' + responses[Math.floor(Math.random() * responses.length)] + '</div>';
-                    chatBody.appendChild(botDiv);
-                    chatBody.scrollTop = chatBody.scrollHeight;
-                }, 1500);
-            }
-            
-            // Auto-start first scenario on page load
+            // Initialize
             document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(() => runScenario(0), 1000);
+                showFeatureDemo(0);
+                setTimeout(() => runScenario(0), 500);
             });
         </script>
     </body>

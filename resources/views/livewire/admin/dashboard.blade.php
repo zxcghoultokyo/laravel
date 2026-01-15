@@ -1,27 +1,17 @@
 <div wire:poll.60s="loadData" x-data="dashboardCharts()" x-init="initCharts()">
-    <!-- Navigation -->
-    <div class="mb-4 flex gap-2 flex-wrap">
-        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">📊 Dashboard</a>
-        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📈 Аналітика</a>
-        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🛒 Конверсії</a>
-        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">💬 Чати</a>
-        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">⚙️ Віджет</a>
-        <a href="{{ route('admin.greetings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🎯 Привітання</a>
-    </div>
-
     <!-- Header with Period Selector -->
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
-            <p class="mt-1 text-sm text-gray-500">Бізнес-метрики та аналітика</p>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Бізнес-метрики та аналітика</p>
         </div>
         <div class="flex items-center gap-3">
             <!-- Period Selector -->
-            <div class="flex bg-gray-100 rounded-lg p-1">
-                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+            <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white dark:bg-gray-600 shadow text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                     Сьогодні
                 </button>
-                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white dark:bg-gray-600 shadow text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
                     7 днів
                 </button>
                 <button wire:click="setPeriod('30d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '30d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">

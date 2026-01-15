@@ -5,6 +5,7 @@ namespace App\Services\Agent;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
+use App\Services\Ai\ToneService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
@@ -39,6 +40,7 @@ class StreamingFunctionCallingAgent
     private MeiliProductSearchTool $searchTool;
     private ProductDetailsTool $detailsTool;
     private OrderSearchService $orderSearchService;
+    private ToneService $toneService;
 
     public function __construct(
         MeiliProductSearchTool $searchTool,
@@ -51,6 +53,7 @@ class StreamingFunctionCallingAgent
         $this->searchTool = $searchTool;
         $this->detailsTool = $detailsTool;
         $this->orderSearchService = $orderSearchService;
+        $this->toneService = app(ToneService::class);
     }
 
     /**
@@ -335,6 +338,7 @@ class StreamingFunctionCallingAgent
     private function getSystemPrompt(): string
     {
         $faqInfo = $this->loadFaqInfo();
+        $toneSection = $this->toneService->getFullPromptSection();
         
         return <<<PROMPT
 Ти — AI-продавець магазину "Contractor" (contractor.kiev.ua). Твоя мета — допомогти клієнту КУПИТИ товар з каталогу.
@@ -392,6 +396,8 @@ class StreamingFunctionCallingAgent
 - НЕ вигадуй товари — ТІЛЬКИ результати search_products
 - Показуй 3-5 РІЗНИХ моделей
 - Якщо товару немає в результатах — НЕ згадуй його взагалі!
+
+{$toneSection}
 
 ІНФОРМАЦІЯ ПРО МАГАЗИН:
 {$faqInfo}

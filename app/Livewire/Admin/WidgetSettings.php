@@ -33,6 +33,7 @@ class WidgetSettings extends Component
     public $font_family = '';
     public $show_shadow = true;
     public $tone = 'official';
+    public $brand_rules = ['', '', '', '', '']; // Up to 5 brand rules
     
     public $shop_phone = '+380 63 631 9919';
     public $callback_form_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/#callback';
@@ -63,7 +64,7 @@ class WidgetSettings extends Component
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
                 'bot_name', 'bot_avatar_url', 'bot_status_text', 
-                'font_family', 'show_shadow', 'tone',
+                'font_family', 'show_shadow', 'tone', 'brand_rules',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
                 'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain',
                 'enable_faq_custom_content',
@@ -72,6 +73,10 @@ class WidgetSettings extends Component
                 'faq_contacts_url','faq_contacts_text',
                 'faq_about_url','faq_about_text'
             ]));
+            
+            // Normalize brand_rules to always have 5 slots
+            $rules = $this->brand_rules ?? [];
+            $this->brand_rules = array_pad(array_slice((array)$rules, 0, 5), 5, '');
         }
 
         // Load last ingest time from cache and compute availability
@@ -103,6 +108,8 @@ class WidgetSettings extends Component
             'bot_status_text' => 'nullable|string|max:100',
             'font_family' => 'nullable|string|max:100',
             'tone' => 'nullable|in:official,spartan,friendly',
+            'brand_rules' => 'nullable|array|max:5',
+            'brand_rules.*' => 'nullable|string|max:200',
             'shop_phone' => 'required|string|max:50',
             'callback_form_url' => 'required|url|max:255',
             'nova_poshta_tracking_url' => 'required|url|max:255',
@@ -135,6 +142,7 @@ class WidgetSettings extends Component
                 'font_family' => $this->font_family ?: null,
                 'show_shadow' => $this->show_shadow,
                 'tone' => $this->tone ?: 'official',
+                'brand_rules' => array_filter($this->brand_rules ?? [], fn($r) => !empty(trim($r))),
                 'shop_phone' => $this->shop_phone,
                 'callback_form_url' => $this->callback_form_url,
                 'nova_poshta_tracking_url' => $this->nova_poshta_tracking_url,
@@ -153,8 +161,9 @@ class WidgetSettings extends Component
             ]
         );
 
-        // Clear FAQ cache so changes take effect immediately
+        // Clear caches so changes take effect immediately
         Cache::forget('widget_settings_faq');
+        Cache::forget('widget_settings_tone');
         
         session()->flash('message', 'Налаштування збережено!');
     }

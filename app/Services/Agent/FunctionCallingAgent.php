@@ -5,6 +5,7 @@ namespace App\Services\Agent;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
+use App\Services\Ai\ToneService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
@@ -25,6 +26,7 @@ class FunctionCallingAgent
     private string $apiKey;
     private string $model;
     private string $baseUrl;
+    private ToneService $toneService;
 
     public function __construct(
         private MeiliProductSearchTool $searchTool,
@@ -35,6 +37,7 @@ class FunctionCallingAgent
         $this->apiKey = $config['key'] ?? '';
         $this->model = $config['model'] ?? 'gpt-4o';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
+        $this->toneService = app(ToneService::class);
     }
 
     /**
@@ -218,8 +221,9 @@ class FunctionCallingAgent
      */
     private function getSystemPrompt(): string
     {
-        // Load FAQ info from settings
+        // Load FAQ info and tone settings
         $faqInfo = $this->loadFaqInfo();
+        $toneSection = $this->toneService->getFullPromptSection();
         
         $basePrompt = <<<PROMPT
 Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor".
@@ -342,6 +346,8 @@ _context (ОБОВ'ЯЗКОВО!):
 - НІКОЛИ не пиши URL текстом! Завжди показуй КАРТКУ ТОВАРУ через get_product_details!
 - Артикул бери з попередньої відповіді (products[].article)
 - Приклад: "дай посилання на плитоноску" → get_product_details(article="se6-4lj-2i9")
+
+{$toneSection}
 
 ІНФОРМАЦІЯ ПРО МАГАЗИН (використовуй для відповідей на питання):
 {$faqInfo}

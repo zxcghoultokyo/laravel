@@ -1,19 +1,9 @@
-<div wire:poll.10s>
-    <!-- Navigation -->
-    <div class="mb-4 flex gap-2 flex-wrap">
-        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Dashboard</a>
-        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">📊 Аналітика</a>
-        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🛒 Конверсії</a>
-        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">💬 Чати</a>
-        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">⚙️ Віджет</a>
-        <a href="{{ route('admin.greetings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">🎯 Привітання</a>
-    </div>
-
+<div wire:poll.10s class="dark:bg-gray-900">
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900">Діалоги</h2>
-            <p class="mt-1 text-sm text-gray-500">Історії чатів з користувачами</p>
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Діалоги</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Історії чатів з користувачами</p>
         </div>
         <button 
             wire:click="$refresh" 

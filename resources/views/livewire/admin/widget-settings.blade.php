@@ -16,20 +16,10 @@
         <span x-text="toastMessage"></span>
     </div>
 
-    <!-- Navigation -->
-    <div class="mb-4 flex gap-2 flex-wrap">
-        <a href="{{ route('admin.dashboard') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">Dashboard</a>
-        <a href="{{ route('admin.analytics') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">📊 Аналітика</a>
-        <a href="{{ route('admin.conversions') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">🛒 Конверсії</a>
-        <a href="{{ route('admin.chats.index') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">💬 Чати</a>
-        <a href="{{ route('admin.widget.settings') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm shadow-sm">⚙️ Віджет</a>
-        <a href="{{ route('admin.greetings') }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors">🎯 Привітання</a>
-    </div>
-
     <!-- Header -->
     <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">⚙️ Налаштування віджета</h2>
-        <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">⚙️ Налаштування віджета</h2>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
     </div>
 
     @if (session()->has('message'))
@@ -180,19 +170,85 @@
                             </select>
                         </div>
 
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Тон відповідей</label>
-                            <select wire:model.live="tone" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="official">Офіційний — ввічливий, формальний</option>
-                                <option value="spartan">Лаконічний — коротко, по суті</option>
-                                <option value="friendly">Дружній — неформальний, позитивний</option>
-                            </select>
-                            <p class="mt-1 text-xs text-gray-500">Впливає на стиль відповідей AI</p>
-                        </div>
-
                         <div class="flex items-center">
                             <input type="checkbox" wire:model.live="show_shadow" id="show_shadow" class="rounded border-gray-300">
                             <label for="show_shadow" class="ml-2 text-sm text-gray-700">Показувати тінь віджету</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Persona & Tone -->
+                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎭 Персона та тон</h3>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Тон відповідей</label>
+                            <div class="grid grid-cols-3 gap-3">
+                                <label class="relative cursor-pointer">
+                                    <input type="radio" wire:model.live="tone" value="official" class="sr-only peer">
+                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
+                                        <div class="text-lg mb-1">📋</div>
+                                        <div class="font-medium text-sm">Офіційний</div>
+                                        <div class="text-xs text-gray-500">Ввічливий, формальний</div>
+                                    </div>
+                                </label>
+                                <label class="relative cursor-pointer">
+                                    <input type="radio" wire:model.live="tone" value="spartan" class="sr-only peer">
+                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
+                                        <div class="text-lg mb-1">⚡</div>
+                                        <div class="font-medium text-sm">Лаконічний</div>
+                                        <div class="text-xs text-gray-500">Коротко, по суті</div>
+                                    </div>
+                                </label>
+                                <label class="relative cursor-pointer">
+                                    <input type="radio" wire:model.live="tone" value="friendly" class="sr-only peer">
+                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
+                                        <div class="text-lg mb-1">😊</div>
+                                        <div class="font-medium text-sm">Дружній</div>
+                                        <div class="text-xs text-gray-500">Неформальний, теплий</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Tone Preview -->
+                        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div class="text-xs font-medium text-gray-500 mb-2">Приклад відповіді:</div>
+                            <div class="flex gap-2 mb-3">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center text-sm">👤</div>
+                                <div class="bg-white border rounded-lg p-3 text-sm">Порадьте теплу куртку до −15°C</div>
+                            </div>
+                            <div class="flex gap-2">
+                                <div class="w-8 h-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center text-sm">🤖</div>
+                                <div class="bg-blue-50 rounded-lg p-3 text-sm" style="background: {{ $primary_color }}15;">
+                                    @if($tone === 'official')
+                                        Доброго дня! Дозвольте запропонувати Вам декілька варіантів теплих курток, розрахованих на температуру до −15°C. Чи є у Вас переваги щодо бренду?
+                                    @elseif($tone === 'spartan')
+                                        Три варіанти під -15°C. Який розмір?
+                                    @else
+                                        О, крута задача! 🔥 Є декілька топових варіантів під -15. Який бюджет орієнтовно?
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Brand Rules -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Правила бренду (до 5 пунктів)</label>
+                            <p class="text-xs text-gray-500 mb-3">AI буде дотримуватися цих правил у кожній відповіді</p>
+                            <div class="space-y-2">
+                                @for($i = 0; $i < 5; $i++)
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-400 w-5">{{ $i + 1 }}.</span>
+                                    <input type="text" 
+                                           wire:model.live="brand_rules.{{ $i }}" 
+                                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" 
+                                           placeholder="{{ $i === 0 ? 'Наприклад: Відповідай українською' : ($i === 1 ? 'Максимум 2-3 речення' : '') }}"
+                                           maxlength="200">
+                                </div>
+                                @endfor
+                            </div>
                         </div>
                     </div>
                 </div>

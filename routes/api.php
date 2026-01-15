@@ -184,3 +184,34 @@ Route::prefix('billing/webhook')->group(function () {
     Route::post('/wayforpay', [BillingWebhookController::class, 'wayforpay'])->name('billing.webhook.wayforpay');
     Route::post('/liqpay', [BillingWebhookController::class, 'liqpay'])->name('billing.webhook.liqpay');
 });
+
+// ==================== TELEGRAM BOT WEBHOOK ====================
+Route::post('/telegram/webhook', [\App\Http\Controllers\Api\TelegramWebhookController::class, 'handle'])
+    ->name('telegram.webhook');
+Route::post('/telegram/generate-code', [\App\Http\Controllers\Api\TelegramWebhookController::class, 'generateCode'])
+    ->middleware('admin.token')
+    ->name('telegram.generate-code');
+
+// ==================== CANNED RESPONSES (OPERATOR) ====================
+Route::prefix('canned-responses')->middleware('admin.token')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\CannedResponseController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Api\CannedResponseController::class, 'store']);
+    Route::get('/suggestions', [\App\Http\Controllers\Api\CannedResponseController::class, 'suggestions']);
+    Route::post('/find-shortcut', [\App\Http\Controllers\Api\CannedResponseController::class, 'findByShortcut']);
+    Route::post('/seed-defaults', [\App\Http\Controllers\Api\CannedResponseController::class, 'seedDefaults']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\CannedResponseController::class, 'show']);
+    Route::put('/{id}', [\App\Http\Controllers\Api\CannedResponseController::class, 'update']);
+    Route::delete('/{id}', [\App\Http\Controllers\Api\CannedResponseController::class, 'destroy']);
+    Route::post('/{id}/use', [\App\Http\Controllers\Api\CannedResponseController::class, 'use']);
+});
+
+// ==================== ANALYTICS EXPORT ====================
+Route::prefix('export')->middleware('admin.token')->group(function () {
+    Route::get('/chat-sessions', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'chatSessions']);
+    Route::get('/chat-messages', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'chatMessages']);
+    Route::get('/events', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'events']);
+    Route::get('/payments', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'payments']);
+    Route::get('/conversion-funnel', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'conversionFunnel']);
+    Route::get('/daily-summary', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'dailySummary']);
+    Route::get('/product-mentions', [\App\Http\Controllers\Api\AnalyticsExportController::class, 'productMentions']);
+});

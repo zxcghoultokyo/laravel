@@ -45,31 +45,51 @@
 
 ---
 
-## 📈 Phase 3: Growth (TODO)
+## 📈 Phase 3: Growth (IN PROGRESS)
 
-### 3.1 Bot Customization
-- [ ] Custom AI prompts in admin
-- [ ] Product recommendations rules
-- [ ] Cross-sell/upsell settings
-- [ ] FAQ management
+### 3.1 Notifications ✅
+- [x] NotificationService (multi-channel)
+- [x] TelegramService + webhook
+- [x] Email alerts (new chat, escalation)
+- [x] Usage warnings
+- [x] Trial ending notifications
 
-### 3.2 Advanced Analytics
-- [ ] Conversion funnel
-- [ ] Revenue attribution
-- [ ] A/B test results
-- [ ] Export reports
+**Files:**
+- `app/Services/Notifications/NotificationService.php`
+- `app/Services/Notifications/TelegramService.php`
+- `app/Http/Controllers/Api/TelegramWebhookController.php`
+- `app/Jobs/CheckTrialEndingJob.php`
 
-### 3.3 Operator Dashboard
-- [ ] Live chat takeover
-- [ ] Canned responses
-- [ ] Assignment rules
-- [ ] SLA tracking
+### 3.2 Operator Tools ✅
+- [x] Canned responses CRUD
+- [x] Shortcut system (/hi, /delivery, etc.)
+- [x] Variable substitution ({{customer_name}})
+- [x] Default responses seeding
 
-### 3.4 Integrations
-- [ ] Shopify app
+**Files:**
+- `app/Models/CannedResponse.php`
+- `app/Http/Controllers/Api/CannedResponseController.php`
+- `database/migrations/2025_01_21_180000_create_canned_responses_table.php`
+
+### 3.3 Analytics & Export ✅
+- [x] AnalyticsExportService (CSV/JSON)
+- [x] Export: sessions, messages, events, payments
+- [x] Daily summary reports
+- [x] Product mentions report
+- [x] ConversionFunnelService
+- [x] Funnel stages tracking
+
+**Files:**
+- `app/Services/Analytics/AnalyticsExportService.php`
+- `app/Services/Analytics/ConversionFunnelService.php`
+- `app/Http/Controllers/Api/AnalyticsExportController.php`
+
+### 3.4 TODO (Next)
+- [ ] Shopify app integration
 - [ ] WooCommerce plugin
-- [ ] Telegram notifications
-- [ ] Email alerts
+- [ ] Custom AI prompts in admin (UI)
+- [ ] A/B test dashboard
+- [ ] SLA tracking
 
 ---
 

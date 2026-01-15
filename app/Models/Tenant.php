@@ -285,7 +285,7 @@ class Tenant extends Model
     /**
      * Suspend tenant.
      */
-    public function suspend(string $reason = null): void
+    public function suspend(?string $reason = null): void
     {
         $this->update([
             'status' => self::STATUS_SUSPENDED,

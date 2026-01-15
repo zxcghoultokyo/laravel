@@ -112,6 +112,9 @@ class AnalyticsController extends Controller
                 DB::table('chat_events')->insert($rows);
                 $inserted = count($rows);
                 Log::info('Analytics events inserted', ['count' => $inserted]);
+                
+                // Auto-create conversions for add_to_cart and checkout_submit events
+                $this->createConversionsFromEvents($events);
             }
 
         } catch (\Throwable $e) {
@@ -534,5 +537,86 @@ class AnalyticsController extends Controller
             ],
             'outcomes' => $outcomes,
         ]);
+    }
+    
+    /**
+     * Auto-create conversions from add_to_cart and checkout_submit events.
+     * This ensures these events are tracked in both chat_events AND chat_conversions.
+     */
+    private function createConversionsFromEvents(array $events): void
+    {
+        foreach ($events as $event) {
+            $eventType = $event['event_type'] ?? '';
+            
+            // Only process conversion-relevant events
+            if (!in_array($eventType, ['add_to_cart', 'checkout_submit'])) {
+                continue;
+            }
+            
+            $sessionId = $event['session_id'] ?? '';
+            if (empty($sessionId)) {
+                continue;
+            }
+            
+            try {
+                // Determine conversion type
+                $conversionType = $eventType === 'checkout_submit' ? 'checkout' : 'add_to_cart';
+                
+                // Find related chat session
+                $chatSession = DB::table('chat_sessions')
+                    ->where('session_id', $sessionId)
+                    ->first();
+                
+                // Check if product was from chat recommendations
+                $productFromChat = !empty($event['product_from_chat']);
+                $hadChatConversation = !empty($event['had_chat_conversation']);
+                
+                // Build conversion record
+                $conversionData = [
+                    'session_id' => substr($sessionId, 0, 64),
+                    'merchant_id' => isset($event['merchant_id']) ? substr($event['merchant_id'], 0, 64) : null,
+                    'client_id' => isset($event['client_id']) ? substr($event['client_id'], 0, 64) : null,
+                    'conversion_type' => $conversionType,
+                    'conversion_status' => 'confirmed',
+                    'order_total' => $event['product_price'] ?? $event['order_total'] ?? null,
+                    'items_count' => $event['order_items_count'] ?? $event['items_count'] ?? 1,
+                    'product_ids' => !empty($event['product_id']) ? json_encode([$event['product_id']]) : null,
+                    'product_from_chat' => $productFromChat,
+                    'chat_timestamp' => $chatSession->created_at ?? null,
+                    'conversion_timestamp' => now(),
+                    'minutes_to_conversion' => $chatSession 
+                        ? now()->diffInMinutes($chatSession->created_at) 
+                        : null,
+                    'metadata' => json_encode([
+                        'had_chat_conversation' => $hadChatConversation,
+                        'product_article' => $event['product_article'] ?? null,
+                        'product_title' => $event['product_title'] ?? null,
+                        'source' => 'auto_from_event',
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+                
+                DB::table('chat_conversions')->insert($conversionData);
+                
+                Log::info('Conversion auto-created from event', [
+                    'event_type' => $eventType,
+                    'conversion_type' => $conversionType,
+                    'session_id' => $sessionId,
+                    'product_from_chat' => $productFromChat,
+                ]);
+                
+                // Update session outcome
+                if ($hadChatConversation) {
+                    $this->updateSessionOutcome($sessionId, $conversionType);
+                }
+                
+            } catch (\Throwable $e) {
+                Log::warning('Failed to auto-create conversion from event', [
+                    'event_type' => $eventType,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 }

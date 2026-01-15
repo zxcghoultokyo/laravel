@@ -168,6 +168,9 @@
         // Setup add-to-cart tracking on the page
         setupAddToCartTracking();
         
+        // Setup checkout form tracking
+        setupCheckoutTracking();
+        
         // Track page view (widget loaded on page)
         sendAnalyticsEvent('page_view', {
             widget_version: WIDGET_VERSION
@@ -235,6 +238,179 @@
         }, true);
         
         log('Add-to-cart tracking initialized');
+    }
+    
+    /**
+     * Setup tracking for checkout form submission
+     * Tracks when user submits order on Horoshop checkout page
+     */
+    function setupCheckoutTracking() {
+        // Check if we're on checkout page
+        const isCheckoutPage = window.location.pathname.includes('/checkout') ||
+                               document.querySelector('form[action*="/order/submit"]') ||
+                               document.querySelector('.checkout');
+        
+        if (!isCheckoutPage) {
+            log('Not a checkout page, skipping checkout tracking');
+            return;
+        }
+        
+        log('Checkout page detected, setting up tracking');
+        
+        // Horoshop checkout form selectors
+        const checkoutFormSelectors = [
+            'form[action*="/order/submit"]',
+            'form#checkout-container',
+            '.checkout form',
+            'form[action*="checkout"]'
+        ];
+        
+        // Submit button selectors
+        const submitButtonSelectors = [
+            '.j-submit',
+            'button[type="submit"]',
+            '.checkout-footer button',
+            'button:contains("Оформити")',
+            '[class*="submit"]'
+        ];
+        
+        // Find the checkout form
+        let checkoutForm = null;
+        for (const selector of checkoutFormSelectors) {
+            checkoutForm = document.querySelector(selector);
+            if (checkoutForm) break;
+        }
+        
+        if (!checkoutForm) {
+            log('Checkout form not found');
+            return;
+        }
+        
+        log('Checkout form found:', checkoutForm);
+        
+        // Track form submission
+        checkoutForm.addEventListener('submit', function(e) {
+            log('Checkout form submitted');
+            
+            // Extract order data from form
+            const formData = new FormData(checkoutForm);
+            const orderData = extractCheckoutData(formData, checkoutForm);
+            
+            // Check if user had chat conversation
+            const sessionId = localStorage.getItem('aintento_session_id');
+            const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
+            const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
+            const hadChatConversation = messages && JSON.parse(messages).length > 0;
+            
+            // Get products shown in chat
+            const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
+            const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
+            
+            // Track checkout submit event
+            sendAnalyticsEvent('checkout_submit', {
+                order_items_count: orderData.itemsCount,
+                order_total: orderData.total,
+                has_email: orderData.hasEmail,
+                has_phone: orderData.hasPhone,
+                delivery_type: orderData.deliveryType,
+                had_chat_conversation: hadChatConversation,
+                products_from_chat: shownProducts.length,
+                city: orderData.city
+            });
+            
+            log('Checkout submit tracked:', orderData, { hadChatConversation });
+            
+            // Also track as conversion (lead type - потенційний клієнт оформив замовлення)
+            sendConversionEvent('checkout', {
+                order_total: orderData.total,
+                items_count: orderData.itemsCount,
+                had_chat_conversation: hadChatConversation,
+                products_from_chat: shownProducts
+            });
+        });
+        
+        log('Checkout tracking initialized');
+    }
+    
+    /**
+     * Extract checkout data from form
+     */
+    function extractCheckoutData(formData, form) {
+        const data = {
+            itemsCount: 0,
+            total: 0,
+            hasEmail: false,
+            hasPhone: false,
+            deliveryType: null,
+            city: null
+        };
+        
+        // Check for email field
+        const emailField = form.querySelector('input[type="email"], input[name*="email"]');
+        data.hasEmail = emailField && emailField.value && emailField.value.includes('@');
+        
+        // Check for phone field
+        const phoneField = form.querySelector('input[name*="phone"], .j-phone');
+        data.hasPhone = phoneField && phoneField.value && phoneField.value.length > 5;
+        
+        // Get delivery type
+        const deliverySelect = form.querySelector('select[name*="delivery_type"], .j-delivery-type');
+        if (deliverySelect) {
+            const selectedOption = deliverySelect.options ? deliverySelect.options[deliverySelect.selectedIndex] : null;
+            data.deliveryType = selectedOption ? selectedOption.text : null;
+        }
+        
+        // Get city
+        const cityField = form.querySelector('input[name*="city"]');
+        data.city = cityField ? cityField.value : null;
+        
+        // Try to get cart data from page
+        const cartTotal = document.querySelector('.cart-total, .order-total, [class*="total"] .price');
+        if (cartTotal) {
+            const priceMatch = cartTotal.textContent.match(/[\d\s]+/);
+            if (priceMatch) {
+                data.total = parseFloat(priceMatch[0].replace(/\s/g, '')) || 0;
+            }
+        }
+        
+        // Count cart items
+        const cartItems = document.querySelectorAll('.cart-item, .order-item, [class*="cart"] [class*="item"]');
+        data.itemsCount = cartItems.length || 1;
+        
+        return data;
+    }
+    
+    /**
+     * Send conversion event (goes to chat_conversions table)
+     */
+    function sendConversionEvent(conversionType, data = {}) {
+        const sessionId = localStorage.getItem('aintento_session_id');
+        const clientId = getOrCreateClientId();
+        const merchantId = getMerchantId();
+        
+        const payload = {
+            conversion_type: conversionType,
+            session_id: sessionId || '',
+            client_id: clientId,
+            merchant_id: merchantId,
+            order_total: data.order_total || null,
+            items_count: data.items_count || null,
+            product_ids: data.products_from_chat || [],
+            had_chat_conversation: data.had_chat_conversation || false
+        };
+        
+        log('Sending conversion event:', conversionType, payload);
+        
+        fetch(BASE_URL + '/api/analytics/conversion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true
+        }).then(response => {
+            log('Conversion event response:', response.status);
+        }).catch(err => {
+            logError('Conversion event failed:', err);
+        });
     }
     
     /**

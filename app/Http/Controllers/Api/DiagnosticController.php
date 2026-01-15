@@ -487,6 +487,54 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/sync-horoshop
+     * Trigger full sync from Horoshop (marks deleted products as out of stock)
+     * Add ?queue=0 to run synchronously (slow, ~5-10 min)
+     */
+    public function syncHoroshop(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $useQueue = $request->query('queue', '1') !== '0';
+        
+        if ($useQueue) {
+            // Dispatch to queue
+            \App\Jobs\IncrementalProductSyncJob::dispatch()
+                ->onQueue('default');
+            
+            return response()->json([
+                'status' => 'dispatched',
+                'message' => 'IncrementalProductSyncJob dispatched to queue. Will mark deleted products as out of stock.',
+            ]);
+        }
+        
+        // Run synchronously (for debugging)
+        set_time_limit(600); // 10 minutes
+        
+        try {
+            $job = new \App\Jobs\IncrementalProductSyncJob();
+            $job->handle(
+                app(\App\Services\Horoshop\HoroshopClient::class),
+                app(\App\Services\Horoshop\ProductService::class)
+            );
+            
+            $stats = \Illuminate\Support\Facades\Cache::get('incremental_sync_stats', []);
+            
+            return response()->json([
+                'status' => 'completed',
+                'stats' => $stats,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * GET /api/diagnostic/chat-sessions
      * List recent chat sessions
      */

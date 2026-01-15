@@ -86,6 +86,11 @@ class ChatService
             // NEW: Use function calling agent if enabled
             if ($this->useNewAgent && $this->functionCallingAgent) {
                 Log::info('ChatService: using FunctionCallingAgent');
+                
+                // Set prompt preset context from session data
+                $presetContext = $this->buildPresetContext($sessionId, $normalizedMessage);
+                $this->functionCallingAgent->setContext($presetContext);
+                
                 $agentResult = $this->functionCallingAgent->handle($normalizedMessage, $contextWithSessionId);
             } else {
                 $agentResult = $this->agentOrchestrator->handle($normalizedMessage, $contextWithSessionId);
@@ -709,6 +714,77 @@ class ChatService
         $ip = request()->ip() ?: 'unknown_ip';
 
         return 'chat_ip_' . $ip;
+    }
+    
+    /**
+     * Build context for prompt preset matching.
+     * 
+     * Context can include:
+     * - language: detected from message or session
+     * - tone: from widget settings or UTM
+     * - campaign: from UTM parameters (stored in session)
+     * - categories: from last search or session context
+     */
+    protected function buildPresetContext(string $sessionId, string $message): array
+    {
+        $context = [];
+        
+        // Detect language from message
+        $context['language'] = $this->detectLanguage($message);
+        
+        // Load session data for UTM and other context
+        $session = ChatSession::where('session_id', $sessionId)->first();
+        
+        if ($session && is_array($session->meta)) {
+            // Get UTM campaign if stored
+            if (!empty($session->meta['utm_campaign'])) {
+                $context['campaign'] = $session->meta['utm_campaign'];
+            }
+            
+            // Get tone preference if stored
+            if (!empty($session->meta['tone'])) {
+                $context['tone'] = $session->meta['tone'];
+            }
+            
+            // Get categories from last context
+            if (!empty($session->meta['last_categories'])) {
+                $context['categories'] = $session->meta['last_categories'];
+            }
+        }
+        
+        // Check for explicit tone in session context cache
+        $sessionKey = $this->buildSessionKey($sessionId);
+        $sessionContext = $this->loadSessionContext($sessionKey);
+        
+        if (!empty($sessionContext['category_key'])) {
+            $context['categories'] = [$sessionContext['category_key']];
+        }
+        
+        return array_filter($context); // Remove empty values
+    }
+    
+    /**
+     * Simple language detection from message.
+     */
+    protected function detectLanguage(string $message): string
+    {
+        // Check for Cyrillic (Ukrainian/Russian)
+        if (preg_match('/[а-яА-ЯіїєґІЇЄҐ]/u', $message)) {
+            // Check for Ukrainian-specific letters
+            if (preg_match('/[іїєґІЇЄҐ]/u', $message)) {
+                return 'uk';
+            }
+            // Default Cyrillic to Ukrainian (our main market)
+            return 'uk';
+        }
+        
+        // Latin characters - default to English
+        if (preg_match('/[a-zA-Z]/u', $message)) {
+            return 'en';
+        }
+        
+        // Default to Ukrainian
+        return 'uk';
     }
 
     protected function loadSessionContext(string $sessionKey): array

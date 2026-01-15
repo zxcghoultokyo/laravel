@@ -6,6 +6,7 @@ use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Ai\ToneService;
+use App\Services\Ai\PromptPresetService;
 use App\Services\Catalog\PriceStatsService;
 use App\Models\Product;
 use App\Models\Brand;
@@ -28,6 +29,10 @@ class FunctionCallingAgent
     private string $model;
     private string $baseUrl;
     private ToneService $toneService;
+    private PromptPresetService $promptPresetService;
+    
+    // Context for prompt preset matching
+    private array $currentContext = [];
 
     public function __construct(
         private MeiliProductSearchTool $searchTool,
@@ -39,6 +44,18 @@ class FunctionCallingAgent
         $this->model = $config['model'] ?? 'gpt-4o';
         $this->baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         $this->toneService = app(ToneService::class);
+        $this->promptPresetService = app(PromptPresetService::class);
+    }
+    
+    /**
+     * Set context for prompt preset matching.
+     * 
+     * @param array $context ['language' => 'uk', 'tone' => 'official', 'campaign' => 'black_friday', 'categories' => ['одяг']]
+     */
+    public function setContext(array $context): self
+    {
+        $this->currentContext = $context;
+        return $this;
     }
 
     /**
@@ -70,8 +87,8 @@ class FunctionCallingAgent
         // Direct text response (small talk, FAQ, follow-up questions)
         $text = $response['choices'][0]['message']['content'] ?? '';
         
-        // Check if GPT returned JSON (sometimes it does for follow-ups)
-        // If so, just extract the intro as plain text and save context
+        // Check if GPT returned JSON (sometimes it does for follow-ups with products from history)
+        // Parse the response to extract real products from DB
         if (preg_match('/^\s*\{/u', $text)) {
             $json = json_decode($text, true);
             if ($json) {
@@ -80,6 +97,32 @@ class FunctionCallingAgent
                     $this->extractAndSaveContext($sessionId, $json);
                 }
                 
+                // Use parseStructuredResponse to find real products in DB by article
+                $structured = $this->parseStructuredResponse($text, []);
+                
+                if (!empty($structured['products'])) {
+                    Log::info('FunctionCallingAgent: found products in JSON response without tool_calls', [
+                        'product_count' => count($structured['products']),
+                        'articles' => array_column($structured['products'], 'article'),
+                    ]);
+                    
+                    $introText = $structured['intro'] ?? '';
+                    $outroText = $structured['outro'] ?? '';
+                    $fullText = trim($introText . "\n\n" . $outroText);
+                    
+                    return [
+                        'message' => $fullText,
+                        'products' => $structured['products'],
+                        'messages' => array_filter([
+                            $introText ? ['type' => 'text', 'content' => $introText] : null,
+                            ['type' => 'products', 'products' => $structured['products']],
+                            $outroText ? ['type' => 'text', 'content' => $outroText] : null,
+                        ]),
+                        'meta' => ['intent' => 'product_search', 'agent' => 'function_calling', 'source' => 'json_from_history'],
+                    ];
+                }
+                
+                // No products found - extract text only
                 if (isset($json['intro'])) {
                     $text = $json['intro'];
                     // If it has product comments, append them
@@ -219,8 +262,57 @@ class FunctionCallingAgent
 
     /**
      * System prompt - the brain of the agent
+     * First checks for matching PromptPreset, falls back to default.
      */
     private function getSystemPrompt(): string
+    {
+        // Try to get custom prompt from PromptPresetService
+        $customPrompt = $this->promptPresetService->getSystemPromptForContext(
+            $this->currentContext,
+            $this->getDefaultVariables()
+        );
+        
+        if ($customPrompt) {
+            Log::debug('FunctionCallingAgent: using custom prompt preset', [
+                'context' => $this->currentContext,
+            ]);
+            return $customPrompt;
+        }
+        
+        // Fall back to default built-in prompt
+        return $this->getDefaultSystemPrompt();
+    }
+    
+    /**
+     * Get default variables for prompt rendering.
+     */
+    private function getDefaultVariables(): array
+    {
+        return [
+            'shop_name' => 'Contractor',
+            'shop_domain' => 'contractor.kiev.ua',
+            'shop_phone' => $this->getShopPhone(),
+            'faq_info' => $this->loadFaqInfo(),
+            'tone_section' => $this->toneService->getFullPromptSection(),
+            'price_context' => $this->loadPriceContext(),
+        ];
+    }
+    
+    /**
+     * Get shop phone from settings.
+     */
+    private function getShopPhone(): string
+    {
+        $settings = Cache::remember('widget_settings_faq', 300, function () {
+            return WidgetSettings::first();
+        });
+        return $settings?->shop_phone ?? '+380 63 631 9919';
+    }
+    
+    /**
+     * Get the default built-in system prompt.
+     */
+    private function getDefaultSystemPrompt(): string
     {
         // Load FAQ info and tone settings
         $faqInfo = $this->loadFaqInfo();
@@ -1117,17 +1209,75 @@ PROMPT;
             return ['error' => 'Product not found'];
         }
 
+        // Extract images from product
+        $images = $this->extractProductImages($product);
+
         return [
             'product' => [
+                'id' => $product->id,
                 'title' => $product->title,
                 'article' => $product->article,
                 'price' => $product->price,
+                'price_old' => $product->price_old,
                 'brand' => $product->brand,
                 'description' => $product->raw['description_ua'] ?? $product->raw['description_ru'] ?? '',
                 'in_stock' => $product->in_stock,
                 'link' => $product->link,
+                'images' => $images,
+                'category_path' => $product->category_path,
             ],
         ];
+    }
+    
+    /**
+     * Extract images from product (raw or images field).
+     */
+    private function extractProductImages(Product $product): array
+    {
+        $images = [];
+
+        // 1. Try raw['pictures'] first (Horoshop format)
+        if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
+            $images = collect($product->raw['pictures'])
+                ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
+        // 2. Try raw['images']
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['images'])) {
+            $imgs = $product->raw['images'];
+            if (is_array($imgs)) {
+                $images = collect($imgs)
+                    ->map(fn($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
+                    ->filter()
+                    ->values()
+                    ->toArray();
+            }
+        }
+
+        // 3. Fallback to images field
+        if (empty($images) && $product->images) {
+            $imgs = $product->images;
+            if (is_string($imgs)) {
+                $imgs = json_decode($imgs, true) ?: [$imgs];
+            }
+            if (is_array($imgs)) {
+                $images = array_values(array_filter($imgs));
+            }
+        }
+
+        // 4. Single image fallbacks
+        if (empty($images) && $product->raw && is_array($product->raw)) {
+            if (!empty($product->raw['image'])) {
+                $images = [$product->raw['image']];
+            } elseif (!empty($product->raw['main_image'])) {
+                $images = [$product->raw['main_image']];
+            }
+        }
+
+        return $images;
     }
 
     /**

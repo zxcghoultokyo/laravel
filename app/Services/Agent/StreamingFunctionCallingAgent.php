@@ -6,6 +6,7 @@ use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Ai\ToneService;
+use App\Services\Ai\PromptPresetService;
 use App\Services\Catalog\PriceStatsService;
 use App\Models\Product;
 use App\Models\Brand;
@@ -42,6 +43,10 @@ class StreamingFunctionCallingAgent
     private ProductDetailsTool $detailsTool;
     private OrderSearchService $orderSearchService;
     private ToneService $toneService;
+    private PromptPresetService $promptPresetService;
+    
+    // Context for prompt preset matching
+    private array $currentContext = [];
 
     public function __construct(
         MeiliProductSearchTool $searchTool,
@@ -55,6 +60,18 @@ class StreamingFunctionCallingAgent
         $this->detailsTool = $detailsTool;
         $this->orderSearchService = $orderSearchService;
         $this->toneService = app(ToneService::class);
+        $this->promptPresetService = app(PromptPresetService::class);
+    }
+
+    /**
+     * Set context for prompt preset matching.
+     * 
+     * @param array $context ['language' => 'uk', 'tone' => 'official', 'campaign' => 'black_friday', 'categories' => ['одяг']]
+     */
+    public function setContext(array $context): self
+    {
+        $this->currentContext = $context;
+        return $this;
     }
 
     /**
@@ -218,23 +235,62 @@ class StreamingFunctionCallingAgent
             }
             
         } else {
-            // No tool calls - just stream the text response
+            // No tool calls - GPT responded with text directly
             $content = $assistantMessage['content'] ?? '';
             $collectedText = '';
             
             if (!empty($content)) {
-                // Already have the full response from non-streaming call
-                // Let's do a streaming call for better UX
+                // Collect full response first (don't stream yet - might be JSON)
                 foreach ($this->streamGptResponse($messages) as $chunk) {
                     if ($chunk['type'] === 'content') {
                         $collectedText .= $chunk['text'];
-                        yield ['type' => 'chunk', 'data' => ['text' => $chunk['text']]];
                     }
                 }
             }
             
             $responseText = $collectedText ?: $content;
             $responseIntent = 'general';
+            
+            // Check if the response contains JSON with products
+            // This happens when GPT knows the products from conversation history
+            $structured = $this->parseStructuredResponse($responseText, []);
+            
+            if (!empty($structured['products'])) {
+                Log::info('StreamingAgent: found products in direct response', [
+                    'count' => count($structured['products']),
+                ]);
+                
+                // Send intro text (not the raw JSON!)
+                if (!empty($structured['intro'])) {
+                    $introChunks = mb_str_split($structured['intro'], 3);
+                    foreach ($introChunks as $chunk) {
+                        yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                        usleep(10000);
+                    }
+                }
+                
+                // Send products
+                yield ['type' => 'products', 'data' => [
+                    'products' => $structured['products'],
+                    'count' => count($structured['products']),
+                ]];
+                
+                // Send outro if exists
+                if (!empty($structured['outro'])) {
+                    yield ['type' => 'chunk', 'data' => ['text' => "\n\n" . $structured['outro']]];
+                }
+                
+                $responseText = $structured['intro'] . ($structured['outro'] ? "\n\n" . $structured['outro'] : '');
+                $responseProducts = $structured['products'];
+                $responseIntent = 'product_search';
+            } else {
+                // No JSON structure - stream as plain text
+                $textChunks = mb_str_split($responseText, 3);
+                foreach ($textChunks as $chunk) {
+                    yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                    usleep(10000);
+                }
+            }
         }
         
         // Log assistant message to DB
@@ -339,8 +395,57 @@ class StreamingFunctionCallingAgent
 
     /**
      * Get system prompt (same as FunctionCallingAgent).
+     * First checks for matching PromptPreset, falls back to default.
      */
     private function getSystemPrompt(): string
+    {
+        // Try to get custom prompt from PromptPresetService
+        $customPrompt = $this->promptPresetService->getSystemPromptForContext(
+            $this->currentContext,
+            $this->getDefaultVariables()
+        );
+        
+        if ($customPrompt) {
+            Log::debug('StreamingAgent: using custom prompt preset', [
+                'context' => $this->currentContext,
+            ]);
+            return $customPrompt;
+        }
+        
+        // Fall back to default built-in prompt
+        return $this->getDefaultSystemPrompt();
+    }
+    
+    /**
+     * Get default variables for prompt rendering.
+     */
+    private function getDefaultVariables(): array
+    {
+        return [
+            'shop_name' => 'Contractor',
+            'shop_domain' => 'contractor.kiev.ua',
+            'shop_phone' => $this->getShopPhone(),
+            'faq_info' => $this->loadFaqInfo(),
+            'tone_section' => $this->toneService->getFullPromptSection(),
+            'price_context' => $this->loadPriceContext(),
+        ];
+    }
+    
+    /**
+     * Get shop phone from settings.
+     */
+    private function getShopPhone(): string
+    {
+        $settings = Cache::remember('widget_settings_faq', 300, function () {
+            return WidgetSettings::first();
+        });
+        return $settings?->shop_phone ?? '+380 63 631 9919';
+    }
+    
+    /**
+     * Get the default built-in system prompt.
+     */
+    private function getDefaultSystemPrompt(): string
     {
         $faqInfo = $this->loadFaqInfo();
         $toneSection = $this->toneService->getFullPromptSection();
@@ -772,16 +877,74 @@ PROMPT;
         $product = Product::where('article', $article)->first();
         if (!$product) return ['error' => 'Product not found'];
 
+        // Extract images from product
+        $images = $this->extractProductImages($product);
+
         return [
             'product' => [
+                'id' => $product->id,
                 'title' => $product->title,
                 'article' => $product->article,
                 'price' => $product->price,
+                'price_old' => $product->price_old,
                 'brand' => $product->brand,
                 'in_stock' => $product->in_stock,
                 'link' => $product->link,
+                'images' => $images,
+                'category_path' => $product->category_path,
             ],
         ];
+    }
+    
+    /**
+     * Extract images from product (raw or images field).
+     */
+    private function extractProductImages(Product $product): array
+    {
+        $images = [];
+
+        // 1. Try raw['pictures'] first (Horoshop format)
+        if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
+            $images = collect($product->raw['pictures'])
+                ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
+        // 2. Try raw['images']
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['images'])) {
+            $imgs = $product->raw['images'];
+            if (is_array($imgs)) {
+                $images = collect($imgs)
+                    ->map(fn($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
+                    ->filter()
+                    ->values()
+                    ->toArray();
+            }
+        }
+
+        // 3. Fallback to images field
+        if (empty($images) && $product->images) {
+            $imgs = $product->images;
+            if (is_string($imgs)) {
+                $imgs = json_decode($imgs, true) ?: [$imgs];
+            }
+            if (is_array($imgs)) {
+                $images = array_values(array_filter($imgs));
+            }
+        }
+
+        // 4. Single image fallbacks
+        if (empty($images) && $product->raw && is_array($product->raw)) {
+            if (!empty($product->raw['image'])) {
+                $images = [$product->raw['image']];
+            } elseif (!empty($product->raw['main_image'])) {
+                $images = [$product->raw['main_image']];
+            }
+        }
+
+        return $images;
     }
 
     /**
@@ -889,9 +1052,35 @@ PROMPT;
                 
                 // Fallback: lookup directly in DB by article
                 if (!$product && $article) {
+                    Log::info('StreamingAgent: looking up product by article in DB', ['article' => $article]);
+                    
                     $dbProduct = \App\Models\Product::where('article', $article)->first();
                     if ($dbProduct) {
-                        $product = $this->detailsTool->getCards([$dbProduct->id])[0] ?? null;
+                        Log::info('StreamingAgent: found product in DB', [
+                            'article' => $article,
+                            'id' => $dbProduct->id,
+                            'title' => $dbProduct->title,
+                        ]);
+                        $cards = $this->detailsTool->getCards([$dbProduct->id]);
+                        $product = $cards[0] ?? null;
+                        
+                        if (!$product) {
+                            // Direct fallback if getCards fails
+                            $product = [
+                                'id' => $dbProduct->id,
+                                'article' => $dbProduct->article,
+                                'title' => $dbProduct->title,
+                                'price' => $dbProduct->price,
+                                'link' => $dbProduct->link,
+                                'in_stock' => $dbProduct->in_stock,
+                                'images' => $this->extractProductImages($dbProduct),
+                                'brand' => $dbProduct->brand,
+                                'category_path' => $dbProduct->category_path,
+                            ];
+                            Log::info('StreamingAgent: used direct fallback for product', ['article' => $article]);
+                        }
+                    } else {
+                        Log::warning('StreamingAgent: product not found in DB', ['article' => $article]);
                     }
                 }
                 

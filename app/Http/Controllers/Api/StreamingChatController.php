@@ -102,6 +102,10 @@ class StreamingChatController extends Controller
             }
 
             try {
+                // Set context for prompt preset matching
+                $presetContext = $this->buildPresetContext($sessionId, $message);
+                $this->streamingAgent->setContext($presetContext);
+                
                 // Stream response from agent
                 foreach ($this->streamingAgent->stream($message, $sessionId) as $event) {
                     $type = $event['type'] ?? 'chunk';
@@ -218,5 +222,60 @@ class StreamingChatController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+    
+    /**
+     * Build context for prompt preset matching.
+     */
+    private function buildPresetContext(string $sessionId, string $message): array
+    {
+        $context = [];
+        
+        // Detect language from message
+        $context['language'] = $this->detectLanguage($message);
+        
+        // Load session data for UTM and other context
+        $session = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+        
+        if ($session && is_array($session->meta)) {
+            // Get UTM campaign if stored
+            if (!empty($session->meta['utm_campaign'])) {
+                $context['campaign'] = $session->meta['utm_campaign'];
+            }
+            
+            // Get tone preference if stored
+            if (!empty($session->meta['tone'])) {
+                $context['tone'] = $session->meta['tone'];
+            }
+            
+            // Get categories from last context
+            if (!empty($session->meta['last_categories'])) {
+                $context['categories'] = $session->meta['last_categories'];
+            }
+        }
+        
+        return array_filter($context);
+    }
+    
+    /**
+     * Simple language detection from message.
+     */
+    private function detectLanguage(string $message): string
+    {
+        // Check for Cyrillic (Ukrainian/Russian)
+        if (preg_match('/[а-яА-ЯіїєґІЇЄҐ]/u', $message)) {
+            // Check for Ukrainian-specific letters
+            if (preg_match('/[іїєґІЇЄҐ]/u', $message)) {
+                return 'uk';
+            }
+            return 'uk';
+        }
+        
+        // Latin characters - English
+        if (preg_match('/[a-zA-Z]/u', $message)) {
+            return 'en';
+        }
+        
+        return 'uk';
     }
 }

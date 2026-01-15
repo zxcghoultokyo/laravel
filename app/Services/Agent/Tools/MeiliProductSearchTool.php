@@ -675,6 +675,9 @@ class MeiliProductSearchTool
         
         // Map to same format as Meilisearch
         return array_map(function($product) {
+            // Extract images from product
+            $images = $this->extractProductImages($product);
+            
             return [
                 'id' => $product->id,
                 'article' => $product->article,
@@ -684,11 +687,64 @@ class MeiliProductSearchTool
                 'price' => $product->price,
                 'category_path' => $product->category_path,
                 'in_stock' => $product->in_stock,
+                'link' => $product->link,
+                'images' => $images,
                 'popularity' => $product->popularity ?? 0,
                 'ai_product_type' => $product->ai_product_type ?? '__unknown__',
                 'display_in_showcase' => $product->display_in_showcase ?? false,
             ];
         }, $deduped);
+    }
+    
+    /**
+     * Extract images from product (raw or images field).
+     */
+    private function extractProductImages(Product $product): array
+    {
+        $images = [];
+
+        // 1. Try raw['pictures'] first (Horoshop format)
+        if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
+            $images = collect($product->raw['pictures'])
+                ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
+                ->filter()
+                ->values()
+                ->toArray();
+        }
+
+        // 2. Try raw['images']
+        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['images'])) {
+            $imgs = $product->raw['images'];
+            if (is_array($imgs)) {
+                $images = collect($imgs)
+                    ->map(fn($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
+                    ->filter()
+                    ->values()
+                    ->toArray();
+            }
+        }
+
+        // 3. Fallback to images field
+        if (empty($images) && $product->images) {
+            $imgs = $product->images;
+            if (is_string($imgs)) {
+                $imgs = json_decode($imgs, true) ?: [$imgs];
+            }
+            if (is_array($imgs)) {
+                $images = array_values(array_filter($imgs));
+            }
+        }
+
+        // 4. Single image fallbacks
+        if (empty($images) && $product->raw && is_array($product->raw)) {
+            if (!empty($product->raw['image'])) {
+                $images = [$product->raw['image']];
+            } elseif (!empty($product->raw['main_image'])) {
+                $images = [$product->raw['main_image']];
+            }
+        }
+
+        return $images;
     }
 
     /**

@@ -171,7 +171,8 @@ class OnboardingController extends Controller
         $client = new \GuzzleHttp\Client(['timeout' => 10]);
         
         try {
-            $response = $client->post($credentials['domain'] . '/api/auth/login', [
+            // Horoshop API endpoint is /api/auth/ (with trailing slash)
+            $response = $client->post($credentials['domain'] . '/api/auth/', [
                 'json' => [
                     'login' => $credentials['login'],
                     'password' => $credentials['password'],
@@ -180,11 +181,18 @@ class OnboardingController extends Controller
             
             $data = json_decode($response->getBody(), true);
             
-            if (isset($data['token'])) {
-                return ['success' => true, 'token' => $data['token']];
+            // Horoshop returns status: "OK" and response.token
+            if (($data['status'] ?? '') === 'OK' && isset($data['response']['token'])) {
+                return ['success' => true, 'token' => $data['response']['token']];
             }
             
-            return ['success' => false, 'error' => 'Невірні облікові дані'];
+            // Get error message from response
+            $errorMessage = $data['response']['message'] ?? 'Невірні облікові дані';
+            return ['success' => false, 'error' => $errorMessage];
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $body = json_decode($e->getResponse()->getBody(), true);
+            $errorMessage = $body['response']['message'] ?? $e->getMessage();
+            return ['success' => false, 'error' => $errorMessage];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }

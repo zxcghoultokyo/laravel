@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.0';
+    const WIDGET_VERSION = '2.5.1';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1116,6 +1116,15 @@
                                 if (accumulatedText.trim()) {
                                     // Has text - finalize (remove cursor)
                                     finalizeStreamingText(currentTextElement, accumulatedText);
+                                    
+                                    // Save text message if not already saved (happens when no products were shown)
+                                    if (!textAlreadySaved) {
+                                        const displayText = extractDisplayText(accumulatedText);
+                                        if (displayText && displayText !== 'Шукаю для вас...') {
+                                            saveMessage(state.sessionId, { role: 'assistant', content: displayText });
+                                            log('Saved text message on done (no products case)');
+                                        }
+                                    }
                                 } else {
                                     // No text - remove empty bubble
                                     currentTextElement.remove();

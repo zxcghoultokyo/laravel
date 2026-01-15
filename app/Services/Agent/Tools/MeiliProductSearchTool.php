@@ -318,6 +318,7 @@ class MeiliProductSearchTool
             'cover', 'case',
             'panel', 'cummerbund',
             'accessory', '__unknown__',
+            'side_plate', // Side plates are accessories to main plates
         ];
         
         // Main product types (not accessories)
@@ -326,12 +327,32 @@ class MeiliProductSearchTool
             'sling_bag', 'messenger_bag', 'duffel_bag',
             'plate_carrier', 'chest_rig', 'vest',
             'helmet', 'ballistic_helmet', 'bump_helmet',
-            'plate', 'armor_plate', 'ballistic_plate',
+            'plate', 'armor_plate', 'ballistic_plate', 'main_plate',
             'boots', 'tactical_boots', 'footwear',
             'uniform', 'pants', 'jacket', 'shirt',
             'gloves', 'belt', 'holster',
             'hydration_pack', 'hydration_bladder',
         ];
+        
+        // SPECIAL CASE: For armor plate queries, filter out side plates
+        // "Бокова бронеплита" should not dominate over "Комплект бронепластин"
+        if (preg_match('/\bбронепла/iu', $queryLower) && !preg_match('/\bбоков[аіиі]\b/iu', $queryLower)) {
+            // User searching for armor plates without "бокова" - filter side plates
+            $filtered = array_filter($hits, function ($hit) {
+                $title = mb_strtolower($hit['title'] ?? '');
+                // Filter out if title contains "бокова" (side plate)
+                return !preg_match('/\bбоков[аіиі]\b/iu', $title);
+            });
+            
+            if (count($filtered) >= 3) {
+                Log::info('MeiliProductSearchTool: filtered side plates for main plate query', [
+                    'query' => $query,
+                    'before' => count($hits),
+                    'after' => count($filtered),
+                ]);
+                return array_values($filtered);
+            }
+        }
         
         // If dominant type is a main product type with 3+ items, filter accessories
         $dominantIsMain = in_array($dominantType, $mainTypes, true);
@@ -813,6 +834,23 @@ class MeiliProductSearchTool
         }
         if (preg_match('/\bшкарпетки\b/iu', $l)) {
             // already correct
+        }
+        
+        // ARMOR PLATES synonyms - expand to find both "бронеплита" and "бронепластина"
+        // Products have different naming: "Бокова бронеплита" vs "Бронепластина BRONYX"
+        if (preg_match('/\bбронеплит[аиіїя]?\b/iu', $l)) {
+            // Add both variants for better recall
+            $q = preg_replace('/\bбронеплит[аиіїя]?\b/iu', 'бронепластина бронеплита', $q);
+        } elseif (preg_match('/\bбронепластин[аиіїя]?\b/iu', $l)) {
+            $q = preg_replace('/\bбронепластин[аиіїя]?\b/iu', 'бронепластина бронеплита', $q);
+        }
+        
+        // Filter out "бокова" when searching for main armor plates
+        // Users asking "бронеплити які є" want main plates, not side plates
+        $hasBokovaExplicit = preg_match('/\bбоков[аіиі]\b/iu', $l);
+        if (!$hasBokovaExplicit && preg_match('/\bбронепла/iu', $l)) {
+            // Searching for armor plates without explicit "бокова" - prefer main plates
+            // This is handled in scoring/sorting later
         }
         
         // 2. Use QueryExpander ONLY for product type normalization (not expansion)

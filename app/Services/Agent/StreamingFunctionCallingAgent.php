@@ -173,14 +173,14 @@ class StreamingFunctionCallingAgent
             // Stream final response
             yield ['type' => 'status', 'data' => ['text' => 'Готую відповідь...', 'phase' => 'generating']];
             
+            // Collect full response first (don't stream JSON chunks to client)
+            // GPT returns JSON like {"intro":"...", "products":[...], "outro":"..."}
+            // We need to parse it and send intro as text, products as structured data
             $collectedText = '';
-            $sentChunks = false;
             
             foreach ($this->streamGptResponse($messages) as $chunk) {
                 if ($chunk['type'] === 'content') {
                     $collectedText .= $chunk['text'];
-                    yield ['type' => 'chunk', 'data' => ['text' => $chunk['text']]];
-                    $sentChunks = true;
                 }
             }
             
@@ -188,14 +188,18 @@ class StreamingFunctionCallingAgent
             $structured = $this->parseStructuredResponse($collectedText, $allProducts);
             
             // Track for logging
-            $responseText = $collectedText;
+            $responseText = $structured['intro'] ?? $collectedText;
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
             
-            // If no text was streamed but we have intro, send it
-            if (!$sentChunks && !empty($structured['intro'])) {
-                yield ['type' => 'chunk', 'data' => ['text' => $structured['intro']]];
-                $responseText = $structured['intro'];
+            // Send intro text (NOT the raw JSON!)
+            if (!empty($structured['intro'])) {
+                // Stream intro character by character for typing effect
+                $introChunks = mb_str_split($structured['intro'], 3);
+                foreach ($introChunks as $chunk) {
+                    yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                    usleep(10000); // 10ms delay for typing effect
+                }
             }
             
             // Send products

@@ -41,6 +41,16 @@ class PromptGeneratorService
             'спорт', 'фітнес', 'тренування', 'велосипед', 'yoga', 'gym',
             'тренажер', 'гантел', 'спортивн', 'біг', 'плавання', 'fitness',
         ],
+        StoreContext::TYPE_HOME_DECOR => [
+            'свічк', 'candle', 'декор', 'інтер\'єр', 'подарун', 'gift', 'ваза',
+            'рамка', 'картин', 'текстиль', 'плед', 'подушк', 'аромат', 'дифузор',
+            'home', 'decor', 'interior', 'ароматичн', 'соєв', 'віск',
+        ],
+        StoreContext::TYPE_BEAUTY => [
+            'косметик', 'крем', 'шампунь', 'маска', 'сироватк', 'beauty',
+            'догляд', 'шкіра', 'волосс', 'makeup', 'парфум', 'духи', 'лосьйон',
+            'скраб', 'пілінг', 'серум', 'cosmetic', 'skincare',
+        ],
     ];
 
     /**
@@ -204,6 +214,8 @@ class PromptGeneratorService
             StoreContext::TYPE_FASHION => 0,
             StoreContext::TYPE_ELECTRONICS => 0,
             StoreContext::TYPE_SPORTS => 0,
+            StoreContext::TYPE_HOME_DECOR => 0,
+            StoreContext::TYPE_BEAUTY => 0,
         ];
 
         $categoriesText = $categories->implode(' ');
@@ -300,6 +312,18 @@ class PromptGeneratorService
                 'Підбір екіпірування',
                 'Тренувальні поради',
             ],
+            StoreContext::TYPE_HOME_DECOR => [
+                'Ароматичні свічки та дифузори',
+                'Декор для інтер\'єру',
+                'Подарункові набори',
+                'Створення атмосфери',
+            ],
+            StoreContext::TYPE_BEAUTY => [
+                'Підбір засобів по типу шкіри',
+                'Догляд за обличчям та тілом',
+                'Парфумерія',
+                'Натуральна косметика',
+            ],
         ];
 
         return $expertiseMap[$storeType] ?? ['Консультація по товарах'];
@@ -315,6 +339,8 @@ class PromptGeneratorService
             StoreContext::TYPE_FASHION => $this->getFashionTemplate(),
             StoreContext::TYPE_ELECTRONICS => $this->getElectronicsTemplate(),
             StoreContext::TYPE_SPORTS => $this->getSportsTemplate(),
+            StoreContext::TYPE_HOME_DECOR => $this->getHomeDecorTemplate(),
+            StoreContext::TYPE_BEAUTY => $this->getBeautyTemplate(),
             default => $this->getGeneralTemplate(),
         };
     }
@@ -513,6 +539,89 @@ PROMPT;
 1. Питай про рівень підготовки (початківець/любитель/професіонал)
 2. Враховуй тип тренувань
 3. Рекомендуй по бюджету та цілях
+PROMPT;
+    }
+
+    private function getHomeDecorTemplate(): string
+    {
+        return <<<PROMPT
+Ти — AI-консультант магазину декору та подарунків "{shop_name}".
+
+ТВОЯ ЕКСПЕРТИЗА:
+- {expertise_list}
+
+КАТЕГОРІЇ:
+{categories_list}
+
+БРЕНДИ:
+{brands_list}
+
+ЦІНОВІ СЕГМЕНТИ ({product_count} товарів):
+- Бюджетний: до {budget_max} грн
+- Середній: {budget_max}-{mid_max} грн
+- Преміум: від {mid_max} грн
+
+ВАЖЛИВІ ЗНАННЯ ПРО СВІЧКИ:
+- Соєвий віск: натуральний, горить довше, менше диму
+- Бджолиний віск: преміум, натуральний медовий аромат
+- Парафіновий віск: бюджетний варіант
+- Час горіння залежить від розміру: маленькі ~10-15г, великі ~30-50г
+- Ароматизовані vs неароматизовані
+- Декоративні свічки vs функціональні
+
+ПОРАДИ ДЛЯ КЛІЄНТІВ:
+- Для медитації: лаванда, сандал, ваніль
+- Для романтики: троянда, жасмін, іланг-іланг
+- Для енергії: цитрусові, м'ята, евкаліпт
+- Для затишку: кориця, ваніль, кава
+
+{faq_section}
+
+{{tone_section}}
+
+ПРАВИЛА:
+1. Питай про призначення (подарунок, для себе, декор)
+2. Уточнюй вподобання щодо ароматів
+3. Пропонуй набори для подарунків
+4. Розповідай про час горіння та догляд
+PROMPT;
+    }
+
+    private function getBeautyTemplate(): string
+    {
+        return <<<PROMPT
+Ти — AI-консультант магазину косметики "{shop_name}".
+
+ТВОЯ ЕКСПЕРТИЗА:
+- {expertise_list}
+
+КАТЕГОРІЇ:
+{categories_list}
+
+БРЕНДИ:
+{brands_list}
+
+ЦІНОВІ СЕГМЕНТИ ({product_count} товарів):
+- Бюджетний: до {budget_max} грн
+- Середній: {budget_max}-{mid_max} грн
+- Преміум: від {mid_max} грн
+
+ВАЖЛИВІ ЗНАННЯ:
+- Типи шкіри: суха, жирна, комбінована, нормальна, чутлива
+- Порядок нанесення: очищення → тонік → сироватка → крем → SPF
+- SPF потрібен щодня, навіть взимку
+- Ретинол не поєднується з кислотами
+- Вітамін С краще вранці, ретинол — ввечері
+
+{faq_section}
+
+{{tone_section}}
+
+ПРАВИЛА:
+1. Питай про тип шкіри та проблеми
+2. Рекомендуй повний догляд, не лише один засіб
+3. Попереджай про несумісність інгредієнтів
+4. Зважай на сезон (зима — більше зволоження)
 PROMPT;
     }
 

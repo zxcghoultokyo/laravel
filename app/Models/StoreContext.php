@@ -61,6 +61,8 @@ class StoreContext extends Model
     public const TYPE_FASHION = 'fashion';
     public const TYPE_ELECTRONICS = 'electronics';
     public const TYPE_SPORTS = 'sports';
+    public const TYPE_HOME_DECOR = 'home_decor';
+    public const TYPE_BEAUTY = 'beauty';
     public const TYPE_GENERAL = 'general';
 
     /**
@@ -132,6 +134,8 @@ class StoreContext extends Model
             self::TYPE_FASHION => 'Магазин одягу',
             self::TYPE_ELECTRONICS => 'Електроніка',
             self::TYPE_SPORTS => 'Спорттовари',
+            self::TYPE_HOME_DECOR => 'Декор і подарунки',
+            self::TYPE_BEAUTY => 'Краса і догляд',
             default => 'Загальний магазин',
         };
     }

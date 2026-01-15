@@ -181,6 +181,43 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                     </svg>
                     <span x-show="!sidebarCollapsed" class="font-medium">Промпти</span>
                 </a>
+
+                <a href="{{ route('admin.canned-responses') }}" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.canned-responses') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
+                   :class="{ 'justify-center': sidebarCollapsed }"
+                   :title="sidebarCollapsed ? 'Шаблони' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" class="font-medium">Шаблони</span>
+                </a>
+
+                <a href="{{ route('admin.exports') }}" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.exports') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
+                   :class="{ 'justify-center': sidebarCollapsed }"
+                   :title="sidebarCollapsed ? 'Експорт' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" class="font-medium">Експорт</span>
+                </a>
+
+                <!-- Super Admin Section -->
+                @if(auth()->user()?->isSuperAdmin())
+                <div class="pt-4" x-show="!sidebarCollapsed">
+                    <p class="px-3 text-xs font-semibold text-red-400 uppercase tracking-wider">Super Admin</p>
+                </div>
+
+                <a href="{{ route('admin.tenants') }}" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.tenants') ? 'bg-red-50 text-red-700' : 'text-gray-700 hover:bg-gray-100' }}"
+                   :class="{ 'justify-center': sidebarCollapsed }"
+                   :title="sidebarCollapsed ? 'Тенанти' : ''">
+                    <svg class="w-5 h-5 flex-shrink-0 {{ request()->routeIs('admin.tenants') ? 'text-red-600' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    <span x-show="!sidebarCollapsed" class="font-medium">Тенанти</span>
+                </a>
+                @endif
             </nav>
 
             <!-- Sidebar Footer -->

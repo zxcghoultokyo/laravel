@@ -11,6 +11,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',      // 👈 ДОДАЛИ ОЦЕ
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function () {
+            // Admin routes (Livewire)
+            \Illuminate\Support\Facades\Route::middleware(['web'])
+                ->group(base_path('routes/admin.php'));
+        },
     )
     ->withSchedule(function (Schedule $schedule) {
         // Синхронізація з Horoshop: щоденно о 3:00 UTC
@@ -50,6 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.token' => \App\Http\Middleware\AdminTokenMiddleware::class,
             'tenant' => \App\Http\Middleware\ResolveTenantMiddleware::class,
             'tenant.limits' => \App\Http\Middleware\CheckTenantLimitsMiddleware::class,
+            'super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

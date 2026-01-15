@@ -16,6 +16,7 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * Role constants
      */
+    public const ROLE_SUPER_ADMIN = 'super_admin';
     public const ROLE_OWNER = 'owner';
     public const ROLE_ADMIN = 'admin';
     public const ROLE_MEMBER = 'member';
@@ -67,6 +68,14 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     // ==================== HELPERS ====================
+
+    /**
+     * Check if user is super admin (platform level).
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === self::ROLE_SUPER_ADMIN;
+    }
 
     /**
      * Check if user is tenant owner.

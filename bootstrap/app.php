@@ -48,6 +48,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'widget.cors' => \App\Http\Middleware\WidgetCors::class,
             'admin.token' => \App\Http\Middleware\AdminTokenMiddleware::class,
+            'tenant' => \App\Http\Middleware\ResolveTenantMiddleware::class,
+            'tenant.limits' => \App\Http\Middleware\CheckTenantLimitsMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

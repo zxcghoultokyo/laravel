@@ -13,12 +13,16 @@
 - Prompt Presets + Auto-generation
 - Admin panel (Livewire)
 - Analytics (basic)
+- **[NEW] Tenant model + migrations** ✅
+- **[NEW] BelongsToTenant trait + TenantScope** ✅
+- **[NEW] Tenant middleware (resolve + limits)** ✅
+- **[NEW] Admin API for tenant management** ✅
+- **[NEW] Widget routes per tenant** ✅
 
 ### Чого немає ❌
-- Multi-tenancy (один магазин = один інстанс)
-- User authentication (no login)
-- Billing/Subscriptions
-- Usage limits/quotas
+- ~~Multi-tenancy (один магазин = один інстанс)~~ ✅ DONE
+- User authentication (no login) - Laravel Breeze pending
+- Billing/Subscriptions - Stripe integration pending
 - Onboarding wizard
 - Customer self-service
 
@@ -26,7 +30,7 @@
 
 ## 🎯 Phase 1: MVP Multi-Tenant (1-2 тижні)
 
-### 1.1 Tenant Model & Architecture
+### ✅ 1.1 Tenant Model & Architecture - COMPLETED!
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

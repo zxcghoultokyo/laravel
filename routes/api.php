@@ -127,6 +127,22 @@ Route::get('/search/products', [ProductSearchController::class, 'index']);
 // Health check endpoint
 Route::get('/health', \App\Http\Controllers\Api\HealthController::class);
 
+// ====================
+// MULTI-TENANT WIDGET ROUTES
+// ====================
+
+// Widget loader per tenant: /widget/{slug}.js
+Route::get('/widget/{slug}.js', [\App\Http\Controllers\Api\TenantWidgetController::class, 'serveWidget'])
+    ->middleware('widget.cors');
+
+// Widget config per tenant
+Route::get('/widget/{slug}/config', [\App\Http\Controllers\Api\TenantWidgetController::class, 'getConfig'])
+    ->middleware('widget.cors');
+
+// Get embed code for a tenant
+Route::get('/widget/{slug}/embed', [\App\Http\Controllers\Api\TenantWidgetController::class, 'getEmbedCode'])
+    ->middleware('admin.token');
+
 // Admin API (token protected)
 Route::prefix('admin')->middleware('admin.token')->group(function () {
     // Circuit breaker management
@@ -147,4 +163,15 @@ Route::prefix('admin')->middleware('admin.token')->group(function () {
     Route::get('/store-context', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'show']);
     Route::post('/store-context/generate-prompt', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'generatePrompt']);
     Route::post('/store-context/create-preset', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'createPreset']);
+    
+    // Tenant Management (SaaS)
+    Route::get('/tenants', [\App\Http\Controllers\Api\Admin\TenantController::class, 'index']);
+    Route::post('/tenants', [\App\Http\Controllers\Api\Admin\TenantController::class, 'store']);
+    Route::get('/tenants/{id}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'show']);
+    Route::put('/tenants/{id}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'update']);
+    Route::delete('/tenants/{id}', [\App\Http\Controllers\Api\Admin\TenantController::class, 'destroy']);
+    Route::post('/tenants/{id}/suspend', [\App\Http\Controllers\Api\Admin\TenantController::class, 'suspend']);
+    Route::post('/tenants/{id}/reactivate', [\App\Http\Controllers\Api\Admin\TenantController::class, 'reactivate']);
+    Route::post('/tenants/{id}/reset-usage', [\App\Http\Controllers\Api\Admin\TenantController::class, 'resetUsage']);
+    Route::get('/tenants/{id}/usage', [\App\Http\Controllers\Api\Admin\TenantController::class, 'usage']);
 });

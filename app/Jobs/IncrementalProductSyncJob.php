@@ -109,14 +109,26 @@ class IncrementalProductSyncJob implements ShouldQueue
         // Позначаємо видалені товари
         $deletedArticles = array_diff(array_keys($existingProducts), $horoshopArticles);
         if (!empty($deletedArticles)) {
-            $deletedCount = Product::whereIn('article', $deletedArticles)
-                ->update(['in_stock' => false, 'quantity' => 0]);
+            // Ensure all articles are strings to avoid SQL type confusion
+            $deletedArticles = array_map('strval', array_values($deletedArticles));
+            
+            // Process in chunks to avoid huge SQL queries
+            $deletedCount = 0;
+            foreach (array_chunk($deletedArticles, 100) as $chunk) {
+                $deletedCount += Product::whereIn('article', $chunk)
+                    ->update(['in_stock' => false, 'quantity' => 0]);
+            }
             $stats['deleted'] = $deletedCount;
             
             // Видаляємо хеші для видалених товарів
             foreach ($deletedArticles as $article) {
                 Cache::forget("product_hash:{$article}");
             }
+            
+            Log::info('[IncrementalSync] Marked products as deleted', [
+                'count' => $deletedCount,
+                'sample_articles' => array_slice($deletedArticles, 0, 10),
+            ]);
         }
 
         $elapsed = round(microtime(true) - $startTime, 2);

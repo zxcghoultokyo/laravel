@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     * 
+     * Change platform_credentials from JSON to TEXT because Laravel's 
+     * encrypted:array cast stores encrypted base64 strings, not valid JSON.
+     */
+    public function up(): void
+    {
+        Schema::table('tenants', function (Blueprint $table) {
+            $table->text('platform_credentials')->nullable()->change();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('tenants', function (Blueprint $table) {
+            $table->json('platform_credentials')->nullable()->change();
+        });
+    }
+};

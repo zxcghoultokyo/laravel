@@ -1025,9 +1025,46 @@ PROMPT;
      */
     private function parseStructuredResponse(string $responseText, array $allProducts): array
     {
+        Log::debug('StreamingAgent: parseStructuredResponse input', [
+            'responseText_length' => strlen($responseText),
+            'allProducts_count' => count($allProducts),
+            'responseText_preview' => mb_substr($responseText, 0, 200),
+        ]);
+        
         $json = null;
+        $introText = '';
+        $outroText = '';
+        
+        // Try to extract JSON object like {"intro":"...", "products":[...]}
         if (preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
             $json = json_decode($matches[0], true);
+            Log::debug('StreamingAgent: parsed JSON object', ['json_keys' => $json ? array_keys($json) : null]);
+        }
+        
+        // If no valid JSON object or no products in it, try to find JSON array [{"article":"..."}, ...]
+        if ((!$json || !isset($json['products'])) && preg_match('/\[[\s\S]*\]/u', $responseText, $arrayMatches)) {
+            $productsArray = json_decode($arrayMatches[0], true);
+            if (is_array($productsArray) && !empty($productsArray) && isset($productsArray[0]['article'])) {
+                Log::debug('StreamingAgent: found products array', ['count' => count($productsArray)]);
+                $json = ['products' => $productsArray];
+                
+                // Extract intro text (everything before the JSON array)
+                $arrayPos = strpos($responseText, $arrayMatches[0]);
+                if ($arrayPos > 0) {
+                    $introText = trim(substr($responseText, 0, $arrayPos));
+                    // Clean up any trailing "products": or similar
+                    $introText = preg_replace('/["\',\s:]+$/', '', $introText);
+                    $introText = preg_replace('/\s*"?products"?\s*:?\s*$/i', '', $introText);
+                    $json['intro'] = trim($introText);
+                }
+                
+                // Extract outro (everything after JSON array)
+                $afterArray = substr($responseText, $arrayPos + strlen($arrayMatches[0]));
+                $afterArray = trim(preg_replace('/^[\s\}\],]+/', '', $afterArray));
+                if (!empty($afterArray) && strlen($afterArray) > 10) {
+                    $json['outro'] = $afterArray;
+                }
+            }
         }
 
         $productsByArticle = [];
@@ -1036,6 +1073,10 @@ PROMPT;
         }
 
         if ($json && isset($json['products']) && is_array($json['products'])) {
+            Log::info('StreamingAgent: processing structured products', [
+                'products_count' => count($json['products']),
+                'has_intro' => !empty($json['intro']),
+            ]);
             $orderedProducts = [];
             foreach ($json['products'] as $item) {
                 $article = $item['article'] ?? '';

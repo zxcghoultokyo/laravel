@@ -6,6 +6,7 @@ use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Ai\ToneService;
+use App\Services\Catalog\PriceStatsService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
@@ -224,6 +225,7 @@ class FunctionCallingAgent
         // Load FAQ info and tone settings
         $faqInfo = $this->loadFaqInfo();
         $toneSection = $this->toneService->getFullPromptSection();
+        $priceContext = $this->loadPriceContext();
         
         $basePrompt = <<<PROMPT
 Ти — AIntento, AI-консультант магазину тактичного спорядження "Contractor".
@@ -358,6 +360,13 @@ _context (ОБОВ'ЯЗКОВО!):
 - Якщо клієнт вказав бюджет в € — перерахуй на гривні і шукай в цьому діапазоні
 - Приклад: "200-250€" → "8400-11000 грн" → search_products з price filter
 
+{$priceContext}
+
+ПОРІВНЯННЯ ТА ЕКСПЕРТНІ ВІДПОВІДІ:
+- При порівнянні товарів ("що краще", "чим відрізняється") — ЗАВЖДИ додавай конкретні приклади з каталогу через search_products!
+- Після експертної відповіді (розміри, матеріали, як обрати) — ОБОВ'ЯЗКОВО запропонуй товари: "Ось варіанти з нашого каталогу:"
+- НЕ давай "голих" порад — завжди додавай товари для покупки!
+
 "ДАВАЙ", "ДОЗВОЛЯЮ", "ТАК" → БІЛЬШЕ ДЕТАЛЕЙ:
 - Коли клієнт погоджується на пропозицію "надати характеристики" → НЕ ПОВТОРЮЙ те саме!
 - Виклич get_product_details для НОВОЇ розширеної інформації
@@ -417,6 +426,20 @@ PROMPT;
         }
 
         return implode("\n\n", $info);
+    }
+
+    /**
+     * Load dynamic price context for prompt.
+     */
+    private function loadPriceContext(): string
+    {
+        try {
+            $priceService = app(PriceStatsService::class);
+            return $priceService->getPromptContext();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to load price context', ['error' => $e->getMessage()]);
+            return "ЦІНОВІ ПОРОГИ: бюджетний до 1500 грн, середній 1500-5000 грн, преміум від 5000 грн";
+        }
     }
 
     /**

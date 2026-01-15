@@ -6,6 +6,7 @@ use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Ai\ToneService;
+use App\Services\Catalog\PriceStatsService;
 use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
@@ -343,6 +344,7 @@ class StreamingFunctionCallingAgent
     {
         $faqInfo = $this->loadFaqInfo();
         $toneSection = $this->toneService->getFullPromptSection();
+        $priceContext = $this->loadPriceContext();
         
         return <<<PROMPT
 Ти — AI-продавець магазину "Contractor" (contractor.kiev.ua). Твоя мета — допомогти клієнту КУПИТИ товар з каталогу.
@@ -390,6 +392,13 @@ class StreamingFunctionCallingAgent
 - 1 EUR ≈ 42-44 грн (2026 рік)
 - Якщо клієнт вказує бюджет в € — перерахуй в грн і фільтруй: "200€ ≈ 8500 грн, шукаю в цьому бюджеті"
 - Показуй ціни товарів в грн як є в базі
+
+{$priceContext}
+
+ПОРІВНЯННЯ ТА ЕКСПЕРТНІ ВІДПОВІДІ:
+- При порівнянні товарів ("що краще", "чим відрізняється") — ЗАВЖДИ додавай конкретні приклади з каталогу через search_products!
+- Після експертної відповіді (розміри, матеріали, як обрати) — ОБОВ'ЯЗКОВО запропонуй товари: "Ось варіанти з нашого каталогу:"
+- НЕ давай "голих" порад — завжди додавай товари для покупки!
 
 "ДАВАЙ", "ДОЗВОЛЯЮ", "ТАК" — ОЗНАЧАЄ БІЛЬШЕ ДЕТАЛЕЙ:
 - Коли клієнт погоджується ("давай", "дозволяю", "покажи") — НЕ повторюй те саме!
@@ -455,6 +464,20 @@ PROMPT;
         }
 
         return empty($info) ? "Актуальну інформацію дивіться на сайті contractor.kiev.ua" : implode("\n\n", $info);
+    }
+
+    /**
+     * Load dynamic price context for prompt.
+     */
+    private function loadPriceContext(): string
+    {
+        try {
+            $priceService = app(PriceStatsService::class);
+            return $priceService->getPromptContext();
+        } catch (\Throwable $e) {
+            Log::warning('Failed to load price context', ['error' => $e->getMessage()]);
+            return "ЦІНОВІ ПОРОГИ: бюджетний до 1500 грн, середній 1500-5000 грн, преміум від 5000 грн";
+        }
     }
 
     /**

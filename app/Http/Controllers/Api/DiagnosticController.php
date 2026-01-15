@@ -35,6 +35,10 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        // Price statistics
+        $priceService = app(\App\Services\Catalog\PriceStatsService::class);
+        $priceStats = $priceService->getStats();
+
         $stats = [
             'total_products' => Product::count(),
             'in_stock' => Product::where('in_stock', true)->count(),
@@ -43,6 +47,16 @@ class DiagnosticController extends Controller
             'with_parent_article' => Product::where('in_stock', true)->whereNotNull('parent_article')->where('parent_article', '!=', '')->count(),
             'unique_colors' => Product::where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->distinct()->pluck('color')->toArray(),
             'categories_count' => Product::where('in_stock', true)->distinct('category_path')->count('category_path'),
+            'price_stats' => [
+                'min' => $priceStats['min'],
+                'max' => $priceStats['max'],
+                'avg' => $priceStats['avg'],
+                'median' => $priceStats['median'],
+                'budget_max' => $priceStats['budget_max'],
+                'mid_min' => $priceStats['mid_min'],
+                'mid_max' => $priceStats['mid_max'],
+                'premium_min' => $priceStats['premium_min'],
+            ],
         ];
 
         return response()->json($stats);

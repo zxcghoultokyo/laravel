@@ -1860,7 +1860,7 @@
             imgHtml = `
                 <img id="${imgId}" 
                      src="${product.images[0]}" 
-                     style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0;" 
+                     style="width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #f3f4f6;" 
                      onerror="(function(img){
                          var fallbacks = [${fallbackImages}];
                          var idx = parseInt(img.dataset.fallbackIdx || '0');
@@ -1868,10 +1868,21 @@
                              img.dataset.fallbackIdx = idx + 1;
                              img.src = fallbacks[idx];
                          } else {
-                             img.style.display = 'none';
+                             img.src = 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 70 70%22><rect fill=%22%23e5e7eb%22 width=%2270%22 height=%2270%22/><text x=%2235%22 y=%2240%22 text-anchor=%22middle%22 fill=%22%239ca3af%22 font-size=%2212%22>Фото</text></svg>';
                          }
                      })(this)"
                 />
+            `;
+        } else {
+            // Placeholder for products without images
+            imgHtml = `
+                <div style="width: 70px; height: 70px; background: #f3f4f6; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <polyline points="21,15 16,10 5,21"/>
+                    </svg>
+                </div>
             `;
         }
 

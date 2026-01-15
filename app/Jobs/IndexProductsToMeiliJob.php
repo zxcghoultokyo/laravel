@@ -49,6 +49,9 @@ class IndexProductsToMeiliJob implements ShouldQueue
         echo "🔄 Індексація товарів у Meilisearch...\n";
         echo "📦 Всього товарів: {$totalCount}\n";
         echo "📊 Розмір чанку: {$chunkSize}\n\n";
+        
+        // 🧹 Cleanup: видаляємо з Meili товари, яких немає в БД або мають in_stock=false
+        $this->cleanupStaleDocuments($index, $meili);
 
         // Ensure filterable attributes for AI flags exist (idempotent)
         try {
@@ -256,5 +259,77 @@ class IndexProductsToMeiliJob implements ShouldQueue
             return implode(' ', array_filter($value, 'is_string'));
         }
         return '';
+    }
+    
+    /**
+     * 🧹 Видаляє з Meilisearch товари, яких немає в БД або мають in_stock=false.
+     * Це вирішує проблему коли товари видаляються з Horoshop, але залишаються в індексі.
+     */
+    protected function cleanupStaleDocuments($index, MeiliClient $meili): void
+    {
+        echo "🧹 Перевірка застарілих товарів у Meili...\n";
+        
+        try {
+            // Отримуємо всі ID з Meilisearch
+            $meiliIds = [];
+            $limit = 1000;
+            $offset = 0;
+            
+            do {
+                $result = $index->getDocuments(['limit' => $limit, 'offset' => $offset, 'fields' => ['id']]);
+                $docs = $result->getResults();
+                
+                if (empty($docs)) {
+                    break;
+                }
+                
+                foreach ($docs as $doc) {
+                    $meiliIds[] = (int) $doc['id'];
+                }
+                
+                $offset += $limit;
+            } while (count($docs) === $limit);
+            
+            if (empty($meiliIds)) {
+                echo "   ℹ️  Meili індекс порожній, cleanup не потрібен\n\n";
+                return;
+            }
+            
+            echo "   📋 Знайдено " . count($meiliIds) . " товарів у Meili\n";
+            
+            // Отримуємо валідні ID з БД (тільки in_stock=true)
+            $validIds = Product::where('in_stock', true)
+                ->whereIn('id', $meiliIds)
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->toArray();
+            
+            // Знаходимо ID для видалення
+            $idsToDelete = array_diff($meiliIds, $validIds);
+            
+            if (empty($idsToDelete)) {
+                echo "   ✅ Застарілих товарів не знайдено\n\n";
+                return;
+            }
+            
+            echo "   🗑️  Видалення " . count($idsToDelete) . " застарілих товарів...\n";
+            
+            // Видаляємо чанками
+            foreach (array_chunk($idsToDelete, 500) as $chunk) {
+                $result = $index->deleteDocuments($chunk);
+                $taskId = $result['taskUid'] ?? null;
+                
+                if ($taskId !== null) {
+                    $task = $this->waitForTaskCompletion($meili, $taskId, 30);
+                    $status = $task['status'] ?? 'unknown';
+                    echo "   • Delete task #{$taskId}: {$status} (" . count($chunk) . " товарів)\n";
+                }
+            }
+            
+            echo "   ✅ Cleanup завершено\n\n";
+            
+        } catch (\Throwable $e) {
+            echo "   ⚠️  Cleanup помилка: {$e->getMessage()}\n\n";
+        }
     }
 }

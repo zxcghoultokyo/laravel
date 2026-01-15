@@ -393,6 +393,96 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/cleanup-meili
+     * Remove stale documents from Meilisearch (products deleted from Horoshop or out of stock)
+     * Faster than full reindex - only deletes, doesn't re-add
+     */
+    public function cleanupMeili(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        set_time_limit(120);
+        
+        try {
+            $meili = app(\App\Services\Search\MeiliClient::class);
+            $index = $meili->productsIndex();
+            
+            // Get all IDs from Meilisearch
+            $meiliIds = [];
+            $limit = 1000;
+            $offset = 0;
+            
+            do {
+                $result = $index->getDocuments(['limit' => $limit, 'offset' => $offset, 'fields' => ['id']]);
+                $docs = $result->getResults();
+                
+                if (empty($docs)) {
+                    break;
+                }
+                
+                foreach ($docs as $doc) {
+                    $meiliIds[] = (int) $doc['id'];
+                }
+                
+                $offset += $limit;
+            } while (count($docs) === $limit);
+            
+            if (empty($meiliIds)) {
+                return response()->json([
+                    'status' => 'ok',
+                    'meili_count' => 0,
+                    'deleted' => 0,
+                    'message' => 'Meili index is empty',
+                ]);
+            }
+            
+            // Get valid IDs from DB (only in_stock=true)
+            $validIds = Product::where('in_stock', true)
+                ->whereIn('id', $meiliIds)
+                ->pluck('id')
+                ->map(fn($id) => (int) $id)
+                ->toArray();
+            
+            // Find IDs to delete
+            $idsToDelete = array_diff($meiliIds, $validIds);
+            
+            if (empty($idsToDelete)) {
+                return response()->json([
+                    'status' => 'ok',
+                    'meili_count' => count($meiliIds),
+                    'valid_count' => count($validIds),
+                    'deleted' => 0,
+                    'message' => 'No stale documents found',
+                ]);
+            }
+            
+            // Delete in chunks
+            $deletedCount = 0;
+            foreach (array_chunk($idsToDelete, 500) as $chunk) {
+                $index->deleteDocuments($chunk);
+                $deletedCount += count($chunk);
+            }
+            
+            return response()->json([
+                'status' => 'ok',
+                'meili_count' => count($meiliIds),
+                'valid_count' => count($validIds),
+                'deleted' => $deletedCount,
+                'sample_deleted_ids' => array_slice($idsToDelete, 0, 10),
+                'message' => "Deleted {$deletedCount} stale documents",
+            ]);
+            
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * GET /api/diagnostic/chat-sessions
      * List recent chat sessions
      */

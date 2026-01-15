@@ -96,6 +96,46 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/product-by-article?article=5hy-mwd-8xz
+     * Find product by exact article (for debugging parseStructuredResponse)
+     */
+    public function productByArticle(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $article = $request->query('article', '');
+        if (!$article) {
+            return response()->json(['error' => 'Missing article parameter'], 400);
+        }
+
+        $product = Product::where('article', $article)->first();
+        
+        if (!$product) {
+            return response()->json([
+                'found' => false,
+                'article' => $article,
+                'message' => 'Product not found by exact article match',
+            ]);
+        }
+
+        return response()->json([
+            'found' => true,
+            'article' => $article,
+            'product' => [
+                'id' => $product->id,
+                'article' => $product->article,
+                'title' => $product->title,
+                'price' => $product->price,
+                'in_stock' => $product->in_stock,
+                'category_path' => $product->category_path,
+                'brand' => $product->brand,
+            ],
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/search-meili?q=рукавички
      * Search products in Meilisearch
      */

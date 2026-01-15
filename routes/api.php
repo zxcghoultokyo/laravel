@@ -66,6 +66,7 @@ Route::get('/debug/products', [DebugProductsController::class, 'index']);
 Route::prefix('diagnostic')->group(function () {
     Route::get('/db-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'dbStats']);
     Route::get('/search-db', [\App\Http\Controllers\Api\DiagnosticController::class, 'searchDb']);
+    Route::get('/product-by-article', [\App\Http\Controllers\Api\DiagnosticController::class, 'productByArticle']);
     Route::get('/search-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'searchMeili']);
     Route::get('/meili-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'meiliStats']);
     Route::get('/product/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'product']);

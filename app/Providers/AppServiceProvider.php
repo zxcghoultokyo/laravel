@@ -221,6 +221,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Analytics\ABTestingService::class, function ($app) {
             return new \App\Services\Analytics\ABTestingService();
         });
+        
+        // Prompt Generator Service (auto-generates prompts from store data)
+        $this->app->singleton(\App\Services\Ai\PromptGeneratorService::class, function ($app) {
+            return new \App\Services\Ai\PromptGeneratorService();
+        });
     }
 
     public function boot(): void

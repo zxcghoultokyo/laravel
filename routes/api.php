@@ -141,4 +141,10 @@ Route::prefix('admin')->middleware('admin.token')->group(function () {
     Route::post('/chats/{sessionId}/takeover', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'takeover']);
     Route::post('/chats/{sessionId}/release', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'release']);
     Route::post('/chats/{sessionId}/message', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'sendMessage']);
+    
+    // Store Context - auto-generate prompts
+    Route::post('/store-context/analyze', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'analyze']);
+    Route::get('/store-context', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'show']);
+    Route::post('/store-context/generate-prompt', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'generatePrompt']);
+    Route::post('/store-context/create-preset', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'createPreset']);
 });

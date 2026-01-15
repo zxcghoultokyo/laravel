@@ -91,4 +91,12 @@ class WidgetSettings extends Model
             }
         });
     }
+
+    /**
+     * Store context relationship.
+     */
+    public function storeContext()
+    {
+        return $this->hasOne(StoreContext::class);
+    }
 }

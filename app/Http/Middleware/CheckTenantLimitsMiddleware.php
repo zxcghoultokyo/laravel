@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Usage\UsageTrackingService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -11,6 +12,10 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class CheckTenantLimitsMiddleware
 {
+    public function __construct(
+        protected UsageTrackingService $usageService
+    ) {}
+
     /**
      * Handle an incoming request.
      */
@@ -24,25 +29,29 @@ class CheckTenantLimitsMiddleware
         $tenant = app('current_tenant');
 
         // Check message limit
-        if (!$tenant->canSendMessage()) {
+        if ($this->usageService->hasReachedLimit($tenant)) {
+            $stats = $this->usageService->getUsageStats($tenant);
+            
             return response()->json([
-                'error' => 'Message limit exceeded',
-                'usage' => [
-                    'used' => $tenant->messages_used,
-                    'limit' => $tenant->messages_limit,
-                    'percentage' => $tenant->getUsagePercentage(),
-                ],
-                'message' => 'You have reached your monthly message limit. Please upgrade your plan.',
-                'upgrade_url' => config('app.url') . '/billing/upgrade',
+                'type' => 'error',
+                'error' => 'limit_exceeded',
+                'text' => 'Вибачте, ліміт повідомлень на цей місяць вичерпано. Зверніться до власника магазину.',
+                'usage' => $stats['messages'],
+                'upgrade_url' => config('app.url') . '/billing',
             ], 429);
         }
 
-        // Process request
+        // Add usage warning header if near limit
         $response = $next($request);
+        
+        if ($this->usageService->isNearLimit($tenant)) {
+            $remaining = $this->usageService->getRemainingMessages($tenant);
+            $response->headers->set('X-Usage-Warning', "Near limit: {$remaining} messages remaining");
+        }
 
         // Increment usage counter after successful chat message
         if ($response->isSuccessful() && $this->shouldCountMessage($request)) {
-            $tenant->incrementMessageUsage();
+            $this->usageService->incrementMessages($tenant);
         }
 
         return $response;

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TenantDashboardController;
@@ -19,6 +20,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+// Billing
+Route::middleware(['auth'])->prefix('billing')->name('billing.')->group(function () {
+    Route::get('/', [BillingController::class, 'index'])->name('index');
+    Route::get('/checkout/{plan}', [BillingController::class, 'checkout'])->name('checkout');
+    Route::post('/subscribe/{plan}', [BillingController::class, 'subscribe'])->name('subscribe');
+    Route::post('/cancel', [BillingController::class, 'cancel'])->name('cancel');
+    Route::post('/resume', [BillingController::class, 'resume'])->name('resume');
+    Route::get('/success', [BillingController::class, 'success'])->name('success');
+    Route::get('/cancel', [BillingController::class, 'cancelled'])->name('cancelled');
+    Route::get('/history', [BillingController::class, 'history'])->name('history');
+    Route::get('/invoice/{payment}', [BillingController::class, 'invoice'])->name('invoice');
 });
 
 // Onboarding Wizard

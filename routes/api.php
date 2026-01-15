@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DebugProductsController;
 use App\Http\Controllers\Api\AdminJobsController;
 use App\Http\Controllers\Api\ProductSearchController;
 use App\Http\Controllers\Api\WidgetController;
+use App\Http\Controllers\Api\BillingWebhookController;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -174,4 +175,12 @@ Route::prefix('admin')->middleware('admin.token')->group(function () {
     Route::post('/tenants/{id}/reactivate', [\App\Http\Controllers\Api\Admin\TenantController::class, 'reactivate']);
     Route::post('/tenants/{id}/reset-usage', [\App\Http\Controllers\Api\Admin\TenantController::class, 'resetUsage']);
     Route::get('/tenants/{id}/usage', [\App\Http\Controllers\Api\Admin\TenantController::class, 'usage']);
+});
+
+// ==================== BILLING WEBHOOKS ====================
+// These endpoints are called by payment providers (WayForPay, LiqPay)
+// They should be excluded from CSRF protection in VerifyCsrfToken middleware
+Route::prefix('billing/webhook')->group(function () {
+    Route::post('/wayforpay', [BillingWebhookController::class, 'wayforpay'])->name('billing.webhook.wayforpay');
+    Route::post('/liqpay', [BillingWebhookController::class, 'liqpay'])->name('billing.webhook.liqpay');
 });

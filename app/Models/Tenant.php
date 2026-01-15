@@ -151,6 +151,30 @@ class Tenant extends Model
     }
 
     /**
+     * Subscriptions for this tenant.
+     */
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    /**
+     * Payments for this tenant.
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Get active subscription.
+     */
+    public function activeSubscription(): ?Subscription
+    {
+        return $this->subscriptions()->active()->first();
+    }
+
+    /**
      * Store context for this tenant.
      */
     public function storeContext(): HasOne

@@ -129,6 +129,16 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\Search\ColorService();
         });
 
+        // Billing Manager (multi-provider billing abstraction)
+        $this->app->singleton(\App\Services\Billing\BillingManager::class, function ($app) {
+            return new \App\Services\Billing\BillingManager();
+        });
+
+        // Usage Tracking Service (tenant message limits)
+        $this->app->singleton(\App\Services\Usage\UsageTrackingService::class, function ($app) {
+            return new \App\Services\Usage\UsageTrackingService();
+        });
+
         // === AGENT HANDLERS ===
 
         // FAQ Handler

@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
         // Тут викликаємо всі сідери, які нам потрібні
         $this->call([
             ScenarioSeeder::class,
+            SuperAdminSeeder::class,
         ]);
     }
 }

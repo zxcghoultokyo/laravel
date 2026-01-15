@@ -197,7 +197,7 @@ CHECKBOX_LICENSE_KEY=xxx
 - [ ] Onboarding tested end-to-end
 - [ ] Payment flow tested
 - [ ] Widget tested on real site
-
+https://aimbot.laravel.cloud/
 ---
 
 *Last updated: January 15, 2026*

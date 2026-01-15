@@ -193,7 +193,7 @@
 
 ---
 
-### Phase 5: Промпт Пресети (3-5 днів)
+### Phase 5: Промпт Пресети ✅ DONE (3-5 днів)
 > **Пріоритет:** СЕРЕДНІЙ — для advanced users
 
 #### 5.1 Prompt Presets Manager
@@ -209,11 +209,22 @@
 └────────────────────────────────────────────────────────┘
 ```
 
-- [ ] Назва пресету
-- [ ] System prompt з variables: `{{brand_name}}`, `{{return_policy_url}}`, `{{delivery_eta}}`
-- [ ] Умови застосування: категорія, мова, кампанія, тон
-- [ ] Mini test-chat для перевірки
-- [ ] Import/Export пресетів
+- [x] Назва пресету
+- [x] System prompt з variables: `{{brand_name}}`, `{{return_policy_url}}`, `{{delivery_eta}}`
+- [x] Умови застосування: категорія, мова, кампанія, тон
+- [x] Mini test-chat для перевірки
+- [x] Import/Export пресетів (export готовий, import TODO)
+- [x] Пріоритет пресетів (вищий = перевіряється раніше)
+- [x] Інтеграція в обидва агенти (FunctionCallingAgent + StreamingAgent)
+
+#### Реалізовано:
+- **Model**: [app/Models/PromptPreset.php](../app/Models/PromptPreset.php)
+- **Service**: [app/Services/Ai/PromptPresetService.php](../app/Services/Ai/PromptPresetService.php)
+- **Livewire**: [app/Livewire/Admin/PromptPresetsManager.php](../app/Livewire/Admin/PromptPresetsManager.php)
+- **View**: [resources/views/livewire/admin/prompt-presets-manager.blade.php](../resources/views/livewire/admin/prompt-presets-manager.blade.php)
+- **Migration**: [database/migrations/2026_01_15_100000_create_prompt_presets_table.php](../database/migrations/2026_01_15_100000_create_prompt_presets_table.php)
+- **Seeder**: [database/seeders/PromptPresetSeeder.php](../database/seeders/PromptPresetSeeder.php)
+- **Route**: `/admin/prompts`
 
 ---
 

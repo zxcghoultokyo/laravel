@@ -4,7 +4,8 @@ Purpose: make agents productive fast in this Laravel 12 AI‑commerce backend. K
 
 Big Picture
 - Core logic lives in services: [app/Services](app/Services) (Ai, Agent, Chat, Search, Horoshop, Catalog).
-- Chat flow: quick rules → `AiRouter::classify()` → Agent Orchestrator → normalized response.
+- **Primary chat flow**: Widget (SSE) → StreamingFunctionCallingAgent → OpenAI function calling → tools → response
+- **Fallback flow**: POST /api/chat → FunctionCallingAgent (same logic, non-streaming)
 - Data sources: Horoshop → MySQL (`products.raw`) → AI enrichment (`product_ai_index`) → Meilisearch indexing.
 - Fallbacks everywhere: if OpenAI or Meili are off, keyword parsing and Eloquent search kick in.
 
@@ -24,6 +25,18 @@ Big Picture
 - Context extraction: `extractConversationContext()` parses product categories, sizes from history
 - System prompt gets `[КОНТЕКСТ РОЗМОВИ: ...]` with extracted context
 
+### GPT Response Without Tool Calls (Critical!)
+
+When GPT knows products from history, it may respond with JSON **without calling search_products**:
+```json
+{"intro": "Ось підсумок:", "products": [{"article": "ab3-775", "comment": "..."}]}
+```
+
+**Both agents must handle this in the `else` branch** (when no tool_calls):
+1. Call `parseStructuredResponse($responseText, [])` to lookup products by article in DB
+2. Return products with images for card display
+3. Extract intro/outro text separately
+
 ## Chat History & Context
 
 History stored in DB, NOT in session/cache:
@@ -34,17 +47,27 @@ History stored in DB, NOT in session/cache:
 
 Diagnostic endpoint: `GET /api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025`
 
-Key Components
+## Key Components
+
+**Agents (Primary)**:
+- `FunctionCallingAgent`: non-streaming, returns full response. [app/Services/Agent/FunctionCallingAgent.php](app/Services/Agent/FunctionCallingAgent.php)
+- `StreamingFunctionCallingAgent`: SSE streaming for widget. [app/Services/Agent/StreamingFunctionCallingAgent.php](app/Services/Agent/StreamingFunctionCallingAgent.php)
+
+**Supporting Services**:
 - `ChatService`: orchestrates chat/session and formatting. [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php)
-- `AiRouter`: OpenAI classification/normalization/rerank with safe fallbacks. [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php)
-- `AgentOrchestrator`: plan‑execute‑respond for `product_search`. [app/Services/Agent/AgentOrchestrator.php](app/Services/Agent/AgentOrchestrator.php)
-- Agent tools: Meili search, details, dedupe, accessory filter, AI rerank. [app/Services/Agent/Tools](app/Services/Agent/Tools)
-- `SearchQueryParser`: price/color parsing, synonyms. [app/Services/Search/SearchQueryParser.php](app/Services/Search/SearchQueryParser.php)
-- Catalog index/aliases: [app/Services/Catalog/CategoryIndexService.php](app/Services/Catalog/CategoryIndexService.php)
+- `PromptPresetService`: custom prompts by context (language, campaign, category). [app/Services/Ai/PromptPresetService.php](app/Services/Ai/PromptPresetService.php)
+- `ToneService`: tone settings (official/spartan/friendly). [app/Services/Ai/ToneService.php](app/Services/Ai/ToneService.php)
+- `MeiliProductSearchTool`: Meilisearch with Eloquent fallback. [app/Services/Agent/Tools/MeiliProductSearchTool.php](app/Services/Agent/Tools/MeiliProductSearchTool.php)
+- `ProductDetailsTool`: full product cards with images. [app/Services/Agent/Tools/ProductDetailsTool.php](app/Services/Agent/Tools/ProductDetailsTool.php)
+
+**Legacy (deprecated)**:
+- `AgentOrchestrator`: old plan-execute-respond flow. [app/Services/Agent/AgentOrchestrator.php](app/Services/Agent/AgentOrchestrator.php)
+- `AiRouter`: classification (still used for some fallbacks). [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php)
 
 API & Contract
-- Primary endpoint: POST /api/chat → [app/Http/Controllers/Api/ChatController.php](app/Http/Controllers/Api/ChatController.php)
-- Response format is normalized: `{ type: 'text|products', text, products?, session_id, meta? }`.
+- **Primary SSE**: GET /api/chat/stream → [StreamingChatController.php](app/Http/Controllers/Api/StreamingChatController.php)
+- **Fallback JSON**: POST /api/chat → [ChatController.php](app/Http/Controllers/Api/ChatController.php)
+- Response format: `{ type: 'text|products', text, products?, session_id, meta? }`.
 - Other endpoints: order status/search, debug, admin jobs in [routes/api.php](routes/api.php).
 
 Data & Models
@@ -103,7 +126,41 @@ When Adding Features
 - Update config under [config](config) and guard with env fallbacks.
 
 References
-- High‑level overview: [README.md](README.md). Agent details: [AGENT_ORCHESTRATOR.md](AGENT_ORCHESTRATOR.md). Examples: [docs/CHAT_EXAMPLES.md](docs/CHAT_EXAMPLES.md).
+- High‑level overview: [README.md](README.md). 
+- Chat architecture: [docs/CHAT_ARCHITECTURE.md](docs/CHAT_ARCHITECTURE.md)
+- Agent details (legacy): [AGENT_ORCHESTRATOR.md](AGENT_ORCHESTRATOR.md). 
+- Chat examples: [docs/CHAT_EXAMPLES.md](docs/CHAT_EXAMPLES.md).
+- Admin UI Roadmap: [docs/ADMIN_UI_ROADMAP.md](docs/ADMIN_UI_ROADMAP.md)
+
+## Product Images
+
+Images extracted via `extractProductImages(Product $product)` method (in both agents and MeiliProductSearchTool):
+
+```php
+// Priority order:
+1. $product->raw['pictures'][*]['url']  // Horoshop format
+2. $product->raw['images'][*]['url']    // Alternative format
+3. $product->images                      // DB column (JSON or string)
+4. $product->raw['image']                // Single image fallback
+5. $product->raw['main_image']           // Main image fallback
+```
+
+## Prompt Presets
+
+Custom system prompts with variables support. Managed via `/admin/prompts`.
+
+Files:
+- Model: [app/Models/PromptPreset.php](app/Models/PromptPreset.php)
+- Service: [app/Services/Ai/PromptPresetService.php](app/Services/Ai/PromptPresetService.php)
+- Livewire: [app/Livewire/Admin/PromptPresetsManager.php](app/Livewire/Admin/PromptPresetsManager.php)
+
+Matching context:
+- `language` - uk, en, ru
+- `tone` - official, spartan, friendly
+- `campaign` - UTM campaign match
+- `categories` - product categories
+
+Variables use `{{variable_name}}` syntax, replaced at runtime.
 
 Meili Documents (example)
 - Built in [app/Jobs/IndexProductsToMeiliJob.php](app/Jobs/IndexProductsToMeiliJob.php); settings set `filterableAttributes` and `searchableAttributes` idempotently.

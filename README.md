@@ -27,9 +27,18 @@
 	- Fallback: механічні фільтри/дедуплікація в `ChatService`
 
 ### Чат‑оркестрація
-- Оркестратор: [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php)
-- Потік: швидкі правила → `AiRouter::classify()` → хендлери за інтенціями → нормалізований JSON‑відповідь
-- Стан пошуку: кеш по `session_id` (категорія, фільтри, негативні терміни, показані id)
+
+**Архітектура з двома агентами:**
+- **Streaming (SSE)**: GET /api/chat/stream → [StreamingFunctionCallingAgent](app/Services/Agent/StreamingFunctionCallingAgent.php) ← Widget використовує це
+- **JSON (fallback)**: POST /api/chat → [FunctionCallingAgent](app/Services/Agent/FunctionCallingAgent.php)
+
+Обидва агенти використовують OpenAI function calling з tools:
+- `search_products` → MeiliProductSearchTool
+- `get_product_details` → ProductDetailsTool
+- `get_popular_products` → DB query
+- `get_order_status` → OrderSearchService
+
+Детальна документація: [docs/CHAT_ARCHITECTURE.md](docs/CHAT_ARCHITECTURE.md)
 
 ---
 

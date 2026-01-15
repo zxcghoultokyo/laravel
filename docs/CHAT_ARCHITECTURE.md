@@ -4,50 +4,98 @@
 
 Ця документація описує архітектуру чат-бота AIntento для магазину тактичного спорядження.
 
-## Flow Diagram
+> **⚠️ ВАЖЛИВО**: Є ДВА агенти! Widget за замовчуванням використовує **SSE streaming**.
+> Див. таблицю нижче для вибору правильного агента при дебагу.
+
+## ⚡ Швидка довідка: Два Агенти
+
+| Endpoint | Агент | Файл | Коли використовується |
+|----------|-------|------|-----------------------|
+| `POST /api/chat` | `FunctionCallingAgent` | [FunctionCallingAgent.php](../app/Services/Agent/FunctionCallingAgent.php) | Fallback, тести |
+| `GET /api/chat/stream` | `StreamingFunctionCallingAgent` | [StreamingFunctionCallingAgent.php](../app/Services/Agent/StreamingFunctionCallingAgent.php) | **Widget (SSE)** ← основний |
+
+**Якщо чат не працює — перевіряй ОБИДВА агенти!**
+
+## Flow Diagram (Актуальна архітектура)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                              USER (Widget)                                       │
 │                            public/widget.js                                      │
+│                         sendMessageStreaming() ← SSE                             │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                       │
-                                      ▼ POST /api/chat
+              ┌───────────────────────┴───────────────────────┐
+              ▼ GET /api/chat/stream (SSE)                     ▼ POST /api/chat (fallback)
+┌────────────────────────────────────────┐  ┌────────────────────────────────────────┐
+│      StreamingChatController           │  │         ChatController                  │
+│ app/Http/Controllers/Api/              │  │ app/Http/Controllers/Api/               │
+│   StreamingChatController.php          │  │   ChatController.php                    │
+└────────────────────────────────────────┘  └────────────────────────────────────────┘
+              │                                          │
+              ▼                                          ▼
+┌────────────────────────────────────────┐  ┌────────────────────────────────────────┐
+│  StreamingFunctionCallingAgent ⭐       │  │    FunctionCallingAgent                │
+│  app/Services/Agent/                   │  │    app/Services/Agent/                  │
+│    StreamingFunctionCallingAgent.php   │  │      FunctionCallingAgent.php           │
+│                                        │  │                                          │
+│  • stream() → Generator yields events  │  │  • handle() → returns array              │
+│  • OpenAI function calling             │  │  • OpenAI function calling               │
+│  • Real-time text chunks               │  │  • Full response at once                 │
+│  • SSE format for widget               │  │  • JSON response                         │
+└────────────────────────────────────────┘  └────────────────────────────────────────┘
+              │                                          │
+              └───────────────────┬───────────────────────┘
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         ChatController (API Entry)                               │
-│                    app/Http/Controllers/Api/ChatController.php                   │
+│                          OpenAI Function Calling                                 │
+│                                                                                  │
+│  Tools:                                                                          │
+│  • search_products(query, filters) → MeiliProductSearchTool                      │
+│  • get_product_details(article) → ProductDetailsTool                             │
+│  • get_popular_products(category) → DB query                                     │
+│  • get_order_status(phone/order_id) → OrderSearchService                         │
 └─────────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
+                                  │
+                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              ChatService                                         │
-│                       app/Services/Chat/ChatService.php                          │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐│
-│  │ - handleMessage() - головний метод                                          ││
-│  │ - Логування повідомлень (user/assistant)                                    ││
-│  │ - Формування фінальної відповіді для фронту                                 ││
-│  │ - Session context management (legacy, use SessionContextService)            ││
-│  └─────────────────────────────────────────────────────────────────────────────┘│
+│                            Історія чату (DB)                                     │
+│                                                                                  │
+│  ChatSession - сесія з session_id                                                │
+│  ChatMessage - повідомлення з role, content, meta                                │
+│                                                                                  │
+│  Маркер: [Показані товари: Назва (арт. XXX)]                                     │
+│  GPT бачить історію і може відповідати з контексту                               │
 └─────────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          AgentOrchestrator                                       │
-│                  app/Services/Agent/AgentOrchestrator.php                        │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐│
-│  │ 🎯 ГОЛОВНИЙ КООРДИНАТОР - вирішує що робити з повідомленням                 ││
-│  │                                                                             ││
-│  │ handle() → createPlan() → route to handler:                                 ││
-│  │   • handleProductSearch() - пошук товарів                                   ││
-│  │   • handleProductComparison() - порівняння                                  ││
-│  │   • handlePopularProductsRequest() - популярні/подарунки                    ││
-│  │   • handleWhyChosenFollowUp() - "чому саме ці?"                             ││
-│  │   • handleProductDetailsFollowUp() - "розкажи про них"                      ││
-│  │   • handleOrderStatus() - статус замовлення (@deprecated)                   ││
-│  │   • handleFaq() - FAQ (@deprecated)                                         ││
-│  │   • handleSmallTalk() - привітання (@deprecated)                            ││
-│  └─────────────────────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## ⚠️ Критичний момент: GPT відповідає без tool_calls
+
+Коли GPT знає товар з історії, він може відповісти JSON **без виклику search_products**:
+
+```json
+{"intro": "Ось підсумок під турнікет:", "products": [{"article": "ab3-775", "comment": "..."}]}
+```
+
+**Обидва агенти повинні:**
+1. Перевірити чи відповідь — JSON
+2. Викликати `parseStructuredResponse()` для пошуку товарів в БД по артикулу
+3. Повернути товари з images для відображення картки
+
+Код виправлення в `else` гілці (без tool_calls):
+```php
+$structured = $this->parseStructuredResponse($responseText, []);
+if (!empty($structured['products'])) {
+    // Повернути intro + products + outro
+}
+```
+
+## Legacy: AgentOrchestrator (deprecated)
+
+> **Застаріло!** `AgentOrchestrator` більше не використовується як головний шлях.
+> Він залишається для backward compatibility, але нові фічі додаються в FunctionCallingAgent.
+
+Див. [AGENT_ORCHESTRATOR.md](../AGENT_ORCHESTRATOR.md) для історичної довідки.
                                       │
                    ┌──────────────────┴──────────────────┐
                    ▼                                      ▼

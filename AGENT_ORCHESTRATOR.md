@@ -1,6 +1,16 @@
-# Agent Orchestrator - Інтеграція завершена ✅
+# Agent Orchestrator - ⚠️ DEPRECATED
 
-## Що було зроблено
+> **⚠️ ЗАСТАРІЛО**: AgentOrchestrator більше **не використовується** як головний шлях чату!
+>
+> Актуальна архітектура використовує:
+> - **StreamingFunctionCallingAgent** для SSE streaming (widget)
+> - **FunctionCallingAgent** для JSON fallback
+>
+> Див. актуальну документацію: [docs/CHAT_ARCHITECTURE.md](docs/CHAT_ARCHITECTURE.md)
+
+---
+
+## Що було зроблено (історична довідка)
 
 ### 1. Створено AgentOrchestrator систему
 - **app/Services/Agent/AgentOrchestrator.php** — головний оркестратор з plan-execute-respond архітектурою

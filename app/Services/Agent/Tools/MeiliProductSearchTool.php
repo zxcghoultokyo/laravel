@@ -212,6 +212,9 @@ class MeiliProductSearchTool
             
             // Apply contextual accessory filtering
             $filtered = $this->filterAccessories($hits, $query);
+            
+            // Filter side plates when user asks for main plates (not "бокові")
+            $filtered = $this->filterSidePlates($filtered, $query);
 
             // If footwear with explicit size → reorder by size closeness
             $queryLower = mb_strtolower($query);
@@ -477,6 +480,68 @@ class MeiliProductSearchTool
         }
         
         return [];
+    }
+    
+    /**
+     * Filter out side plates when user asks for main body armor plates.
+     * Side plates (бокові плити) should only appear when explicitly requested.
+     */
+    private function filterSidePlates(array $hits, string $query): array
+    {
+        $queryLower = mb_strtolower($query);
+        
+        // If user explicitly asks for side plates, don't filter them
+        $askingForSidePlates = str_contains($queryLower, 'бокові') 
+            || str_contains($queryLower, 'бокова')
+            || str_contains($queryLower, 'side')
+            || str_contains($queryLower, '15x15')
+            || str_contains($queryLower, '15x20')
+            || str_contains($queryLower, '15х15')
+            || str_contains($queryLower, '15х20');
+        
+        if ($askingForSidePlates) {
+            Log::info('MeiliProductSearchTool: user asking for side plates, keeping them', [
+                'query' => $query,
+            ]);
+            return $hits;
+        }
+        
+        // Check if this is a plates/armor query
+        $isPlatesQuery = str_contains($queryLower, 'плит') 
+            || str_contains($queryLower, 'бронеплит')
+            || str_contains($queryLower, 'sapi')
+            || str_contains($queryLower, 'esapi');
+        
+        if (!$isPlatesQuery) {
+            return $hits; // Not a plates query, don't filter
+        }
+        
+        // Filter out side plates - they have "бокова/бокові" or "side" or small sizes in title
+        $filtered = array_filter($hits, function ($hit) {
+            $title = mb_strtolower($hit['title'] ?? '');
+            
+            // Side plate indicators
+            $isSidePlate = str_contains($title, 'бокова')
+                || str_contains($title, 'бокові')
+                || str_contains($title, 'side')
+                || str_contains($title, '15x15')
+                || str_contains($title, '15х15')
+                || str_contains($title, '15x20')
+                || str_contains($title, '15х20')
+                || str_contains($title, '6x6')
+                || str_contains($title, '6х6');
+            
+            return !$isSidePlate;
+        });
+        
+        Log::info('MeiliProductSearchTool: filtered side plates', [
+            'query' => $query,
+            'before' => count($hits),
+            'after' => count($filtered),
+        ]);
+        
+        // Return filtered if we still have results, otherwise original
+        return count($filtered) >= 2 ? array_values($filtered) : $hits;
     }
 
     private function detectPrimaryType(string $queryLower): ?string

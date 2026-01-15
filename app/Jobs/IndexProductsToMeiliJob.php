@@ -59,6 +59,23 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 'filterableAttributes' => array_values(array_unique([
                     'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price',
                 ])),
+                'sortableAttributes' => [
+                    'popularity',
+                    'orders_count',
+                    'price',
+                    'updated_at_ts',
+                ],
+                // Custom ranking rules: popularity/orders boost BEFORE text matching
+                'rankingRules' => [
+                    'words',
+                    'typo',
+                    'proximity',
+                    'attribute',
+                    'sort',
+                    'exactness',
+                    'popularity:desc',    // Higher popularity = better ranking
+                    'orders_count:desc',  // More orders = better ranking
+                ],
                 'searchableAttributes' => [
                     // Primary fields (highest priority)
                     'title',
@@ -103,7 +120,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     'crye precision' => ['crye', 'край', 'край прецішн'],
                 ],
             ]);
-            echo "✅ Налаштування Meili оновлено (включно з синонімами)\n\n";
+            echo "✅ Налаштування Meili оновлено (включно з синонімами та ранкінгом)\n\n";
         } catch (\Throwable $e) {
             echo "⚠️  Налаштування Meili: {$e->getMessage()}\n\n";
         }

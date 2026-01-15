@@ -1,54 +1,51 @@
 <?php
 
+use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\TenantDashboardController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\File;
-use App\Livewire\Admin\ChatsList;
-use App\Livewire\Admin\ChatDetail;
-use App\Livewire\Admin\WidgetSettings;
-use App\Livewire\Admin\Dashboard;
-use App\Livewire\Admin\Analytics;
-use App\Livewire\Admin\ConversionAnalytics;
-use App\Livewire\Admin\GreetingsManager;
-use App\Livewire\Admin\PromptPresetsManager;
 
 Route::get('/', function () {
-    return view('demo'); // AI Chat Demo landing page
+    return view('welcome');
 });
 
-// Test chat page
-Route::get('/chat', function () {
-    return view('chat');
+// Dashboard - tenant scoped
+Route::get('/dashboard', [TenantDashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
+// Profile
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-// Widget with proper cache control headers
-Route::get('/widget.js', function () {
-    $path = public_path('widget.js');
+// Onboarding Wizard
+Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(function () {
+    Route::get('/', [OnboardingController::class, 'index'])->name('index');
     
-    if (!File::exists($path)) {
-        abort(404);
-    }
+    // Step 1: Platform selection
+    Route::get('/platform', [OnboardingController::class, 'step1'])->name('step1');
+    Route::post('/platform', [OnboardingController::class, 'saveStep1'])->name('step1.save');
     
-    $content = File::get($path);
-    $lastModified = File::lastModified($path);
-    $etag = md5($content);
+    // Step 2: Credentials
+    Route::get('/credentials', [OnboardingController::class, 'step2'])->name('step2');
+    Route::post('/credentials', [OnboardingController::class, 'saveStep2'])->name('step2.save');
     
-    return response($content)
-        ->header('Content-Type', 'application/javascript; charset=utf-8')
-        ->header('Cache-Control', 'no-cache, must-revalidate')
-        ->header('ETag', $etag)
-        ->header('Last-Modified', gmdate('D, d M Y H:i:s', $lastModified) . ' GMT')
-        ->header('Access-Control-Allow-Origin', '*')
-        ->header('X-Widget-Version', '2.0.0');
+    // Step 3: Sync
+    Route::get('/sync', [OnboardingController::class, 'step3'])->name('step3');
+    Route::post('/sync/start', [OnboardingController::class, 'startSync'])->name('step3.start');
+    Route::get('/sync/status', [OnboardingController::class, 'syncStatus'])->name('step3.status');
+    Route::post('/sync', [OnboardingController::class, 'saveStep3'])->name('step3.save');
+    
+    // Step 4: Widget
+    Route::get('/widget', [OnboardingController::class, 'step4'])->name('step4');
+    Route::post('/widget', [OnboardingController::class, 'saveStep4'])->name('step4.save');
+    
+    // Step 5: Embed
+    Route::get('/embed', [OnboardingController::class, 'step5'])->name('step5');
+    Route::post('/complete', [OnboardingController::class, 'complete'])->name('complete');
 });
 
-// Admin routes
-Route::prefix('admin')->name('admin.')->group(function () {
-    Route::get('/', Dashboard::class)->name('dashboard');
-    Route::get('/chats', ChatsList::class)->name('chats.index');
-    Route::get('/chats/{sessionId}', ChatDetail::class)->name('chats.show');
-    Route::get('/widget', WidgetSettings::class)->name('widget.settings');
-    Route::get('/greetings', GreetingsManager::class)->name('greetings');
-    Route::get('/prompts', PromptPresetsManager::class)->name('prompts');
-    Route::get('/analytics', Analytics::class)->name('analytics');
-    Route::get('/conversions', ConversionAnalytics::class)->name('conversions');
-});
+require __DIR__.'/auth.php';

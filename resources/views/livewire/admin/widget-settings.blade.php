@@ -18,8 +18,8 @@
 
     <!-- Header -->
     <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">⚙️ Налаштування віджета</h2>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
+        <h2 class="text-2xl font-bold text-gray-900">⚙️ Налаштування віджета</h2>
+        <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
     </div>
 
     @if (session()->has('message'))

@@ -1,12 +1,12 @@
-<div class="p-6 dark:bg-gray-900">
+<div class="p-6">
     <div class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🛒 Конверсії з чату</h1>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Товари додані в кошик після спілкування</p>
+            <h1 class="text-2xl font-bold text-gray-900">🛒 Конверсії з чату</h1>
+            <p class="text-sm text-gray-500 mt-1">Товари додані в кошик після спілкування</p>
         </div>
         
         <div class="flex items-center gap-4">
-            <select wire:model.live="days" class="rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm">
+            <select wire:model.live="days" class="rounded-lg border-gray-300 text-sm">
                 <option value="1">Сьогодні</option>
                 <option value="7">7 днів</option>
                 <option value="30">30 днів</option>

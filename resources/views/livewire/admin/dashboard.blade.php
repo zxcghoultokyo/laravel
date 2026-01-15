@@ -2,16 +2,16 @@
     <!-- Header with Period Selector -->
     <div class="flex items-center justify-between mb-6">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Бізнес-метрики та аналітика</p>
+            <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
+            <p class="mt-1 text-sm text-gray-500">Бізнес-метрики та аналітика</p>
         </div>
         <div class="flex items-center gap-3">
             <!-- Period Selector -->
-            <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white dark:bg-gray-600 shadow text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
+            <div class="flex bg-gray-100 rounded-lg p-1">
+                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
                     Сьогодні
                 </button>
-                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white dark:bg-gray-600 shadow text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white' }}">
+                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
                     7 днів
                 </button>
                 <button wire:click="setPeriod('30d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '30d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">

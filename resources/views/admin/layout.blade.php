@@ -47,7 +47,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
         }
     </style>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+<body class="bg-gray-50 transition-colors duration-200">
     <div class="flex h-screen overflow-hidden">
         
         <!-- Mobile Sidebar Overlay -->
@@ -64,7 +64,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
         </div>
 
         <!-- Sidebar -->
-        <aside class="sidebar-transition fixed lg:relative z-50 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col"
+        <aside class="sidebar-transition fixed lg:relative z-50 h-full bg-white border-r border-gray-200 flex flex-col"
                :class="{
                    'w-64': !sidebarCollapsed,
                    'w-20': sidebarCollapsed,
@@ -73,19 +73,19 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                }">
             
             <!-- Logo -->
-            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between p-4 border-b border-gray-200">
                 <a href="{{ route('admin.dashboard') }}" class="flex items-center gap-3" :class="{ 'justify-center w-full': sidebarCollapsed }">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg flex-shrink-0">
                         A
                     </div>
                     <div x-show="!sidebarCollapsed" x-cloak>
-                        <h1 class="text-lg font-bold text-gray-900 dark:text-white">AIntento</h1>
-                        <p class="text-xs text-gray-500 dark:text-gray-400">Admin Panel</p>
+                        <h1 class="text-lg font-bold text-gray-900">AIntento</h1>
+                        <p class="text-xs text-gray-500">Admin Panel</p>
                     </div>
                 </a>
                 <!-- Collapse button (desktop only) -->
                 <button @click="sidebarCollapsed = !sidebarCollapsed" 
-                        class="hidden lg:flex p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                        class="hidden lg:flex p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"
                         x-show="!sidebarCollapsed">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
@@ -97,7 +97,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
             <nav class="flex-1 overflow-y-auto p-3 space-y-1">
                 <!-- Dashboard -->
                 <a href="{{ route('admin.dashboard') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.dashboard') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.dashboard') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Dashboard' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,11 +108,11 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <!-- Analytics Section -->
                 <div class="pt-4" x-show="!sidebarCollapsed">
-                    <p class="px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Аналітика</p>
+                    <p class="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Аналітика</p>
                 </div>
 
                 <a href="{{ route('admin.analytics') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.analytics') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.analytics') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Аналітика' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,7 +122,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 </a>
 
                 <a href="{{ route('admin.conversions') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.conversions') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.conversions') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Конверсії' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,11 +133,11 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <!-- Communication Section -->
                 <div class="pt-4" x-show="!sidebarCollapsed">
-                    <p class="px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Комунікація</p>
+                    <p class="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Комунікація</p>
                 </div>
 
                 <a href="{{ route('admin.chats.index') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.chats.*') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.chats.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Діалоги' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,11 +148,11 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <!-- Settings Section -->
                 <div class="pt-4" x-show="!sidebarCollapsed">
-                    <p class="px-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Налаштування</p>
+                    <p class="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Налаштування</p>
                 </div>
 
                 <a href="{{ route('admin.widget.settings') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.widget.*') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.widget.*') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Віджет' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +163,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 </a>
 
                 <a href="{{ route('admin.greetings') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.greetings') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.greetings') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Привітання' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -173,7 +173,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 </a>
 
                 <a href="{{ route('admin.prompts') }}" 
-                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.prompts') ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700' }}"
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors {{ request()->routeIs('admin.prompts') ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100' }}"
                    :class="{ 'justify-center': sidebarCollapsed }"
                    :title="sidebarCollapsed ? 'Промпти' : ''">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -184,11 +184,11 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
             </nav>
 
             <!-- Sidebar Footer -->
-            <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+            <div class="p-3 border-t border-gray-200">
                 <!-- Expand button when collapsed -->
                 <button @click="sidebarCollapsed = false" 
                         x-show="sidebarCollapsed"
-                        class="w-full p-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 flex justify-center">
+                        class="w-full p-2.5 rounded-lg hover:bg-gray-100 text-gray-500 flex justify-center">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
                     </svg>
@@ -197,7 +197,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 <!-- Dark mode toggle -->
                 <button @click="darkMode = !darkMode" 
                         x-show="!sidebarCollapsed"
-                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
                     <template x-if="!darkMode">
                         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -216,12 +216,12 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
         <!-- Main Content Area -->
         <div class="flex-1 flex flex-col min-w-0">
             <!-- Top Header Bar -->
-            <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 lg:px-6 flex-shrink-0">
+            <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 flex-shrink-0">
                 <!-- Left: Mobile menu + Breadcrumb -->
                 <div class="flex items-center gap-4">
                     <!-- Mobile menu button -->
                     <button @click="sidebarOpen = !sidebarOpen" 
-                            class="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500">
+                            class="lg:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-500">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                         </svg>
@@ -229,14 +229,14 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                     
                     <!-- Breadcrumb -->
                     <nav class="hidden sm:flex items-center text-sm">
-                        <a href="{{ route('admin.dashboard') }}" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                        <a href="{{ route('admin.dashboard') }}" class="text-gray-500 hover:text-gray-700">
                             Admin
                         </a>
                         @hasSection('breadcrumb')
                             <svg class="w-4 h-4 mx-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                             </svg>
-                            <span class="text-gray-900 dark:text-white font-medium">@yield('breadcrumb')</span>
+                            <span class="text-gray-900 font-medium">@yield('breadcrumb')</span>
                         @endif
                     </nav>
                 </div>
@@ -245,17 +245,17 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 <div class="flex items-center gap-2">
                     <!-- Search Button -->
                     <button @click="searchOpen = true" 
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors">
+                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
                         <span class="hidden sm:inline text-sm">Пошук</span>
-                        <kbd class="hidden md:inline px-1.5 py-0.5 text-xs bg-gray-200 dark:bg-gray-600 rounded">⌘K</kbd>
+                        <kbd class="hidden md:inline px-1.5 py-0.5 text-xs bg-gray-200 rounded">⌘K</kbd>
                     </button>
 
                     <!-- Dark mode toggle (compact for header) -->
                     <button @click="darkMode = !darkMode" 
-                            class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
+                            class="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
                         <template x-if="!darkMode">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -297,7 +297,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
         </div>
 
         <!-- Search Panel -->
-        <div class="relative w-full max-w-xl mx-4 bg-white dark:bg-gray-800 rounded-xl shadow-2xl"
+        <div class="relative w-full max-w-xl mx-4 bg-white rounded-xl shadow-2xl"
              x-transition:enter="transition ease-out duration-200"
              x-transition:enter-start="opacity-0 scale-95"
              x-transition:enter-end="opacity-100 scale-100"
@@ -307,16 +307,16 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
              @click.away="searchOpen = false">
             
             <!-- Search Input -->
-            <div class="flex items-center px-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center px-4 border-b border-gray-200">
                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
                 <input type="text" 
                        placeholder="Пошук сторінок, налаштувань..."
-                       class="w-full px-4 py-4 bg-transparent border-0 focus:ring-0 text-gray-900 dark:text-white placeholder-gray-400"
+                       class="w-full px-4 py-4 bg-transparent border-0 focus:ring-0 text-gray-900 placeholder-gray-400"
                        x-ref="searchInput"
                        @keydown.enter="navigateToResult()">
-                <kbd class="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 rounded">ESC</kbd>
+                <kbd class="px-2 py-1 text-xs bg-gray-100 text-gray-500 rounded">ESC</kbd>
             </div>
 
             <!-- Quick Links -->
@@ -325,7 +325,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
                 
                 <a href="{{ route('admin.dashboard') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
                     </svg>
@@ -334,7 +334,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <a href="{{ route('admin.analytics') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
                     </svg>
@@ -343,7 +343,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <a href="{{ route('admin.conversions') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
                     </svg>
@@ -352,7 +352,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <a href="{{ route('admin.chats.index') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                     </svg>
@@ -361,7 +361,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <a href="{{ route('admin.widget.settings') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
@@ -371,7 +371,7 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <a href="{{ route('admin.greetings') }}" 
                    @click="searchOpen = false"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700">
                     <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
                     </svg>

@@ -309,59 +309,27 @@ class MeiliProductSearchTool
             'dominant_count' => $dominantCount,
         ]);
         
-        // Accessory ai_product_types that should be filtered when we have main products
-        $accessoryTypes = [
-            'patch', 'chevron', 'patch_pvc', 'patch_embroidery',
-            'pouch', 'magazine_pouch', 'admin_pouch', 'medical_pouch', 'dump_pouch',
-            'strap', 'sling', 'shoulder_strap',
-            'adapter', 'mount', 'rail',
-            'cover', 'case',
-            'panel', 'cummerbund',
-            'accessory', '__unknown__',
-            'side_plate', // Side plates are accessories to main plates
-        ];
+        // Use ai_product_type to determine what's an accessory
+        // Products with ai_product_type containing these patterns are typically accessories
+        // This relies on AI enrichment naming conventions, not hardcoded product lists
+        $isAccessoryType = function($type) {
+            if (empty($type) || $type === '__unknown__') return true;
+            $t = mb_strtolower($type);
+            // AI enrichment marks accessories with these patterns in ai_product_type
+            return str_contains($t, 'accessory') 
+                || str_contains($t, 'adapter')
+                || str_contains($t, 'mount')
+                || str_contains($t, 'strap')
+                || str_contains($t, 'cover')
+                || str_contains($t, 'patch')
+                || str_starts_with($t, 'side_');
+        };
         
-        // Main product types (not accessories)
-        $mainTypes = [
-            'backpack', 'tactical_backpack', 'medical_backpack', 'assault_pack',
-            'sling_bag', 'messenger_bag', 'duffel_bag',
-            'plate_carrier', 'chest_rig', 'vest',
-            'helmet', 'ballistic_helmet', 'bump_helmet',
-            'plate', 'armor_plate', 'ballistic_plate', 'main_plate',
-            'boots', 'tactical_boots', 'footwear',
-            'uniform', 'pants', 'jacket', 'shirt',
-            'gloves', 'belt', 'holster',
-            'hydration_pack', 'hydration_bladder',
-        ];
-        
-        // SPECIAL CASE: For armor plate queries, filter out side plates
-        // "Бокова бронеплита" should not dominate over "Комплект бронепластин"
-        if (preg_match('/\bбронепла/iu', $queryLower) && !preg_match('/\bбоков[аіиі]\b/iu', $queryLower)) {
-            // User searching for armor plates without "бокова" - filter side plates
-            $filtered = array_filter($hits, function ($hit) {
-                $title = mb_strtolower($hit['title'] ?? '');
-                // Filter out if title contains "бокова" (side plate)
-                return !preg_match('/\bбоков[аіиі]\b/iu', $title);
-            });
-            
-            if (count($filtered) >= 3) {
-                Log::info('MeiliProductSearchTool: filtered side plates for main plate query', [
-                    'query' => $query,
-                    'before' => count($hits),
-                    'after' => count($filtered),
-                ]);
-                return array_values($filtered);
-            }
-        }
-        
-        // If dominant type is a main product type with 3+ items, filter accessories
-        $dominantIsMain = in_array($dominantType, $mainTypes, true);
-        
-        if ($dominantIsMain && $dominantCount >= 3) {
-            // Keep only products of the dominant type (or similar main types)
-            $filtered = array_filter($hits, function ($hit) use ($accessoryTypes) {
+        // If dominant type is NOT an accessory and we have 3+ of them, filter accessories
+        if (!$isAccessoryType($dominantType) && $dominantCount >= 3) {
+            $filtered = array_filter($hits, function ($hit) use ($isAccessoryType) {
                 $type = $hit['ai_product_type'] ?? '__unknown__';
-                return !in_array($type, $accessoryTypes, true);
+                return !$isAccessoryType($type);
             });
             
             Log::info('MeiliProductSearchTool: filtered accessories by ai_product_type', [
@@ -371,16 +339,15 @@ class MeiliProductSearchTool
                 'dominant_type' => $dominantType,
             ]);
             
-            // Return filtered if we still have results
             if (count($filtered) >= 3) {
                 return array_values($filtered);
             }
         }
         
         // Fallback: sort by putting main products first, accessories last
-        usort($hits, function ($a, $b) use ($accessoryTypes) {
-            $aIsAccessory = in_array($a['ai_product_type'] ?? '__unknown__', $accessoryTypes, true);
-            $bIsAccessory = in_array($b['ai_product_type'] ?? '__unknown__', $accessoryTypes, true);
+        usort($hits, function ($a, $b) use ($isAccessoryType) {
+            $aIsAccessory = $isAccessoryType($a['ai_product_type'] ?? '__unknown__');
+            $bIsAccessory = $isAccessoryType($b['ai_product_type'] ?? '__unknown__');
             
             if ($aIsAccessory === $bIsAccessory) {
                 return 0;
@@ -836,25 +803,8 @@ class MeiliProductSearchTool
             // already correct
         }
         
-        // ARMOR PLATES synonyms - expand to find both "бронеплита" and "бронепластина"
-        // Products have different naming: "Бокова бронеплита" vs "Бронепластина BRONYX"
-        if (preg_match('/\bбронеплит[аиіїя]?\b/iu', $l)) {
-            // Add both variants for better recall
-            $q = preg_replace('/\bбронеплит[аиіїя]?\b/iu', 'бронепластина бронеплита', $q);
-        } elseif (preg_match('/\bбронепластин[аиіїя]?\b/iu', $l)) {
-            $q = preg_replace('/\bбронепластин[аиіїя]?\b/iu', 'бронепластина бронеплита', $q);
-        }
-        
-        // Filter out "бокова" when searching for main armor plates
-        // Users asking "бронеплити які є" want main plates, not side plates
-        $hasBokovaExplicit = preg_match('/\bбоков[аіиі]\b/iu', $l);
-        if (!$hasBokovaExplicit && preg_match('/\bбронепла/iu', $l)) {
-            // Searching for armor plates without explicit "бокова" - prefer main plates
-            // This is handled in scoring/sorting later
-        }
-        
-        // 2. Use QueryExpander ONLY for product type normalization (not expansion)
-        // This helps with "бронік" → finds "плитоноска" products via search_index
+        // 2. Use QueryExpander for product type normalization via product_synonyms table
+        // This handles domain-specific synonyms configured per tenant
         $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk');
         
         // 3. Limit expansion - don't add too many words (causes AND problem)

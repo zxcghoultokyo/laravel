@@ -32,167 +32,167 @@
     </div>
 
     @if(!$tablesExist)
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+        <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-6 text-center">
             <div class="text-4xl mb-4">⚠️</div>
-            <h2 class="text-lg font-semibold text-yellow-800 mb-2">Таблиці аналітики не створені</h2>
-            <p class="text-yellow-700 mb-4">Потрібно запустити міграцію:</p>
-            <code class="bg-yellow-100 px-3 py-1 rounded text-sm">php artisan migrate</code>
+            <h2 class="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Таблиці аналітики не створені</h2>
+            <p class="text-yellow-700 dark:text-yellow-300 mb-4">Потрібно запустити міграцію:</p>
+            <code class="bg-yellow-100 dark:bg-yellow-800 px-3 py-1 rounded text-sm">php artisan migrate</code>
         </div>
     @else
         <!-- Visitors Funnel -->
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
-            <h3 class="text-sm font-semibold text-gray-500 mb-3">📈 Воронка відвідувачів</h3>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+            <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">📈 Воронка відвідувачів</h3>
             <div class="grid grid-cols-3 gap-4">
-                <div class="text-center p-3 bg-gray-50 rounded-lg">
-                    <div class="text-3xl font-bold text-gray-700">{{ number_format($stats['page_visitors'] ?? 0) }}</div>
-                    <div class="text-sm text-gray-500">Відвідувачів</div>
-                    <div class="text-xs text-gray-400 mt-1">{{ number_format($stats['page_views'] ?? 0) }} переглядів</div>
+                <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="text-3xl font-bold text-gray-700 dark:text-gray-200">{{ number_format($stats['page_visitors'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Відвідувачів</div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ number_format($stats['page_views'] ?? 0) }} переглядів</div>
                 </div>
-                <div class="text-center p-3 bg-blue-50 rounded-lg border-2 border-blue-200">
-                    <div class="text-3xl font-bold text-blue-600">{{ number_format($stats['chat_opened_users'] ?? 0) }}</div>
-                    <div class="text-sm text-gray-500">Відкрили чат</div>
-                    <div class="text-xs text-blue-600 mt-1 font-medium">{{ $stats['widget_open_rate'] ?? 0 }}% конверсія</div>
+                <div class="text-center p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-200 dark:border-blue-700">
+                    <div class="text-3xl font-bold text-blue-600 dark:text-blue-400">{{ number_format($stats['chat_opened_users'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Відкрили чат</div>
+                    <div class="text-xs text-blue-600 dark:text-blue-400 mt-1 font-medium">{{ $stats['widget_open_rate'] ?? 0 }}% конверсія</div>
                 </div>
-                <div class="text-center p-3 bg-green-50 rounded-lg">
-                    <div class="text-3xl font-bold text-green-600">{{ number_format($stats['sessions'] ?? 0) }}</div>
-                    <div class="text-sm text-gray-500">Активних сесій</div>
-                    <div class="text-xs text-gray-400 mt-1">{{ $stats['avg_messages'] ?? 0 }} msg/сесія</div>
+                <div class="text-center p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                    <div class="text-3xl font-bold text-green-600 dark:text-green-400">{{ number_format($stats['sessions'] ?? 0) }}</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">Активних сесій</div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">{{ $stats['avg_messages'] ?? 0 }} msg/сесія</div>
                 </div>
             </div>
         </div>
     
         <!-- Stats Cards -->
         <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-blue-600">{{ number_format($stats['sessions'] ?? 0) }}</div>
-                <div class="text-sm text-gray-500">Сесій</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ number_format($stats['sessions'] ?? 0) }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Сесій</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-purple-600">{{ number_format($stats['unique_users'] ?? 0) }}</div>
-                <div class="text-sm text-gray-500">Унікальних</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ number_format($stats['unique_users'] ?? 0) }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Унікальних</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-gray-700">{{ number_format($stats['messages'] ?? 0) }}</div>
-                <div class="text-sm text-gray-500">Повідомлень</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{{ number_format($stats['messages'] ?? 0) }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Повідомлень</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-cyan-600">{{ $stats['avg_messages'] ?? 0 }}</div>
-                <div class="text-sm text-gray-500">Avg msg/сесія</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{{ $stats['avg_messages'] ?? 0 }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Avg msg/сесія</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-orange-600">{{ number_format($stats['products_shown'] ?? 0) }}</div>
-                <div class="text-sm text-gray-500">Показано товарів</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">{{ number_format($stats['products_shown'] ?? 0) }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Показано товарів</div>
             </div>
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-2xl font-bold text-green-600">{{ number_format($stats['products_clicked'] ?? 0) }}</div>
-                <div class="text-sm text-gray-500">Кліків</div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ number_format($stats['products_clicked'] ?? 0) }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Кліків</div>
             </div>
         </div>
 
         <!-- Conversion Stats -->
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-gray-500">💰 Конверсії</h3>
-                <span class="text-xs text-gray-400" title="Для трекінгу конверсій потрібна інтеграція на сайті магазину">ℹ️ Потребує інтеграції</span>
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">💰 Конверсії</h3>
+                <span class="text-xs text-gray-400 dark:text-gray-500" title="Для трекінгу конверсій потрібна інтеграція на сайті магазину">ℹ️ Потребує інтеграції</span>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                <div class="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 rounded-lg p-4 border border-green-200 dark:border-green-700">
                     <div class="flex items-center gap-2 mb-1">
                         <span class="text-2xl">🛒</span>
-                        <span class="text-sm text-green-700">Add to Cart</span>
+                        <span class="text-sm text-green-700 dark:text-green-300">Add to Cart</span>
                     </div>
-                    <div class="text-3xl font-bold text-green-700">{{ $stats['add_to_cart'] ?? 0 }}</div>
+                    <div class="text-3xl font-bold text-green-700 dark:text-green-300">{{ $stats['add_to_cart'] ?? 0 }}</div>
                     @if(($stats['add_to_cart'] ?? 0) == 0)
-                    <p class="text-xs text-green-600 mt-1">Потрібен JS callback</p>
+                    <p class="text-xs text-green-600 dark:text-green-400 mt-1">Потрібен JS callback</p>
                     @endif
                 </div>
-                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
                     <div class="flex items-center gap-2 mb-1">
                         <span class="text-2xl">💰</span>
-                        <span class="text-sm text-blue-700">Покупок</span>
+                        <span class="text-sm text-blue-700 dark:text-blue-300">Покупок</span>
                     </div>
-                    <div class="text-3xl font-bold text-blue-700">{{ $stats['purchases'] ?? 0 }}</div>
+                    <div class="text-3xl font-bold text-blue-700 dark:text-blue-300">{{ $stats['purchases'] ?? 0 }}</div>
                     @if(($stats['purchases'] ?? 0) == 0)
-                    <p class="text-xs text-blue-600 mt-1">Потрібен webhook</p>
+                    <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">Потрібен webhook</p>
                     @endif
                 </div>
-                <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/30 dark:to-purple-800/30 rounded-lg p-4 border border-purple-200 dark:border-purple-700">
                     <div class="flex items-center gap-2 mb-1">
                         <span class="text-2xl">💵</span>
-                        <span class="text-sm text-purple-700">Виручка</span>
+                        <span class="text-sm text-purple-700 dark:text-purple-300">Виручка</span>
                     </div>
-                    <div class="text-3xl font-bold text-purple-700">{{ number_format($stats['revenue'] ?? 0, 0, '.', ' ') }} ₴</div>
+                    <div class="text-3xl font-bold text-purple-700 dark:text-purple-300">{{ number_format($stats['revenue'] ?? 0, 0, '.', ' ') }} ₴</div>
                 </div>
-                <div class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
+                <div class="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/30 rounded-lg p-4 border border-amber-200 dark:border-amber-700">
                     <div class="flex items-center gap-2 mb-1">
                         <span class="text-2xl">📊</span>
-                        <span class="text-sm text-amber-700">CTR товарів</span>
+                        <span class="text-sm text-amber-700 dark:text-amber-300">CTR товарів</span>
                     </div>
-                    <div class="text-3xl font-bold text-amber-700">{{ $stats['ctr'] ?? 0 }}%</div>
-                    <p class="text-xs text-amber-600 mt-1">кліків / показів</p>
+                    <div class="text-3xl font-bold text-amber-700 dark:text-amber-300">{{ $stats['ctr'] ?? 0 }}%</div>
+                    <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">кліків / показів</p>
                 </div>
             </div>
         </div>
 
         <!-- AI Index Quality Score -->
         @if(!empty($aiQuality) && !isset($aiQuality['error']))
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-gray-500">🤖 Якість AI-пошуку</h3>
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">🤖 Якість AI-пошуку</h3>
                 <a href="{{ url('/api/diagnostic/ai-index-problems?key=diagnostic_secret_key_2025') }}" 
                    target="_blank" 
-                   class="text-xs text-blue-600 hover:underline">Детальніше →</a>
+                   class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Детальніше →</a>
             </div>
             <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <!-- Overall Score -->
                 <div class="text-center p-3 rounded-lg {{ 
-                    $aiQuality['score'] >= 90 ? 'bg-green-50 border border-green-200' : 
-                    ($aiQuality['score'] >= 70 ? 'bg-yellow-50 border border-yellow-200' : 
-                    'bg-red-50 border border-red-200') 
+                    $aiQuality['score'] >= 90 ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700' : 
+                    ($aiQuality['score'] >= 70 ? 'bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700' : 
+                    'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700') 
                 }}">
                     <div class="text-3xl font-bold {{ 
-                        $aiQuality['score'] >= 90 ? 'text-green-600' : 
-                        ($aiQuality['score'] >= 70 ? 'text-yellow-600' : 'text-red-600') 
+                        $aiQuality['score'] >= 90 ? 'text-green-600 dark:text-green-400' : 
+                        ($aiQuality['score'] >= 70 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400') 
                     }}">
                         {{ $aiQuality['grade'] }}
                     </div>
-                    <div class="text-lg font-semibold text-gray-700">{{ $aiQuality['score'] }}%</div>
-                    <div class="text-xs text-gray-500">Quality Score</div>
+                    <div class="text-lg font-semibold text-gray-700 dark:text-gray-300">{{ $aiQuality['score'] }}%</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Quality Score</div>
                 </div>
                 
                 <!-- Coverage -->
-                <div class="text-center p-3 bg-gray-50 rounded-lg">
-                    <div class="text-2xl font-bold text-gray-700">{{ $aiQuality['coverage'] }}%</div>
-                    <div class="text-xs text-gray-500">Покриття</div>
-                    <div class="text-xs text-gray-400">{{ number_format($aiQuality['total_indexed']) }}/{{ number_format($aiQuality['total_products']) }}</div>
+                <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{{ $aiQuality['coverage'] }}%</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Покриття</div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500">{{ number_format($aiQuality['total_indexed']) }}/{{ number_format($aiQuality['total_products']) }}</div>
                 </div>
                 
                 <!-- Type Coverage -->
-                <div class="text-center p-3 bg-gray-50 rounded-lg">
-                    <div class="text-2xl font-bold text-blue-600">{{ $aiQuality['type_coverage'] }}%</div>
-                    <div class="text-xs text-gray-500">З типом</div>
+                <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ $aiQuality['type_coverage'] }}%</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">З типом</div>
                 </div>
                 
                 <!-- Slang Coverage -->
-                <div class="text-center p-3 bg-gray-50 rounded-lg">
-                    <div class="text-2xl font-bold text-purple-600">{{ $aiQuality['slang_coverage'] }}%</div>
-                    <div class="text-xs text-gray-500">Зі сленгом</div>
-                    <div class="text-xs text-gray-400">avg {{ $aiQuality['avg_slang'] }} слів</div>
+                <div class="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="text-2xl font-bold text-purple-600 dark:text-purple-400">{{ $aiQuality['slang_coverage'] }}%</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Зі сленгом</div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500">avg {{ $aiQuality['avg_slang'] }} слів</div>
                 </div>
                 
                 <!-- Issues -->
-                <div class="text-center p-3 rounded-lg {{ $aiQuality['high_priority_issues'] > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50' }}">
-                    <div class="text-2xl font-bold {{ $aiQuality['high_priority_issues'] > 0 ? 'text-red-600' : 'text-green-600' }}">
+                <div class="text-center p-3 rounded-lg {{ $aiQuality['high_priority_issues'] > 0 ? 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700' : 'bg-green-50 dark:bg-green-900/30' }}">
+                    <div class="text-2xl font-bold {{ $aiQuality['high_priority_issues'] > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
                         {{ $aiQuality['high_priority_issues'] }}
                     </div>
-                    <div class="text-xs text-gray-500">Критичних</div>
-                    <div class="text-xs text-gray-400">{{ $aiQuality['recommendations_count'] }} всього</div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">Критичних</div>
+                    <div class="text-xs text-gray-400 dark:text-gray-500">{{ $aiQuality['recommendations_count'] }} всього</div>
                 </div>
             </div>
             
             @if($aiQuality['score'] < 70)
-            <div class="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                ⚠️ Низький score впливає на якість пошуку. Запустіть: <code class="bg-yellow-100 px-1 rounded">php artisan products:build-ai-index --only-missing</code>
+            <div class="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ Низький score впливає на якість пошуку. Запустіть: <code class="bg-yellow-100 dark:bg-yellow-800 px-1 rounded">php artisan products:build-ai-index --only-missing</code>
             </div>
             @endif
         </div>
@@ -200,75 +200,75 @@
 
         <!-- A/B Testing Stats -->
         @if(!empty($abTestStats) && !isset($abTestStats['error']))
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
             <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-gray-500">🧪 A/B Тестування пошуку</h3>
+                <h3 class="text-sm font-semibold text-gray-500 dark:text-gray-400">🧪 A/B Тестування пошуку</h3>
                 <div class="flex items-center gap-2">
-                    <span class="text-xs px-2 py-1 rounded {{ $abTestStats['enabled'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                    <span class="text-xs px-2 py-1 rounded {{ $abTestStats['enabled'] ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400' }}">
                         {{ $abTestStats['enabled'] ? '✓ Активний' : '○ Неактивний' }}
                     </span>
                     <a href="{{ url('/api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025') }}" 
                        target="_blank" 
-                       class="text-xs text-blue-600 hover:underline">JSON →</a>
+                       class="text-xs text-blue-600 dark:text-blue-400 hover:underline">JSON →</a>
                 </div>
             </div>
             
             @if($abTestStats['has_data'])
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Control Variant -->
-                <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
                     <div class="flex items-center gap-2 mb-3">
                         <span class="text-lg">🔵</span>
-                        <span class="font-semibold text-gray-700">Control</span>
-                        <span class="text-xs text-gray-500">(тільки keyword)</span>
+                        <span class="font-semibold text-gray-700 dark:text-gray-200">Control</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">(тільки keyword)</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                            <div class="text-2xl font-bold text-gray-700">{{ $abTestStats['control']['total_searches'] ?? 0 }}</div>
-                            <div class="text-xs text-gray-500">Пошуків</div>
+                            <div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{{ $abTestStats['control']['total_searches'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Пошуків</div>
                         </div>
                         <div>
-                            <div class="text-2xl font-bold text-gray-700">{{ $abTestStats['control']['unique_sessions'] ?? 0 }}</div>
-                            <div class="text-xs text-gray-500">Сесій</div>
+                            <div class="text-2xl font-bold text-gray-700 dark:text-gray-200">{{ $abTestStats['control']['unique_sessions'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Сесій</div>
                         </div>
                         <div>
-                            <div class="text-xl font-bold {{ ($abTestStats['control']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600' : 'text-gray-700' }}">
+                            <div class="text-xl font-bold {{ ($abTestStats['control']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200' }}">
                                 {{ $abTestStats['control']['zero_results_rate'] ?? 0 }}%
                             </div>
-                            <div class="text-xs text-gray-500">Zero Results</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Zero Results</div>
                         </div>
                         <div>
-                            <div class="text-xl font-bold text-blue-600">{{ $abTestStats['control']['click_through_rate'] ?? 0 }}%</div>
-                            <div class="text-xs text-gray-500">CTR</div>
+                            <div class="text-xl font-bold text-blue-600 dark:text-blue-400">{{ $abTestStats['control']['click_through_rate'] ?? 0 }}%</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">CTR</div>
                         </div>
                     </div>
                 </div>
                 
                 <!-- Treatment Variant -->
-                <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div class="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-700">
                     <div class="flex items-center gap-2 mb-3">
                         <span class="text-lg">🟢</span>
-                        <span class="font-semibold text-blue-700">Treatment</span>
-                        <span class="text-xs text-blue-500">(keyword + AI)</span>
+                        <span class="font-semibold text-blue-700 dark:text-blue-300">Treatment</span>
+                        <span class="text-xs text-blue-500 dark:text-blue-400">(keyword + AI)</span>
                     </div>
                     <div class="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                            <div class="text-2xl font-bold text-blue-700">{{ $abTestStats['treatment']['total_searches'] ?? 0 }}</div>
-                            <div class="text-xs text-gray-500">Пошуків</div>
+                            <div class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ $abTestStats['treatment']['total_searches'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Пошуків</div>
                         </div>
                         <div>
-                            <div class="text-2xl font-bold text-blue-700">{{ $abTestStats['treatment']['unique_sessions'] ?? 0 }}</div>
-                            <div class="text-xs text-gray-500">Сесій</div>
+                            <div class="text-2xl font-bold text-blue-700 dark:text-blue-300">{{ $abTestStats['treatment']['unique_sessions'] ?? 0 }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Сесій</div>
                         </div>
                         <div>
-                            <div class="text-xl font-bold {{ ($abTestStats['treatment']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600' : 'text-green-600' }}">
+                            <div class="text-xl font-bold {{ ($abTestStats['treatment']['zero_results_rate'] ?? 0) > 10 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400' }}">
                                 {{ $abTestStats['treatment']['zero_results_rate'] ?? 0 }}%
                             </div>
-                            <div class="text-xs text-gray-500">Zero Results</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">Zero Results</div>
                         </div>
                         <div>
-                            <div class="text-xl font-bold text-green-600">{{ $abTestStats['treatment']['click_through_rate'] ?? 0 }}%</div>
-                            <div class="text-xs text-gray-500">CTR</div>
+                            <div class="text-xl font-bold text-green-600 dark:text-green-400">{{ $abTestStats['treatment']['click_through_rate'] ?? 0 }}%</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">CTR</div>
                         </div>
                     </div>
                 </div>
@@ -276,43 +276,43 @@
             
             <!-- Comparison Summary -->
             @if(!empty($abTestStats['comparison']) && $abTestStats['comparison']['winner'] !== 'tie')
-            <div class="mt-4 p-3 rounded-lg {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200' }}">
+            <div class="mt-4 p-3 rounded-lg {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700' : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600' }}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <span class="text-lg">{{ $abTestStats['comparison']['winner'] === 'treatment' ? '🏆' : '📊' }}</span>
-                        <span class="font-medium {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'text-green-700' : 'text-gray-700' }}">
+                        <span class="font-medium {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'text-green-700 dark:text-green-300' : 'text-gray-700 dark:text-gray-300' }}">
                             Лідер: {{ $abTestStats['comparison']['winner'] === 'treatment' ? 'Treatment (AI)' : 'Control' }}
                         </span>
                     </div>
-                    <div class="text-sm text-gray-500">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
                         {{ $abTestStats['comparison']['confidence'] ?? 'insufficient_data' }}
                     </div>
                 </div>
                 @if(isset($abTestStats['comparison']['zero_results_improvement']))
                 <div class="mt-2 grid grid-cols-3 gap-2 text-xs">
                     <div class="text-center">
-                        <div class="font-bold {{ $abTestStats['comparison']['zero_results_improvement'] < 0 ? 'text-green-600' : 'text-red-600' }}">
+                        <div class="font-bold {{ $abTestStats['comparison']['zero_results_improvement'] < 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
                             {{ $abTestStats['comparison']['zero_results_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['zero_results_improvement'] }}%
                         </div>
-                        <div class="text-gray-500">Zero Results</div>
+                        <div class="text-gray-500 dark:text-gray-400">Zero Results</div>
                     </div>
                     <div class="text-center">
-                        <div class="font-bold {{ $abTestStats['comparison']['ctr_improvement'] > 0 ? 'text-green-600' : 'text-red-600' }}">
+                        <div class="font-bold {{ $abTestStats['comparison']['ctr_improvement'] > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
                             {{ $abTestStats['comparison']['ctr_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['ctr_improvement'] }}%
                         </div>
-                        <div class="text-gray-500">CTR</div>
+                        <div class="text-gray-500 dark:text-gray-400">CTR</div>
                     </div>
                     <div class="text-center">
-                        <div class="font-bold {{ $abTestStats['comparison']['add_to_cart_improvement'] > 0 ? 'text-green-600' : 'text-red-600' }}">
+                        <div class="font-bold {{ $abTestStats['comparison']['add_to_cart_improvement'] > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
                             {{ $abTestStats['comparison']['add_to_cart_improvement'] > 0 ? '+' : '' }}{{ $abTestStats['comparison']['add_to_cart_improvement'] }}%
                         </div>
-                        <div class="text-gray-500">Add to Cart</div>
+                        <div class="text-gray-500 dark:text-gray-400">Add to Cart</div>
                     </div>
                 </div>
                 @endif
             </div>
             @else
-            <div class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-sm text-gray-500">
+            <div class="mt-4 p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
                 📊 Недостатньо даних для визначення переможця. Потрібно мінімум 100 пошуків на варіант.
             </div>
             @endif
@@ -320,8 +320,8 @@
             @else
             <div class="text-center py-8">
                 <div class="text-4xl mb-2">🧪</div>
-                <div class="text-gray-500">Експеримент активний, але ще немає даних</div>
-                <div class="text-xs text-gray-400 mt-2">
+                <div class="text-gray-500 dark:text-gray-400">Експеримент активний, але ще немає даних</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-2">
                     Дані з'являться після того як користувачі почнуть шукати товари
                 </div>
             </div>
@@ -331,75 +331,75 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Daily Chart -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-700 mb-4">📈 Активність по днях</h2>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 dark:text-gray-200 mb-4">📈 Активність по днях</h2>
                 @if(count($dailyChart) > 0)
                     <div class="space-y-2">
                         @php $maxSessions = max(array_column($dailyChart, 'sessions')) ?: 1; @endphp
                         @foreach($dailyChart as $day)
                             <div class="flex items-center gap-2">
-                                <div class="w-20 text-xs text-gray-500">{{ \Carbon\Carbon::parse($day['date'])->format('d.m') }}</div>
-                                <div class="flex-1 bg-gray-100 rounded-full h-4 relative">
+                                <div class="w-20 text-xs text-gray-500 dark:text-gray-400">{{ \Carbon\Carbon::parse($day['date'])->format('d.m') }}</div>
+                                <div class="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-4 relative">
                                     <div class="bg-blue-500 h-4 rounded-full" style="width: {{ ($day['sessions'] / $maxSessions) * 100 }}%"></div>
                                 </div>
-                                <div class="w-12 text-xs text-right text-gray-600">{{ $day['sessions'] }}</div>
+                                <div class="w-12 text-xs text-right text-gray-600 dark:text-gray-400">{{ $day['sessions'] }}</div>
                             </div>
                         @endforeach
                     </div>
                 @else
-                    <div class="text-gray-400 text-center py-8">Немає даних</div>
+                    <div class="text-gray-400 dark:text-gray-500 text-center py-8">Немає даних</div>
                 @endif
             </div>
 
             <!-- Top Viewed Products (NEW) -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-700 mb-4">👁️ Найчастіше переглядають</h2>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 dark:text-gray-200 mb-4">👁️ Найчастіше переглядають</h2>
                 @if(count($topViewedProducts) > 0)
                     <div class="space-y-2">
                         @foreach($topViewedProducts as $product)
-                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-medium text-gray-800 truncate">{{ $product['title'] }}</div>
-                                    <div class="text-xs text-gray-500">{{ $product['article'] }} • {{ number_format($product['price'], 0) }} ₴</div>
+                                    <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ $product['title'] }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $product['article'] }} • {{ number_format($product['price'], 0) }} ₴</div>
                                 </div>
-                                <div class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-sm font-medium">
+                                <div class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-sm font-medium">
                                     {{ $product['views'] }} показів
                                 </div>
                             </div>
                         @endforeach
                     </div>
                 @else
-                    <div class="text-gray-400 text-center py-8">Немає даних</div>
+                    <div class="text-gray-400 dark:text-gray-500 text-center py-8">Немає даних</div>
                 @endif
             </div>
         </div>
         
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
             <!-- Top Clicked Products -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-700 mb-4">🔥 Топ кліки по товарах</h2>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 dark:text-gray-200 mb-4">🔥 Топ кліки по товарах</h2>
                 @if(count($topProducts) > 0)
                     <div class="space-y-2">
                         @foreach($topProducts as $product)
-                            <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                            <div class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-medium text-gray-800 truncate">{{ $product['title'] }}</div>
-                                    <div class="text-xs text-gray-500">{{ $product['article'] }} • {{ number_format($product['price'], 0) }} ₴</div>
+                                    <div class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{{ $product['title'] }}</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">{{ $product['article'] }} • {{ number_format($product['price'], 0) }} ₴</div>
                                 </div>
-                                <div class="bg-green-100 text-green-700 px-2 py-1 rounded text-sm font-medium">
+                                <div class="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-1 rounded text-sm font-medium">
                                     {{ $product['clicks'] }} кліків
                                 </div>
                             </div>
                         @endforeach
                     </div>
                 @else
-                    <div class="text-gray-400 text-center py-8">Немає даних про кліки</div>
+                    <div class="text-gray-400 dark:text-gray-500 text-center py-8">Немає даних про кліки</div>
                 @endif
             </div>
             
             <!-- Recent Chat Events Only -->
-            <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-700 mb-4">💬 Останні події чатів</h2>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                <h2 class="font-semibold text-gray-700 dark:text-gray-200 mb-4">💬 Останні події чатів</h2>
                 @if(count($recentChatEvents) > 0)
                     <div class="space-y-1 max-h-80 overflow-y-auto">
                         @foreach($recentChatEvents as $event)
@@ -413,27 +413,27 @@
                                     default => '📌'
                                 };
                             @endphp
-                            <div class="flex items-center gap-2 text-sm py-1 border-b border-gray-50">
-                                <span class="text-xs text-gray-400 w-16">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</span>
+                            <div class="flex items-center gap-2 text-sm py-1 border-b border-gray-50 dark:border-gray-700">
+                                <span class="text-xs text-gray-400 dark:text-gray-500 w-16">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</span>
                                 <span>{{ $eventIcon }}</span>
-                                <span class="text-gray-600">{{ $event->event_type }}</span>
+                                <span class="text-gray-600 dark:text-gray-400">{{ $event->event_type }}</span>
                                 <a href="{{ route('admin.chats.show', $event->session_id) }}" 
-                                   class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                   class="text-xs text-blue-500 dark:text-blue-400 hover:underline truncate ml-auto" style="max-width: 120px;">
                                     {{ substr($event->session_id, -12) }}
                                 </a>
                             </div>
                         @endforeach
                     </div>
                 @else
-                    <div class="text-gray-400 text-center py-8">Немає подій</div>
+                    <div class="text-gray-400 dark:text-gray-500 text-center py-8">Немає подій</div>
                 @endif
             </div>
         </div>
 
         <!-- Outcomes -->
         @if(count($outcomes) > 0)
-            <div class="bg-white rounded-lg shadow p-4 mt-6">
-                <h2 class="font-semibold text-gray-700 mb-4">📋 Результати сесій</h2>
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mt-6">
+                <h2 class="font-semibold text-gray-700 dark:text-gray-200 mb-4">📋 Результати сесій</h2>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                     @foreach($outcomes as $outcome)
                         @php
@@ -454,12 +454,12 @@
                                 default => '📊'
                             };
                         @endphp
-                        <div class="bg-{{ $color }}-50 border border-{{ $color }}-200 rounded-lg p-3">
+                        <div class="bg-{{ $color }}-50 dark:bg-{{ $color }}-900/30 border border-{{ $color }}-200 dark:border-{{ $color }}-700 rounded-lg p-3">
                             <div class="flex items-center gap-2">
                                 <span>{{ $icon }}</span>
-                                <span class="text-sm text-{{ $color }}-700">{{ $outcome->outcome }}</span>
+                                <span class="text-sm text-{{ $color }}-700 dark:text-{{ $color }}-300">{{ $outcome->outcome }}</span>
                             </div>
-                            <div class="text-xl font-bold text-{{ $color }}-800 mt-1">{{ $outcome->count }}</div>
+                            <div class="text-xl font-bold text-{{ $color }}-800 dark:text-{{ $color }}-200 mt-1">{{ $outcome->count }}</div>
                         </div>
                     @endforeach
                 </div>

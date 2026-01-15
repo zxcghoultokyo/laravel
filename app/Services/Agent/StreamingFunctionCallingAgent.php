@@ -490,15 +490,15 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'search_products',
-                    'description' => 'Пошук товарів в каталозі.',
+                    'description' => 'Пошук товарів в каталозі. ВАЖЛИВО: для запитів з "недорого", "бюджетний", "дешевий" — ОБОВ\'ЯЗКОВО передавай price_max! Для "преміум", "дорогий" — передавай price_min!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
                             'query' => ['type' => 'string', 'description' => 'Пошуковий запит'],
                             'product_type' => ['type' => 'string', 'description' => 'Тип товару'],
                             'brand' => ['type' => 'string', 'description' => 'Бренд'],
-                            'price_min' => ['type' => 'number', 'description' => 'Мін. ціна'],
-                            'price_max' => ['type' => 'number', 'description' => 'Макс. ціна'],
+                            'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум/дорогих)'],
+                            'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (ОБОВ\'ЯЗКОВО для недорогих/бюджетних запитів!)'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово'],
                             'limit' => ['type' => 'integer', 'description' => 'Кількість результатів'],

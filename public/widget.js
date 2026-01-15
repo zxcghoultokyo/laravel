@@ -1080,7 +1080,8 @@
                             
                             // Store products for later display
                             hasReceivedProducts = true;
-                            receivedProducts = data.products || [];
+                            // Support both formats: data.data.products (from streaming agent) and data.products (legacy)
+                            receivedProducts = data.data?.products || data.products || [];
                             
                             // Display products immediately after text
                             if (receivedProducts.length > 0) {

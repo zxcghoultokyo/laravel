@@ -9,9 +9,18 @@ use Carbon\Carbon;
 /**
  * Business-focused metrics for the admin dashboard.
  * Provides KPIs, trends, and chart data.
+ * 
+ * Uses ChatStatsService as the single source of truth for chat metrics.
  */
 class DashboardMetricsService
 {
+    private ChatStatsService $chatStats;
+    
+    public function __construct(ChatStatsService $chatStats)
+    {
+        $this->chatStats = $chatStats;
+    }
+    
     /**
      * Get KPI cards data with trends.
      */
@@ -22,11 +31,11 @@ class DashboardMetricsService
         return Cache::remember($cacheKey, 60, function () use ($period) {
             [$startDate, $endDate, $prevStartDate, $prevEndDate] = $this->getPeriodDates($period);
             
-            // Current period stats
-            $current = $this->getPeriodStats($startDate, $endDate);
+            // Current period stats from unified ChatStatsService
+            $current = $this->chatStats->getBasicStats($startDate, $endDate);
             
             // Previous period stats for comparison
-            $previous = $this->getPeriodStats($prevStartDate, $prevEndDate);
+            $previous = $this->chatStats->getBasicStats($prevStartDate, $prevEndDate);
             
             return [
                 'conversations' => [
@@ -42,8 +51,8 @@ class DashboardMetricsService
                     'icon' => '📨',
                 ],
                 'conversions' => [
-                    'value' => $current['conversions'],
-                    'change' => $this->calculateChange($current['conversions'], $previous['conversions']),
+                    'value' => $current['purchases'],
+                    'change' => $this->calculateChange($current['purchases'], $previous['purchases']),
                     'label' => 'Конверсій',
                     'icon' => '🛒',
                 ],
@@ -56,11 +65,11 @@ class DashboardMetricsService
                 ],
                 'conversion_rate' => [
                     'value' => $current['sessions'] > 0 
-                        ? round(($current['conversions'] / $current['sessions']) * 100, 1) 
+                        ? round(($current['purchases'] / $current['sessions']) * 100, 1) 
                         : 0,
                     'change' => $this->calculateRateChange(
-                        $current['conversions'], $current['sessions'],
-                        $previous['conversions'], $previous['sessions']
+                        $current['purchases'], $current['sessions'],
+                        $previous['purchases'], $previous['sessions']
                     ),
                     'label' => 'Конверсія',
                     'icon' => '📈',
@@ -87,26 +96,8 @@ class DashboardMetricsService
         return Cache::remember($cacheKey, 120, function () use ($period) {
             [$startDate, $endDate] = $this->getPeriodDates($period);
             
-            // Get daily data - try different sources
-            $dailyStats = collect();
-            
-            try {
-                $dailyStats = DB::table('chat_daily_stats')
-                    ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
-                    ->orderBy('date')
-                    ->get();
-            } catch (\Throwable $e) {
-                // Table might not exist or have different schema
-            }
-            
-            // If no stats in chat_daily_stats, try chat_metrics
-            if ($dailyStats->isEmpty()) {
-                try {
-                    $dailyStats = $this->aggregateFromChatMetrics($startDate, $endDate);
-                } catch (\Throwable $e) {
-                    $dailyStats = collect();
-                }
-            }
+            // Use unified ChatStatsService for chart data
+            $dailyStats = collect($this->chatStats->getDailyChart($startDate, $endDate));
             
             $labels = [];
             $conversations = [];
@@ -120,14 +111,9 @@ class DashboardMetricsService
                 
                 $dayStats = $dailyStats->firstWhere('date', $dateStr);
                 
-                // Try different column names for compatibility
-                $sessionsCount = $dayStats->sessions_count ?? $dayStats->unique_sessions ?? 0;
-                $conversionsCount = $dayStats->purchase_sessions ?? $dayStats->add_to_cart_sessions ?? 0;
-                $revenueVal = (float) ($dayStats->total_attributed_revenue ?? 0);
-                
-                $conversations[] = $sessionsCount;
-                $conversions[] = $conversionsCount;
-                $revenue[] = $revenueVal;
+                $conversations[] = $dayStats['sessions'] ?? 0;
+                $conversions[] = 0; // Would need daily conversions tracking
+                $revenue[] = 0; // Would need daily revenue tracking
                 
                 $currentDate->addDay();
             }
@@ -213,91 +199,31 @@ class DashboardMetricsService
 
     /**
      * Get recent chat sessions with outcome.
+     * Uses ChatStatsService as data source.
      */
     public function getRecentChats(int $limit = 10): array
     {
         return Cache::remember("dashboard_recent_chats:{$limit}", 60, function () use ($limit) {
-            $sessions = collect();
+            $chats = $this->chatStats->getRecentChats($limit);
             
-            // Try chat_sessions first (main storage)
-            try {
-                $sessions = DB::table('chat_sessions')
-                    ->select('session_id', 'created_at', 'updated_at')
-                    ->orderByDesc('updated_at')
-                    ->limit($limit)
-                    ->get();
-            } catch (\Throwable $e) {
-                // Table might not exist
-            }
-            
-            // If empty, try active_chat_sessions
-            if ($sessions->isEmpty()) {
+            // Enrich with outcome data if available
+            foreach ($chats as &$chat) {
                 try {
-                    $sessions = DB::table('active_chat_sessions')
-                        ->select('session_id', 'created_at', 'last_message_at as updated_at', 'status')
-                        ->orderByDesc('last_message_at')
-                        ->limit($limit)
-                        ->get();
+                    $outcome = DB::table('chat_session_outcomes')
+                        ->where('session_id', $chat['session_id'])
+                        ->first(['outcome', 'outcome_category']);
+                    
+                    $chat['outcome'] = $outcome->outcome ?? null;
+                    $chat['outcome_category'] = $outcome->outcome_category ?? null;
+                    $chat['status'] = 'ai';
                 } catch (\Throwable $e) {
-                    // Table might not exist either
+                    $chat['outcome'] = null;
+                    $chat['outcome_category'] = null;
+                    $chat['status'] = 'ai';
                 }
             }
             
-            // Last resort: get from chat_messages directly
-            if ($sessions->isEmpty()) {
-                try {
-                    $sessions = DB::table('chat_messages')
-                        ->select('session_id', DB::raw('MIN(created_at) as created_at'), DB::raw('MAX(created_at) as updated_at'))
-                        ->groupBy('session_id')
-                        ->orderByDesc('updated_at')
-                        ->limit($limit)
-                        ->get();
-                } catch (\Throwable $e) {
-                    return [];
-                }
-            }
-            
-            $result = [];
-            foreach ($sessions as $s) {
-                try {
-                    // Get first user message as preview
-                    $firstMessage = DB::table('chat_messages')
-                        ->where('session_id', $s->session_id)
-                        ->where('role', 'user')
-                        ->orderBy('created_at')
-                        ->first(['content']);
-                    
-                    // Get message count
-                    $messageCount = DB::table('chat_messages')
-                        ->where('session_id', $s->session_id)
-                        ->count();
-                    
-                    // Get outcome if exists
-                    $outcome = null;
-                    try {
-                        $outcome = DB::table('chat_session_outcomes')
-                            ->where('session_id', $s->session_id)
-                            ->first(['outcome', 'outcome_category']);
-                    } catch (\Throwable $e) {
-                        // Table might not exist
-                    }
-                    
-                    $result[] = [
-                        'session_id' => $s->session_id,
-                        'preview' => $firstMessage ? mb_substr($firstMessage->content, 0, 50) . (mb_strlen($firstMessage->content) > 50 ? '...' : '') : 'Новий чат',
-                        'messages_count' => $messageCount,
-                        'status' => $s->status ?? 'ai',
-                        'outcome' => $outcome->outcome ?? null,
-                        'outcome_category' => $outcome->outcome_category ?? null,
-                        'time_ago' => Carbon::parse($s->updated_at)->diffForHumans(),
-                        'created_at' => $s->updated_at,
-                    ];
-                } catch (\Throwable $e) {
-                    continue;
-                }
-            }
-            
-            return $result;
+            return $chats;
         });
     }
 
@@ -385,100 +311,6 @@ class DashboardMetricsService
         }
         
         return [$startDate, $endDate, $prevStartDate, $prevEndDate];
-    }
-
-    /**
-     * Get aggregated stats for a period.
-     */
-    private function getPeriodStats(Carbon $startDate, Carbon $endDate): array
-    {
-        $dailyStats = null;
-        
-        // Try chat_daily_stats first (with fallback for different schemas)
-        try {
-            // Try new schema first
-            $dailyStats = DB::table('chat_daily_stats')
-                ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
-                ->selectRaw('
-                    COALESCE(SUM(sessions_count), 0) as sessions,
-                    COALESCE(SUM(messages_count), 0) as messages,
-                    COALESCE(SUM(purchase_sessions), 0) as conversions,
-                    COALESCE(SUM(total_attributed_revenue), 0) as revenue
-                ')
-                ->first();
-        } catch (\Throwable $e) {
-            // Try old schema (unique_sessions instead of sessions_count)
-            try {
-                $dailyStats = DB::table('chat_daily_stats')
-                    ->whereBetween('date', [$startDate->toDateString(), $endDate->toDateString()])
-                    ->selectRaw('
-                        COALESCE(SUM(unique_sessions), 0) as sessions,
-                        COALESCE(SUM(total_requests), 0) as messages,
-                        0 as conversions,
-                        0 as revenue
-                    ')
-                    ->first();
-            } catch (\Throwable $e2) {
-                $dailyStats = null;
-            }
-        }
-        
-        // Try chat_metrics for response time and session count
-        $metricsStats = null;
-        try {
-            $metricsStats = DB::table('chat_metrics')
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->selectRaw('
-                    COUNT(DISTINCT session_id) as sessions,
-                    COUNT(*) as messages,
-                    AVG(response_time_ms) as avg_response_ms
-                ')
-                ->first();
-        } catch (\Throwable $e) {
-            $metricsStats = null;
-        }
-        
-        // Try chat_conversions for conversions
-        $conversions = null;
-        try {
-            $conversions = DB::table('chat_conversions')
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->where('conversion_type', 'purchase')
-                ->selectRaw('
-                    COUNT(*) as count,
-                    COALESCE(SUM(order_total), 0) as revenue
-                ')
-                ->first();
-        } catch (\Throwable $e) {
-            $conversions = null;
-        }
-        
-        return [
-            'sessions' => max($dailyStats->sessions ?? 0, $metricsStats->sessions ?? 0),
-            'messages' => max($dailyStats->messages ?? 0, $metricsStats->messages ?? 0),
-            'conversions' => max($dailyStats->conversions ?? 0, $conversions->count ?? 0),
-            'revenue' => max((float)($dailyStats->revenue ?? 0), (float)($conversions->revenue ?? 0)),
-            'avg_response_ms' => round($metricsStats->avg_response_ms ?? 0),
-        ];
-    }
-
-    /**
-     * Aggregate stats from chat_metrics when daily_stats is empty.
-     */
-    private function aggregateFromChatMetrics(Carbon $startDate, Carbon $endDate)
-    {
-        return DB::table('chat_metrics')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw('
-                DATE(created_at) as date,
-                COUNT(DISTINCT session_id) as unique_sessions,
-                COUNT(*) as messages_count,
-                0 as add_to_cart_sessions,
-                0 as purchase_sessions,
-                0 as total_attributed_revenue
-            ')
-            ->groupBy(DB::raw('DATE(created_at)'))
-            ->get();
     }
 
     /**

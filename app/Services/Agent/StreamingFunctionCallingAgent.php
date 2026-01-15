@@ -236,19 +236,11 @@ class StreamingFunctionCallingAgent
             
         } else {
             // No tool calls - GPT responded with text directly
+            // The content is already in assistantMessage['content'] from the first non-streaming call
             $content = $assistantMessage['content'] ?? '';
-            $collectedText = '';
             
-            if (!empty($content)) {
-                // Collect full response first (don't stream yet - might be JSON)
-                foreach ($this->streamGptResponse($messages) as $chunk) {
-                    if ($chunk['type'] === 'content') {
-                        $collectedText .= $chunk['text'];
-                    }
-                }
-            }
-            
-            $responseText = $collectedText ?: $content;
+            // Use the content directly - no need for another streaming request
+            $responseText = $content;
             $responseIntent = 'general';
             
             // Check if the response contains JSON with products

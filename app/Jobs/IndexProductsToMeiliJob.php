@@ -276,7 +276,11 @@ class IndexProductsToMeiliJob implements ShouldQueue
             $offset = 0;
             
             do {
-                $result = $index->getDocuments(['limit' => $limit, 'offset' => $offset, 'fields' => ['id']]);
+                $query = (new \Meilisearch\Contracts\DocumentsQuery())
+                    ->setLimit($limit)
+                    ->setOffset($offset)
+                    ->setFields(['id']);
+                $result = $index->getDocuments($query);
                 $docs = $result->getResults();
                 
                 if (empty($docs)) {

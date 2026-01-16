@@ -288,7 +288,7 @@ class PromptPresetsManager extends Component
                         ['role' => 'system', 'content' => $renderedPrompt],
                         ['role' => 'user', 'content' => $this->testMessage],
                     ],
-                    'max_tokens' => 500,
+                    'max_completion_tokens' => 500,
                     'temperature' => 0.7,
                 ]);
 

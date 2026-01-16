@@ -166,7 +166,7 @@ class="p-6 max-w-7xl mx-auto">
                             @if(!empty($preset->variables))
                                 <div class="flex flex-wrap gap-1">
                                     @foreach(array_slice($preset->variables, 0, 3) as $var)
-                                        <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded font-mono">@{{ '{{' . $var['name'] . '}}' }}</span>
+                                        <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded font-mono">{{ '{{' . $var['name'] . '}}' }}</span>
                                     @endforeach
                                     @if(count($preset->variables) > 3)
                                         <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">+{{ count($preset->variables) - 3 }}</span>
@@ -308,7 +308,7 @@ class="p-6 max-w-7xl mx-auto">
                         <div class="space-y-2">
                             @foreach($variables as $index => $var)
                                 <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                    <code class="text-sm text-purple-600">@{{ {{ '{{' . ($var['name'] ?? 'unnamed') . '}}' }} }}</code>
+                                    <code class="text-sm text-purple-600 font-mono bg-purple-50 px-2 py-0.5 rounded">{{ '{{' . ($var['name'] ?? 'unnamed') . '}}' }}</code>
                                     <span class="text-gray-400">=</span>
                                     <input type="text" wire:model="variables.{{ $index }}.default"
                                            class="flex-1 text-sm rounded border-gray-300"
@@ -338,11 +338,26 @@ class="p-6 max-w-7xl mx-auto">
 
                     {{-- Conditions --}}
                     <div class="border-t border-gray-200 pt-4">
-                        <h3 class="text-sm font-medium text-gray-700 mb-3">Умови застосування</h3>
+                        <div class="flex items-center gap-2 mb-3">
+                            <h3 class="text-sm font-medium text-gray-700">Умови застосування</h3>
+                            <div class="group relative">
+                                <svg class="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <div class="hidden group-hover:block absolute left-0 top-6 z-50 w-72 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg">
+                                    <p class="font-semibold mb-1">Коли застосовується пресет?</p>
+                                    <p>Пресет застосовується коли ВСІ вказані умови збігаються. Пусті поля = будь-яке значення.</p>
+                                    <p class="mt-2 text-gray-300">Приклад: Мова=UK + UTM=black_friday → пресет для української аудиторії під час акції.</p>
+                                </div>
+                            </div>
+                        </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Мова</label>
+                                <label class="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                    Мова
+                                    <span class="text-gray-400 cursor-help" title="Мова клієнта: uk (українська), en (англійська), ru (російська). Пусто = будь-яка мова.">ⓘ</span>
+                                </label>
                                 <select wire:model="language" 
                                         class="w-full rounded-lg border-gray-300 text-sm">
                                     @foreach($languages as $code => $label)
@@ -351,7 +366,10 @@ class="p-6 max-w-7xl mx-auto">
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">Тон</label>
+                                <label class="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                    Тон
+                                    <span class="text-gray-400 cursor-help" title="Налаштування тону з /admin/widget. Офіційний = формальний, Спартанський = стислий, Дружній = неформальний.">ⓘ</span>
+                                </label>
                                 <select wire:model="tone"
                                         class="w-full rounded-lg border-gray-300 text-sm">
                                     @foreach($tones as $code => $label)
@@ -360,7 +378,10 @@ class="p-6 max-w-7xl mx-auto">
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs text-gray-500 mb-1">UTM Campaign</label>
+                                <label class="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                    UTM Campaign
+                                    <span class="text-gray-400 cursor-help" title="Значення utm_campaign з URL відвідувача. Використовуйте для акцій: black_friday, summer_sale, promo2025.">ⓘ</span>
+                                </label>
                                 <input type="text" wire:model="campaign"
                                        class="w-full rounded-lg border-gray-300 text-sm"
                                        placeholder="black_friday">
@@ -369,7 +390,10 @@ class="p-6 max-w-7xl mx-auto">
 
                         {{-- Categories --}}
                         <div class="mt-4">
-                            <label class="block text-xs text-gray-500 mb-1">Категорії</label>
+                            <label class="block text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                Категорії
+                                <span class="text-gray-400 cursor-help" title="Якщо клієнт питає про товари з цих категорій — застосується цей пресет. Пусто = для всіх категорій.">ⓘ</span>
+                            </label>
                             <div class="flex flex-wrap gap-1 mb-2">
                                 @foreach($categories as $index => $cat)
                                     <span class="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">

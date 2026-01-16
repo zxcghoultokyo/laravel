@@ -29,6 +29,8 @@ class WidgetSettings extends Component
     public $bot_name = 'AIntento';
     public $bot_avatar_url = '';
     public $bot_avatar_upload = null; // For file upload
+    public $bot_avatar_base64 = null; // Base64 encoded avatar for serverless
+    public $glow_color = ''; // Glow color for avatar, defaults to primary_color if empty
     public $bot_status_text = 'Завжди онлайн';
     public $font_family = '';
     public $show_shadow = true;
@@ -63,7 +65,7 @@ class WidgetSettings extends Component
                 'primary_color', 'text_color', 'position', 'start_state',
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
-                'bot_name', 'bot_avatar_url', 'bot_status_text', 
+                'bot_name', 'bot_avatar_url', 'bot_avatar_base64', 'glow_color', 'bot_status_text', 
                 'font_family', 'show_shadow', 'tone', 'brand_rules',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
                 'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain',
@@ -105,6 +107,7 @@ class WidgetSettings extends Component
             'input_placeholder' => 'required|string|max:200',
             'bot_name' => 'nullable|string|max:100',
             'bot_avatar_url' => 'nullable|url|max:500',
+            'glow_color' => 'nullable|string|max:20',
             'bot_status_text' => 'nullable|string|max:100',
             'font_family' => 'nullable|string|max:100',
             'tone' => 'nullable|in:official,spartan,friendly',
@@ -138,6 +141,8 @@ class WidgetSettings extends Component
                 'enabled' => $this->enabled,
                 'bot_name' => $this->bot_name ?: 'AIntento',
                 'bot_avatar_url' => $this->bot_avatar_url ?: null,
+                'bot_avatar_base64' => $this->bot_avatar_base64 ?: null,
+                'glow_color' => $this->glow_color ?: null,
                 'bot_status_text' => $this->bot_status_text ?: 'Завжди онлайн',
                 'font_family' => $this->font_family ?: null,
                 'show_shadow' => $this->show_shadow,
@@ -174,16 +179,22 @@ class WidgetSettings extends Component
             'bot_avatar_upload' => 'image|max:1024', // 1MB max
         ]);
 
-        // Store the uploaded file
-        $path = $this->bot_avatar_upload->store('avatars', 'public');
+        // Convert to base64 for serverless (Laravel Cloud doesn't persist local files)
+        $fileContents = file_get_contents($this->bot_avatar_upload->getRealPath());
+        $mimeType = $this->bot_avatar_upload->getMimeType();
+        $base64 = 'data:' . $mimeType . ';base64,' . base64_encode($fileContents);
         
-        // Update the URL
-        $this->bot_avatar_url = Storage::disk('public')->url($path);
+        // Store as base64
+        $this->bot_avatar_base64 = $base64;
+        $this->bot_avatar_url = ''; // Clear URL since we use base64
         
         // Save immediately
         $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
         if ($settings) {
-            $settings->update(['bot_avatar_url' => $this->bot_avatar_url]);
+            $settings->update([
+                'bot_avatar_base64' => $this->bot_avatar_base64,
+                'bot_avatar_url' => null,
+            ]);
         }
         
         session()->flash('message', 'Аватар завантажено!');
@@ -192,10 +203,11 @@ class WidgetSettings extends Component
     public function removeAvatar()
     {
         $this->bot_avatar_url = '';
+        $this->bot_avatar_base64 = null;
         
         $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
         if ($settings) {
-            $settings->update(['bot_avatar_url' => null]);
+            $settings->update(['bot_avatar_url' => null, 'bot_avatar_base64' => null]);
         }
         
         session()->flash('message', 'Аватар видалено!');

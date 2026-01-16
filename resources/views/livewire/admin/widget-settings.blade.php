@@ -168,9 +168,9 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">Аватар бота</label>
                             <div class="flex items-start gap-4">
                                 <div class="flex-shrink-0">
-                                    @if($bot_avatar_url)
+                                    @if($bot_avatar_base64 || $bot_avatar_url)
                                         <div class="relative">
-                                            <img src="{{ $bot_avatar_url }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-gray-200">
+                                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-gray-200" style="box-shadow: 0 0 10px {{ $glow_color ?: $primary_color }};">
                                             <button type="button" wire:click="removeAvatar" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center">✕</button>
                                         </div>
                                     @else
@@ -194,6 +194,17 @@
                                 </div>
                             </div>
                             <p class="mt-2 text-xs text-gray-500">80×80px, макс 1MB</p>
+                        </div>
+
+                        <!-- Glow Color -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Колір сяйва (glow)</label>
+                            <div class="flex gap-2 items-center">
+                                <input type="color" wire:model.live="glow_color" value="{{ $glow_color ?: $primary_color }}" class="h-10 w-14 rounded border-gray-300 cursor-pointer">
+                                <input type="text" wire:model.live="glow_color" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="{{ $primary_color }}">
+                                <button type="button" wire:click="$set('glow_color', '')" class="px-3 py-2 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200" title="Скинути до основного кольору">🔄</button>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">За замовчуванням використовує основний колір</p>
                         </div>
 
                         <div>
@@ -452,9 +463,9 @@
                     <div class="bg-white flex flex-col overflow-hidden" style="border-radius: {{ $border_radius }}px; width: 340px; height: 480px; {{ $show_shadow ? 'box-shadow: 0 10px 40px rgba(0,0,0,0.15);' : '' }}">
                         <!-- Header -->
                         <div class="p-3 flex items-center gap-3" style="background: {{ $primary_color }}; color: {{ $text_color }}; border-radius: {{ $border_radius }}px {{ $border_radius }}px 0 0;">
-                            <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
-                                @if($bot_avatar_url)
-                                    <img src="{{ $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
+                            <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center overflow-hidden" style="box-shadow: 0 0 8px {{ $glow_color ?: $primary_color }};">
+                                @if($bot_avatar_base64 || $bot_avatar_url)
+                                    <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
                                 @else
                                     <span>🤖</span>
                                 @endif
@@ -469,9 +480,9 @@
                         <!-- Messages -->
                         <div class="flex-1 p-3 overflow-y-auto bg-gray-50">
                             <div class="flex gap-2 mb-3">
-                                <div class="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                                    @if($bot_avatar_url)
-                                        <img src="{{ $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
+                                <div class="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden" style="box-shadow: 0 0 6px {{ $glow_color ?: $primary_color }};">
+                                    @if($bot_avatar_base64 || $bot_avatar_url)
+                                        <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
                                     @else
                                         <span class="text-xs">🤖</span>
                                     @endif

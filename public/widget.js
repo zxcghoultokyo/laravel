@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.7';
+    const WIDGET_VERSION = '2.5.8';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -108,6 +108,8 @@
             show_shadow: true,
             bot_name: 'AIntento',
             bot_avatar_url: null,
+            bot_avatar_base64: null,
+            glow_color: null, // defaults to primary_color if null
             bot_status_text: 'Завжди онлайн',
             welcome_message: 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?',
             input_placeholder: 'Напишіть повідомлення...',
@@ -123,8 +125,11 @@
             return;
         }
 
-        // Bot avatar - use custom URL if provided, otherwise default
-        BOT_AVATAR = settings.bot_avatar_url || (BASE_URL + '/images/aintento-avatar.svg');
+        // Bot avatar - use base64 if available, then URL, otherwise default
+        BOT_AVATAR = settings.bot_avatar_base64 || settings.bot_avatar_url || (BASE_URL + '/images/aintento-avatar.svg');
+        
+        // Glow color - use custom if set, otherwise primary color
+        window.aintentoGlowColor = settings.glow_color || settings.primary_color;
 
         // Store settings globally
         window.aintentoSettings = settings;
@@ -537,6 +542,16 @@
     function injectStyles(settings) {
         if (document.getElementById('aintento-styles')) return;
         
+        // Glow color - use custom if set, otherwise primary color
+        const glowColor = settings.glow_color || settings.primary_color || '#2563eb';
+        
+        // Convert hex to rgb for rgba support
+        const hexToRgb = (hex) => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '37, 99, 235';
+        };
+        const glowRgb = hexToRgb(glowColor);
+        
         const style = document.createElement('style');
         style.id = 'aintento-styles';
         style.textContent = `
@@ -549,8 +564,8 @@
                 40% { opacity: 1; }
             }
             @keyframes aintento-glow {
-                0%, 100% { box-shadow: 0 0 5px rgba(34, 211, 238, 0.5); }
-                50% { box-shadow: 0 0 15px rgba(34, 211, 238, 0.8); }
+                0%, 100% { box-shadow: 0 0 5px rgba(${glowRgb}, 0.5); }
+                50% { box-shadow: 0 0 15px rgba(${glowRgb}, 0.8); }
             }
             .aintento-messages::-webkit-scrollbar { width: 6px; }
             .aintento-messages::-webkit-scrollbar-track { background: #f1f1f1; }

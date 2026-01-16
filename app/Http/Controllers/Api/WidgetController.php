@@ -35,6 +35,8 @@ class WidgetController extends Controller
             // Bot branding
             'bot_name' => $settings->bot_name ?: $settings->store_name ?: 'AIntento',
             'bot_avatar_url' => $settings->bot_avatar_url,
+            'bot_avatar_base64' => $settings->bot_avatar_base64,
+            'glow_color' => $settings->glow_color,
             'bot_status_text' => $settings->bot_status_text ?: 'Завжди онлайн',
             'logo_url' => $settings->logo_url,
             // Messages
@@ -60,6 +62,8 @@ class WidgetController extends Controller
             'show_shadow' => true,
             'bot_name' => 'AIntento',
             'bot_avatar_url' => null,
+            'bot_avatar_base64' => null,
+            'glow_color' => null,
             'bot_status_text' => 'Завжди онлайн',
             'logo_url' => null,
             'welcome_message' => 'Вітаю! 👋 Я AIntento — ваш персональний помічник. Чим можу допомогти?',

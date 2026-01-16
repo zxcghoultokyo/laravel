@@ -18,6 +18,8 @@ class WidgetSettings extends Model
         'logo_url',
         'bot_name',
         'bot_avatar_url',
+        'bot_avatar_base64',
+        'glow_color',
         'bot_status_text',
         'welcome_message',
         'greetings',

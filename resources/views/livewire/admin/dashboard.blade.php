@@ -72,32 +72,95 @@
         </div>
     </div>
 
-    <!-- KPI Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        @foreach($kpis as $key => $kpi)
-        <div class="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-2xl">{{ $kpi['icon'] }}</span>
-                @if($kpi['change'] != 0)
-                    <span class="text-xs px-2 py-0.5 rounded-full {{ $kpi['change'] > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
-                        {{ $kpi['change'] > 0 ? '+' : '' }}{{ $kpi['change'] }}%
-                    </span>
-                @endif
-            </div>
-            <p class="text-2xl font-bold text-gray-900">
-                @if(($kpi['format'] ?? '') === 'currency')
-                    ₴{{ number_format($kpi['value'], 0, ',', ' ') }}
-                @elseif(($kpi['format'] ?? '') === 'percent')
-                    {{ $kpi['value'] }}%
-                @elseif(($kpi['format'] ?? '') === 'ms')
-                    {{ $kpi['value'] }}<span class="text-sm font-normal text-gray-500">ms</span>
-                @else
-                    {{ number_format($kpi['value']) }}
-                @endif
-            </p>
-            <p class="text-sm text-gray-500 mt-1">{{ $kpi['label'] }}</p>
+    <!-- Horizontal Conversion Funnel (replaces KPI cards) -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">🔄 Воронка конверсії</h3>
+            @if(($funnelData['overall_rate'] ?? 0) > 0)
+                <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                    {{ $funnelData['overall_rate'] }}% загальна конверсія
+                </span>
+            @endif
         </div>
-        @endforeach
+        
+        @if(!empty($funnelData['stages']))
+            <!-- Horizontal funnel on desktop, vertical on mobile -->
+            <div class="hidden lg:flex items-stretch gap-2">
+                @foreach($funnelData['stages'] as $index => $stage)
+                    <div class="flex-1 relative group">
+                        <!-- Stage card -->
+                        <div class="bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-xl p-4 h-full hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-2xl">{{ $stage['icon'] }}</span>
+                                @if($index > 0 && $stage['rate'] > 0)
+                                    <span class="text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-orange-100 text-orange-700') }}">
+                                        {{ $stage['rate'] }}%
+                                    </span>
+                                @endif
+                            </div>
+                            <p class="text-2xl font-bold text-gray-900">{{ number_format($stage['count']) }}</p>
+                            <p class="text-sm text-gray-500 mt-1">{{ $stage['label'] }}</p>
+                            @if($index > 0 && $stage['dropoff'] > 0)
+                                <p class="text-xs text-gray-400 mt-2">-{{ $stage['dropoff'] }}% відсіялось</p>
+                            @endif
+                        </div>
+                        <!-- Arrow between stages -->
+                        @if($index < count($funnelData['stages']) - 1)
+                            <div class="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 w-6 h-6 flex items-center justify-center">
+                                <svg class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </div>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+            
+            <!-- Vertical funnel on mobile -->
+            <div class="lg:hidden space-y-3">
+                @php $maxCount = max(array_column($funnelData['stages'], 'count')) ?: 1; @endphp
+                @foreach($funnelData['stages'] as $index => $stage)
+                    <div class="group">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">{{ $stage['icon'] }}</span>
+                                <span class="text-sm font-medium text-gray-700">{{ $stage['label'] }}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-bold text-gray-900">{{ number_format($stage['count']) }}</span>
+                                @if($index > 0 && $stage['rate'] > 0)
+                                    <span class="text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                        {{ $stage['rate'] }}%
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="h-6 bg-gray-100 rounded-lg overflow-hidden relative">
+                            <div class="h-full rounded-lg transition-all duration-500 {{ $index === count($funnelData['stages']) - 1 ? 'bg-green-500' : 'bg-blue-500' }}"
+                                 style="width: {{ ($stage['count'] / $maxCount) * 100 }}%">
+                            </div>
+                            @if($index > 0 && $stage['dropoff'] > 0)
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                                    -{{ $stage['dropoff'] }}% відсіялось
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+                    @if($index < count($funnelData['stages']) - 1)
+                        <div class="flex justify-center">
+                            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                    @endif
+                @endforeach
+            </div>
+        @else
+            <div class="flex flex-col items-center justify-center h-32 text-gray-400">
+                <span class="text-4xl mb-2">📊</span>
+                <p class="text-sm">Ще немає даних</p>
+            </div>
+        @endif
     </div>
 
     <!-- Charts Row -->
@@ -105,72 +168,42 @@
         <!-- Conversations Chart -->
         <div class="bg-white rounded-xl shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">📈 Діалоги</h3>
-            <div class="h-64">
+            <div class="h-64 min-h-[16rem]" style="position: relative;">
                 <canvas id="conversationsChart"></canvas>
             </div>
         </div>
         
-        <!-- Conversion Funnel -->
+        <!-- Quick Stats Grid (replacing second funnel) -->
         <div class="bg-white rounded-xl shadow-sm p-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">🔄 Воронка конверсії</h3>
-                @if(($funnelData['overall_rate'] ?? 0) > 0)
-                    <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                        {{ $funnelData['overall_rate'] }}% загальна конверсія
-                    </span>
-                @endif
-            </div>
-            
-            @if(!empty($funnelData['stages']))
-                <div class="space-y-3">
-                    @php $maxCount = max(array_column($funnelData['stages'], 'count')) ?: 1; @endphp
-                    @foreach($funnelData['stages'] as $index => $stage)
-                        <div class="group">
-                            <div class="flex items-center justify-between mb-1">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-lg">{{ $stage['icon'] }}</span>
-                                    <span class="text-sm font-medium text-gray-700">{{ $stage['label'] }}</span>
-                                    <span class="text-xs text-gray-400 hidden group-hover:inline" title="{{ $stage['hint'] }}">
-                                        (??)
-                                    </span>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-sm font-bold text-gray-900">{{ number_format($stage['count']) }}</span>
-                                    @if($index > 0 && $stage['rate'] > 0)
-                                        <span class="text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
-                                            {{ $stage['rate'] }}%
-                                        </span>
-                                    @endif
-                                </div>
-                            </div>
-                            <!-- Progress bar -->
-                            <div class="h-6 bg-gray-100 rounded-lg overflow-hidden relative">
-                                <div class="h-full rounded-lg transition-all duration-500 {{ $index === count($funnelData['stages']) - 1 ? 'bg-green-500' : 'bg-blue-500' }}"
-                                     style="width: {{ ($stage['count'] / $maxCount) * 100 }}%">
-                                </div>
-                                @if($index > 0 && $stage['dropoff'] > 0)
-                                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
-                                        -{{ $stage['dropoff'] }}% відсіялось
-                                    </span>
-                                @endif
-                            </div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Ключові метрики</h3>
+            <div class="grid grid-cols-2 gap-4">
+                @foreach($kpis as $key => $kpi)
+                    @if(in_array($key, ['conversions', 'revenue', 'conversion_rate', 'avg_response']))
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xl">{{ $kpi['icon'] }}</span>
+                            @if($kpi['change'] != 0)
+                                <span class="text-xs px-2 py-0.5 rounded-full {{ $kpi['change'] > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+                                    {{ $kpi['change'] > 0 ? '+' : '' }}{{ $kpi['change'] }}%
+                                </span>
+                            @endif
                         </div>
-                        @if($index < count($funnelData['stages']) - 1)
-                            <div class="flex justify-center">
-                                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </div>
-                        @endif
-                    @endforeach
-                </div>
-            @else
-                <div class="flex flex-col items-center justify-center h-48 text-gray-400">
-                    <span class="text-4xl mb-2">📊</span>
-                    <p class="text-sm">Ще немає даних</p>
-                    <p class="text-xs mt-1">Дані з'являться після перших відвідувачів</p>
-                </div>
-            @endif
+                        <p class="text-xl font-bold text-gray-900">
+                            @if(($kpi['format'] ?? '') === 'currency')
+                                ₴{{ number_format($kpi['value'], 0, ',', ' ') }}
+                            @elseif(($kpi['format'] ?? '') === 'percent')
+                                {{ $kpi['value'] }}%
+                            @elseif(($kpi['format'] ?? '') === 'ms')
+                                {{ $kpi['value'] }}<span class="text-sm font-normal text-gray-500">ms</span>
+                            @else
+                                {{ number_format($kpi['value']) }}
+                            @endif
+                        </p>
+                        <p class="text-xs text-gray-500 mt-1">{{ $kpi['label'] }}</p>
+                    </div>
+                    @endif
+                @endforeach
+            </div>
         </div>
     </div>
 
@@ -410,6 +443,7 @@
         function dashboardCharts() {
             return {
                 conversationsChart: null,
+                resizeTimeout: null,
                 
                 initCharts() {
                     this.$nextTick(() => {
@@ -422,14 +456,29 @@
                             this.createConversationsChart();
                         });
                     });
+                    
+                    // Handle window resize with debounce
+                    window.addEventListener('resize', () => {
+                        clearTimeout(this.resizeTimeout);
+                        this.resizeTimeout = setTimeout(() => {
+                            if (this.conversationsChart) {
+                                this.conversationsChart.resize();
+                            }
+                        }, 100);
+                    });
                 },
                 
                 createConversationsChart() {
                     const ctx = document.getElementById('conversationsChart');
                     if (!ctx) return;
                     
+                    // Get parent container dimensions
+                    const container = ctx.parentElement;
+                    if (!container) return;
+                    
                     if (this.conversationsChart) {
                         this.conversationsChart.destroy();
+                        this.conversationsChart = null;
                     }
                     
                     const chartData = @json($chartData);
@@ -451,6 +500,7 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            resizeDelay: 0,
                             plugins: {
                                 legend: { display: false }
                             },

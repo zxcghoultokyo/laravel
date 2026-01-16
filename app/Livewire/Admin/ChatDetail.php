@@ -35,45 +35,42 @@ class ChatDetail extends Component
 
     public function loadSession()
     {
-        // Try to find existing session
-        $this->session = ChatSession::where('session_id', $this->sessionId)
+        // Try to find existing session - could be id or session_id string
+        $this->session = ChatSession::where('id', $this->sessionId)
+            ->orWhere('session_id', $this->sessionId)
             ->with('messages')
             ->first();
         
-        // If session doesn't exist but messages do, create session from messages
+        // If session doesn't exist, try to find by chat_session_id in messages
         if (!$this->session) {
             $firstMessage = DB::table('chat_messages')
                 ->where('chat_session_id', $this->sessionId)
-                ->orWhere('session_id', $this->sessionId)
                 ->orderBy('created_at')
                 ->first();
             
             if ($firstMessage) {
-                $this->session = ChatSession::create([
-                    'session_id' => $this->sessionId,
-                    'created_at' => $firstMessage->created_at,
-                    'updated_at' => now(),
-                ]);
+                // Find or create session
+                $this->session = ChatSession::firstOrCreate(
+                    ['id' => $firstMessage->chat_session_id],
+                    [
+                        'session_id' => (string) $firstMessage->chat_session_id,
+                        'created_at' => $firstMessage->created_at,
+                        'updated_at' => now(),
+                    ]
+                );
             } else {
                 abort(404, 'Сесія не знайдена');
             }
         }
         
-        // Load messages - try both column names for compatibility
-        $sessionId = $this->session->id;
-        $this->messages = ChatMessage::where('chat_session_id', $sessionId)
-            ->orWhere('chat_session_id', $this->sessionId)
-            ->orWhere(function ($q) {
-                if (\Schema::hasColumn('chat_messages', 'session_id')) {
-                    $q->where('session_id', $this->sessionId);
-                }
-            })
+        // Load messages by chat_session_id only (session_id column doesn't exist)
+        $this->messages = ChatMessage::where('chat_session_id', $this->session->id)
             ->orderBy('created_at')
             ->get();
         
         // Check if operator has taken over
         $this->activeSessionData = DB::table('active_chat_sessions')
-            ->where('session_id', $this->sessionId)
+            ->where('session_id', $this->session->session_id ?? $this->sessionId)
             ->first();
         $this->operatorMode = $this->activeSessionData && $this->activeSessionData->status === 'operator';
     }

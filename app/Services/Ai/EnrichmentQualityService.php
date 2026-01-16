@@ -82,21 +82,21 @@ class EnrichmentQualityService
             return [
                 'total_products' => $totalProducts,
                 'total_ai_index' => $totalAiIndex,
-                'coverage_percent' => $totalProducts > 0 ? round(($totalAiIndex / $totalProducts) * 100, 1) : 0,
+                'coverage_percent' => $totalProducts > 0 ? min(100, round(($totalAiIndex / $totalProducts) * 100, 1)) : 0,
                 
                 'with_product_type' => $withProductType,
-                'type_coverage_percent' => $totalAiIndex > 0 ? round(($withProductType / $totalAiIndex) * 100, 1) : 0,
+                'type_coverage_percent' => $totalAiIndex > 0 ? min(100, round(($withProductType / $totalAiIndex) * 100, 1)) : 0,
                 
                 'with_slang' => $withSlang,
-                'slang_coverage_percent' => $totalAiIndex > 0 ? round(($withSlang / $totalAiIndex) * 100, 1) : 0,
+                'slang_coverage_percent' => $totalAiIndex > 0 ? min(100, round(($withSlang / $totalAiIndex) * 100, 1)) : 0,
                 'avg_slang_count' => round($avgSlangCount, 1),
                 
                 'with_keywords' => $withKeywords,
-                'keywords_coverage_percent' => $totalAiIndex > 0 ? round(($withKeywords / $totalAiIndex) * 100, 1) : 0,
+                'keywords_coverage_percent' => $totalAiIndex > 0 ? min(100, round(($withKeywords / $totalAiIndex) * 100, 1)) : 0,
                 'avg_keywords_count' => round($avgKeywordsCount, 1),
                 
                 'with_raw_ai' => $withRawAi,
-                'ai_enriched_percent' => $totalAiIndex > 0 ? round(($withRawAi / $totalAiIndex) * 100, 1) : 0,
+                'ai_enriched_percent' => $totalAiIndex > 0 ? min(100, round(($withRawAi / $totalAiIndex) * 100, 1)) : 0,
                 
                 'type_distribution' => $typeDistribution,
             ];

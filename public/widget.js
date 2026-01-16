@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.6.0';
+    const WIDGET_VERSION = '2.6.1';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -250,24 +250,29 @@
      * Tracks when user submits order on Horoshop checkout page
      */
     function setupCheckoutTracking() {
-        // Check if we're on checkout page
+        // Hook into Horoshop's marketingEvents system
+        setupHoroshopCheckoutHook();
+        
+        // Fallback: Check if we're on checkout page for form-based tracking
         const isCheckoutPage = window.location.pathname.includes('/checkout') ||
                                document.querySelector('form[action*="/order/submit"]') ||
                                document.querySelector('.checkout');
         
         if (!isCheckoutPage) {
-            log('Not a checkout page, skipping checkout tracking');
+            log('Not a checkout page, skipping form-based checkout tracking');
             return;
         }
         
-        log('Checkout page detected, setting up tracking');
+        log('Checkout page detected, setting up form tracking');
         
         // Horoshop checkout form selectors
         const checkoutFormSelectors = [
             'form[action*="/order/submit"]',
             'form#checkout-container',
             '.checkout form',
-            'form[action*="checkout"]'
+            'form[action*="checkout"]',
+            '#checkout form',
+            '.order-form'
         ];
         
         // Submit button selectors
@@ -335,6 +340,152 @@
         });
         
         log('Checkout tracking initialized');
+    }
+    
+    /**
+     * Hook into Horoshop's marketing events system
+     * This is the most reliable way to track checkout completion
+     */
+    function setupHoroshopCheckoutHook() {
+        // Wait for Horoshop's INIT system
+        const hookHoroshop = () => {
+            // Method 1: Hook into marketingEvents.checkout_success array
+            if (window.marketingEvents && Array.isArray(window.marketingEvents.checkout_success)) {
+                window.marketingEvents.checkout_success.push(function(order_id, cart, name, email, phone, eventId) {
+                    log('Horoshop checkout_success triggered:', { order_id, cart, name, email, phone });
+                    trackCheckoutSuccess(order_id, cart, name, email, phone);
+                });
+                log('Hooked into Horoshop marketingEvents.checkout_success');
+                return true;
+            }
+            
+            // Method 2: Override triggerMarketingEvent
+            if (window.triggerMarketingEvent) {
+                const originalTrigger = window.triggerMarketingEvent;
+                window.triggerMarketingEvent = function(eventName, args) {
+                    if (eventName === 'checkout_success') {
+                        log('Intercepted triggerMarketingEvent checkout_success:', args);
+                        const [order_id, cart, name, email, phone] = args || [];
+                        trackCheckoutSuccess(order_id, cart, name, email, phone);
+                    }
+                    return originalTrigger.apply(this, arguments);
+                };
+                log('Hooked triggerMarketingEvent');
+                return true;
+            }
+            
+            return false;
+        };
+        
+        // Try immediately
+        if (!hookHoroshop()) {
+            // Retry after DOM ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(hookHoroshop, 500);
+                });
+            } else {
+                setTimeout(hookHoroshop, 500);
+            }
+            // Retry after window load (for lazy-loaded scripts)
+            window.addEventListener('load', () => {
+                setTimeout(hookHoroshop, 1000);
+            });
+        }
+        
+        // Method 3: Listen for .j-submit button click as backup
+        document.addEventListener('click', (e) => {
+            const submitBtn = e.target.closest('.j-submit, button[type="submit"].btn');
+            if (submitBtn && !submitBtn.disabled) {
+                const isCheckoutPage = window.location.pathname.includes('/checkout') ||
+                                       document.querySelector('.checkout-footer');
+                if (isCheckoutPage) {
+                    log('Checkout submit button clicked');
+                    // Store pending checkout for success tracking
+                    sessionStorage.setItem('aintento_pending_checkout', JSON.stringify({
+                        timestamp: Date.now(),
+                        session_id: localStorage.getItem('aintento_session_id')
+                    }));
+                }
+            }
+        }, true);
+        
+        // Method 4: Listen for URL change to thank-you page
+        const checkThankYouPage = () => {
+            const isThankYou = window.location.pathname.includes('/checkout/success') ||
+                               window.location.pathname.includes('/thank') ||
+                               document.querySelector('.checkout-success, .order-success, .thank-you');
+            if (isThankYou) {
+                const pending = sessionStorage.getItem('aintento_pending_checkout');
+                if (pending) {
+                    log('Thank you page detected with pending checkout');
+                    const data = JSON.parse(pending);
+                    // Only track if within last 5 minutes
+                    if (Date.now() - data.timestamp < 300000) {
+                        trackCheckoutSuccess(null, null, null, null, null);
+                    }
+                    sessionStorage.removeItem('aintento_pending_checkout');
+                }
+            }
+        };
+        
+        // Check on page load
+        checkThankYouPage();
+    }
+    
+    /**
+     * Track checkout success event
+     */
+    function trackCheckoutSuccess(order_id, cart, name, email, phone) {
+        const sessionId = localStorage.getItem('aintento_session_id');
+        const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
+        const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
+        const hadChatConversation = messages && JSON.parse(messages).length > 0;
+        
+        // Get products shown in chat
+        const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
+        const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
+        
+        // Extract cart data
+        let orderTotal = 0;
+        let itemsCount = 0;
+        let products = [];
+        
+        if (cart && cart.products) {
+            products = cart.products.map(p => ({
+                id: p.id,
+                title: p.title,
+                price: p.price?.value || p.price,
+                quantity: p.quantity
+            }));
+            itemsCount = products.reduce((sum, p) => sum + (p.quantity || 1), 0);
+            orderTotal = cart.total?.total?.sum || cart.total?.sum || 0;
+        }
+        
+        // Check if any product in order was shown in chat
+        const hasProductFromChat = products.some(p => 
+            shownProducts.includes(String(p.id)) || 
+            shownProducts.includes(p.article)
+        );
+        
+        sendAnalyticsEvent('checkout_success', {
+            order_id: order_id,
+            order_total: orderTotal,
+            items_count: itemsCount,
+            has_email: !!email,
+            has_phone: !!phone,
+            had_chat_conversation: hadChatConversation,
+            has_product_from_chat: hasProductFromChat,
+            products_from_chat_count: shownProducts.length
+        });
+        
+        log('Checkout success tracked:', {
+            order_id,
+            orderTotal,
+            itemsCount,
+            hadChatConversation,
+            hasProductFromChat
+        });
     }
     
     /**

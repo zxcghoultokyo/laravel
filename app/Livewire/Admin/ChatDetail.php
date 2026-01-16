@@ -103,7 +103,17 @@ class ChatDetail extends Component
                 if ($event->product_id) {
                     $product = DB::table('products')
                         ->where('id', $event->product_id)
-                        ->first(['id', 'title', 'article', 'url']);
+                        ->first(['id', 'title', 'article']);
+                    
+                    if ($product) {
+                        // Generate URL from raw data or article
+                        $rawData = DB::table('products')
+                            ->where('id', $event->product_id)
+                            ->value('raw');
+                        $raw = json_decode($rawData ?? '{}', true);
+                        $product->url = $raw['url'] ?? $raw['link'] ?? null;
+                    }
+                    
                     $event->product = $product;
                 }
                 

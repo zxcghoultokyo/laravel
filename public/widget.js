@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.4';
+    const WIDGET_VERSION = '2.5.5';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -750,6 +750,18 @@
                         ">✕</button>
                     </div>
 
+                    <!-- Beta warning banner -->
+                    <div style="
+                        background: linear-gradient(90deg, #fef3c7, #fde68a);
+                        padding: 6px 12px;
+                        font-size: 11px;
+                        color: #92400e;
+                        text-align: center;
+                        border-bottom: 1px solid #fcd34d;
+                    ">
+                        ⚠️ Бот в активній розробці — можливі помилки
+                    </div>
+
                     <div id="aintento-messages" class="aintento-messages" style="
                         flex: 1;
                         overflow-y: auto;
@@ -933,11 +945,6 @@
             if (!s.store_address && !s.store_phone && !s.store_hours) {
                 info += '📞 Зв\'яжіться з нами через сайт\n';
                 info += '🕐 Працюємо щодня\n';
-            }
-            
-            info += '\nЧим можу допомогти? 😊';
-            return info;
-        }
             }
             
             info += '\nЧим можу допомогти? 😊';

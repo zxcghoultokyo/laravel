@@ -31,6 +31,57 @@ class="p-6 max-w-7xl mx-auto">
         </button>
     </div>
 
+    {{-- Info Banner with FAQ --}}
+    <div x-data="{ showHelp: false }" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <div class="flex items-start justify-between">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                <div class="text-sm text-amber-800">
+                    <p><strong>Привітання</strong> — перше повідомлення, яке бачить клієнт при відкритті чату.</p>
+                    <p class="mt-1">Різні привітання для різних умов (рекламні кампанії, пристрої, час доби).</p>
+                </div>
+            </div>
+            <button @click="showHelp = !showHelp" class="text-amber-600 hover:text-amber-800 text-sm flex items-center gap-1">
+                <span x-text="showHelp ? 'Сховати' : 'Детальніше'"></span>
+                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showHelp }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div x-show="showHelp" x-collapse class="mt-4 pt-4 border-t border-amber-200 text-sm text-amber-900 space-y-4">
+            {{-- Conditions FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">🎯 Умови показу</h4>
+                <div class="bg-white rounded p-3 space-y-1">
+                    <p><strong>UTM Campaign</strong> — показувати для конкретної рекламної кампанії (utm_campaign=black_friday)</p>
+                    <p><strong>UTM Source</strong> — джерело трафіку (google, facebook, instagram)</p>
+                    <p><strong>URL містить</strong> — якщо URL сторінки містить текст (наприклад: /sale/)</p>
+                    <p><strong>Категорія</strong> — якщо відвідувач на сторінці категорії товарів</p>
+                    <p><strong>Пристрій</strong> — mobile (телефони), desktop (комп'ютери), any (всі)</p>
+                    <p><strong>Тип відвідувача</strong> — new (перший візит), returning (повернувся)</p>
+                    <p><strong>Час</strong> — діапазон годин (напр. 09:00-18:00 для робочого часу)</p>
+                </div>
+            </div>
+            
+            {{-- Quick Actions FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">⚡ Швидкі дії</h4>
+                <p>Кнопки під привітанням, які клієнт може натиснути для швидкого старту розмови.</p>
+                <p class="text-amber-700 mt-1">Приклад: "🔥 Що популярне?" → відправить запит "покажи популярні товари"</p>
+            </div>
+            
+            {{-- Priority FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">📊 Пріоритет</h4>
+                <p>Якщо кілька привітань підходять — показується з найвищим пріоритетом (0-1000).</p>
+                <p class="text-amber-700 mt-1">Привітання "За замовчуванням" показується якщо жодне інше не підійшло.</p>
+            </div>
+        </div>
+    </div>
+
     {{-- Greetings Table --}}
     <div class="bg-white rounded-lg shadow overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
@@ -219,24 +270,36 @@ class="p-6 max-w-7xl mx-auto">
 
                         {{-- Conditions --}}
                         <div class="space-y-4">
-                            <h3 class="font-medium text-gray-900 border-b pb-2">🎯 Умови показу</h3>
+                            <div class="flex items-center gap-2 border-b pb-2">
+                                <h3 class="font-medium text-gray-900">🎯 Умови показу</h3>
+                                <span class="text-gray-400 cursor-help text-sm" title="Привітання показується коли ВСІ вказані умови збігаються. Пусті поля ігноруються.">ⓘ</span>
+                            </div>
                             <p class="text-sm text-gray-500">Залиште поле пустим, щоб ігнорувати цю умову</p>
                             
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">UTM Campaign</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        UTM Campaign
+                                        <span class="text-gray-400 cursor-help" title="Параметр utm_campaign з URL. Наприклад: site.com?utm_campaign=black_friday">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="utm_campaign" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="black_friday">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">UTM Source</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        UTM Source
+                                        <span class="text-gray-400 cursor-help" title="Джерело трафіку: google, facebook, instagram, tiktok...">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="utm_source" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="facebook">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">UTM Medium</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        UTM Medium
+                                        <span class="text-gray-400 cursor-help" title="Тип трафіку: cpc (платна реклама), organic, email, social...">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="utm_medium" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="cpc">
@@ -245,13 +308,19 @@ class="p-6 max-w-7xl mx-auto">
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">URL містить</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        URL містить
+                                        <span class="text-gray-400 cursor-help" title="Якщо URL сторінки містить цей текст. Наприклад: /sale/ або /helmets/">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="url_contains" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="/sale/">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Категорія</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Категорія
+                                        <span class="text-gray-400 cursor-help" title="Slug категорії магазину. Наприклад: plate-carriers, helmets, pouches">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="category_path" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="plate-carriers">
@@ -260,7 +329,10 @@ class="p-6 max-w-7xl mx-auto">
 
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Пристрій</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Пристрій
+                                        <span class="text-gray-400 cursor-help" title="Mobile = смартфони та планшети, Desktop = комп'ютери та ноутбуки">ⓘ</span>
+                                    </label>
                                     <select wire:model="device" class="w-full px-3 py-2 border rounded-lg text-sm">
                                         <option value="any">Будь-який</option>
                                         <option value="mobile">Мобільний</option>
@@ -268,7 +340,10 @@ class="p-6 max-w-7xl mx-auto">
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Тип відвідувача</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Тип відвідувача
+                                        <span class="text-gray-400 cursor-help" title="Новий = перше відвідування, Повертається = був раніше (cookie)">ⓘ</span>
+                                    </label>
                                     <select wire:model="visitor_type" class="w-full px-3 py-2 border rounded-lg text-sm">
                                         <option value="any">Будь-який</option>
                                         <option value="new">Новий</option>
@@ -276,7 +351,10 @@ class="p-6 max-w-7xl mx-auto">
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Мова браузера</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Мова браузера
+                                        <span class="text-gray-400 cursor-help" title="Двобуквенний код мови з налаштувань браузера: uk, en, pl, de...">ⓘ</span>
+                                    </label>
                                     <input type="text" wire:model="language" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm"
                                            placeholder="uk, en, pl">
@@ -285,12 +363,18 @@ class="p-6 max-w-7xl mx-auto">
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Час з</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Час з
+                                        <span class="text-gray-400 cursor-help" title="Показувати тільки з цієї години (за Київським часом)">ⓘ</span>
+                                    </label>
                                     <input type="time" wire:model="time_start" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Час до</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Час до
+                                        <span class="text-gray-400 cursor-help" title="Показувати до цієї години (за Київським часом)">ⓘ</span>
+                                    </label>
                                     <input type="time" wire:model="time_end" 
                                            class="w-full px-3 py-2 border rounded-lg text-sm">
                                 </div>
@@ -299,11 +383,17 @@ class="p-6 max-w-7xl mx-auto">
 
                         {{-- Settings --}}
                         <div class="space-y-4">
-                            <h3 class="font-medium text-gray-900 border-b pb-2">⚙️ Налаштування</h3>
+                            <div class="flex items-center gap-2 border-b pb-2">
+                                <h3 class="font-medium text-gray-900">⚙️ Налаштування</h3>
+                                <span class="text-gray-400 cursor-help text-sm" title="Пріоритет визначає порядок перевірки. Активність дозволяє тимчасово вимкнути без видалення.">ⓘ</span>
+                            </div>
                             
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Пріоритет</label>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                                        Пріоритет
+                                        <span class="text-gray-400 cursor-help" title="Чим вище число — тим раніше перевіряється. 100 = перше, 0 = останнє. Default завжди має пріоритет 0.">ⓘ</span>
+                                    </label>
                                     <input type="number" wire:model="priority" min="0" max="1000"
                                            class="w-full px-3 py-2 border rounded-lg text-sm">
                                     <p class="text-xs text-gray-500 mt-1">Вищий = перевіряється раніше</p>

@@ -71,6 +71,8 @@ class TenantsManager extends Component
             'editForm.name' => 'required|string|max:255',
             'editForm.slug' => 'required|string|max:100',
             'editForm.status' => 'required|in:active,suspended,trial',
+            'editForm.messages_limit' => 'nullable|integer|min:0|max:2147483647',
+            'editForm.products_limit' => 'nullable|integer|min:0|max:2147483647',
         ]);
 
         $tenant = Tenant::findOrFail($this->editingTenantId);

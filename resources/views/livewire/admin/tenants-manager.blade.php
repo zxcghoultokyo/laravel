@@ -200,11 +200,13 @@
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Ліміт повідомлень</label>
-                            <input type="number" wire:model="editForm.messages_limit" class="w-full px-3 py-2 border border-gray-200 rounded-lg">
+                            <input type="number" wire:model="editForm.messages_limit" min="0" max="2147483647" class="w-full px-3 py-2 border border-gray-200 rounded-lg">
+                            <p class="text-xs text-gray-500 mt-1">0 = без ліміту</p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Ліміт товарів</label>
-                            <input type="number" wire:model="editForm.products_limit" class="w-full px-3 py-2 border border-gray-200 rounded-lg">
+                            <input type="number" wire:model="editForm.products_limit" min="0" max="2147483647" class="w-full px-3 py-2 border border-gray-200 rounded-lg">
+                            <p class="text-xs text-gray-500 mt-1">0 = без ліміту</p>
                         </div>
                     </div>
                 </div>

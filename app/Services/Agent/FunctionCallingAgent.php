@@ -262,7 +262,7 @@ class FunctionCallingAgent
 
     /**
      * System prompt - the brain of the agent
-     * First checks for matching PromptPreset, falls back to default.
+     * First checks for matching PromptPreset, then MERGES with core rules.
      */
     private function getSystemPrompt(): string
     {
@@ -272,15 +272,67 @@ class FunctionCallingAgent
             $this->getDefaultVariables()
         );
         
+        // Get core rules (these ALWAYS apply)
+        $coreRules = $this->getCoreRules();
+        
         if ($customPrompt) {
-            Log::debug('FunctionCallingAgent: using custom prompt preset', [
+            Log::debug('FunctionCallingAgent: using custom prompt preset + core rules', [
                 'context' => $this->currentContext,
             ]);
-            return $customPrompt;
+            // Custom prompt provides identity and expertise, core rules provide behavior
+            return $customPrompt . "\n\n" . $coreRules;
         }
         
-        // Fall back to default built-in prompt
+        // Fall back to full default built-in prompt
         return $this->getDefaultSystemPrompt();
+    }
+    
+    /**
+     * Get core rules that ALWAYS apply regardless of custom preset.
+     * These are essential behavioral rules for the AI agent.
+     */
+    private function getCoreRules(): string
+    {
+        $priceContext = $this->loadPriceContext();
+        
+        return <<<RULES
+=== ОБОВ'ЯЗКОВІ ПРАВИЛА (ЗАВЖДИ ЗАСТОСОВУЮТЬСЯ) ===
+
+ЛАКОНІЧНІСТЬ — КРИТИЧНО:
+- Максимум 2-3 речення перед показом товарів
+- НЕ пиши розлогих описів — клієнт хоче бачити ТОВАРИ!
+- НЕ використовуй Markdown (**, ##, -, •) в текстових відповідях
+- Емодзі — тільки 1-2 на повідомлення
+
+ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
+Не кажи "цього немає" поки не перевіриш пошуком.
+
+ФОРМАТ ВІДПОВІДІ:
+1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}], "_context": "..."}
+2. Текстові питання → JSON: {"text": "...", "_context": "..."}
+3. intro/text — максимум 2-3 речення!
+
+АВТОВИПРАВЛЕННЯ (виправляй помилки і шукай):
+- плитноска, плейткерієр → плитоноска
+- опс кор, опскор → Ops-Core
+- берци, ботінки → берці
+- шлем, каска → шолом (шукай "шолом OR каска")
+
+СИНОНІМИ ПРИ ПОШУКУ (використовуй OR):
+- шолом → search_products(query="шолом OR каска OR helmet")
+- сорочка → search_products(query="сорочка OR shirt")
+
+МУЛЬТИМОВНІСТЬ:
+- Відповідай МОВОЮ КОРИСТУВАЧА
+- При пошуку загальні слова українською, БРЕНДИ оригінальними
+
+{$priceContext}
+
+ПАМ'ЯТЬ КОНТЕКСТУ:
+- НЕ питай "що хочеш купити" якщо в історії вже є товар
+- Якщо обговорювали товар — ПАМ'ЯТАЙ через всю розмову
+- В історії є маркери [Показані товари: ...] — використовуй їх!
+RULES;
     }
     
     /**

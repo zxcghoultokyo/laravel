@@ -144,7 +144,7 @@ class PromptGeneratorService
     private function generatePromptWithAi(StoreContext $context): string
     {
         $settings = $context->widgetSettings;
-        $storeName = $settings?->store_name ?? $settings?->bot_name ?? 'магазин';
+        $storeName = $this->extractStoreName($settings);
         
         $storeData = [
             'name' => $storeName,
@@ -177,15 +177,18 @@ class PromptGeneratorService
 ПОВЕРНЕННЯ: {$storeData['returns']}
 
 ВИМОГИ ДО ПРОМПТУ:
-1. Почни з "Ти — AI-консультант магазину {$storeData['name']}."
-2. Опиши експертизу AI виходячи з категорій (що він знає, в чому розбирається)
-3. Додай 3-5 корисних знань про товари цієї ніші які допоможуть консультувати
+1. Почни з "Ти — AI-консультант магазину \"{$storeData['name']}\"."
+2. Опиши експертизу AI виходячи з категорій (2-3 пункти що він знає)
+3. Додай 3-5 коротких знань про товари цієї ніші
 4. Додай цінові сегменти (бюджетний/середній/преміум) з конкретними цінами
-5. Включи інформацію про доставку/повернення
-6. Обов'язково включи рядок: {{tone_section}}
-7. Закінчи секцією ПРАВИЛА з 3-4 правилами для AI
+5. Обов'язково включи рядок: {{tone_section}}
+6. КРИТИЧНО — секція ПРАВИЛА повинна включати:
+   - "Відповідай МАКСИМУМ 2-3 реченнями"
+   - "НЕ використовуй Markdown/емодзі крім карток товарів"
+   - "Після пошуку товарів — ТІЛЬКИ JSON формат"
+   - "НЕ пиши розлогих описів — показуй товари!"
 
-Відповідай ТІЛЬКИ системним промптом українською мовою, без пояснень та коментарів.
+Відповідай ТІЛЬКИ системним промптом українською мовою, без пояснень.
 PROMPT;
 
         try {
@@ -232,6 +235,43 @@ PROMPT;
     }
 
     /**
+     * Extract store name from settings or FAQ text.
+     */
+    private function extractStoreName(?WidgetSettings $settings): string
+    {
+        // First try direct fields
+        if (!empty($settings?->store_name)) {
+            return $settings->store_name;
+        }
+        
+        if (!empty($settings?->bot_name)) {
+            return $settings->bot_name;
+        }
+        
+        // Try to extract from FAQ about text
+        $aboutText = $settings?->faq_about_text ?? '';
+        if (!empty($aboutText)) {
+            // Look for patterns like "CONTRACTOR — українська команда" or "Магазин X — це"
+            if (preg_match('/^([A-ZА-ЯІЇЄҐ][A-Za-zА-Яа-яІіЇїЄєҐґ\s\.]+?)\s*[—–-]\s*/mu', $aboutText, $matches)) {
+                $name = trim($matches[1]);
+                if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
+                    return $name;
+                }
+            }
+            
+            // Try "Магазин X" pattern
+            if (preg_match('/магазин[у]?\s+["\']?([А-Яа-яA-Za-z][А-Яа-яA-Za-z0-9\s\.]+)["\']?/iu', $aboutText, $matches)) {
+                $name = trim($matches[1]);
+                if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
+                    return $name;
+                }
+            }
+        }
+        
+        return 'магазин';
+    }
+
+    /**
      * Create PromptPreset from StoreContext.
      */
     public function createPresetFromContext(StoreContext $context, ?string $name = null): PromptPreset
@@ -239,7 +279,7 @@ PROMPT;
         $prompt = $this->generatePrompt($context);
         
         $settings = $context->widgetSettings;
-        $storeName = $settings?->store_name ?? $settings?->bot_name ?? 'Store';
+        $storeName = $this->extractStoreName($settings);
         
         return PromptPreset::create([
             'name' => $name ?? "Auto: {$storeName}",

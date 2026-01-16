@@ -387,7 +387,7 @@ class StreamingFunctionCallingAgent
 
     /**
      * Get system prompt (same as FunctionCallingAgent).
-     * First checks for matching PromptPreset, falls back to default.
+     * First checks for matching PromptPreset, then MERGES with core rules.
      */
     private function getSystemPrompt(): string
     {
@@ -397,15 +397,59 @@ class StreamingFunctionCallingAgent
             $this->getDefaultVariables()
         );
         
+        // Get core rules (these ALWAYS apply)
+        $coreRules = $this->getCoreRules();
+        
         if ($customPrompt) {
-            Log::debug('StreamingAgent: using custom prompt preset', [
+            Log::debug('StreamingAgent: using custom prompt preset + core rules', [
                 'context' => $this->currentContext,
             ]);
-            return $customPrompt;
+            // Custom prompt provides identity and expertise, core rules provide behavior
+            return $customPrompt . "\n\n" . $coreRules;
         }
         
         // Fall back to default built-in prompt
         return $this->getDefaultSystemPrompt();
+    }
+    
+    /**
+     * Get core rules that ALWAYS apply regardless of custom preset.
+     */
+    private function getCoreRules(): string
+    {
+        $priceContext = $this->loadPriceContext();
+        
+        return <<<RULES
+=== ОБОВ'ЯЗКОВІ ПРАВИЛА (ЗАВЖДИ ЗАСТОСОВУЮТЬСЯ) ===
+
+ЛАКОНІЧНІСТЬ — КРИТИЧНО:
+- Максимум 2-3 речення перед показом товарів
+- НЕ пиши розлогих описів — клієнт хоче бачити ТОВАРИ!
+- НЕ використовуй Markdown (**, ##, -, •) в текстових відповідях
+- Емодзі — тільки 1-2 на повідомлення
+
+ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
+Не кажи "цього немає" поки не перевіриш пошуком.
+
+ФОРМАТ ВІДПОВІДІ:
+1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}], "_context": "..."}
+2. Текстові питання → JSON: {"text": "...", "_context": "..."}
+3. intro/text — максимум 2-3 речення!
+
+АВТОВИПРАВЛЕННЯ:
+- плитноска → плитоноска
+- опс кор → Ops-Core
+- шлем, каска → шолом
+
+СИНОНІМИ ПРИ ПОШУКУ (використовуй OR):
+- шолом → search_products(query="шолом OR каска")
+
+{$priceContext}
+
+ПАМ'ЯТЬ КОНТЕКСТУ:
+- НЕ питай "що хочеш" якщо в історії вже є товар
+- В історії є [Показані товари: ...] — використовуй їх!
+RULES;
     }
     
     /**

@@ -260,6 +260,120 @@
         </div>
     </div>
 
+    <!-- Advanced Analytics (collapsible) -->
+    <div class="mt-6 bg-white rounded-xl shadow-sm overflow-hidden">
+        <button wire:click="toggleAdvanced" class="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition">
+            <span class="text-sm font-medium text-gray-600">
+                📊 Розширена аналітика
+                @if(!empty($aiQuality) && isset($aiQuality['score']))
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full 
+                        {{ $aiQuality['score'] >= 80 ? 'bg-green-100 text-green-700' : ($aiQuality['score'] >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                        AI: {{ $aiQuality['grade'] ?? 'N/A' }}
+                    </span>
+                @endif
+                @if(!empty($abTestStats) && ($abTestStats['enabled'] ?? false))
+                    <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                        A/B тест активний
+                    </span>
+                @endif
+            </span>
+            <svg class="w-5 h-5 text-gray-400 transform transition {{ $showAdvanced ? 'rotate-180' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+        </button>
+        
+        @if($showAdvanced)
+        <div class="px-6 pb-6 border-t border-gray-100 pt-4">
+            <div class="grid grid-cols-2 gap-6">
+                <!-- AI Quality Score -->
+                <div class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-gray-900">🤖 AI Index Quality</h4>
+                        @if(isset($aiQuality['score']))
+                            <div class="text-3xl font-bold {{ $aiQuality['score'] >= 80 ? 'text-green-600' : ($aiQuality['score'] >= 60 ? 'text-yellow-600' : 'text-red-600') }}">
+                                {{ $aiQuality['score'] }}%
+                            </div>
+                        @endif
+                    </div>
+                    
+                    @if(isset($aiQuality['error']))
+                        <p class="text-sm text-red-600">{{ $aiQuality['error'] }}</p>
+                    @else
+                        <div class="space-y-3">
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span class="text-gray-600">Покриття продуктів</span>
+                                    <span class="font-medium">{{ $aiQuality['coverage'] ?? 0 }}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-600 h-2 rounded-full" style="width: {{ $aiQuality['coverage'] ?? 0 }}%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span class="text-gray-600">Сленг/ключові слова</span>
+                                    <span class="font-medium">{{ $aiQuality['slang_coverage'] ?? 0 }}%</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-purple-600 h-2 rounded-full" style="width: {{ $aiQuality['slang_coverage'] ?? 0 }}%"></div>
+                                </div>
+                            </div>
+                            <div class="pt-2 flex justify-between text-xs text-gray-500">
+                                <span>{{ number_format($aiQuality['total_indexed'] ?? 0) }}/{{ number_format($aiQuality['total_products'] ?? 0) }} проіндексовано</span>
+                                @if(($aiQuality['high_priority_issues'] ?? 0) > 0)
+                                    <span class="text-orange-600">⚠ {{ $aiQuality['high_priority_issues'] }} важливих рекомендацій</span>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+                </div>
+                
+                <!-- A/B Testing -->
+                <div class="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-5 border border-purple-100">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-gray-900">🧪 A/B Тестування</h4>
+                        @if($abTestStats['enabled'] ?? false)
+                            <span class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">Активно</span>
+                        @else
+                            <span class="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full">Вимкнено</span>
+                        @endif
+                    </div>
+                    
+                    @if(isset($abTestStats['error']))
+                        <p class="text-sm text-red-600">{{ $abTestStats['error'] }}</p>
+                    @elseif($abTestStats['has_data'] ?? false)
+                        <div class="space-y-3">
+                            <p class="text-sm text-gray-600 mb-3">{{ $abTestStats['name'] ?? 'Експеримент' }}</p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-white/60 rounded-lg p-3">
+                                    <p class="text-xs text-gray-500 mb-1">Control</p>
+                                    <p class="text-lg font-bold text-gray-700">{{ $abTestStats['control']['total_searches'] ?? 0 }}</p>
+                                    <p class="text-xs text-gray-500">пошуків</p>
+                                </div>
+                                <div class="bg-white/60 rounded-lg p-3">
+                                    <p class="text-xs text-gray-500 mb-1">Treatment</p>
+                                    <p class="text-lg font-bold text-purple-700">{{ $abTestStats['treatment']['total_searches'] ?? 0 }}</p>
+                                    <p class="text-xs text-gray-500">пошуків</p>
+                                </div>
+                            </div>
+                            @if(!empty($abTestStats['comparison']))
+                                <div class="pt-2 text-xs text-gray-500">
+                                    CTR: {{ $abTestStats['comparison']['ctr_improvement'] ?? 0 }}% {{ ($abTestStats['comparison']['ctr_improvement'] ?? 0) > 0 ? '↑' : '↓' }}
+                                </div>
+                            @endif
+                        </div>
+                    @else
+                        <div class="text-center py-4 text-gray-400">
+                            <p class="text-sm">Немає даних</p>
+                            <p class="text-xs mt-1">Експеримент ще не накопичив достатньо даних</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+        @endif
+    </div>
+
     <!-- Health Status (collapsed by default) -->
     <details class="mt-6 bg-white rounded-xl shadow-sm">
         <summary class="px-6 py-4 cursor-pointer text-sm font-medium text-gray-600 hover:text-gray-900">

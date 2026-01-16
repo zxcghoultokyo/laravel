@@ -9,6 +9,7 @@ use App\Services\Metrics\MetricsService;
 use App\Events\OperatorMessage;
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ChatDetail extends Component
 {
@@ -34,10 +35,41 @@ class ChatDetail extends Component
 
     public function loadSession()
     {
+        // Try to find existing session
         $this->session = ChatSession::where('session_id', $this->sessionId)
             ->with('messages')
-            ->firstOrFail();
-        $this->messages = $this->session->messages()->orderBy('created_at')->get();
+            ->first();
+        
+        // If session doesn't exist but messages do, create session from messages
+        if (!$this->session) {
+            $firstMessage = DB::table('chat_messages')
+                ->where('chat_session_id', $this->sessionId)
+                ->orWhere('session_id', $this->sessionId)
+                ->orderBy('created_at')
+                ->first();
+            
+            if ($firstMessage) {
+                $this->session = ChatSession::create([
+                    'session_id' => $this->sessionId,
+                    'created_at' => $firstMessage->created_at,
+                    'updated_at' => now(),
+                ]);
+            } else {
+                abort(404, 'Сесія не знайдена');
+            }
+        }
+        
+        // Load messages - try both column names for compatibility
+        $sessionId = $this->session->id;
+        $this->messages = ChatMessage::where('chat_session_id', $sessionId)
+            ->orWhere('chat_session_id', $this->sessionId)
+            ->orWhere(function ($q) {
+                if (\Schema::hasColumn('chat_messages', 'session_id')) {
+                    $q->where('session_id', $this->sessionId);
+                }
+            })
+            ->orderBy('created_at')
+            ->get();
         
         // Check if operator has taken over
         $this->activeSessionData = DB::table('active_chat_sessions')

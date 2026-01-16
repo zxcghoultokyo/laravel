@@ -6,6 +6,8 @@ use Livewire\Component;
 use App\Services\Metrics\MetricsService;
 use App\Services\Metrics\DashboardMetricsService;
 use App\Services\Ai\CircuitBreaker;
+use App\Services\Ai\EnrichmentQualityService;
+use App\Services\Analytics\ABTestingService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Meilisearch\Client as MeiliClient;
@@ -20,7 +22,10 @@ class Dashboard extends Component
     public array $recentChats = [];
     public array $liveStats = [];
     public array $health = [];
+    public array $aiQuality = [];
+    public array $abTestStats = [];
     public bool $loading = true;
+    public bool $showAdvanced = false;
 
     protected $queryString = ['period'];
 
@@ -43,7 +48,68 @@ class Dashboard extends Component
         $this->liveStats = $metricsService->getLiveStats();
         $this->health = $this->checkHealth();
         
+        // Load AI Quality and A/B Testing stats
+        $this->loadAiQuality();
+        $this->loadABTestStats();
+        
         $this->loading = false;
+    }
+    
+    public function toggleAdvanced()
+    {
+        $this->showAdvanced = !$this->showAdvanced;
+    }
+    
+    private function loadAiQuality(): void
+    {
+        try {
+            $service = app(EnrichmentQualityService::class);
+            $quality = $service->getOverallScore();
+            $recommendations = $service->getRecommendations();
+            
+            $this->aiQuality = [
+                'score' => $quality['score'],
+                'grade' => $quality['grade'],
+                'coverage' => $quality['stats']['coverage_percent'] ?? 0,
+                'slang_coverage' => $quality['stats']['slang_coverage_percent'] ?? 0,
+                'type_coverage' => $quality['stats']['type_coverage_percent'] ?? 0,
+                'avg_slang' => $quality['stats']['avg_slang_count'] ?? 0,
+                'total_products' => $quality['stats']['total_products'] ?? 0,
+                'total_indexed' => $quality['stats']['total_ai_index'] ?? 0,
+                'recommendations_count' => count($recommendations),
+                'high_priority_issues' => count(array_filter($recommendations, fn($r) => $r['priority'] === 'high')),
+            ];
+        } catch (\Throwable $e) {
+            $this->aiQuality = [
+                'score' => 0,
+                'grade' => 'N/A',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+    
+    private function loadABTestStats(): void
+    {
+        try {
+            $service = app(ABTestingService::class);
+            $stats = $service->getStats();
+            
+            $this->abTestStats = [
+                'experiment' => $stats['experiment'] ?? 'search_ai_features',
+                'name' => $stats['name'] ?? 'AI Search Features',
+                'enabled' => $stats['enabled'] ?? false,
+                'control' => $stats['variants']['control'] ?? [],
+                'treatment' => $stats['variants']['treatment'] ?? [],
+                'comparison' => $stats['comparison'] ?? [],
+                'has_data' => ($stats['variants']['control']['total_searches'] ?? 0) > 0 ||
+                              ($stats['variants']['treatment']['total_searches'] ?? 0) > 0,
+            ];
+        } catch (\Throwable $e) {
+            $this->abTestStats = [
+                'error' => $e->getMessage(),
+                'has_data' => false,
+            ];
+        }
     }
 
     public function setPeriod(string $period)

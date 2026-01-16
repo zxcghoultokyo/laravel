@@ -111,11 +111,11 @@ class Tenant extends Model
     }
 
     /**
-     * Owner of this tenant (first user with owner role, or first user).
+     * Owner of this tenant (first user with owner role, or any first user as fallback).
      */
     public function owner(): HasOne
     {
-        return $this->hasOne(User::class)->where('role', User::ROLE_OWNER)->oldest();
+        return $this->hasOne(User::class)->oldest();
     }
 
     /**

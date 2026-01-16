@@ -111,6 +111,14 @@ class Tenant extends Model
     }
 
     /**
+     * Owner of this tenant (first user with owner role, or first user).
+     */
+    public function owner(): HasOne
+    {
+        return $this->hasOne(User::class)->where('role', User::ROLE_OWNER)->oldest();
+    }
+
+    /**
      * Widget settings for this tenant.
      */
     public function widgetSettings(): HasOne

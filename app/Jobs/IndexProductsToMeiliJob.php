@@ -98,9 +98,10 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 // Синоніми для покращення пошуку (одне слово знаходить всі варіанти)
                 'synonyms' => [
                     // Шоломи
-                    'шолом' => ['каска', 'шлем', 'helmet', 'ballistic helmet', 'кевларовий шолом'],
-                    'каска' => ['шолом', 'helmet', 'ballistic helmet'],
-                    'helmet' => ['шолом', 'каска'],
+                    'шолом' => ['каска', 'шлем', 'helmet', 'ballistic helmet', 'кевларовий шолом', 'batlskin', 'модульна система захисту'],
+                    'каска' => ['шолом', 'helmet', 'ballistic helmet', 'batlskin'],
+                    'helmet' => ['шолом', 'каска', 'batlskin'],
+                    'batlskin' => ['шолом', 'каска', 'helmet', 'модульна система захисту'],
                     // Плитоноски
                     'плитоноска' => ['plate carrier', 'плейткерієр', 'плитник', 'розвантажка', 'разгрузка'],
                     'plate carrier' => ['плитоноска', 'плейткерієр'],

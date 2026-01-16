@@ -9,20 +9,37 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            // Chat attribution fields
-            $table->string('session_id')->nullable()->after('order_id')->index();
-            $table->boolean('had_chat')->default(false)->after('raw');
-            $table->integer('products_from_chat')->default(0)->after('had_chat');
-            
-            // Analytics data (UTM etc from Horoshop)
-            $table->json('analytics')->nullable()->after('products_from_chat');
+            // Chat attribution fields - only add if not exists
+            if (!Schema::hasColumn('orders', 'session_id')) {
+                $table->string('session_id')->nullable()->index();
+            }
+            if (!Schema::hasColumn('orders', 'had_chat')) {
+                $table->boolean('had_chat')->default(false);
+            }
+            if (!Schema::hasColumn('orders', 'products_from_chat')) {
+                $table->integer('products_from_chat')->default(0);
+            }
+            if (!Schema::hasColumn('orders', 'analytics')) {
+                $table->json('analytics')->nullable();
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            $table->dropColumn(['session_id', 'had_chat', 'products_from_chat', 'analytics']);
+            if (Schema::hasColumn('orders', 'session_id')) {
+                $table->dropColumn('session_id');
+            }
+            if (Schema::hasColumn('orders', 'had_chat')) {
+                $table->dropColumn('had_chat');
+            }
+            if (Schema::hasColumn('orders', 'products_from_chat')) {
+                $table->dropColumn('products_from_chat');
+            }
+            if (Schema::hasColumn('orders', 'analytics')) {
+                $table->dropColumn('analytics');
+            }
         });
     }
 };

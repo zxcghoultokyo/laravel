@@ -1722,6 +1722,35 @@
         // No longer append to messagesContainer - we use the persistent bar
     }
 
+    /**
+     * Parse basic markdown to HTML (safe subset)
+     */
+    function parseMarkdown(text) {
+        if (!text) return '';
+        
+        // Escape HTML first for safety
+        let html = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        // Bold: **text** or __text__
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+        
+        // Italic: *text* or _text_
+        html = html.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+        html = html.replace(/_([^_]+?)_/g, '<em>$1</em>');
+        
+        // Links: [text](url)
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">$1</a>');
+        
+        // Newlines to <br> (preserve pre-wrap behavior for multiple newlines)
+        html = html.replace(/\n/g, '<br>');
+        
+        return html;
+    }
+
     function addMessage(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
         const s = window.aintentoSettings || { primary_color: '#2563eb' };
         const div = document.createElement('div');
@@ -1742,10 +1771,16 @@
             max-width: 75%;
             font-size: 14px;
             line-height: 1.6;
-            white-space: pre-wrap;
             box-shadow: ${role === 'user' ? '0 2px 8px ' + s.primary_color + '30' : '0 2px 8px rgba(0,0,0,0.08)'};
         `;
-        bubble.textContent = text;
+        
+        // Parse markdown for assistant messages, plain text for user
+        if (role === 'assistant') {
+            bubble.innerHTML = parseMarkdown(text);
+        } else {
+            bubble.textContent = text;
+        }
+        
         div.appendChild(bubble);
         messagesContainer.appendChild(div);
         

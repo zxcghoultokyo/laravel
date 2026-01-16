@@ -273,7 +273,14 @@ class PromptPresetsManager extends Component
             $renderedPrompt = $preset->render($values);
 
             // Call OpenAI for test
-            $response = \Illuminate\Support\Facades\Http::withToken(config('services.openai.key'))
+            $apiKey = config('services.openai.key');
+            if (empty($apiKey)) {
+                $this->testResponse = '⚠️ OpenAI API ключ не налаштований. Перевірте OPENAI_API_KEY в .env';
+                $this->testLoading = false;
+                return;
+            }
+            
+            $response = \Illuminate\Support\Facades\Http::withToken($apiKey)
                 ->timeout(30)
                 ->post(config('services.openai.base_url', 'https://api.openai.com/v1') . '/chat/completions', [
                     'model' => config('services.openai.model', 'gpt-4.1-mini'),
@@ -286,7 +293,14 @@ class PromptPresetsManager extends Component
                 ]);
 
             $data = $response->json();
-            $this->testResponse = $data['choices'][0]['message']['content'] ?? 'Помилка відповіді';
+            
+            if (isset($data['error'])) {
+                $this->testResponse = '❌ OpenAI помилка: ' . ($data['error']['message'] ?? json_encode($data['error']));
+            } elseif (!$response->successful()) {
+                $this->testResponse = '❌ HTTP помилка ' . $response->status() . ': ' . $response->body();
+            } else {
+                $this->testResponse = $data['choices'][0]['message']['content'] ?? '⚠️ Порожня відповідь від API';
+            }
             
         } catch (\Throwable $e) {
             $this->testResponse = 'Помилка: ' . $e->getMessage();

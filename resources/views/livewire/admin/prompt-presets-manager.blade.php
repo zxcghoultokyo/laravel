@@ -56,15 +56,57 @@ class="p-6 max-w-7xl mx-auto">
         </div>
     </div>
 
-    {{-- Info Banner --}}
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <div class="flex items-start gap-3">
-            <svg class="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            <div class="text-sm text-blue-800">
-                <p><strong>Змінні:</strong> Використовуйте <code class="bg-blue-100 px-1 rounded">&#123;&#123;variable_name&#125;&#125;</code> для динамічних значень.</p>
-                <p class="mt-1"><strong>Умови:</strong> Пресет застосовується автоматично при збігу категорії, мови, тону або UTM-кампанії.</p>
+    {{-- Info Banner with FAQ --}}
+    <div x-data="{ showHelp: false }" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <div class="flex items-start justify-between">
+            <div class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div class="text-sm text-blue-800">
+                    <p><strong>Пресет</strong> — це набір інструкцій для AI, який визначає як бот відповідає клієнтам.</p>
+                    <p class="mt-1">Натисніть <strong>"🤖 Згенерувати для магазину"</strong> для автоматичного створення пресету на основі товарів.</p>
+                </div>
+            </div>
+            <button @click="showHelp = !showHelp" class="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1">
+                <span x-text="showHelp ? 'Сховати' : 'Детальніше'"></span>
+                <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showHelp }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+        </div>
+        
+        <div x-show="showHelp" x-collapse class="mt-4 pt-4 border-t border-blue-200 text-sm text-blue-900 space-y-4">
+            {{-- Variables FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">📌 Змінні (Variables)</h4>
+                <p class="mb-2">Змінні дозволяють вставляти динамічні дані в промпт. Пишіть <code class="bg-blue-100 px-1 rounded">@{{ shop_name }}</code> в тексті промпту.</p>
+                <div class="bg-white rounded p-3 space-y-1">
+                    <p><code class="text-purple-600">@{{ shop_name }}</code> — назва магазину</p>
+                    <p><code class="text-purple-600">@{{ shop_phone }}</code> — телефон магазину</p>
+                    <p><code class="text-purple-600">@{{ delivery_info }}</code> — інформація про доставку</p>
+                    <p><code class="text-purple-600">@{{ return_policy }}</code> — політика повернення</p>
+                    <p><code class="text-purple-600">@{{ tone_section }}</code> — інструкції тону (авто)</p>
+                    <p><code class="text-purple-600">@{{ faq_info }}</code> — FAQ інформація (авто)</p>
+                </div>
+            </div>
+            
+            {{-- Conditions FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">🎯 Умови застосування</h4>
+                <p class="mb-2">Пресет застосовується коли ВСІ вказані умови збігаються:</p>
+                <div class="bg-white rounded p-3 space-y-1">
+                    <p><strong>Мова</strong> — мова клієнта (uk/en/ru). Пусто = будь-яка.</p>
+                    <p><strong>Тон</strong> — налаштування тону з /admin/widget. Пусто = будь-який.</p>
+                    <p><strong>UTM Campaign</strong> — значення utm_campaign з URL. Для акцій (black_friday).</p>
+                    <p><strong>Категорії</strong> — якщо клієнт питає про товари з цих категорій.</p>
+                </div>
+            </div>
+            
+            {{-- Priority FAQ --}}
+            <div>
+                <h4 class="font-semibold mb-2">⚡ Пріоритет</h4>
+                <p>Якщо кілька пресетів підходять — вибирається з найвищим пріоритетом (0-1000). Пресет "За замовчуванням" використовується якщо жоден не підійшов.</p>
             </div>
         </div>
     </div>
@@ -266,7 +308,7 @@ class="p-6 max-w-7xl mx-auto">
                         <div class="space-y-2">
                             @foreach($variables as $index => $var)
                                 <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                    <code class="text-sm text-purple-600">@verbatim{{@endverbatim{{ $var['name'] }}@verbatim}}@endverbatim</code>
+                                    <code class="text-sm text-purple-600">@{{ {{ $var['name'] ?? 'unnamed' }} }}</code>
                                     <span class="text-gray-400">=</span>
                                     <input type="text" wire:model="variables.{{ $index }}.default"
                                            class="flex-1 text-sm rounded border-gray-300"

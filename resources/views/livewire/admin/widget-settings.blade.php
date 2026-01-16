@@ -272,27 +272,24 @@
                 <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">🎭 Тон відповідей</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <label class="cursor-pointer">
-                            <input type="radio" wire:model.live="tone" value="official" class="sr-only peer">
-                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                        <div class="cursor-pointer" wire:click="$set('tone', 'official')">
+                            <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'official' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">📋</div>
                                 <div class="font-medium text-sm">Офіційний</div>
                             </div>
-                        </label>
-                        <label class="cursor-pointer">
-                            <input type="radio" wire:model.live="tone" value="spartan" class="sr-only peer">
-                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                        </div>
+                        <div class="cursor-pointer" wire:click="$set('tone', 'spartan')">
+                            <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'spartan' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">⚡</div>
                                 <div class="font-medium text-sm">Лаконічний</div>
                             </div>
-                        </label>
-                        <label class="cursor-pointer">
-                            <input type="radio" wire:model.live="tone" value="friendly" class="sr-only peer">
-                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                        </div>
+                        <div class="cursor-pointer" wire:click="$set('tone', 'friendly')">
+                            <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'friendly' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">😊</div>
                                 <div class="font-medium text-sm">Дружній</div>
                             </div>
-                        </label>
+                        </div>
                     </div>
                 </div>
 

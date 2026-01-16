@@ -23,6 +23,7 @@ class SyncOrdersCommand extends Command
         {--resume : Continue from last saved offset}
         {--reset : Reset saved position}
         {--update-counts : Update orders_count in products table after sync}
+        {--link-chat : Re-link existing orders to chat sessions without API sync}
         {--stats : Show statistics only}';
 
     protected $description = 'Sync orders from Horoshop API and optionally update product orders_count';
@@ -33,6 +34,10 @@ class SyncOrdersCommand extends Command
     {
         if ($this->option('stats')) {
             return $this->showStats();
+        }
+
+        if ($this->option('link-chat')) {
+            return $this->linkExistingOrdersToChat();
         }
 
         $startTime = microtime(true);
@@ -195,9 +200,21 @@ class SyncOrdersCommand extends Command
             ? \Carbon\Carbon::parse($raw['stat_created']) 
             : null;
 
+        // Try to find and link chat session
+        $chatData = $this->findChatSession(
+            $raw['delivery_phone'] ?? null,
+            $raw['delivery_email'] ?? null,
+            $raw['products'] ?? [],
+            $orderedAt
+        );
+
         $order = Order::updateOrCreate(
             ['order_id' => $raw['order_id']],
             [
+                'session_id'            => $chatData['session_id'],
+                'had_chat'              => $chatData['had_chat'],
+                'products_from_chat'    => $chatData['products_from_chat'],
+                'analytics'             => $raw['analytics'] ?? null,
                 'status_code'           => $raw['stat_status'] ?? 1,
                 'status_label'          => $this->getStatusLabel($raw['stat_status'] ?? 1),
                 'currency'              => $raw['currency'] ?? 'UAH',
@@ -257,6 +274,159 @@ class SyncOrdersCommand extends Command
             6 => 'доставляється',
             default => 'невідомий',
         };
+    }
+
+    /**
+     * Find chat session that can be linked to this order
+     * Uses multiple strategies: checkout events, add_to_cart timing, phone matching
+     */
+    protected function findChatSession(?string $phone, ?string $email, array $products, ?\Carbon\Carbon $orderedAt): array
+    {
+        $result = [
+            'session_id' => null,
+            'had_chat' => false,
+            'products_from_chat' => 0,
+        ];
+
+        // Normalize phone for comparison (last 10 digits)
+        $phoneLast10 = $phone ? substr(preg_replace('/[^0-9]/', '', $phone), -10) : null;
+        
+        // Time window: look for chat sessions 24h before order
+        $orderTime = $orderedAt ?? now();
+        $windowStart = $orderTime->copy()->subHours(24);
+        $windowEnd = $orderTime->copy()->addMinutes(30); // Some buffer for timezone issues
+
+        // Strategy 1: Look for checkout_submit events around order time
+        $checkoutEvent = DB::table('chat_events')
+            ->where('event_type', 'checkout_submit')
+            ->whereBetween('created_at', [$windowStart, $windowEnd])
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($checkoutEvent) {
+            $sessionId = $checkoutEvent->session_id;
+            if ($this->sessionHadChat($sessionId)) {
+                $result['session_id'] = $sessionId;
+                $result['had_chat'] = true;
+                $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+                return $result;
+            }
+        }
+
+        // Strategy 2: Look for add_to_cart events with matching products
+        $orderArticles = array_filter(array_column($products, 'article'));
+        if (!empty($orderArticles)) {
+            $cartEvent = DB::table('chat_events')
+                ->where('event_type', 'add_to_cart')
+                ->whereIn('product_article', $orderArticles)
+                ->whereBetween('created_at', [$windowStart, $windowEnd])
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($cartEvent) {
+                $sessionId = $cartEvent->session_id;
+                if ($this->sessionHadChat($sessionId)) {
+                    $result['session_id'] = $sessionId;
+                    $result['had_chat'] = true;
+                    $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+                    return $result;
+                }
+            }
+        }
+
+        // Strategy 3: Look for chat messages containing the phone number
+        if ($phoneLast10) {
+            $messageWithPhone = DB::table('chat_messages')
+                ->where('role', 'user')
+                ->where('content', 'like', '%' . $phoneLast10 . '%')
+                ->whereBetween('created_at', [$windowStart, $windowEnd])
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($messageWithPhone) {
+                $session = DB::table('chat_sessions')
+                    ->where('id', $messageWithPhone->chat_session_id)
+                    ->first();
+
+                if ($session) {
+                    $result['session_id'] = $session->session_id;
+                    $result['had_chat'] = true;
+                    $result['products_from_chat'] = $this->countProductsFromChat($session->session_id, $products);
+                    return $result;
+                }
+            }
+        }
+
+        // Strategy 4: Look for any chat session with product_shown events for ordered products
+        if (!empty($orderArticles)) {
+            $shownEvent = DB::table('chat_events')
+                ->whereIn('event_type', ['product_shown', 'product_click'])
+                ->whereIn('product_article', $orderArticles)
+                ->whereBetween('created_at', [$windowStart, $windowEnd])
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($shownEvent && $this->sessionHadChat($shownEvent->session_id)) {
+                $result['session_id'] = $shownEvent->session_id;
+                $result['had_chat'] = true;
+                $result['products_from_chat'] = $this->countProductsFromChat($shownEvent->session_id, $products);
+                return $result;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Check if session had meaningful chat conversation
+     */
+    protected function sessionHadChat(string $sessionId): bool
+    {
+        // Check chat_messages via chat_sessions
+        $session = DB::table('chat_sessions')
+            ->where('session_id', $sessionId)
+            ->first();
+
+        if ($session) {
+            $messageCount = DB::table('chat_messages')
+                ->where('chat_session_id', $session->id)
+                ->where('role', 'user')
+                ->count();
+
+            if ($messageCount > 0) {
+                return true;
+            }
+        }
+
+        // Also check chat_events for message events
+        $eventMessages = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->where('event_type', 'message')
+            ->where('message_type', 'user')
+            ->count();
+
+        return $eventMessages > 0;
+    }
+
+    /**
+     * Count how many products in order were shown/clicked in chat
+     */
+    protected function countProductsFromChat(string $sessionId, array $products): int
+    {
+        $orderArticles = array_filter(array_column($products, 'article'));
+        if (empty($orderArticles)) {
+            return 0;
+        }
+
+        $shownArticles = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->whereIn('event_type', ['product_shown', 'product_click', 'add_to_cart'])
+            ->whereIn('product_article', $orderArticles)
+            ->distinct()
+            ->pluck('product_article')
+            ->toArray();
+
+        return count(array_intersect($orderArticles, $shownArticles));
     }
 
     protected function updateOrdersCounts(): void
@@ -339,6 +509,10 @@ class SyncOrdersCommand extends Command
             if ($oldest && $newest) {
                 $this->info("\nDate range: {$oldest->ordered_at->format('Y-m-d')} to {$newest->ordered_at->format('Y-m-d')}");
             }
+            
+            // Chat linking stats
+            $withChat = Order::where('had_chat', true)->count();
+            $this->info("\nOrders with chat: {$withChat}");
         }
 
         $this->newLine();
@@ -346,6 +520,57 @@ class SyncOrdersCommand extends Command
         $totalProducts = Product::count();
         $this->info("Products with orders_count > 0: {$productsWithOrders} / {$totalProducts}");
 
+        $this->info("=================================================");
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * Re-link existing orders to chat sessions without API sync
+     */
+    protected function linkExistingOrdersToChat(): int
+    {
+        $this->info("=================================================");
+        $this->info("[LINK] Linking existing orders to chat sessions...");
+        $this->info("=================================================");
+
+        $orders = Order::whereNull('session_id')
+            ->orWhere('session_id', '')
+            ->orderByDesc('ordered_at')
+            ->get();
+
+        $this->info("Found {$orders->count()} orders without session link");
+
+        $linked = 0;
+        $notLinked = 0;
+
+        foreach ($orders as $order) {
+            $raw = json_decode($order->raw ?? '{}', true);
+            $products = $raw['products'] ?? [];
+
+            $chatData = $this->findChatSession(
+                $order->customer_phone,
+                $order->customer_email,
+                $products,
+                $order->ordered_at
+            );
+
+            if ($chatData['session_id']) {
+                $order->update([
+                    'session_id' => $chatData['session_id'],
+                    'had_chat' => $chatData['had_chat'],
+                    'products_from_chat' => $chatData['products_from_chat'],
+                ]);
+                $linked++;
+                $this->line("[LINKED] Order #{$order->order_id} → session: {$chatData['session_id']}");
+            } else {
+                $notLinked++;
+            }
+        }
+
+        $this->newLine();
+        $this->info("=================================================");
+        $this->info("[DONE] Linked: {$linked} | Not linked: {$notLinked}");
         $this->info("=================================================");
 
         return self::SUCCESS;

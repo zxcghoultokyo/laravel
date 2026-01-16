@@ -191,6 +191,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
 
     /**
      * Find chat session by customer phone or email
+     * Improved matching: check checkout events, add_to_cart, and chat messages
      */
     protected function findSessionByCustomer(?string $phone, ?string $email): ?string
     {
@@ -198,15 +199,76 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             return null;
         }
 
-        // Look for recent checkout_success events with matching data
-        $query = DB::table('chat_events')
-            ->where('event_type', 'checkout_success')
-            ->where('created_at', '>=', now()->subHours(24));
+        // Normalize phone for comparison
+        $normalizedPhone = $phone ? preg_replace('/[^0-9]/', '', $phone) : null;
+        $phoneLast10 = $normalizedPhone ? substr($normalizedPhone, -10) : null;
 
-        // This is a simplified approach - in reality you might need more sophisticated matching
-        $event = $query->orderByDesc('created_at')->first();
+        // Strategy 1: Look for checkout_submit events with matching session in last 24h
+        // These events are sent when customer submits order form
+        $checkoutEvent = DB::table('chat_events')
+            ->where('event_type', 'checkout_submit')
+            ->where('created_at', '>=', now()->subHours(24))
+            ->orderByDesc('created_at')
+            ->first();
         
-        return $event?->session_id;
+        if ($checkoutEvent) {
+            // Check if this session had chat activity
+            $hadChat = $this->checkIfHadChat($checkoutEvent->session_id);
+            if ($hadChat) {
+                Log::info('FetchHoroshopOrdersJob: Found session from checkout event', [
+                    'session_id' => $checkoutEvent->session_id,
+                    'phone' => $phone,
+                ]);
+                return $checkoutEvent->session_id;
+            }
+        }
+
+        // Strategy 2: Look for sessions with add_to_cart that also had chat
+        // Match by time proximity (order created within 2h of last add_to_cart)
+        $recentCartSessions = DB::table('chat_events')
+            ->where('event_type', 'add_to_cart')
+            ->where('created_at', '>=', now()->subHours(2))
+            ->select('session_id')
+            ->distinct()
+            ->pluck('session_id');
+
+        foreach ($recentCartSessions as $sessionId) {
+            if ($this->checkIfHadChat($sessionId)) {
+                Log::info('FetchHoroshopOrdersJob: Found session from recent add_to_cart', [
+                    'session_id' => $sessionId,
+                    'phone' => $phone,
+                ]);
+                return $sessionId;
+            }
+        }
+
+        // Strategy 3: Look for chat sessions where user might have mentioned their phone
+        // This is a best-effort approach for when we don't have direct tracking
+        if ($phoneLast10) {
+            $messageWithPhone = DB::table('chat_messages')
+                ->where('role', 'user')
+                ->where('created_at', '>=', now()->subHours(24))
+                ->where('content', 'like', '%' . $phoneLast10 . '%')
+                ->orderByDesc('created_at')
+                ->first();
+
+            if ($messageWithPhone) {
+                // Get session_id from chat_sessions
+                $session = DB::table('chat_sessions')
+                    ->where('id', $messageWithPhone->chat_session_id)
+                    ->first();
+                
+                if ($session) {
+                    Log::info('FetchHoroshopOrdersJob: Found session from phone in chat message', [
+                        'session_id' => $session->session_id,
+                        'phone' => $phone,
+                    ]);
+                    return $session->session_id;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

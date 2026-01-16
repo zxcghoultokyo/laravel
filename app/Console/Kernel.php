@@ -54,6 +54,12 @@ class Kernel extends ConsoleKernel
 
         $schedule->job(new GenerateCategoryScriptsJob())
             ->weeklyOn(1, '07:00');
+            
+        // 6. Sync orders from Horoshop (twice a day: morning + evening)
+        $schedule->command('orders:sync', ['--days' => 3, '--update-counts'])
+            ->twiceDaily(8, 20)
+            ->environments(['production'])
+            ->withoutOverlapping();
     }
 
     protected function commands(): void

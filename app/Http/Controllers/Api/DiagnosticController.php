@@ -1531,4 +1531,59 @@ class DiagnosticController extends Controller
             'message' => '🔥 All analytics data cleared! Starting fresh.',
         ]);
     }
+    
+    /**
+     * POST /api/diagnostic/set-super-admin
+     * Set user as super admin by email
+     */
+    public function setSuperAdmin(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $email = $request->input('email', 'stovburtm@gmail.com');
+        
+        $user = \App\Models\User::where('email', $email)->first();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'error' => 'User not found',
+                'email' => $email,
+            ], 404);
+        }
+        
+        $oldRole = $user->role;
+        $user->role = \App\Models\User::ROLE_SUPER_ADMIN;
+        $user->save();
+        
+        return response()->json([
+            'success' => true,
+            'email' => $email,
+            'old_role' => $oldRole,
+            'new_role' => $user->role,
+            'message' => "User {$email} is now super_admin",
+        ]);
+    }
+    
+    /**
+     * GET /api/diagnostic/users
+     * List all users with roles
+     */
+    public function listUsers(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $users = \App\Models\User::select(['id', 'name', 'email', 'role', 'tenant_id', 'created_at'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'count' => $users->count(),
+            'users' => $users,
+        ]);
+    }
 }

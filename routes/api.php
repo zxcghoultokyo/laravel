@@ -98,6 +98,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/reset-views-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'resetViewsCount']);
     Route::get('/chat-events-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatEventsStats']);
     Route::post('/clear-all-analytics', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearAllAnalytics']);
+    Route::get('/users', [\App\Http\Controllers\Api\DiagnosticController::class, 'listUsers']);
+    Route::post('/set-super-admin', [\App\Http\Controllers\Api\DiagnosticController::class, 'setSuperAdmin']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

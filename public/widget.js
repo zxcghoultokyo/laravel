@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.6';
+    const WIDGET_VERSION = '2.5.7';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1258,20 +1258,15 @@
         function updateStreamingText(element, text) {
             const textSpan = element.querySelector('.streaming-text');
             if (textSpan) {
-                let displayText = '';
+                // Default: show text as-is
+                let displayText = text || '';
                 
-                // Check if this looks like raw JSON/function call output
-                const looksLikeJson = text.trim().startsWith('{') || 
-                                      text.includes('```') ||
-                                      text.includes('"action"') ||
-                                      text.includes('"tool"') ||
-                                      text.includes('search_products') ||
-                                      text.includes('function_call');
+                // Check if this looks like a complete JSON structure
+                const isJsonStructure = text.trim().startsWith('{') && text.trim().endsWith('}');
                 
-                // Try to extract intro from complete JSON response
+                // Try to extract intro from JSON response if present
                 if (text.includes('"intro"')) {
                     try {
-                        // Find the outermost JSON object
                         const firstBrace = text.indexOf('{');
                         const lastBrace = text.lastIndexOf('}');
                         if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -1288,20 +1283,11 @@
                             displayText = introMatch[1];
                         }
                     }
-                } else if (!looksLikeJson) {
-                    // Not JSON - show as plain text
-                    displayText = text;
+                } else if (isJsonStructure) {
+                    // Complete JSON without intro - show "Обробляю..."
+                    displayText = 'Обробляю...';
                 }
-                
-                // If we have no displayable text but got data, show thinking indicator
-                if (!displayText && text.length > 0) {
-                    // Only show loader if it's actually JSON being processed
-                    if (looksLikeJson) {
-                        displayText = '';
-                    } else {
-                        displayText = text; // Show raw text if not JSON
-                    }
-                }
+                // Otherwise show text as-is (plain text response)
                 
                 textSpan.textContent = displayText;
                 
@@ -1326,17 +1312,13 @@
                 bubble.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
             }
             
-            // Final text cleanup - extract intro from JSON if needed
-            let displayText = '';
+            // Final text cleanup - extract intro from JSON if needed, or show plain text
+            let displayText = text || '';
             
-            // Check if this looks like raw JSON/function call output
-            const looksLikeJson = text.trim().startsWith('{') || 
-                                  text.includes('```') ||
-                                  text.includes('"action"') ||
-                                  text.includes('"tool"') ||
-                                  text.includes('search_products') ||
-                                  text.includes('function_call');
+            // Check if this looks like raw JSON structure (not just contains keywords)
+            const isJsonStructure = text.trim().startsWith('{') && text.trim().endsWith('}');
             
+            // Try to extract intro from JSON-like responses
             if (text.includes('"intro"')) {
                 try {
                     const firstBrace = text.indexOf('{');
@@ -1355,9 +1337,14 @@
                         displayText = introMatch[1];
                     }
                 }
-            } else if (!looksLikeJson) {
-                // Not JSON - show as plain text
-                displayText = text;
+            } else if (isJsonStructure) {
+                // Pure JSON without intro - try to extract any meaningful text
+                try {
+                    const parsed = JSON.parse(text.trim());
+                    displayText = parsed.text || parsed.message || parsed.response || '';
+                } catch (e) {
+                    // Not valid JSON, show as is
+                }
             }
             
             const textSpan = element.querySelector('.streaming-text');
@@ -1365,8 +1352,8 @@
                 textSpan.textContent = displayText;
             }
             
-            // If no readable text, hide the element
-            if (!displayText || displayText.trim().startsWith('{') || displayText === 'Шукаю для вас...') {
+            // Only hide if truly empty or just JSON garbage
+            if (!displayText.trim() || (displayText.trim().startsWith('{') && displayText.trim().endsWith('}'))) {
                 element.style.display = 'none';
             }
             // Note: text is now saved in 'products' event handler to preserve correct order

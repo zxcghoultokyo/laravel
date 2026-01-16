@@ -117,7 +117,7 @@ class TenantWidgetController extends Controller
     
     // Load main widget script (with cache buster)
     var script = document.createElement('script');
-    script.src = '{$baseUrl}/widget.js?v=2.5.6';
+    script.src = '{$baseUrl}/widget.js?v=2.5.7';
     script.async = true;
     script.onload = function() {
         if (typeof window.AilureWidget !== 'undefined') {

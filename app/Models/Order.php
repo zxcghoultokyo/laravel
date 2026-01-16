@@ -4,11 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Order extends Model
 {
     protected $fillable = [
         'order_id',
+        'session_id',
         'status_code',
         'status_label',
         'currency',
@@ -32,6 +34,9 @@ class Order extends Model
         'payment_price',
         'payed',
         'raw',
+        'had_chat',
+        'products_from_chat',
+        'analytics',
         'ordered_at',
     ];
 
@@ -49,12 +54,44 @@ class Order extends Model
         'payment_price'         => 'decimal:2',
         'payed'                 => 'boolean',
         'raw'                   => 'array',
+        'had_chat'              => 'boolean',
+        'products_from_chat'    => 'integer',
+        'analytics'             => 'array',
         'ordered_at'            => 'datetime',
+    ];
+
+    /**
+     * Status labels mapping
+     */
+    public const STATUS_LABELS = [
+        1 => 'Новий',
+        2 => 'В обробці',
+        3 => 'Доставлено',
+        4 => 'Не доставлено',
+        6 => 'Доставляється',
     ];
 
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Get related chat session
+     */
+    public function chatSession()
+    {
+        return $this->belongsTo(ChatSession::class, 'session_id', 'session_id');
+    }
+
+    /**
+     * Get status label attribute
+     */
+    protected function statusLabelComputed(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => self::STATUS_LABELS[$this->status_code] ?? $this->status_label ?? 'Невідомо',
+        );
     }
 
     /**
@@ -79,5 +116,37 @@ class Order extends Model
     public function scopeNotCancelled($query)
     {
         return $query->where('status_code', '!=', 4);
+    }
+
+    /**
+     * Scope for orders with chat attribution
+     */
+    public function scopeWithChat($query)
+    {
+        return $query->where('had_chat', true);
+    }
+
+    /**
+     * Scope for recent orders
+     */
+    public function scopeRecent($query, int $days = 7)
+    {
+        return $query->where('ordered_at', '>=', now()->subDays($days));
+    }
+
+    /**
+     * Calculate total revenue for a period
+     */
+    public static function totalRevenue(int $days = 30): float
+    {
+        return static::recent($days)->notCancelled()->sum('total_sum');
+    }
+
+    /**
+     * Calculate chat-attributed revenue for a period
+     */
+    public static function chatAttributedRevenue(int $days = 30): float
+    {
+        return static::recent($days)->withChat()->notCancelled()->sum('total_sum');
     }
 }

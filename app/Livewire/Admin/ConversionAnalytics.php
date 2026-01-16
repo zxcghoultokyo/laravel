@@ -134,28 +134,113 @@ class ConversionAnalytics extends Component
     
     private function loadCheckoutEvents($startDate)
     {
+        // First, try to load from orders table (with Horoshop data)
+        $orders = collect();
+        if (Schema::hasTable('orders')) {
+            $orders = DB::table('orders')
+                ->where('created_at', '>=', $startDate)
+                ->orderByDesc('created_at')
+                ->get();
+        }
+        
+        // Also load from chat_events
         $events = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->whereIn('event_type', ['checkout_success', 'checkout_submit'])
             ->orderByDesc('created_at')
             ->get();
         
-        $this->checkouts = $events->map(function ($event) {
-                $meta = json_decode($event->metadata ?? '{}', true);
-                
-                return [
-                    'id' => $event->id,
-                    'session_id' => $event->session_id,
-                    'event_type' => $event->event_type,
-                    'order_id' => $meta['order_id'] ?? null,
-                    'order_total' => $meta['order_total'] ?? $event->product_price ?? 0,
-                    'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
-                    'had_chat' => $meta['had_chat_conversation'] ?? false,
-                    'products_from_chat' => $meta['products_from_chat'] ?? 0,
-                    'created_at' => $event->created_at,
-                ];
-            })
+        // Map orders (preferred - has Horoshop data with products)
+        $checkoutsFromOrders = $orders->map(function ($order) {
+            $raw = json_decode($order->raw ?? '{}', true);
+            $analytics = json_decode($order->analytics ?? '{}', true);
+            
+            // Extract products from raw Horoshop data
+            $products = $raw['products'] ?? [];
+            
+            return [
+                'id' => $order->id,
+                'source' => 'horoshop',
+                'order_id' => $order->order_id ?? $order->id,
+                'session_id' => $order->session_id,
+                'event_type' => 'checkout_success',
+                'status' => $order->status ?? 'new',
+                'status_label' => $this->getOrderStatusLabel($order->status ?? 'new'),
+                'order_total' => $order->total_sum ?? 0,
+                'items_count' => count($products),
+                'had_chat' => (bool)($order->had_chat ?? false),
+                'products_from_chat' => $order->products_from_chat ?? 0,
+                'created_at' => $order->created_at,
+                // Customer info
+                'customer_name' => $order->delivery_name ?? null,
+                'customer_phone' => $order->delivery_phone ?? null,
+                'customer_email' => $order->customer_email ?? null,
+                // UTM
+                'utm_source' => $analytics['utm_source'] ?? null,
+                'utm_campaign' => $analytics['utm_campaign'] ?? null,
+                // Products
+                'products' => collect($products)->map(fn($p) => [
+                    'title' => $p['title'] ?? $p['name'] ?? 'Товар',
+                    'article' => $p['article'] ?? '',
+                    'price' => $p['price'] ?? 0,
+                    'quantity' => $p['quantity'] ?? 1,
+                ])->toArray(),
+            ];
+        });
+        
+        // Map events (fallback for orders without Horoshop sync)
+        $orderIds = $orders->pluck('order_id')->filter()->toArray();
+        $eventsWithoutOrders = $events->filter(function ($event) use ($orderIds) {
+            $meta = json_decode($event->metadata ?? '{}', true);
+            $orderId = $meta['order_id'] ?? null;
+            // Skip events that already have order in orders table
+            return !$orderId || !in_array($orderId, $orderIds);
+        });
+        
+        $checkoutsFromEvents = $eventsWithoutOrders->map(function ($event) {
+            $meta = json_decode($event->metadata ?? '{}', true);
+            
+            return [
+                'id' => $event->id,
+                'source' => 'event',
+                'order_id' => $meta['order_id'] ?? null,
+                'session_id' => $event->session_id,
+                'event_type' => $event->event_type,
+                'status' => 'new',
+                'status_label' => 'Новий',
+                'order_total' => $meta['order_total'] ?? $event->product_price ?? 0,
+                'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
+                'had_chat' => $meta['had_chat_conversation'] ?? false,
+                'products_from_chat' => $meta['products_from_chat'] ?? 0,
+                'created_at' => $event->created_at,
+                // Customer info (from event)
+                'customer_name' => $meta['customer_name'] ?? $meta['name'] ?? null,
+                'customer_phone' => $meta['phone'] ?? null,
+                'customer_email' => $meta['email'] ?? null,
+                // No products for events
+                'products' => [],
+            ];
+        });
+        
+        // Merge and sort by date
+        $this->checkouts = $checkoutsFromOrders
+            ->merge($checkoutsFromEvents)
+            ->sortByDesc('created_at')
+            ->values()
             ->toArray();
+    }
+    
+    private function getOrderStatusLabel(string $status): string
+    {
+        $labels = [
+            'new' => 'Новий',
+            'processing' => 'В обробці',
+            'delivered' => 'Доставлено',
+            'not_delivered' => 'Не доставлено',
+            'delivering' => 'Доставляється',
+            'cancelled' => 'Скасовано',
+        ];
+        return $labels[$status] ?? $status;
     }
     
     public function viewSession($sessionId)

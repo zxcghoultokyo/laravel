@@ -549,12 +549,18 @@ class AnalyticsController extends Controller
             $eventType = $event['event_type'] ?? '';
             
             // Only process conversion-relevant events
-            if (!in_array($eventType, ['add_to_cart', 'checkout_submit'])) {
+            if (!in_array($eventType, ['add_to_cart', 'checkout_submit', 'checkout_success'])) {
                 continue;
             }
             
             $sessionId = $event['session_id'] ?? '';
             if (empty($sessionId)) {
+                continue;
+            }
+            
+            // For checkout_success - fetch order details from Horoshop
+            if ($eventType === 'checkout_success') {
+                $this->handleCheckoutSuccess($event, $sessionId);
                 continue;
             }
             
@@ -617,6 +623,44 @@ class AnalyticsController extends Controller
                     'error' => $e->getMessage(),
                 ]);
             }
+        }
+    }
+    
+    /**
+     * Handle checkout_success event - dispatch job to fetch order details from Horoshop
+     */
+    private function handleCheckoutSuccess(array $event, string $sessionId): void
+    {
+        $orderId = $event['order_id'] ?? $event['metadata']['order_id'] ?? null;
+        
+        Log::info('Checkout success event received', [
+            'session_id' => $sessionId,
+            'order_id' => $orderId,
+            'event' => $event,
+        ]);
+        
+        try {
+            // Dispatch job to fetch order details from Horoshop API
+            // Job will run with delay to allow order to be fully created in Horoshop
+            \App\Jobs\FetchHoroshopOrdersJob::dispatch(
+                sessionId: $sessionId,
+                fromDate: now()->subMinutes(30)->format('Y-m-d H:i:s'), // Look at recent orders
+                toDate: now()->addMinutes(5)->format('Y-m-d H:i:s'),
+                orderIds: $orderId ? [$orderId] : null,
+                linkToChat: true
+            )->delay(now()->addSeconds(30)); // Wait 30s for order to be created in Horoshop
+            
+            Log::info('FetchHoroshopOrdersJob dispatched for checkout_success', [
+                'session_id' => $sessionId,
+                'order_id' => $orderId,
+            ]);
+            
+        } catch (\Throwable $e) {
+            Log::error('Failed to dispatch FetchHoroshopOrdersJob', [
+                'session_id' => $sessionId,
+                'order_id' => $orderId,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }

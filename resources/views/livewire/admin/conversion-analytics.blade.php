@@ -416,33 +416,44 @@
                             </div>
                         </div>
                         
-                        {{-- Products list (expandable) --}}
-                        @if(!empty($checkout['products']))
+                        {{-- Products list (lazy loading) --}}
+                        @if($checkout['has_products'] ?? false)
                             <div class="mt-3">
-                                <button @click="expanded = !expanded" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                                    <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                                    </svg>
-                                    Товари у замовленні ({{ count($checkout['products']) }})
-                                </button>
-                                <div x-show="expanded" x-collapse class="mt-2 space-y-2">
-                                    @foreach($checkout['products'] as $product)
-                                        <div class="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
-                                            <div class="flex-1">
-                                                <span class="text-gray-800">{{ $product['title'] }}</span>
-                                                @if($product['article'])
-                                                    <span class="text-gray-400 text-xs ml-2">[{{ $product['article'] }}]</span>
-                                                @endif
-                                                @if($product['quantity'] > 1)
-                                                    <span class="text-gray-500 ml-2">× {{ $product['quantity'] }}</span>
+                                @if($selectedCheckoutId === $checkout['id'])
+                                    {{-- Products loaded --}}
+                                    <button wire:click="closeCheckoutProducts" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                        <svg class="w-4 h-4 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                        Товари у замовленні ({{ $checkout['items_count'] }})
+                                    </button>
+                                    <div class="mt-2 space-y-2">
+                                        @foreach($selectedCheckoutProducts as $product)
+                                            <div class="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
+                                                <div class="flex-1">
+                                                    <span class="text-gray-800">{{ $product['title'] }}</span>
+                                                    @if($product['article'])
+                                                        <span class="text-gray-400 text-xs ml-2">[{{ $product['article'] }}]</span>
+                                                    @endif
+                                                    @if($product['quantity'] > 1)
+                                                        <span class="text-gray-500 ml-2">× {{ $product['quantity'] }}</span>
+                                                    @endif
+                                                </div>
+                                                @if($product['price'])
+                                                    <span class="text-gray-700 font-medium ml-4">{{ number_format($product['price'], 0) }} ₴</span>
                                                 @endif
                                             </div>
-                                            @if($product['price'])
-                                                <span class="text-gray-700 font-medium ml-4">{{ number_format($product['price'], 0) }} ₴</span>
-                                            @endif
-                                        </div>
-                                    @endforeach
-                                </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    {{-- Click to load products --}}
+                                    <button wire:click="loadCheckoutProducts({{ $checkout['id'] }})" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                        <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                        Товари у замовленні ({{ $checkout['items_count'] }})
+                                    </button>
+                                @endif
                             </div>
                         @endif
                         

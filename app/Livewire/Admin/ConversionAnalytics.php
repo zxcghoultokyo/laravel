@@ -15,6 +15,8 @@ class ConversionAnalytics extends Component
     public array $chatAttributedConversions = [];
     public ?array $selectedSession = null;
     public ?string $selectedSessionId = null;
+    public ?int $selectedCheckoutId = null;
+    public array $selectedCheckoutProducts = [];
     public string $activeTab = 'funnel';
     
     public function mount()
@@ -178,13 +180,8 @@ class ConversionAnalytics extends Component
                 // UTM
                 'utm_source' => $analytics['utm_source'] ?? null,
                 'utm_campaign' => $analytics['utm_campaign'] ?? null,
-                // Products
-                'products' => collect($products)->map(fn($p) => [
-                    'title' => $p['title'] ?? $p['name'] ?? 'Товар',
-                    'article' => $p['article'] ?? '',
-                    'price' => $p['price'] ?? 0,
-                    'quantity' => $p['quantity'] ?? 1,
-                ])->toArray(),
+                // Products count only, not full data (to reduce payload)
+                'has_products' => count($products) > 0,
             ];
         });
         
@@ -217,8 +214,7 @@ class ConversionAnalytics extends Component
                 'customer_name' => $meta['customer_name'] ?? $meta['name'] ?? null,
                 'customer_phone' => $meta['phone'] ?? null,
                 'customer_email' => $meta['email'] ?? null,
-                // No products for events
-                'products' => [],
+                'has_products' => false,
             ];
         });
         
@@ -241,6 +237,34 @@ class ConversionAnalytics extends Component
             'cancelled' => 'Скасовано',
         ];
         return $labels[$status] ?? $status;
+    }
+    
+    /**
+     * Load products for a specific order (lazy loading to reduce payload)
+     */
+    public function loadCheckoutProducts(int $orderId)
+    {
+        $this->selectedCheckoutId = $orderId;
+        $this->selectedCheckoutProducts = [];
+        
+        $order = DB::table('orders')->where('id', $orderId)->first();
+        if ($order && $order->raw) {
+            $raw = json_decode($order->raw, true);
+            $products = $raw['products'] ?? [];
+            
+            $this->selectedCheckoutProducts = collect($products)->map(fn($p) => [
+                'title' => $p['title'] ?? $p['name'] ?? 'Товар',
+                'article' => $p['article'] ?? '',
+                'price' => $p['price'] ?? 0,
+                'quantity' => $p['quantity'] ?? 1,
+            ])->toArray();
+        }
+    }
+    
+    public function closeCheckoutProducts()
+    {
+        $this->selectedCheckoutId = null;
+        $this->selectedCheckoutProducts = [];
     }
     
     public function viewSession($sessionId)

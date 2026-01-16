@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.3';
+    const WIDGET_VERSION = '2.5.4';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -774,6 +774,7 @@
                             -webkit-overflow-scrolling: touch;
                             scrollbar-width: none;
                             -ms-overflow-style: none;
+                            padding-right: 16px;
                         "></div>
                         ${s.consent_notice ? `
                         <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
@@ -900,24 +901,43 @@
 
         // Build store info from settings
         function buildStoreInfo(s) {
-            let info = '🏪 **ATK.UA — тактичне спорядження**\n\n';
+            let info = '';
+            
+            // Store name
+            const storeName = s.store_name || 'Наш магазин';
+            info += `🏪 **${storeName}**\n\n`;
             
             if (s.store_address) {
                 info += `📍 ${s.store_address}\n`;
             }
             if (s.store_phone) {
-                info += `📞 Телефон: ${s.store_phone}\n`;
+                info += `📞 ${s.store_phone}\n`;
             }
             if (s.store_hours) {
-                info += `🕐 Графік роботи: ${s.store_hours}\n`;
-            }
-            if (s.store_about) {
-                info += `\n${s.store_about}\n`;
+                info += `🕐 ${s.store_hours}\n`;
             }
             
-            if (!s.store_address && !s.store_phone && !s.store_hours && !s.store_about) {
-                info += '📞 Зв\'яжіться з нами через сайт atk.ua\n';
+            // Short description from store_about (first 2 sentences max)
+            if (s.store_about) {
+                // Extract first meaningful sentence (up to 200 chars)
+                const shortAbout = s.store_about
+                    .replace(/\n+/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .split(/[.!?]\s/)[0];
+                if (shortAbout && shortAbout.length < 200) {
+                    info += `\n${shortAbout}.\n`;
+                }
+            }
+            
+            if (!s.store_address && !s.store_phone && !s.store_hours) {
+                info += '📞 Зв\'яжіться з нами через сайт\n';
                 info += '🕐 Працюємо щодня\n';
+            }
+            
+            info += '\nЧим можу допомогти? 😊';
+            return info;
+        }
             }
             
             info += '\nЧим можу допомогти? 😊';

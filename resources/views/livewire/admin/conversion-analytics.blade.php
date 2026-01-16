@@ -580,7 +580,11 @@
                                             @foreach($selectedCheckoutProducts as $product)
                                                 <div class="flex justify-between items-center p-2 bg-white rounded border text-sm">
                                                     <div class="flex-1">
-                                                        <span class="text-gray-800">{{ $product['title'] }}</span>
+                                                        @if($product['url'] ?? null)
+                                                            <a href="{{ $product['url'] }}" target="_blank" class="text-blue-600 hover:underline">{{ $product['title'] }}</a>
+                                                        @else
+                                                            <span class="text-gray-800">{{ $product['title'] }}</span>
+                                                        @endif
                                                         @if($product['article'])
                                                             <span class="text-gray-400 text-xs ml-2">[{{ $product['article'] }}]</span>
                                                         @endif

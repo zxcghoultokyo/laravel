@@ -151,30 +151,18 @@ class ConversionAnalytics extends Component
     
     private function loadCheckoutEvents($startDate)
     {
-        // First, try to load from orders table (with Horoshop data)
+        // Load only from orders table (synced from Horoshop) - ONLY with chat
         $orders = collect();
         if (Schema::hasTable('orders')) {
             $orders = DB::table('orders')
                 ->where('created_at', '>=', $startDate)
-                ->orderByDesc('created_at')
+                ->where('had_chat', true)  // Only chat-attributed orders
+                ->orderByDesc('ordered_at')
                 ->get();
         }
         
-        // Also load from chat_events (only those with chat!)
-        $events = DB::table('chat_events')
-            ->where('created_at', '>=', $startDate)
-            ->whereIn('event_type', ['checkout_success', 'checkout_submit'])
-            ->orderByDesc('created_at')
-            ->get()
-            ->filter(function ($event) {
-                $meta = json_decode($event->metadata ?? '{}', true);
-                return $meta['had_chat_conversation'] ?? false;
-            });
-        
-        // Map orders (preferred - has Horoshop data with products) - ONLY with chat
-        $checkoutsFromOrders = $orders
-            ->filter(fn($order) => (bool)($order->had_chat ?? false))
-            ->map(function ($order) {
+        // Map orders to checkout format
+        $this->checkouts = $orders->map(function ($order) {
                 $raw = json_decode($order->raw ?? '{}', true);
             
                 // Extract products from raw Horoshop data
@@ -209,51 +197,7 @@ class ConversionAnalytics extends Component
                     // Products count only, not full data (to reduce payload)
                     'has_products' => count($products) > 0,
                 ];
-            });
-        
-        // Map events (fallback for orders without Horoshop sync)
-        $orderIds = $orders->pluck('order_id')->filter()->toArray();
-        $eventsWithoutOrders = $events->filter(function ($event) use ($orderIds) {
-            $meta = json_decode($event->metadata ?? '{}', true);
-            $orderId = $meta['order_id'] ?? null;
-            // Skip events that already have order in orders table
-            return !$orderId || !in_array($orderId, $orderIds);
-        });
-        
-        $checkoutsFromEvents = $eventsWithoutOrders->map(function ($event) {
-            $meta = json_decode($event->metadata ?? '{}', true);
-            
-            return [
-                'id' => $event->id,
-                'source' => 'event',
-                'order_id' => $meta['order_id'] ?? null,
-                'session_id' => $event->session_id,
-                'event_type' => $event->event_type,
-                'status' => 'new',
-                'status_label' => 'Новий',
-                'order_total' => $meta['order_total'] ?? $event->product_price ?? 0,
-                'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
-                'had_chat' => true,
-                'products_from_chat' => $meta['products_from_chat'] ?? 0,
-                'created_at' => $event->created_at,
-                // Customer info (from event metadata)
-                'customer_name' => $meta['customer_name'] ?? $meta['name'] ?? null,
-                'customer_phone' => $meta['phone'] ?? null,
-                'customer_email' => $meta['email'] ?? null,
-                'customer_city' => null,
-                'customer_address' => null,
-                'delivery_type' => null,
-                'delivery_price' => null,
-                'delivery_comment' => null,
-                'payment_type' => null,
-                'payed' => false,
-                'has_products' => false,
-            ];
-        });
-        
-        // Merge and sort by date
-        $this->checkouts = $checkoutsFromOrders
-            ->merge($checkoutsFromEvents)
+            })
             ->sortByDesc('created_at')
             ->values()
             ->toArray();
@@ -285,12 +229,34 @@ class ConversionAnalytics extends Component
             $raw = json_decode($order->raw, true);
             $products = $raw['products'] ?? [];
             
-            $this->selectedCheckoutProducts = collect($products)->map(fn($p) => [
-                'title' => $p['title'] ?? $p['name'] ?? 'Товар',
-                'article' => $p['article'] ?? '',
-                'price' => $p['price'] ?? 0,
-                'quantity' => $p['quantity'] ?? 1,
-            ])->toArray();
+            // Build shop URL base from config or default
+            $shopDomain = config('services.horoshop.domain', '');
+            
+            $this->selectedCheckoutProducts = collect($products)->map(function($p) use ($shopDomain) {
+                $article = $p['article'] ?? '';
+                $url = null;
+                
+                // Try to get URL from product, or build from article
+                if (!empty($p['url'])) {
+                    $url = $p['url'];
+                } elseif (!empty($p['href'])) {
+                    $url = $p['href'];
+                } elseif ($article && $shopDomain) {
+                    // Fallback: search product in DB for URL
+                    $dbProduct = \App\Models\Product::where('article', $article)->first();
+                    if ($dbProduct && !empty($dbProduct->raw['url'])) {
+                        $url = $dbProduct->raw['url'];
+                    }
+                }
+                
+                return [
+                    'title' => $p['title'] ?? $p['name'] ?? 'Товар',
+                    'article' => $article,
+                    'price' => $p['price'] ?? 0,
+                    'quantity' => $p['quantity'] ?? 1,
+                    'url' => $url,
+                ];
+            })->toArray();
         }
     }
     

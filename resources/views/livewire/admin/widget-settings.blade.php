@@ -1,5 +1,30 @@
-<div x-data="{ showToast: false, toastMessage: '' }" 
-     x-on:notify.window="showToast = true; toastMessage = $event.detail; setTimeout(() => showToast = false, 3000)">
+<div x-data="{ 
+    showToast: false, 
+    toastMessage: '',
+    hasUnsavedChanges: false,
+    originalData: {},
+    initTracker() {
+        this.originalData = JSON.stringify({
+            primary_color: $wire.primary_color,
+            text_color: $wire.text_color,
+            position: $wire.position,
+            bot_name: $wire.bot_name,
+            welcome_message: $wire.welcome_message,
+        });
+    },
+    checkChanges() {
+        const current = JSON.stringify({
+            primary_color: $wire.primary_color,
+            text_color: $wire.text_color,
+            position: $wire.position,
+            bot_name: $wire.bot_name,
+            welcome_message: $wire.welcome_message,
+        });
+        this.hasUnsavedChanges = this.originalData !== current;
+    }
+}" 
+     x-init="initTracker()"
+     x-on:notify.window="showToast = true; toastMessage = $event.detail; setTimeout(() => showToast = false, 3000); hasUnsavedChanges = false; initTracker()">
     
     <!-- Toast Notification -->
     <div x-show="showToast" 
@@ -7,8 +32,6 @@
          x-transition:enter-start="opacity-0 translate-y-2"
          x-transition:enter-end="opacity-100 translate-y-0"
          x-transition:leave="transition ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0"
-         x-transition:leave-end="opacity-0 translate-y-2"
          class="fixed bottom-4 right-4 z-50 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg flex items-center gap-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
@@ -16,10 +39,33 @@
         <span x-text="toastMessage"></span>
     </div>
 
-    <!-- Header -->
-    <div class="mb-6">
-        <h2 class="text-2xl font-bold text-gray-900">⚙️ Налаштування віджета</h2>
-        <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
+    <!-- Unsaved Changes Warning -->
+    <div x-show="hasUnsavedChanges" 
+         x-transition
+         class="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg shadow-lg flex items-center gap-2 text-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span>Є незбережені зміни</span>
+    </div>
+
+    <!-- Header with Save Button -->
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900">⚙️ Налаштування віджета</h2>
+            <p class="mt-1 text-sm text-gray-500">Персоналізуйте зовнішній вигляд та поведінку чат-віджета</p>
+        </div>
+        <button type="button" wire:click="save" 
+                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                :class="{ 'ring-2 ring-amber-400 ring-offset-2': hasUnsavedChanges }"
+                wire:loading.attr="disabled">
+            <svg wire:loading wire:target="save" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span wire:loading.remove wire:target="save">💾 Зберегти</span>
+            <span wire:loading wire:target="save">Зберігаю...</span>
+        </button>
     </div>
 
     @if (session()->has('message'))
@@ -32,12 +78,12 @@
     </div>
     @endif
 
-    <div class="grid grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <!-- Settings Form -->
         <div class="space-y-6">
-            <form wire:submit="save">
+            <form wire:submit="save" x-on:input="checkChanges()">
                 <!-- Appearance -->
-                <div class="bg-white rounded-lg shadow-sm p-6">
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">🎨 Зовнішній вигляд</h3>
                     
                     <div class="space-y-4">
@@ -60,11 +106,11 @@
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Основний колір</label>
                                 <div class="flex gap-2">
-                                    <input type="color" wire:model.live="primary_color" class="h-10 w-16 rounded border-gray-300 cursor-pointer">
+                                    <input type="color" wire:model.live="primary_color" class="h-10 w-14 rounded border-gray-300 cursor-pointer">
                                     <input type="text" wire:model.live="primary_color" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="#2563eb">
                                 </div>
                             </div>
@@ -72,13 +118,13 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Колір тексту</label>
                                 <div class="flex gap-2">
-                                    <input type="color" wire:model.live="text_color" class="h-10 w-16 rounded border-gray-300 cursor-pointer">
+                                    <input type="color" wire:model.live="text_color" class="h-10 w-14 rounded border-gray-300 cursor-pointer">
                                     <input type="text" wire:model.live="text_color" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm" placeholder="#ffffff">
                                 </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Позиція</label>
                                 <select wire:model.live="position" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
@@ -108,7 +154,7 @@
                 </div>
 
                 <!-- Branding -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
                     <h3 class="text-lg font-semibold text-gray-900 mb-4">🤖 Брендинг бота</h3>
                     
                     <div class="space-y-4">
@@ -121,37 +167,33 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Аватар бота</label>
                             <div class="flex items-start gap-4">
-                                <!-- Current Avatar Preview -->
                                 <div class="flex-shrink-0">
                                     @if($bot_avatar_url)
                                         <div class="relative">
-                                            <img src="{{ $bot_avatar_url }}" alt="Avatar" class="w-20 h-20 rounded-full object-cover border-2 border-gray-200">
-                                            <button type="button" wire:click="removeAvatar" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center">✕</button>
+                                            <img src="{{ $bot_avatar_url }}" alt="Avatar" class="w-16 h-16 rounded-full object-cover border-2 border-gray-200">
+                                            <button type="button" wire:click="removeAvatar" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 flex items-center justify-center">✕</button>
                                         </div>
                                     @else
-                                        <div class="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
-                                            <span class="text-2xl">🤖</span>
+                                        <div class="w-16 h-16 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                                            <span class="text-xl">🤖</span>
                                         </div>
                                     @endif
                                 </div>
                                 
-                                <!-- Upload Options -->
                                 <div class="flex-1 space-y-2">
                                     <div>
-                                        <label class="block">
-                                            <span class="sr-only">Завантажити аватар</span>
-                                            <input type="file" wire:model="bot_avatar_upload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
+                                        <label class="inline-block px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg cursor-pointer hover:bg-blue-100 transition">
+                                            📁 Вибрати файл
+                                            <input type="file" wire:model="bot_avatar_upload" accept="image/*" class="hidden">
                                         </label>
-                                        <div wire:loading wire:target="bot_avatar_upload" class="text-sm text-blue-600 mt-1">
-                                            ⏳ Завантаження...
-                                        </div>
-                                        @error('bot_avatar_upload') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                        <div wire:loading wire:target="bot_avatar_upload" class="text-sm text-blue-600 mt-1">⏳ Завантаження...</div>
+                                        @error('bot_avatar_upload') <span class="text-red-500 text-sm block mt-1">{{ $message }}</span> @enderror
                                     </div>
-                                    <div class="text-xs text-gray-500">або вставте URL:</div>
-                                    <input type="url" wire:model.live="bot_avatar_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://example.com/avatar.png" maxlength="500">
+                                    <div class="text-xs text-gray-500">або URL:</div>
+                                    <input type="url" wire:model.live="bot_avatar_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://example.com/avatar.png">
                                 </div>
                             </div>
-                            <p class="mt-2 text-xs text-gray-500">Рекомендований розмір: 80×80px. Макс 1MB.</p>
+                            <p class="mt-2 text-xs text-gray-500">80×80px, макс 1MB</p>
                         </div>
 
                         <div>
@@ -162,101 +204,90 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Шрифт</label>
                             <select wire:model.live="font_family" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="">Системний (за замовчуванням)</option>
+                                <option value="">Системний</option>
                                 <option value="'Inter', sans-serif">Inter</option>
                                 <option value="'Roboto', sans-serif">Roboto</option>
                                 <option value="'Open Sans', sans-serif">Open Sans</option>
                                 <option value="'Montserrat', sans-serif">Montserrat</option>
                             </select>
+                            @if($font_family)
+                            <div class="mt-2 p-3 bg-gray-50 rounded-lg border text-sm" style="font-family: {{ $font_family }}">
+                                Приклад: Привіт! Чим допомогти?
+                            </div>
+                            @endif
                         </div>
 
                         <div class="flex items-center">
                             <input type="checkbox" wire:model.live="show_shadow" id="show_shadow" class="rounded border-gray-300">
-                            <label for="show_shadow" class="ml-2 text-sm text-gray-700">Показувати тінь віджету</label>
+                            <label for="show_shadow" class="ml-2 text-sm text-gray-700">Тінь віджету</label>
                         </div>
                     </div>
                 </div>
 
-                <!-- Persona & Tone -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎭 Персона та тон</h3>
+                <!-- Brand Rules -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6 border-2 border-gray-100">
+                    <div class="flex items-start justify-between mb-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">📋 Правила бренду</h3>
+                            <p class="text-xs text-gray-500 mt-1">Інструкції для AI про стиль спілкування</p>
+                        </div>
+                        <div x-data="{ show: false }" class="relative">
+                            <button type="button" @click="show = !show" class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-sm">?</button>
+                            <div x-show="show" @click.away="show = false" x-transition class="absolute right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-xl border z-10 text-xs">
+                                <p class="font-medium mb-2">ℹ️ Приклади правил:</p>
+                                <ul class="text-gray-600 space-y-1 list-disc pl-4">
+                                    <li>Завжди звертайся на "ти"</li>
+                                    <li>Не використовуй емодзі</li>
+                                    <li>Пропонуй аксесуари до товарів</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                     
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Тон відповідей</label>
-                            <div class="grid grid-cols-3 gap-3">
-                                <label class="relative cursor-pointer">
-                                    <input type="radio" wire:model.live="tone" value="official" class="sr-only peer">
-                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
-                                        <div class="text-lg mb-1">📋</div>
-                                        <div class="font-medium text-sm">Офіційний</div>
-                                        <div class="text-xs text-gray-500">Ввічливий, формальний</div>
-                                    </div>
-                                </label>
-                                <label class="relative cursor-pointer">
-                                    <input type="radio" wire:model.live="tone" value="spartan" class="sr-only peer">
-                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
-                                        <div class="text-lg mb-1">⚡</div>
-                                        <div class="font-medium text-sm">Лаконічний</div>
-                                        <div class="text-xs text-gray-500">Коротко, по суті</div>
-                                    </div>
-                                </label>
-                                <label class="relative cursor-pointer">
-                                    <input type="radio" wire:model.live="tone" value="friendly" class="sr-only peer">
-                                    <div class="p-4 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400">
-                                        <div class="text-lg mb-1">😊</div>
-                                        <div class="font-medium text-sm">Дружній</div>
-                                        <div class="text-xs text-gray-500">Неформальний, теплий</div>
-                                    </div>
-                                </label>
-                            </div>
+                    <div class="space-y-2">
+                        @for($i = 0; $i < 5; $i++)
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-400 w-4">{{ $i + 1 }}.</span>
+                            <input type="text" wire:model.live="brand_rules.{{ $i }}" 
+                                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" 
+                                   placeholder="Правило..."
+                                   maxlength="200">
                         </div>
+                        @endfor
+                    </div>
+                </div>
 
-                        <!-- Tone Preview -->
-                        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div class="text-xs font-medium text-gray-500 mb-2">Приклад відповіді:</div>
-                            <div class="flex gap-2 mb-3">
-                                <div class="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center text-sm">👤</div>
-                                <div class="bg-white border rounded-lg p-3 text-sm">Порадьте теплу куртку до −15°C</div>
+                <!-- Tone -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">🎭 Тон відповідей</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label class="cursor-pointer">
+                            <input type="radio" wire:model.live="tone" value="official" class="sr-only peer">
+                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                                <div class="text-lg">📋</div>
+                                <div class="font-medium text-sm">Офіційний</div>
                             </div>
-                            <div class="flex gap-2">
-                                <div class="w-8 h-8 rounded-full bg-blue-100 flex-shrink-0 flex items-center justify-center text-sm">🤖</div>
-                                <div class="bg-blue-50 rounded-lg p-3 text-sm" style="background: {{ $primary_color }}15;">
-                                    @if($tone === 'official')
-                                        Доброго дня! Дозвольте запропонувати Вам декілька варіантів теплих курток, розрахованих на температуру до −15°C. Чи є у Вас переваги щодо бренду?
-                                    @elseif($tone === 'spartan')
-                                        Три варіанти під -15°C. Який розмір?
-                                    @else
-                                        О, крута задача! 🔥 Є декілька топових варіантів під -15. Який бюджет орієнтовно?
-                                    @endif
-                                </div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" wire:model.live="tone" value="spartan" class="sr-only peer">
+                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                                <div class="text-lg">⚡</div>
+                                <div class="font-medium text-sm">Лаконічний</div>
                             </div>
-                        </div>
-
-                        <!-- Brand Rules -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Правила бренду (до 5 пунктів)</label>
-                            <p class="text-xs text-gray-500 mb-3">AI буде дотримуватися цих правил у кожній відповіді</p>
-                            <div class="space-y-2">
-                                @for($i = 0; $i < 5; $i++)
-                                <div class="flex items-center gap-2">
-                                    <span class="text-xs text-gray-400 w-5">{{ $i + 1 }}.</span>
-                                    <input type="text" 
-                                           wire:model.live="brand_rules.{{ $i }}" 
-                                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" 
-                                           placeholder="{{ $i === 0 ? 'Наприклад: Відповідай українською' : ($i === 1 ? 'Максимум 2-3 речення' : '') }}"
-                                           maxlength="200">
-                                </div>
-                                @endfor
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" wire:model.live="tone" value="friendly" class="sr-only peer">
+                            <div class="p-3 border-2 rounded-lg transition-all peer-checked:border-blue-500 peer-checked:bg-blue-50 hover:border-gray-400 text-center">
+                                <div class="text-lg">😊</div>
+                                <div class="font-medium text-sm">Дружній</div>
                             </div>
-                        </div>
+                        </label>
                     </div>
                 </div>
 
                 <!-- Content -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Тексти</h3>
-                    
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">📝 Тексти</h3>
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Вітальне повідомлення</label>
@@ -270,7 +301,7 @@
                         </div>
 
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Повідомлення про згоду (опціонально)</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Повідомлення про згоду</label>
                             <textarea wire:model.live="consent_notice" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="300"></textarea>
                         </div>
 
@@ -281,127 +312,120 @@
                     </div>
                 </div>
 
-                <!-- Контакти та доставка -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Контакти та доставка</h3>
-
+                <!-- Contacts -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">📞 Контакти</h3>
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Телефон для зворотного зв'язку</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
                             <input type="text" wire:model.live="shop_phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="50">
                         </div>
-
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Посилання на форму зворотного зв'язку</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Форма зворотного зв'язку</label>
                             <input type="url" wire:model.live="callback_form_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
                         </div>
-
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Посилання на трекінг Нової Пошти</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Трекінг НП</label>
                             <input type="url" wire:model.live="nova_poshta_tracking_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
                         </div>
-
                         <div class="flex items-center space-x-3">
                             <input type="checkbox" wire:model.live="enable_delivery_tracking" id="enable_delivery_tracking" class="rounded border-gray-300">
-                            <label for="enable_delivery_tracking" class="text-sm text-gray-700">Увімкнути відображення статусу доставки / ТТН</label>
-                        </div>
-
-                        <div class="flex items-center space-x-3">
-                            <input type="checkbox" wire:model.live="enable_faq_from_horoshop" id="enable_faq_from_horoshop" class="rounded border-gray-300">
-                            <label for="enable_faq_from_horoshop" class="text-sm text-gray-700">Показувати FAQ сторінки з Horoshop</label>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Домен Horoshop (для формування посилань на FAQ)</label>
-                            <input type="url" wire:model.live="horoshop_domain" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255" placeholder="https://contractor.kiev.ua">
-                            <p class="mt-1 text-xs text-gray-500">Використовується для побудови прямих лінків типу /page/{id}</p>
+                            <label for="enable_delivery_tracking" class="text-sm text-gray-700">Статус доставки</label>
                         </div>
                     </div>
                 </div>
 
-                <!-- FAQ налаштування -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">FAQ налаштування</h3>
+                <!-- FAQ -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6 border-2 border-indigo-100">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">❓ FAQ</h3>
+                        <button type="button" wire:click="fetchFaqNow" 
+                                class="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 disabled:opacity-50 w-fit" 
+                                @if(!$can_fetch_now) disabled @endif>
+                            🔄 Оновити FAQ
+                        </button>
+                    </div>
+                    
+                    @if($faq_last_ingest_at)
+                    <p class="text-xs text-gray-500 mb-4">Оновлено: {{ $faq_last_ingest_at }}</p>
+                    @endif
 
                     <div class="flex items-center space-x-3 mb-4">
                         <input type="checkbox" wire:model.live="enable_faq_custom_content" id="enable_faq_custom_content" class="rounded border-gray-300">
-                        <label for="enable_faq_custom_content" class="text-sm text-gray-700">Використовувати власний контент для FAQ</label>
+                        <label for="enable_faq_custom_content" class="text-sm text-gray-700">Власний контент FAQ</label>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-6">
-                        <div class="space-y-3">
-                            <label class="block text-sm font-medium text-gray-700">Оплата і доставка — URL</label>
-                            <input type="url" wire:model.live="faq_payment_delivery_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/oplata-i-dostavka/">
-                            <label class="block text-sm font-medium text-gray-700">Оплата і доставка — Текст (до 2000 символів)</label>
-                            <textarea wire:model.live="faq_payment_delivery_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+                            <label class="block text-sm font-medium text-gray-700">💳 Оплата і доставка</label>
+                            <input type="url" wire:model.live="faq_payment_delivery_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
+                            <textarea wire:model.live="faq_payment_delivery_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
                         </div>
 
-                        <div class="space-y-3">
-                            <label class="block text-sm font-medium text-gray-700">Обмін та повернення — URL</label>
-                            <input type="url" wire:model.live="faq_returns_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/obmin-ta-povernennya/">
-                            <label class="block text-sm font-medium text-gray-700">Обмін та повернення — Текст</label>
-                            <textarea wire:model.live="faq_returns_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+                            <label class="block text-sm font-medium text-gray-700">🔄 Обмін та повернення</label>
+                            <input type="url" wire:model.live="faq_returns_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
+                            <textarea wire:model.live="faq_returns_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
                         </div>
 
-                        <div class="space-y-3">
-                            <label class="block text-sm font-medium text-gray-700">Контактна інформація — URL</label>
-                            <input type="url" wire:model.live="faq_contacts_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/kontaktna-informatsiya/">
-                            <label class="block text-sm font-medium text-gray-700">Контактна інформація — Текст</label>
-                            <textarea wire:model.live="faq_contacts_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+                            <label class="block text-sm font-medium text-gray-700">📍 Контакти</label>
+                            <input type="url" wire:model.live="faq_contacts_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
+                            <textarea wire:model.live="faq_contacts_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
                         </div>
 
-                        <div class="space-y-3">
-                            <label class="block text-sm font-medium text-gray-700">Про нас — URL</label>
-                            <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://contractor.kiev.ua/pro-nas/">
-                            <label class="block text-sm font-medium text-gray-700">Про нас — Текст</label>
-                            <textarea wire:model.live="faq_about_text" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="2000"></textarea>
+                        <div class="p-3 bg-gray-50 rounded-lg space-y-2">
+                            <label class="block text-sm font-medium text-gray-700">ℹ️ Про нас</label>
+                            <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
+                            <textarea wire:model.live="faq_about_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
                         </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <button type="button" wire:click="fetchFaqNow" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60" @if(!$can_fetch_now) disabled @endif>
-                            Оновити FAQ з сторінок зараз
-                        </button>
-                        <p class="mt-2 text-xs text-gray-500">Перепарсить вказані URL-и і оновить тексти нижче. Доступно не частіше 1 разу на день.</p>
-                        @if($faq_last_ingest_at)
-                        <p class="mt-1 text-xs text-gray-500">Останнє оновлення: {{ $faq_last_ingest_at }} @if($next_fetch_time) | Наступне доступне: {{ $next_fetch_time }} @endif</p>
-                        @endif
                     </div>
                 </div>
 
                 <!-- API Token -->
-                <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">API Токен</h3>
-                    
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Токен</label>
-                            <div class="flex gap-2">
-                                <input type="text" value="{{ $api_token }}" readonly class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-mono text-sm">
-                                <button type="button" wire:click="regenerateToken" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                                    Оновити
-                                </button>
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">🔑 API Токен</h3>
+                        <div x-data="{ show: false }" class="relative">
+                            <button type="button" @click="show = !show" class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-sm">?</button>
+                            <div x-show="show" @click.away="show = false" x-transition class="absolute right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-xl border z-10 text-xs">
+                                <p>Токен ідентифікує ваш магазин. Оновіть його якщо скомпрометовано.</p>
                             </div>
                         </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" value="{{ $api_token }}" readonly class="flex-1 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg font-mono text-xs">
+                        <button type="button" wire:click="regenerateToken" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">🔄</button>
                     </div>
                 </div>
 
                 <div class="mt-6">
-                    <button type="submit" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2" wire:loading.attr="disabled">
-                        <svg wire:loading wire:target="save" class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span wire:loading.remove wire:target="save">Зберегти налаштування</span>
+                    <button type="submit" 
+                            class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                            :class="{ 'ring-2 ring-amber-400': hasUnsavedChanges }"
+                            wire:loading.attr="disabled">
+                        <span wire:loading.remove wire:target="save">💾 Зберегти налаштування</span>
                         <span wire:loading wire:target="save">Зберігаю...</span>
                     </button>
                 </div>
             </form>
 
             <!-- Install Code -->
-            <div class="bg-white rounded-lg shadow-sm p-6 mt-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Код для вставки</h3>
-                <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto"><code>&lt;!-- AIntento Chat Widget --&gt;
+            <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                <div class="flex items-start justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">📋 Код для вставки</h3>
+                    <div x-data="{ show: false }" class="relative">
+                        <button type="button" @click="show = !show" class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-sm">?</button>
+                        <div x-show="show" @click.away="show = false" x-transition class="absolute right-0 mt-2 w-64 p-3 bg-white rounded-lg shadow-xl border z-10 text-xs">
+                            <ol class="list-decimal pl-4 space-y-1">
+                                <li>Скопіюйте код</li>
+                                <li>Вставте перед &lt;/body&gt;</li>
+                                <li>Готово!</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <pre class="bg-gray-900 text-green-400 p-4 rounded-lg text-xs overflow-x-auto"><code>&lt;!-- AIntento Chat --&gt;
 &lt;div id="aintento-chat" data-token="{{ $api_token }}"&gt;&lt;/div&gt;
 &lt;script&gt;
 (function(){
@@ -410,88 +434,79 @@
   document.body.appendChild(s);
 })();
 &lt;/script&gt;</code></pre>
-                <p class="mt-2 text-xs text-gray-500">Додайте цей код перед закриваючим тегом &lt;/body&gt; на вашому сайті. Віджет завжди завантажуватиме найновішу версію.</p>
+                <button type="button" 
+                        onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent); this.textContent = '✓ Скопійовано!'; setTimeout(() => this.textContent = '📋 Скопіювати', 2000)"
+                        class="mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm">
+                    📋 Скопіювати
+                </button>
             </div>
         </div>
 
-        <!-- Preview -->
-        <div class="sticky top-6">
+        <!-- Preview (desktop only) -->
+        <div class="hidden xl:block sticky top-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">👁️ Попередній перегляд</h3>
-            <div class="bg-gray-200 rounded-lg p-6 h-[650px] flex items-end justify-{{ $position === 'left' ? 'start' : 'end' }}" style="background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%); background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0px;">
-                <div class="bg-white flex flex-col overflow-hidden" style="border-radius: {{ $border_radius }}px; width: 380px; height: 520px; {{ $show_shadow ? 'box-shadow: 0 12px 48px rgba(0,0,0,0.25);' : '' }}">
-                    <!-- Header -->
-                    <div class="p-4 flex items-center gap-3" style="background: linear-gradient(135deg, {{ $primary_color }} 0%, {{ $primary_color }}dd 100%); color: {{ $text_color }}; border-radius: {{ $border_radius }}px {{ $border_radius }}px 0 0;">
-                        <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center border-2 border-cyan-400/60">
-                            @if($bot_avatar_url)
-                                <img src="{{ $bot_avatar_url }}" alt="{{ $bot_name }}" class="w-8 h-8 rounded-full">
-                            @else
-                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                                </svg>
-                            @endif
-                        </div>
-                        <div class="flex flex-col">
-                            <h4 class="font-semibold text-[15px]" style="color: {{ $text_color }}">{{ $bot_name ?: 'AIntento' }}</h4>
-                            <span class="text-xs opacity-90" style="color: {{ $text_color }}">🟢 {{ $bot_status_text ?: 'Завжди онлайн' }}</span>
-                        </div>
-                        <button class="ml-auto w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-lg" style="color: {{ $text_color }}">✕</button>
-                    </div>
-                    
-                    <!-- Messages -->
-                    <div class="flex-1 p-4 overflow-y-auto bg-gray-50">
-                        <div class="flex gap-2 mb-3">
-                            <div class="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
+            
+            <div class="rounded-xl overflow-hidden shadow-lg border border-gray-200" 
+                 style="background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); height: 600px;">
+                <div class="h-full flex items-end justify-{{ $position === 'left' ? 'start' : 'end' }} p-6">
+                    <div class="bg-white flex flex-col overflow-hidden" style="border-radius: {{ $border_radius }}px; width: 340px; height: 480px; {{ $show_shadow ? 'box-shadow: 0 10px 40px rgba(0,0,0,0.15);' : '' }}">
+                        <!-- Header -->
+                        <div class="p-3 flex items-center gap-3" style="background: {{ $primary_color }}; color: {{ $text_color }}; border-radius: {{ $border_radius }}px {{ $border_radius }}px 0 0;">
+                            <div class="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
                                 @if($bot_avatar_url)
-                                    <img src="{{ $bot_avatar_url }}" alt="" class="w-8 h-8 rounded-full">
+                                    <img src="{{ $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
                                 @else
-                                    <span class="text-sm">🤖</span>
+                                    <span>🤖</span>
                                 @endif
                             </div>
-                            <div class="bg-white rounded-2xl rounded-tl-sm p-3 text-sm shadow-sm max-w-[85%]">
-                                {{ $welcome_message ?: 'Вітаю! 👋' }}
+                            <div class="flex flex-col">
+                                <span class="font-semibold text-sm">{{ $bot_name ?: 'AIntento' }}</span>
+                                <span class="text-xs opacity-80">🟢 {{ $bot_status_text ?: 'Онлайн' }}</span>
+                            </div>
+                            <button class="ml-auto w-6 h-6 rounded-full bg-white/20 text-sm">✕</button>
+                        </div>
+                        
+                        <!-- Messages -->
+                        <div class="flex-1 p-3 overflow-y-auto bg-gray-50">
+                            <div class="flex gap-2 mb-3">
+                                <div class="w-7 h-7 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                                    @if($bot_avatar_url)
+                                        <img src="{{ $bot_avatar_url }}" alt="" class="w-7 h-7 rounded-full object-cover">
+                                    @else
+                                        <span class="text-xs">🤖</span>
+                                    @endif
+                                </div>
+                                <div class="bg-white rounded-xl rounded-tl-sm p-2.5 text-xs shadow-sm max-w-[85%]">
+                                    {{ Str::limit($welcome_message ?: 'Вітаю! 👋', 100) }}
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-wrap gap-1.5 ml-9">
+                                <button class="px-2 py-1 text-[10px] rounded-full border" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
+                                    🔍 Пошук
+                                </button>
+                                <button class="px-2 py-1 text-[10px] rounded-full border" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
+                                    📦 Замовлення
+                                </button>
                             </div>
                         </div>
                         
-                        <!-- Quick Actions Preview -->
-                        <div class="flex flex-wrap gap-2 ml-10">
-                            <button class="px-3 py-1.5 text-xs rounded-full border-2 transition-all" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
-                                🔍 Пошук товару
-                            </button>
-                            <button class="px-3 py-1.5 text-xs rounded-full border-2 transition-all" style="border-color: {{ $primary_color }}; color: {{ $primary_color }}">
-                                📦 Статус замовлення
-                            </button>
+                        <!-- Input -->
+                        <div class="p-3 border-t bg-white">
+                            <div class="flex gap-2">
+                                <input type="text" placeholder="{{ Str::limit($input_placeholder, 25) }}" disabled class="flex-1 px-3 py-2 border border-gray-300 rounded-full text-xs bg-gray-50">
+                                <button class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm" style="background-color: {{ $primary_color }}">➤</button>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <!-- Input -->
-                    <div class="p-4 border-t bg-white">
-                        <div class="flex gap-2">
-                            <input type="text" placeholder="{{ $input_placeholder }}" disabled class="flex-1 px-4 py-2.5 border border-gray-300 rounded-full text-sm bg-gray-50">
-                            <button class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: {{ $primary_color }}">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                                </svg>
-                            </button>
-                        </div>
-                        @if($consent_notice)
-                        <p class="mt-2 text-xs text-gray-500 text-center">{{ $consent_notice }}</p>
-                        @endif
                     </div>
                 </div>
             </div>
             
-            <!-- Tone Preview -->
             @if($tone)
-            <div class="mt-4 p-4 bg-white rounded-lg shadow-sm">
-                <h4 class="text-sm font-medium text-gray-700 mb-2">🎭 Приклад тону "{{ $tone === 'official' ? 'Офіційний' : ($tone === 'spartan' ? 'Лаконічний' : 'Дружній') }}"</h4>
-                <div class="text-sm text-gray-600 italic">
-                    @if($tone === 'official')
-                        "Доброго дня! Із задоволенням допоможу вам підібрати товар. Які ваші побажання?"
-                    @elseif($tone === 'spartan')
-                        "Привіт. Що шукаєте?"
-                    @else
-                        "Привіт! 👋 Радий бачити! Давай підберемо щось круте — що тебе цікавить?"
-                    @endif
+            <div class="mt-4 p-3 bg-white rounded-lg shadow-sm">
+                <h4 class="text-sm font-medium text-gray-700 mb-2">🎭 Тон "{{ $tone === 'official' ? 'Офіційний' : ($tone === 'spartan' ? 'Лаконічний' : 'Дружній') }}"</h4>
+                <div class="text-xs text-gray-600 italic">
+                    @if($tone === 'official') "Доброго дня! Із задоволенням допоможу." @elseif($tone === 'spartan') "Привіт. Що шукаєте?" @else "Привіт! 👋 Що тебе цікавить?" @endif
                 </div>
             </div>
             @endif

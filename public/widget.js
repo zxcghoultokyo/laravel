@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.5';
+    const WIDGET_VERSION = '2.5.6';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -752,14 +752,14 @@
 
                     <!-- Beta warning banner -->
                     <div style="
-                        background: linear-gradient(90deg, #fef3c7, #fde68a);
-                        padding: 6px 12px;
-                        font-size: 11px;
-                        color: #92400e;
+                        background: rgba(254, 243, 199, 0.7);
+                        padding: 4px 12px;
+                        font-size: 10px;
+                        color: #b45309;
                         text-align: center;
-                        border-bottom: 1px solid #fcd34d;
+                        border-bottom: 1px solid rgba(252, 211, 77, 0.5);
                     ">
-                        ⚠️ Бот в активній розробці — можливі помилки
+                        ⚠️ Бета-версія
                     </div>
 
                     <div id="aintento-messages" class="aintento-messages" style="
@@ -1295,7 +1295,12 @@
                 
                 // If we have no displayable text but got data, show thinking indicator
                 if (!displayText && text.length > 0) {
-                    displayText = 'Шукаю для вас...';
+                    // Only show loader if it's actually JSON being processed
+                    if (looksLikeJson) {
+                        displayText = '';
+                    } else {
+                        displayText = text; // Show raw text if not JSON
+                    }
                 }
                 
                 textSpan.textContent = displayText;

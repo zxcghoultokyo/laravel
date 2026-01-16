@@ -37,6 +37,7 @@ class PromptPresetsManager extends Component
     public $newVarName = '';
     public $newVarDefault = '';
     public $newCategory = '';
+    public $customCategory = '';
 
     protected $rules = [
         'name' => 'required|string|max:100',
@@ -58,8 +59,36 @@ class PromptPresetsManager extends Component
             ->orderByDesc('is_default')
             ->paginate(10);
 
+        // Load available categories from products
+        $availableCategories = \App\Models\Product::where('in_stock', true)
+            ->whereNotNull('category_path')
+            ->where('category_path', '!=', '')
+            ->select('category_path')
+            ->distinct()
+            ->orderBy('category_path')
+            ->pluck('category_path')
+            ->map(fn($path) => collect(explode(' > ', $path))->last())
+            ->unique()
+            ->sort()
+            ->values()
+            ->toArray();
+        
+        // Load store types from StoreContext
+        $storeTypes = [
+            '' => 'Будь-який',
+            \App\Models\StoreContext::TYPE_TACTICAL => 'Тактичний / Військовий',
+            \App\Models\StoreContext::TYPE_FASHION => 'Мода / Одяг',
+            \App\Models\StoreContext::TYPE_ELECTRONICS => 'Електроніка',
+            \App\Models\StoreContext::TYPE_SPORTS => 'Спорт / Фітнес',
+            \App\Models\StoreContext::TYPE_HOME_DECOR => 'Дім / Декор',
+            \App\Models\StoreContext::TYPE_BEAUTY => 'Краса / Косметика',
+            \App\Models\StoreContext::TYPE_GENERAL => 'Загальний',
+        ];
+
         return view('livewire.admin.prompt-presets-manager', [
             'presets' => $presets,
+            'availableCategories' => $availableCategories,
+            'storeTypes' => $storeTypes,
             'tones' => [
                 '' => 'Будь-який',
                 'official' => 'Офіційний',
@@ -95,7 +124,23 @@ class PromptPresetsManager extends Component
         $this->language = $preset->language ?? '';
         $this->tone = $preset->tone ?? '';
         $this->campaign = $preset->campaign ?? '';
-        $this->variables = $preset->variables ?? [];
+        
+        // Normalize variables to array of ['name' => ..., 'default' => ...] format
+        $rawVars = $preset->variables ?? [];
+        $this->variables = [];
+        foreach ($rawVars as $key => $value) {
+            if (is_array($value) && isset($value['name'])) {
+                // Already in correct format
+                $this->variables[] = $value;
+            } else {
+                // Old format: key => default_value
+                $this->variables[] = [
+                    'name' => is_string($key) ? $key : (string)$key,
+                    'default' => is_string($value) ? $value : '',
+                ];
+            }
+        }
+        
         $this->is_active = $preset->is_active;
         $this->is_default = $preset->is_default;
         $this->priority = $preset->priority;
@@ -216,6 +261,20 @@ class PromptPresetsManager extends Component
         }
 
         $this->newCategory = '';
+    }
+
+    public function addCustomCategory()
+    {
+        if (empty($this->customCategory)) {
+            return;
+        }
+
+        $cat = trim($this->customCategory);
+        if (!in_array($cat, $this->categories)) {
+            $this->categories[] = $cat;
+        }
+
+        $this->customCategory = '';
     }
 
     public function removeCategory($index)
@@ -394,6 +453,7 @@ class PromptPresetsManager extends Component
         $this->newVarName = '';
         $this->newVarDefault = '';
         $this->newCategory = '';
+        $this->customCategory = '';
     }
 
     protected function getDefaultPromptTemplate(): string

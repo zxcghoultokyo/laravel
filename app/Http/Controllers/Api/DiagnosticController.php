@@ -63,6 +63,35 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/categories
+     * Get all unique categories with product counts
+     */
+    public function categories(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $categories = Product::where('in_stock', true)
+            ->whereNotNull('category_path')
+            ->where('category_path', '!=', '')
+            ->select('category_path', DB::raw('COUNT(*) as count'))
+            ->groupBy('category_path')
+            ->orderByDesc('count')
+            ->get()
+            ->map(fn($c) => [
+                'path' => $c->category_path,
+                'name' => collect(explode(' > ', $c->category_path))->last(),
+                'count' => $c->count,
+            ]);
+
+        return response()->json([
+            'total' => $categories->count(),
+            'categories' => $categories,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/search-db?q=рукавички
      * Search products in DB (Eloquent)
      */

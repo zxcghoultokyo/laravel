@@ -19,6 +19,7 @@ class ChatDetail extends Component
     public $operatorMode = false;
     public $operatorMessage = '';
     public $activeSessionData = null;
+    public $chatEvents = [];
     
     // Canned responses
     public $cannedResponses = [];
@@ -73,6 +74,34 @@ class ChatDetail extends Component
             ->where('session_id', $this->session->session_id ?? $this->sessionId)
             ->first();
         $this->operatorMode = $this->activeSessionData && $this->activeSessionData->status === 'operator';
+        
+        // Load chat events for this session
+        $this->loadChatEvents();
+    }
+    
+    public function loadChatEvents()
+    {
+        $sessionId = $this->session->session_id ?? $this->sessionId;
+        
+        $this->chatEvents = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
+            ->get()
+            ->map(function ($event) {
+                $event->metadata = json_decode($event->metadata ?? '{}', true);
+                
+                // Get product info if product_id exists
+                if ($event->product_id) {
+                    $product = DB::table('products')
+                        ->where('id', $event->product_id)
+                        ->first(['id', 'title', 'article', 'url']);
+                    $event->product = $product;
+                }
+                
+                return $event;
+            })
+            ->toArray();
     }
     
     public function loadCannedResponses()

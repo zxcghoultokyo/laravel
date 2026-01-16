@@ -376,6 +376,115 @@
                 <pre class="mt-2 text-xs bg-gray-50 p-2 rounded overflow-x-auto">{{ json_encode($session->meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
             </details>
             @endif
+            
+            <!-- Events History -->
+            @if(count($chatEvents) > 0)
+            <div class="mt-6 pt-4 border-t">
+                <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    📊 Історія івентів 
+                    <span class="text-gray-400">({{ count($chatEvents) }})</span>
+                </h4>
+                
+                <div class="space-y-2 max-h-80 overflow-y-auto">
+                    @foreach($chatEvents as $event)
+                        @php
+                            $eventIcons = [
+                                'page_view' => '👁️',
+                                'widget_open' => '💬',
+                                'widget_close' => '❌',
+                                'message' => '✉️',
+                                'product_view' => '🔍',
+                                'product_click' => '👆',
+                                'add_to_cart' => '🛒',
+                                'checkout' => '💳',
+                                'purchase' => '✅',
+                                'checkout_success' => '🎉',
+                            ];
+                            $icon = $eventIcons[$event->event_type] ?? '📌';
+                            
+                            $eventLabels = [
+                                'page_view' => 'Перегляд сторінки',
+                                'widget_open' => 'Відкрив чат',
+                                'widget_close' => 'Закрив чат',
+                                'message' => 'Повідомлення',
+                                'product_view' => 'Перегляд товару',
+                                'product_click' => 'Клік на товар',
+                                'add_to_cart' => 'Додав у кошик',
+                                'checkout' => 'Оформлення',
+                                'purchase' => 'Покупка',
+                                'checkout_success' => 'Замовлення оформлено',
+                            ];
+                            $label = $eventLabels[$event->event_type] ?? $event->event_type;
+                            
+                            $bgColors = [
+                                'purchase' => 'bg-green-50 border-green-200',
+                                'checkout_success' => 'bg-green-50 border-green-200',
+                                'add_to_cart' => 'bg-yellow-50 border-yellow-200',
+                                'product_click' => 'bg-blue-50 border-blue-200',
+                            ];
+                            $bgColor = $bgColors[$event->event_type] ?? 'bg-gray-50 border-gray-100';
+                        @endphp
+                        
+                        <div class="p-2 rounded-lg border {{ $bgColor }} text-xs">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                    <span>{{ $icon }}</span>
+                                    <span class="font-medium text-gray-700">{{ $label }}</span>
+                                </div>
+                                <span class="text-gray-400 whitespace-nowrap">
+                                    {{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}
+                                </span>
+                            </div>
+                            
+                            @if(isset($event->product) && $event->product)
+                                <div class="mt-1.5 pl-5">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-gray-500">Товар:</span>
+                                        @if($event->product->url)
+                                            <a href="{{ $event->product->url }}" 
+                                               target="_blank" 
+                                               class="text-blue-600 hover:text-blue-800 hover:underline truncate"
+                                               title="{{ $event->product->title }}">
+                                                {{ Str::limit($event->product->title, 40) }}
+                                            </a>
+                                            <a href="{{ $event->product->url }}" 
+                                               target="_blank"
+                                               class="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                                               title="Відкрити на сайті">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                                </svg>
+                                            </a>
+                                        @else
+                                            <span class="text-gray-700 truncate">{{ Str::limit($event->product->title, 40) }}</span>
+                                        @endif
+                                    </div>
+                                    @if($event->product->article)
+                                        <div class="text-gray-400 mt-0.5">арт. {{ $event->product->article }}</div>
+                                    @endif
+                                    @if($event->product_price)
+                                        <div class="text-green-600 font-medium mt-0.5">₴{{ number_format($event->product_price, 0) }}</div>
+                                    @endif
+                                </div>
+                            @elseif($event->product_article)
+                                <div class="mt-1.5 pl-5 text-gray-500">
+                                    арт. {{ $event->product_article }}
+                                    @if($event->product_price)
+                                        <span class="text-green-600">• ₴{{ number_format($event->product_price, 0) }}</span>
+                                    @endif
+                                </div>
+                            @endif
+                            
+                            @if($event->page_url)
+                                <div class="mt-1 pl-5 text-gray-400 truncate" title="{{ $event->page_url }}">
+                                    {{ parse_url($event->page_url, PHP_URL_PATH) ?: '/' }}
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            @endif
         </div>
     </div>
 </div>

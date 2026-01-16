@@ -12,6 +12,7 @@ use App\Livewire\Admin\PromptPresetsManager;
 use App\Livewire\Admin\TenantsManager;
 use App\Livewire\Admin\CannedResponsesManager;
 use App\Livewire\Admin\ExportsManager;
+use App\Livewire\Admin\SyncReports;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,5 +52,6 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     // Super Admin only routes
     Route::middleware('super-admin')->group(function () {
         Route::get('/tenants', TenantsManager::class)->name('tenants');
+        Route::get('/sync-reports', SyncReports::class)->name('sync-reports');
     });
 });

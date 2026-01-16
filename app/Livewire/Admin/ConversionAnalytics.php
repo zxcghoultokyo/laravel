@@ -364,24 +364,41 @@ class ConversionAnalytics extends Component
             ->get()
             ->toArray();
         
-        // Get checkout/order events for this session
-        $checkouts = DB::table('chat_events')
+        // Get checkout/order events for this session (deduplicated by time - within 5 min = same checkout)
+        $rawCheckouts = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->whereIn('event_type', ['checkout_submit', 'checkout_success'])
             ->select('event_type', 'product_price', 'created_at', 'metadata')
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(function ($e) {
-                $meta = json_decode($e->metadata ?? '{}', true);
-                return [
-                    'event_type' => $e->event_type,
-                    'order_total' => $meta['order_total'] ?? $e->product_price ?? 0,
-                    'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
-                    'order_id' => $meta['order_id'] ?? null,
-                    'created_at' => $e->created_at,
-                ];
-            })
-            ->toArray();
+            ->orderBy('created_at')
+            ->get();
+        
+        // Deduplicate checkouts by time (group events within 5 minutes)
+        $checkouts = [];
+        $lastCheckoutTime = null;
+        foreach ($rawCheckouts as $e) {
+            $meta = json_decode($e->metadata ?? '{}', true);
+            $currentTime = strtotime($e->created_at);
+            
+            // If this is within 5 minutes of last checkout, skip it (duplicate)
+            if ($lastCheckoutTime && ($currentTime - $lastCheckoutTime) < 300) {
+                continue;
+            }
+            
+            $lastCheckoutTime = $currentTime;
+            $checkouts[] = [
+                'event_type' => $e->event_type,
+                'order_total' => $meta['order_total'] ?? $e->product_price ?? 0,
+                'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
+                'order_id' => $meta['order_id'] ?? null,
+                'customer_name' => $meta['customer_name'] ?? $meta['name'] ?? null,
+                'customer_phone' => $meta['phone'] ?? null,
+                'customer_email' => $meta['email'] ?? null,
+                'delivery_type' => $meta['delivery_type'] ?? null,
+                'payment_type' => $meta['payment_type'] ?? null,
+                'created_at' => $e->created_at,
+            ];
+        }
+        $checkouts = array_reverse($checkouts); // Most recent first
         
         // Get UTM data from first page_view in session
         $firstEvent = DB::table('chat_events')

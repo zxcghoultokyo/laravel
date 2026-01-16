@@ -247,25 +247,66 @@
                         @if(count($selectedSession['checkouts'] ?? []) > 0)
                             <div class="mb-4">
                                 <h3 class="text-sm font-semibold text-gray-600 mb-2">✅ Замовлення ({{ count($selectedSession['checkouts']) }})</h3>
-                                <div class="space-y-1">
-                                    @foreach($selectedSession['checkouts'] as $checkout)
-                                        <div class="p-3 bg-green-50 border border-green-200 rounded">
-                                            <div class="flex justify-between items-center">
-                                                <div>
-                                                    @if($checkout['order_id'])
-                                                        <span class="font-medium text-green-800">Замовлення #{{ $checkout['order_id'] }}</span>
-                                                    @else
-                                                        <span class="font-medium text-green-800">Оформлення замовлення</span>
-                                                    @endif
-                                                    <div class="text-xs text-green-600 mt-1">
-                                                        {{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m.Y H:i') }}
-                                                        @if($checkout['items_count'])
-                                                            • {{ $checkout['items_count'] }} товарів
+                                <div class="space-y-2">
+                                    @foreach($selectedSession['checkouts'] as $idx => $checkout)
+                                        <div x-data="{ open: false }" class="border border-green-200 rounded overflow-hidden">
+                                            <button @click="open = !open" class="w-full p-3 bg-green-50 hover:bg-green-100 flex justify-between items-center text-left">
+                                                <div class="flex items-center gap-2">
+                                                    <svg class="w-4 h-4 text-green-600 transition-transform" :class="{ 'rotate-90': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                                    </svg>
+                                                    <div>
+                                                        @if($checkout['order_id'])
+                                                            <span class="font-medium text-green-800">Замовлення #{{ $checkout['order_id'] }}</span>
+                                                        @else
+                                                            <span class="font-medium text-green-800">Оформлення замовлення</span>
                                                         @endif
+                                                        <span class="text-xs text-green-600 ml-2">{{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m H:i') }}</span>
                                                     </div>
                                                 </div>
                                                 @if($checkout['order_total'])
-                                                    <span class="text-lg font-bold text-green-700">{{ number_format($checkout['order_total'], 0) }} ₴</span>
+                                                    <span class="font-bold text-green-700">{{ number_format($checkout['order_total'], 0) }} ₴</span>
+                                                @endif
+                                            </button>
+                                            <div x-show="open" x-collapse class="p-3 bg-white border-t border-green-100 text-sm">
+                                                @if($checkout['customer_name'])
+                                                    <div class="flex items-center gap-2 text-gray-700">
+                                                        <span class="text-gray-400">👤</span>
+                                                        <span>{{ $checkout['customer_name'] }}</span>
+                                                    </div>
+                                                @endif
+                                                @if($checkout['customer_phone'])
+                                                    <div class="flex items-center gap-2 text-gray-600">
+                                                        <span class="text-gray-400">📱</span>
+                                                        <a href="tel:{{ $checkout['customer_phone'] }}" class="hover:text-blue-600">{{ $checkout['customer_phone'] }}</a>
+                                                    </div>
+                                                @endif
+                                                @if($checkout['customer_email'])
+                                                    <div class="flex items-center gap-2 text-gray-600">
+                                                        <span class="text-gray-400">📧</span>
+                                                        <span>{{ $checkout['customer_email'] }}</span>
+                                                    </div>
+                                                @endif
+                                                @if($checkout['delivery_type'])
+                                                    <div class="flex items-center gap-2 text-gray-600 mt-1">
+                                                        <span class="text-gray-400">🚚</span>
+                                                        <span>{{ $checkout['delivery_type'] }}</span>
+                                                    </div>
+                                                @endif
+                                                @if($checkout['payment_type'])
+                                                    <div class="flex items-center gap-2 text-gray-600">
+                                                        <span class="text-gray-400">💳</span>
+                                                        <span>{{ $checkout['payment_type'] }}</span>
+                                                    </div>
+                                                @endif
+                                                @if($checkout['items_count'])
+                                                    <div class="flex items-center gap-2 text-gray-600 mt-1">
+                                                        <span class="text-gray-400">📦</span>
+                                                        <span>{{ $checkout['items_count'] }} товарів</span>
+                                                    </div>
+                                                @endif
+                                                @if(!$checkout['customer_name'] && !$checkout['customer_phone'] && !$checkout['items_count'])
+                                                    <div class="text-gray-400 text-xs">Деталі замовлення недоступні</div>
                                                 @endif
                                             </div>
                                         </div>
@@ -411,152 +452,166 @@
             </div>
             <div class="divide-y divide-gray-100">
                 @forelse($checkouts as $checkout)
-                    <div class="p-4 hover:bg-gray-50" x-data="{ expanded: false }">
-                        <div class="flex justify-between items-start">
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    @if($checkout['order_id'])
-                                        <span class="font-medium text-gray-900">Замовлення #{{ $checkout['order_id'] }}</span>
-                                    @else
-                                        <span class="font-medium text-gray-900">Checkout</span>
-                                    @endif
-                                    <span class="text-xs px-2 py-0.5 rounded-full {{ $checkout['status'] === 'delivered' ? 'bg-green-100 text-green-700' : ($checkout['status'] === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700') }}">
-                                        {{ $checkout['status_label'] }}
-                                    </span>
-                                    @if($checkout['payed'] ?? false)
-                                        <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                                            💰 Оплачено
+                    <div x-data="{ expanded: false }" class="hover:bg-gray-50">
+                        {{-- Header row - clickable --}}
+                        <button @click="expanded = !expanded" class="w-full p-4 flex justify-between items-center text-left">
+                            <div class="flex items-center gap-3">
+                                <svg class="w-5 h-5 text-gray-400 transition-transform" :class="{ 'rotate-90': expanded }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div>
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        @if($checkout['order_id'])
+                                            <span class="font-medium text-gray-900">Замовлення #{{ $checkout['order_id'] }}</span>
+                                        @else
+                                            <span class="font-medium text-gray-900">Checkout</span>
+                                        @endif
+                                        <span class="text-xs px-2 py-0.5 rounded-full {{ $checkout['status'] === 'delivered' ? 'bg-green-100 text-green-700' : ($checkout['status'] === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700') }}">
+                                            {{ $checkout['status_label'] }}
                                         </span>
-                                    @endif
-                                    @if($checkout['source'] === 'horoshop')
-                                        <span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-                                            Horoshop
-                                        </span>
-                                    @endif
+                                        @if($checkout['payed'] ?? false)
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">💰</span>
+                                        @endif
+                                    </div>
+                                    <div class="text-sm text-gray-500 mt-0.5">
+                                        {{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m.Y H:i') }}
+                                        @if($checkout['customer_name'])
+                                            • {{ $checkout['customer_name'] }}
+                                        @endif
+                                        @if($checkout['items_count'])
+                                            • {{ $checkout['items_count'] }} тов.
+                                        @endif
+                                    </div>
                                 </div>
-                                
-                                {{-- Customer info --}}
-                                <div class="mt-2 text-sm">
+                            </div>
+                            <div class="text-right">
+                                @if($checkout['order_total'])
+                                    <div class="text-lg font-bold text-green-600">{{ number_format($checkout['order_total'], 0) }} ₴</div>
+                                @endif
+                            </div>
+                        </button>
+                        
+                        {{-- Expanded details --}}
+                        <div x-show="expanded" x-collapse class="px-4 pb-4 border-t border-gray-100 bg-gray-50">
+                            <div class="grid grid-cols-2 gap-4 pt-3">
+                                {{-- Left: Customer info --}}
+                                <div class="space-y-2">
+                                    <h4 class="text-xs font-semibold text-gray-500 uppercase">Клієнт</h4>
                                     @if($checkout['customer_name'])
-                                        <div class="flex items-center gap-2 text-gray-700">
+                                        <div class="flex items-center gap-2 text-sm">
                                             <span class="text-gray-400">👤</span>
-                                            <span class="font-medium">{{ $checkout['customer_name'] }}</span>
+                                            <span class="font-medium text-gray-800">{{ $checkout['customer_name'] }}</span>
                                         </div>
                                     @endif
                                     @if($checkout['customer_phone'])
-                                        <div class="flex items-center gap-2 text-gray-600">
+                                        <div class="flex items-center gap-2 text-sm">
                                             <span class="text-gray-400">📱</span>
-                                            <a href="tel:{{ $checkout['customer_phone'] }}" class="hover:text-blue-600">{{ $checkout['customer_phone'] }}</a>
+                                            <a href="tel:{{ $checkout['customer_phone'] }}" class="text-blue-600 hover:underline">{{ $checkout['customer_phone'] }}</a>
                                         </div>
                                     @endif
                                     @if($checkout['customer_email'])
-                                        <div class="flex items-center gap-2 text-gray-600">
+                                        <div class="flex items-center gap-2 text-sm">
                                             <span class="text-gray-400">📧</span>
-                                            <a href="mailto:{{ $checkout['customer_email'] }}" class="hover:text-blue-600">{{ $checkout['customer_email'] }}</a>
+                                            <a href="mailto:{{ $checkout['customer_email'] }}" class="text-blue-600 hover:underline">{{ $checkout['customer_email'] }}</a>
                                         </div>
                                     @endif
                                     @if($checkout['customer_city'] || $checkout['customer_address'])
-                                        <div class="flex items-center gap-2 text-gray-500 text-xs">
+                                        <div class="flex items-start gap-2 text-sm">
                                             <span class="text-gray-400">📍</span>
-                                            <span>{{ $checkout['customer_city'] }}{{ $checkout['customer_address'] ? ', ' . Str::limit($checkout['customer_address'], 50) : '' }}</span>
+                                            <span class="text-gray-600">{{ $checkout['customer_city'] }}{{ $checkout['customer_address'] ? ', ' . $checkout['customer_address'] : '' }}</span>
                                         </div>
                                     @endif
                                 </div>
                                 
-                                {{-- Delivery & Payment --}}
-                                @if($checkout['delivery_type'] || $checkout['payment_type'])
-                                    <div class="mt-2 flex flex-wrap gap-2 text-xs">
-                                        @if($checkout['delivery_type'])
-                                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">
-                                                🚚 {{ $checkout['delivery_type'] }}
-                                                @if($checkout['delivery_price'] > 0)
-                                                    ({{ number_format($checkout['delivery_price'], 0) }} ₴)
-                                                @endif
-                                            </span>
-                                        @endif
-                                        @if($checkout['payment_type'])
-                                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600">
-                                                💳 {{ $checkout['payment_type'] }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                @endif
-                                
-                                <div class="text-xs text-gray-400 mt-2">
-                                    {{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m.Y H:i') }}
-                                    @if($checkout['items_count'])
-                                        • {{ $checkout['items_count'] }} товарів
+                                {{-- Right: Delivery & Payment --}}
+                                <div class="space-y-2">
+                                    <h4 class="text-xs font-semibold text-gray-500 uppercase">Доставка та оплата</h4>
+                                    @if($checkout['delivery_type'])
+                                        <div class="flex items-center gap-2 text-sm">
+                                            <span class="text-gray-400">🚚</span>
+                                            <span class="text-gray-700">{{ $checkout['delivery_type'] }}</span>
+                                            @if($checkout['delivery_price'] > 0)
+                                                <span class="text-gray-500">({{ number_format($checkout['delivery_price'], 0) }} ₴)</span>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    @if($checkout['delivery_comment'])
+                                        <div class="text-xs text-gray-500 pl-6">{{ $checkout['delivery_comment'] }}</div>
+                                    @endif
+                                    @if($checkout['payment_type'])
+                                        <div class="flex items-center gap-2 text-sm">
+                                            <span class="text-gray-400">💳</span>
+                                            <span class="text-gray-700">{{ $checkout['payment_type'] }}</span>
+                                            @if($checkout['payed'] ?? false)
+                                                <span class="text-green-600 text-xs">(оплачено)</span>
+                                            @endif
+                                        </div>
+                                    @endif
+                                    @if($checkout['source'] === 'horoshop')
+                                        <div class="flex items-center gap-2 text-xs text-purple-600 mt-2">
+                                            <span>📦</span>
+                                            <span>Синхронізовано з Horoshop</span>
+                                        </div>
                                     @endif
                                 </div>
                             </div>
-                            <div class="text-right ml-4">
-                                @if($checkout['order_total'])
-                                    <div class="text-xl font-bold text-green-600">{{ number_format($checkout['order_total'], 0) }} ₴</div>
-                                @endif
-                                @if($checkout['products_from_chat'] > 0)
-                                    <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
-                                        📦 {{ $checkout['products_from_chat'] }} з чату
-                                    </span>
-                                @endif
-                            </div>
-                        </div>
-                        
-                        {{-- Products list (lazy loading) --}}
-                        @if($checkout['has_products'] ?? false)
-                            <div class="mt-3">
-                                @if($selectedCheckoutId === $checkout['id'])
-                                    {{-- Products loaded --}}
-                                    <button wire:click="closeCheckoutProducts" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                                        <svg class="w-4 h-4 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                                        </svg>
-                                        Товари у замовленні ({{ $checkout['items_count'] }})
-                                    </button>
-                                    <div class="mt-2 space-y-2">
-                                        @foreach($selectedCheckoutProducts as $product)
-                                            <div class="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
-                                                <div class="flex-1">
-                                                    <span class="text-gray-800">{{ $product['title'] }}</span>
-                                                    @if($product['article'])
-                                                        <span class="text-gray-400 text-xs ml-2">[{{ $product['article'] }}]</span>
-                                                    @endif
-                                                    @if($product['quantity'] > 1)
-                                                        <span class="text-gray-500 ml-2">× {{ $product['quantity'] }}</span>
+                            
+                            {{-- Products list (lazy loading) --}}
+                            @if($checkout['has_products'] ?? false)
+                                <div class="mt-4 pt-3 border-t border-gray-200">
+                                    <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Товари</h4>
+                                    @if($selectedCheckoutId === $checkout['id'])
+                                        <div class="space-y-1">
+                                            @foreach($selectedCheckoutProducts as $product)
+                                                <div class="flex justify-between items-center p-2 bg-white rounded border text-sm">
+                                                    <div class="flex-1">
+                                                        <span class="text-gray-800">{{ $product['title'] }}</span>
+                                                        @if($product['article'])
+                                                            <span class="text-gray-400 text-xs ml-2">[{{ $product['article'] }}]</span>
+                                                        @endif
+                                                        @if($product['quantity'] > 1)
+                                                            <span class="text-gray-500 ml-2">× {{ $product['quantity'] }}</span>
+                                                        @endif
+                                                    </div>
+                                                    @if($product['price'])
+                                                        <span class="text-gray-700 font-medium ml-4">{{ number_format($product['price'], 0) }} ₴</span>
                                                     @endif
                                                 </div>
-                                                @if($product['price'])
-                                                    <span class="text-gray-700 font-medium ml-4">{{ number_format($product['price'], 0) }} ₴</span>
-                                                @endif
-                                            </div>
-                                        @endforeach
-                                    </div>
-                                @else
-                                    {{-- Click to load products --}}
-                                    <button wire:click="loadCheckoutProducts({{ $checkout['id'] }})" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
-                                        <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                            @endforeach
+                                        </div>
+                                        <button wire:click="closeCheckoutProducts" class="mt-2 text-xs text-gray-500 hover:text-gray-700">
+                                            Згорнути товари
+                                        </button>
+                                    @else
+                                        <button wire:click="loadCheckoutProducts({{ $checkout['id'] }})" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                            </svg>
+                                            Показати {{ $checkout['items_count'] }} товарів
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
+                            
+                            {{-- Chat link --}}
+                            @if($checkout['session_id'])
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <a href="{{ route('admin.chats.show', $checkout['session_id']) }}" 
+                                       class="text-sm text-blue-600 hover:underline inline-flex items-center gap-1">
+                                        💬 Переглянути чат
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                                         </svg>
-                                        Товари у замовленні ({{ $checkout['items_count'] }})
-                                    </button>
-                                @endif
-                            </div>
-                        @endif
-                        
-                        @if($checkout['session_id'])
-                            <div class="mt-2">
-                                <a href="{{ route('admin.chats.show', $checkout['session_id']) }}" 
-                                   class="text-xs text-blue-600 hover:underline">
-                                    Переглянути чат →
-                                </a>
-                            </div>
-                        @endif
+                                    </a>
+                                </div>
+                            @endif
+                        </div>
                     </div>
                 @empty
                     <div class="p-12 text-center text-gray-400">
                         <div class="text-5xl mb-3">📭</div>
-                        <p class="text-lg">Ще немає замовлень</p>
-                        <p class="text-sm mt-2">Замовлення з'являться коли хтось оформить покупку на сайті</p>
-                        <p class="text-xs mt-4 text-gray-300">Трекінг: checkout_success event через Horoshop marketingEvents</p>
+                        <p class="text-lg">Ще немає замовлень після чату</p>
+                        <p class="text-sm mt-2">Замовлення з'являться коли хтось спілкується в чаті а потім оформить покупку</p>
                     </div>
                 @endforelse
             </div>

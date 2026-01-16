@@ -545,7 +545,8 @@ class SyncOrdersCommand extends Command
         $notLinked = 0;
 
         foreach ($orders as $order) {
-            $raw = json_decode($order->raw ?? '{}', true);
+            // raw is already cast to array by Eloquent
+            $raw = $order->raw ?? [];
             $products = $raw['products'] ?? [];
 
             $chatData = $this->findChatSession(

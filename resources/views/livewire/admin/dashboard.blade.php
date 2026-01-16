@@ -163,46 +163,13 @@
         @endif
     </div>
 
-    <!-- Charts Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Charts Row - Full Width -->
+    <div class="mb-6">
         <!-- Conversations Chart -->
         <div class="bg-white rounded-xl shadow-sm p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">📈 Діалоги</h3>
             <div class="h-64 min-h-[16rem]" style="position: relative;">
                 <canvas id="conversationsChart"></canvas>
-            </div>
-        </div>
-        
-        <!-- Quick Stats Grid (replacing second funnel) -->
-        <div class="bg-white rounded-xl shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">📊 Ключові метрики</h3>
-            <div class="grid grid-cols-2 gap-4">
-                @foreach($kpis as $key => $kpi)
-                    @if(in_array($key, ['conversions', 'revenue', 'conversion_rate', 'avg_response']))
-                    <div class="bg-gray-50 rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-xl">{{ $kpi['icon'] }}</span>
-                            @if($kpi['change'] != 0)
-                                <span class="text-xs px-2 py-0.5 rounded-full {{ $kpi['change'] > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
-                                    {{ $kpi['change'] > 0 ? '+' : '' }}{{ $kpi['change'] }}%
-                                </span>
-                            @endif
-                        </div>
-                        <p class="text-xl font-bold text-gray-900">
-                            @if(($kpi['format'] ?? '') === 'currency')
-                                ₴{{ number_format($kpi['value'], 0, ',', ' ') }}
-                            @elseif(($kpi['format'] ?? '') === 'percent')
-                                {{ $kpi['value'] }}%
-                            @elseif(($kpi['format'] ?? '') === 'ms')
-                                {{ $kpi['value'] }}<span class="text-sm font-normal text-gray-500">ms</span>
-                            @else
-                                {{ number_format($kpi['value']) }}
-                            @endif
-                        </p>
-                        <p class="text-xs text-gray-500 mt-1">{{ $kpi['label'] }}</p>
-                    </div>
-                    @endif
-                @endforeach
             </div>
         </div>
     </div>

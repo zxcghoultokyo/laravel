@@ -231,7 +231,48 @@
                             @if($selectedSession['created_at'])
                                 <div class="text-xs text-gray-500 mt-2">Почато: {{ \Carbon\Carbon::parse($selectedSession['created_at'])->format('d.m.Y H:i') }}</div>
                             @endif
+                            @if($selectedSession['utm'] ?? null)
+                                <div class="mt-2 text-xs">
+                                    <span class="text-gray-500">Джерело:</span>
+                                    <span class="text-blue-600">{{ $selectedSession['utm']['utm_source'] }}</span>
+                                    @if($selectedSession['utm']['utm_campaign'])
+                                        <span class="text-gray-400">/</span>
+                                        <span class="text-purple-600">{{ $selectedSession['utm']['utm_campaign'] }}</span>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
+                        
+                        <!-- Checkouts/Orders -->
+                        @if(count($selectedSession['checkouts'] ?? []) > 0)
+                            <div class="mb-4">
+                                <h3 class="text-sm font-semibold text-gray-600 mb-2">✅ Замовлення ({{ count($selectedSession['checkouts']) }})</h3>
+                                <div class="space-y-1">
+                                    @foreach($selectedSession['checkouts'] as $checkout)
+                                        <div class="p-3 bg-green-50 border border-green-200 rounded">
+                                            <div class="flex justify-between items-center">
+                                                <div>
+                                                    @if($checkout['order_id'])
+                                                        <span class="font-medium text-green-800">Замовлення #{{ $checkout['order_id'] }}</span>
+                                                    @else
+                                                        <span class="font-medium text-green-800">Оформлення замовлення</span>
+                                                    @endif
+                                                    <div class="text-xs text-green-600 mt-1">
+                                                        {{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m.Y H:i') }}
+                                                        @if($checkout['items_count'])
+                                                            • {{ $checkout['items_count'] }} товарів
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                @if($checkout['order_total'])
+                                                    <span class="text-lg font-bold text-green-700">{{ number_format($checkout['order_total'], 0) }} ₴</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
                         
                         <!-- Chat Messages -->
                         @if(count($selectedSession['messages']) > 0)
@@ -263,7 +304,11 @@
                                     @foreach($selectedSession['products_shown'] as $product)
                                         <div class="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
                                             <div>
-                                                <span class="text-gray-700">{{ Str::limit($product['title'], 40) }}</span>
+                                                @if($product['url'] ?? null)
+                                                    <a href="{{ $product['url'] }}" target="_blank" class="text-blue-600 hover:underline">{{ Str::limit($product['title'], 40) }}</a>
+                                                @else
+                                                    <span class="text-gray-700">{{ Str::limit($product['title'], 40) }}</span>
+                                                @endif
                                             </div>
                                             @if($product['product_price'] ?? false)
                                                 <span class="text-gray-600">{{ number_format($product['product_price'], 0) }} ₴</span>
@@ -281,7 +326,11 @@
                                 <div class="space-y-1">
                                     @foreach($selectedSession['products_clicked'] as $product)
                                         <div class="flex justify-between items-center p-2 bg-blue-50 rounded text-sm">
-                                            <span class="text-blue-700">{{ Str::limit($product['title'], 40) }}</span>
+                                            @if($product['url'] ?? null)
+                                                <a href="{{ $product['url'] }}" target="_blank" class="text-blue-700 hover:underline">{{ Str::limit($product['title'], 40) }}</a>
+                                            @else
+                                                <span class="text-blue-700">{{ Str::limit($product['title'], 40) }}</span>
+                                            @endif
                                             @if($product['product_price'] ?? false)
                                                 <span class="text-blue-600">{{ number_format($product['product_price'], 0) }} ₴</span>
                                             @endif
@@ -299,7 +348,11 @@
                                     @foreach($selectedSession['added_to_cart'] as $product)
                                         <div class="flex justify-between items-center p-2 bg-green-50 border border-green-200 rounded text-sm">
                                             <div>
-                                                <span class="text-green-700 font-medium">{{ Str::limit($product['title'], 40) }}</span>
+                                                @if($product['url'] ?? null)
+                                                    <a href="{{ $product['url'] }}" target="_blank" class="text-green-700 font-medium hover:underline">{{ Str::limit($product['title'], 40) }}</a>
+                                                @else
+                                                    <span class="text-green-700 font-medium">{{ Str::limit($product['title'], 40) }}</span>
+                                                @endif
                                                 <div class="text-xs text-green-600">{{ \Carbon\Carbon::parse($product['created_at'])->format('H:i') }}</div>
                                             </div>
                                             @if($product['product_price'] ?? false)

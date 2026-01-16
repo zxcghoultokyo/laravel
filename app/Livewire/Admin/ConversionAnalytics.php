@@ -100,20 +100,29 @@ class ConversionAnalytics extends Component
             ->get();
         
         $articles = $events->pluck('product_article')->unique()->filter()->toArray();
-        $productTitlesByArticle = [];
+        $productDataByArticle = [];
         if (!empty($articles)) {
-            $productTitlesByArticle = DB::table('products')
+            $products = DB::table('products')
                 ->whereIn('article', $articles)
-                ->pluck('title', 'article')
-                ->toArray();
+                ->select('article', 'title', 'raw')
+                ->get();
+            foreach ($products as $p) {
+                $raw = json_decode($p->raw ?? '{}', true);
+                $productDataByArticle[$p->article] = [
+                    'title' => $p->title,
+                    'url' => $raw['link'] ?? $raw['url'] ?? null,
+                ];
+            }
         }
         
-        $this->conversions = $events->map(function ($event) use ($productTitlesByArticle) {
+        $this->conversions = $events->map(function ($event) use ($productDataByArticle) {
                 $meta = json_decode($event->metadata ?? '{}', true);
                 
                 $title = $meta['product_title'] ?? null;
-                if (!$title && $event->product_article) {
-                    $title = $productTitlesByArticle[$event->product_article] ?? null;
+                $url = null;
+                if ($event->product_article && isset($productDataByArticle[$event->product_article])) {
+                    $title = $title ?: $productDataByArticle[$event->product_article]['title'];
+                    $url = $productDataByArticle[$event->product_article]['url'];
                 }
                 
                 return [
@@ -122,10 +131,16 @@ class ConversionAnalytics extends Component
                     'product_id' => $event->product_id,
                     'product_article' => $event->product_article,
                     'product_title' => $title,
+                    'product_url' => $url,
                     'product_price' => $event->product_price,
                     'had_chat' => $meta['had_chat_conversation'] ?? false,
                     'from_chat' => $meta['product_from_chat'] ?? false,
                     'chat_session_id' => $meta['chat_session_id'] ?? $event->session_id,
+                    'utm_source' => $event->utm_source,
+                    'utm_campaign' => $event->utm_campaign,
+                    'utm_medium' => $event->utm_medium,
+                    'referrer' => $event->referrer,
+                    'page_url' => $event->page_url,
                     'created_at' => $event->created_at,
                 ];
             })
@@ -331,7 +346,42 @@ class ConversionAnalytics extends Component
             ->get()
             ->toArray();
         
-        // Get product titles - by article (primary) and by product_id (fallback)
+        // Get checkout/order events for this session
+        $checkouts = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->whereIn('event_type', ['checkout_submit', 'checkout_success'])
+            ->select('event_type', 'product_price', 'created_at', 'metadata')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function ($e) {
+                $meta = json_decode($e->metadata ?? '{}', true);
+                return [
+                    'event_type' => $e->event_type,
+                    'order_total' => $meta['order_total'] ?? $e->product_price ?? 0,
+                    'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
+                    'order_id' => $meta['order_id'] ?? null,
+                    'created_at' => $e->created_at,
+                ];
+            })
+            ->toArray();
+        
+        // Get UTM data from first page_view in session
+        $firstEvent = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->whereNotNull('utm_source')
+            ->first();
+        
+        $utmData = null;
+        if ($firstEvent) {
+            $utmData = [
+                'utm_source' => $firstEvent->utm_source,
+                'utm_campaign' => $firstEvent->utm_campaign,
+                'utm_medium' => $firstEvent->utm_medium,
+                'referrer' => $firstEvent->referrer,
+            ];
+        }
+        
+        // Get product data - by article (primary) and by product_id (fallback)
         $productArticles = collect($productsShown)
             ->merge($productsClicked)
             ->merge($addedToCart)
@@ -340,12 +390,19 @@ class ConversionAnalytics extends Component
             ->filter()
             ->toArray();
         
-        $productTitlesByArticle = [];
+        $productDataByArticle = [];
         if (!empty($productArticles)) {
-            $productTitlesByArticle = DB::table('products')
+            $products = DB::table('products')
                 ->whereIn('article', $productArticles)
-                ->pluck('title', 'article')
-                ->toArray();
+                ->select('article', 'title', 'raw')
+                ->get();
+            foreach ($products as $p) {
+                $raw = json_decode($p->raw ?? '{}', true);
+                $productDataByArticle[$p->article] = [
+                    'title' => $p->title,
+                    'url' => $raw['link'] ?? $raw['url'] ?? null,
+                ];
+            }
         }
         
         $productIds = collect($productsShown)
@@ -364,46 +421,62 @@ class ConversionAnalytics extends Component
                 ->toArray();
         }
         
-        // Helper to get title from various sources
-        $getTitle = function ($item) use ($productTitlesByArticle, $productTitlesById) {
+        // Helper to get title and URL from various sources
+        $getProductData = function ($item) use ($productDataByArticle, $productTitlesById) {
+            $title = null;
+            $url = null;
+            
             // 1. Try metadata (stored from widget)
             if (isset($item->metadata)) {
                 $meta = json_decode($item->metadata, true);
                 if (!empty($meta['product_title'])) {
-                    return $meta['product_title'];
+                    $title = $meta['product_title'];
                 }
             }
             // 2. Try by article (most reliable)
-            if (!empty($item->product_article) && isset($productTitlesByArticle[$item->product_article])) {
-                return $productTitlesByArticle[$item->product_article];
+            if (!empty($item->product_article) && isset($productDataByArticle[$item->product_article])) {
+                $title = $title ?: $productDataByArticle[$item->product_article]['title'];
+                $url = $productDataByArticle[$item->product_article]['url'];
             }
             // 3. Try by product_id
-            if (!empty($item->product_id) && isset($productTitlesById[$item->product_id])) {
-                return $productTitlesById[$item->product_id];
+            if (!$title && !empty($item->product_id) && isset($productTitlesById[$item->product_id])) {
+                $title = $productTitlesById[$item->product_id];
             }
-            return 'Unknown';
+            
+            return [
+                'title' => $title ?: 'Unknown',
+                'url' => $url,
+            ];
         };
         
         $this->selectedSession = [
             'session_id' => $sessionId,
             'created_at' => $session->created_at ?? null,
             'messages' => $messages,
-            'products_shown' => array_map(function ($p) use ($getTitle) {
+            'utm' => $utmData,
+            'checkouts' => $checkouts,
+            'products_shown' => array_map(function ($p) use ($getProductData) {
+                $data = $getProductData($p);
                 return [
                     ...(array)$p,
-                    'title' => $getTitle($p)
+                    'title' => $data['title'],
+                    'url' => $data['url'],
                 ];
             }, $productsShown),
-            'products_clicked' => array_map(function ($p) use ($getTitle) {
+            'products_clicked' => array_map(function ($p) use ($getProductData) {
+                $data = $getProductData($p);
                 return [
                     ...(array)$p,
-                    'title' => $getTitle($p)
+                    'title' => $data['title'],
+                    'url' => $data['url'],
                 ];
             }, $productsClicked),
-            'added_to_cart' => array_map(function ($p) use ($getTitle) {
+            'added_to_cart' => array_map(function ($p) use ($getProductData) {
+                $data = $getProductData($p);
                 return [
                     ...(array)$p,
-                    'title' => $getTitle($p)
+                    'title' => $data['title'],
+                    'url' => $data['url'],
                 ];
             }, $addedToCart),
         ];

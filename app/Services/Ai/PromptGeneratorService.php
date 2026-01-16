@@ -246,16 +246,12 @@ PROMPT;
      */
     private function extractStoreName(?WidgetSettings $settings): string
     {
-        // First try direct fields
+        // First try explicit store_name field
         if (!empty($settings?->store_name)) {
             return $settings->store_name;
         }
         
-        if (!empty($settings?->bot_name)) {
-            return $settings->bot_name;
-        }
-        
-        // Try to extract from FAQ about text
+        // Try to extract from FAQ about text BEFORE bot_name (bot_name is often generic like "Контракторець")
         $aboutText = $settings?->faq_about_text ?? '';
         if (!empty($aboutText)) {
             // Look for uppercase brand name followed by em-dash (CONTRACTOR — ...)
@@ -282,6 +278,11 @@ PROMPT;
                     return $name;
                 }
             }
+        }
+        
+        // Fallback to bot_name only if FAQ extraction failed
+        if (!empty($settings?->bot_name)) {
+            return $settings->bot_name;
         }
         
         return 'магазин';

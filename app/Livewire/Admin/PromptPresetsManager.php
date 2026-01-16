@@ -19,6 +19,7 @@ class PromptPresetsManager extends Component
     public $categories = [];
     public $language = '';
     public $tone = '';
+    public $storeType = '';
     public $campaign = '';
     public $variables = [];
     public $is_active = true;
@@ -123,6 +124,7 @@ class PromptPresetsManager extends Component
         $this->categories = $preset->categories ?? [];
         $this->language = $preset->language ?? '';
         $this->tone = $preset->tone ?? '';
+        $this->storeType = $preset->store_type ?? '';
         $this->campaign = $preset->campaign ?? '';
         
         // Normalize variables to array of ['name' => ..., 'default' => ...] format
@@ -161,6 +163,7 @@ class PromptPresetsManager extends Component
             'categories' => $this->categories ?: null,
             'language' => $this->language ?: null,
             'tone' => $this->tone ?: null,
+            'store_type' => $this->storeType ?: null,
             'campaign' => $this->campaign ?: null,
             'variables' => $this->variables ?: null,
             'is_active' => $this->is_active,
@@ -445,6 +448,7 @@ class PromptPresetsManager extends Component
         $this->categories = [];
         $this->language = '';
         $this->tone = '';
+        $this->storeType = '';
         $this->campaign = '';
         $this->variables = [];
         $this->is_active = true;

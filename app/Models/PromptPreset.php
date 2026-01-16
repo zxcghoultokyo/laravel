@@ -22,6 +22,7 @@ class PromptPreset extends Model
         'language',
         'tone',
         'campaign',
+        'store_type',
         'variables',
         'is_active',
         'is_default',

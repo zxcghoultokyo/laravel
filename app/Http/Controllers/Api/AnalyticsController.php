@@ -56,6 +56,20 @@ class AnalyticsController extends Controller
                 if (empty($event['event_type']) || empty($event['session_id'])) {
                     continue;
                 }
+                
+                // Skip checkout events without actual chat conversation
+                // These are noise from users who never used the chat
+                $eventType = $event['event_type'] ?? '';
+                if (in_array($eventType, ['checkout_submit', 'checkout_success'])) {
+                    $hadChat = $event['had_chat_conversation'] ?? false;
+                    if (!$hadChat) {
+                        Log::debug('Skipping checkout event without chat conversation', [
+                            'event_type' => $eventType,
+                            'session_id' => $event['session_id'] ?? ''
+                        ]);
+                        continue;
+                    }
+                }
 
                 // Convert ISO 8601 timestamp to MySQL format
                 $createdAt = now();

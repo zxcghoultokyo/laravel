@@ -330,6 +330,12 @@
             const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
             const hadChatConversation = messages && JSON.parse(messages).length > 0;
             
+            // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
+            if (!hadChatConversation) {
+                log('Skipping checkout_submit tracking - no chat conversation');
+                return;
+            }
+            
             // Get products shown in chat
             const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
             const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
@@ -459,6 +465,12 @@
         const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
         const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
         const hadChatConversation = messages && JSON.parse(messages).length > 0;
+        
+        // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
+        if (!hadChatConversation) {
+            log('Skipping checkout_success tracking - no chat conversation');
+            return;
+        }
         
         // Get products shown in chat
         const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;

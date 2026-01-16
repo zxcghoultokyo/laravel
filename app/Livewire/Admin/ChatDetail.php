@@ -36,38 +36,46 @@ class ChatDetail extends Component
 
     public function loadSession()
     {
-        // Try to find existing session - could be id or session_id string
-        $this->session = ChatSession::where('id', $this->sessionId)
-            ->orWhere('session_id', $this->sessionId)
-            ->with('messages')
-            ->first();
+        // First, try to find messages by chat_session_id (most common case from dashboard)
+        $messagesExist = DB::table('chat_messages')
+            ->where('chat_session_id', $this->sessionId)
+            ->exists();
         
-        // If session doesn't exist, try to find by chat_session_id in messages
-        if (!$this->session) {
-            $firstMessage = DB::table('chat_messages')
-                ->where('chat_session_id', $this->sessionId)
+        if ($messagesExist) {
+            // Messages exist, find or create ChatSession
+            $this->session = ChatSession::where('id', $this->sessionId)->first();
+            
+            if (!$this->session) {
+                // Create session from messages
+                $firstMessage = DB::table('chat_messages')
+                    ->where('chat_session_id', $this->sessionId)
+                    ->orderBy('created_at')
+                    ->first();
+                
+                $this->session = ChatSession::create([
+                    'id' => (int) $this->sessionId,
+                    'session_id' => 'session-' . $this->sessionId,
+                    'created_at' => $firstMessage->created_at ?? now(),
+                    'updated_at' => now(),
+                ]);
+            }
+            
+            // Load messages
+            $this->messages = ChatMessage::where('chat_session_id', $this->sessionId)
                 ->orderBy('created_at')
+                ->get();
+        } else {
+            // Try to find by session_id string (UUID format)
+            $this->session = ChatSession::where('session_id', $this->sessionId)
+                ->with('messages')
                 ->first();
             
-            if ($firstMessage) {
-                // Find or create session
-                $this->session = ChatSession::firstOrCreate(
-                    ['id' => $firstMessage->chat_session_id],
-                    [
-                        'session_id' => (string) $firstMessage->chat_session_id,
-                        'created_at' => $firstMessage->created_at,
-                        'updated_at' => now(),
-                    ]
-                );
+            if ($this->session) {
+                $this->messages = $this->session->messages;
             } else {
                 abort(404, 'Сесія не знайдена');
             }
         }
-        
-        // Load messages by chat_session_id only (session_id column doesn't exist)
-        $this->messages = ChatMessage::where('chat_session_id', $this->session->id)
-            ->orderBy('created_at')
-            ->get();
         
         // Check if operator has taken over
         $this->activeSessionData = DB::table('active_chat_sessions')

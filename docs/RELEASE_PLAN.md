@@ -43,7 +43,7 @@
 | **Pro** | 1,999 ₴/mo | 5,000 | 5,000 |
 | **Enterprise** | 4,999 ₴/mo | 50,000 | Unlimited |
 
----
+---змін
 
 ## 📈 Phase 3: Growth (IN PROGRESS)
 

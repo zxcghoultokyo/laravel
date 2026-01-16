@@ -409,8 +409,9 @@ class PromptPresetsManager extends Component
             $useAi = !empty(config('services.openai.key'));
             $prompt = $generator->generatePrompt($context, $useAi);
             
-            // Create PromptPreset from generated content
-            $storeName = \App\Models\WidgetSettings::first()?->bot_name ?? 'Магазин';
+            // Extract store name properly (from FAQ text, not bot_name)
+            $settings = \App\Models\WidgetSettings::first();
+            $storeName = $this->extractStoreNameFromSettings($settings);
             $presetName = "Auto: {$storeName} (" . now()->format('d.m.Y') . ")";
             
             $preset = PromptPreset::create([
@@ -424,7 +425,7 @@ class PromptPresetsManager extends Component
                 'campaign' => null,
                 'variables' => [
                     ['name' => 'shop_name', 'default' => $storeName],
-                    ['name' => 'shop_phone', 'default' => \App\Models\WidgetSettings::first()?->shop_phone ?? ''],
+                    ['name' => 'shop_phone', 'default' => $settings?->shop_phone ?? ''],
                 ],
                 'is_active' => true,
                 'is_default' => false,
@@ -458,6 +459,45 @@ class PromptPresetsManager extends Component
         $this->newVarDefault = '';
         $this->newCategory = '';
         $this->customCategory = '';
+    }
+
+    /**
+     * Extract store name from widget settings.
+     * Priority: store_name field → FAQ about text extraction → bot_name → fallback
+     */
+    protected function extractStoreNameFromSettings(?\App\Models\WidgetSettings $settings): string
+    {
+        // First try explicit store_name field
+        if (!empty($settings?->store_name)) {
+            return $settings->store_name;
+        }
+        
+        // Try to extract from FAQ about text
+        $aboutText = $settings?->faq_about_text ?? '';
+        if (!empty($aboutText)) {
+            // Look for uppercase brand name followed by em-dash (CONTRACTOR — ...)
+            if (preg_match('/^([A-ZА-ЯІЇЄҐ][A-Za-zА-Яа-яІіЇїЄєҐґ0-9]*)\s*[—–-]\s*/m', $aboutText, $matches)) {
+                $name = trim($matches[1]);
+                if (mb_strlen($name) >= 2 && mb_strlen($name) < 50) {
+                    return $name;
+                }
+            }
+            
+            // Try "Магазин X" pattern  
+            if (preg_match('/магазин[у]?\s+["\']?([А-Яа-яA-Za-z][А-Яа-яA-Za-z0-9\s\.]+)["\']?/iu', $aboutText, $matches)) {
+                $name = trim($matches[1]);
+                if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
+                    return $name;
+                }
+            }
+        }
+        
+        // Fallback to bot_name
+        if (!empty($settings?->bot_name)) {
+            return $settings->bot_name;
+        }
+        
+        return 'Магазин';
     }
 
     protected function getDefaultPromptTemplate(): string

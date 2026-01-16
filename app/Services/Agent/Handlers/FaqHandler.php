@@ -110,8 +110,11 @@ class FaqHandler
      */
     private function buildPromptForTopic(string $message, string $contextText, string $topic): string
     {
+        // Clean context text from garbage
+        $contextText = $this->cleanFaqText($contextText);
+        
         $basePrompt = "Користувач питає: \"{$message}\"\n\n" .
-            "Контекст (з FAQ сторінки магазину, очищений):\n" . $contextText . "\n\n";
+            "Контекст (з FAQ сторінки магазину):\n" . $contextText . "\n\n";
 
         return match ($topic) {
             'delivery' => $basePrompt .
@@ -130,11 +133,53 @@ class FaqHandler
                 "Завершуй CTA: 'Потрібна допомога з поверненням — написати?'.\n" .
                 "Не вигадуй фактів. Макс 450 символів.",
             'contacts' => $basePrompt .
-                "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі ТІЛЬКИ з контактами (1-3 способи).\n" .
-                "Завершуй CTA: 'Написати тут?'. Макс 300 символів.",
+                "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі. Виведи ТІЛЬКИ:\n" .
+                "- Телефон (якщо є)\n" .
+                "- Адреса (одним рядком)\n" .
+                "- Графік роботи\n" .
+                "НЕ дублюй інформацію! Завершуй CTA: 'Чим можу допомогти?'. Макс 200 символів.",
+            'about' => $basePrompt .
+                "Завдання: дай КОРОТКУ відповідь українською БЕЗ Markdown/емодзі. Виведи:\n" .
+                "- Назва магазину\n" .
+                "- 1-2 речення про спеціалізацію\n" .
+                "- Телефон для звʼязку\n" .
+                "НЕ дублюй інформацію! НЕ пиши списки товарів! Завершуй: 'Чим можу допомогти?'. Макс 300 символів.",
             default => $basePrompt .
                 "Дай коротку корисну відповідь одним блоком, без Markdown/емодзі, з CTA наприкінці. Макс 500 символів."
         };
+    }
+
+    /**
+     * Clean FAQ text from garbage.
+     */
+    private function cleanFaqText(string $text): string
+    {
+        // Remove ?? artifacts
+        $text = str_replace('??', '', $text);
+        
+        // Remove duplicate lines
+        $lines = explode("\n", $text);
+        $seen = [];
+        $result = [];
+        foreach ($lines as $line) {
+            $normalized = trim(mb_strtolower($line));
+            if (empty($normalized) || isset($seen[$normalized])) {
+                continue;
+            }
+            $seen[$normalized] = true;
+            $result[] = trim($line);
+        }
+        
+        // Remove lines that are just social media handles without context
+        $result = array_filter($result, function($line) {
+            // Skip lines that are just @username or short "Написати" etc
+            if (preg_match('/^@\w+$/', $line)) return false;
+            if (trim($line) === 'Написати') return false;
+            if (trim($line) === 'Замовити дзвінок') return false;
+            return true;
+        });
+        
+        return implode("\n", $result);
     }
 
     /**

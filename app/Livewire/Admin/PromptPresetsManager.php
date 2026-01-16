@@ -318,6 +318,51 @@ class PromptPresetsManager extends Component
         );
     }
 
+    /**
+     * Generate prompt automatically based on store data.
+     */
+    public function generateForStore()
+    {
+        try {
+            $generator = app(\App\Services\Ai\PromptGeneratorService::class);
+            
+            // Analyze store first
+            $context = $generator->analyzeStore(null);
+            
+            // Generate prompt (use AI if OpenAI is configured)
+            $useAi = !empty(config('services.openai.key'));
+            $prompt = $generator->generatePrompt($context, $useAi);
+            
+            // Create PromptPreset from generated content
+            $storeName = \App\Models\WidgetSettings::first()?->bot_name ?? 'Магазин';
+            $presetName = "Auto: {$storeName} (" . now()->format('d.m.Y') . ")";
+            
+            $preset = PromptPreset::create([
+                'name' => $presetName,
+                'slug' => Str::slug($presetName) . '-' . time(),
+                'description' => "Автоматично згенерований промпт для {$storeName}. Тип магазину: {$context->store_type}",
+                'system_prompt' => $prompt,
+                'categories' => $context->primary_categories ? array_slice($context->primary_categories, 0, 5) : null,
+                'language' => 'uk',
+                'tone' => null,
+                'campaign' => null,
+                'variables' => [
+                    ['name' => 'shop_name', 'default' => $storeName],
+                    ['name' => 'shop_phone', 'default' => \App\Models\WidgetSettings::first()?->shop_phone ?? ''],
+                ],
+                'is_active' => true,
+                'is_default' => false,
+                'priority' => 50,
+            ]);
+            
+            $this->dispatch('toast', message: "Промпт згенеровано! Тип: {$context->store_type}, Категорій: " . count($context->primary_categories ?? []), type: 'success');
+            
+        } catch (\Throwable $e) {
+            \Log::error('[PromptPresetsManager] Generate failed', ['error' => $e->getMessage()]);
+            $this->dispatch('toast', message: 'Помилка: ' . $e->getMessage(), type: 'error');
+        }
+    }
+
     protected function resetForm()
     {
         $this->preset_id = null;

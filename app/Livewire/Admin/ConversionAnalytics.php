@@ -4,14 +4,18 @@ namespace App\Livewire\Admin;
 
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ConversionAnalytics extends Component
 {
     public int $days = 7;
+    public array $funnel = [];
     public array $conversions = [];
+    public array $checkouts = [];
     public array $chatAttributedConversions = [];
     public ?array $selectedSession = null;
     public ?string $selectedSessionId = null;
+    public string $activeTab = 'funnel';
     
     public function mount()
     {
@@ -23,18 +27,76 @@ class ConversionAnalytics extends Component
         $this->loadData();
     }
     
+    public function setTab(string $tab)
+    {
+        $this->activeTab = $tab;
+    }
+    
     public function loadData()
     {
         $startDate = now()->subDays($this->days)->startOfDay();
+        $endDate = now()->endOfDay();
         
-        // Get all add_to_cart events with chat context
+        // Load funnel data
+        $this->loadFunnel($startDate, $endDate);
+        
+        // Load add_to_cart events
+        $this->loadAddToCartEvents($startDate);
+        
+        // Load checkout events
+        $this->loadCheckoutEvents($startDate);
+    }
+    
+    private function loadFunnel($startDate, $endDate)
+    {
+        $stages = [
+            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Відкрили сторінку з віджетом'],
+            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Натиснули на іконку чату'],
+            'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
+            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
+            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар у кошик'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+        ];
+        
+        $this->funnel = [];
+        $prevCount = 0;
+        
+        foreach ($stages as $eventType => $stage) {
+            try {
+                $count = DB::table('chat_events')
+                    ->where('event_type', $eventType)
+                    ->whereBetween('created_at', [$startDate, $endDate])
+                    ->distinct('session_id')
+                    ->count('session_id');
+            } catch (\Throwable $e) {
+                $count = 0;
+            }
+            
+            $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
+            $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
+            
+            $this->funnel[] = [
+                'stage' => $eventType,
+                'label' => $stage['label'],
+                'icon' => $stage['icon'],
+                'hint' => $stage['hint'],
+                'count' => $count,
+                'rate' => $rate,
+                'dropoff' => $dropoff,
+            ];
+            
+            $prevCount = $count ?: $prevCount;
+        }
+    }
+    
+    private function loadAddToCartEvents($startDate)
+    {
         $events = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->where('event_type', 'add_to_cart')
             ->orderByDesc('created_at')
             ->get();
         
-        // Get product titles by article (most reliable method)
         $articles = $events->pluck('product_article')->unique()->filter()->toArray();
         $productTitlesByArticle = [];
         if (!empty($articles)) {
@@ -47,7 +109,6 @@ class ConversionAnalytics extends Component
         $this->conversions = $events->map(function ($event) use ($productTitlesByArticle) {
                 $meta = json_decode($event->metadata ?? '{}', true);
                 
-                // Get title: 1) from metadata, 2) from products table by article
                 $title = $meta['product_title'] ?? null;
                 if (!$title && $event->product_article) {
                     $title = $productTitlesByArticle[$event->product_article] ?? null;
@@ -68,8 +129,33 @@ class ConversionAnalytics extends Component
             })
             ->toArray();
         
-        // Get chat-attributed conversions (had conversation before adding to cart)
         $this->chatAttributedConversions = array_filter($this->conversions, fn($c) => $c['had_chat'] || $c['from_chat']);
+    }
+    
+    private function loadCheckoutEvents($startDate)
+    {
+        $events = DB::table('chat_events')
+            ->where('created_at', '>=', $startDate)
+            ->whereIn('event_type', ['checkout_success', 'checkout_submit'])
+            ->orderByDesc('created_at')
+            ->get();
+        
+        $this->checkouts = $events->map(function ($event) {
+                $meta = json_decode($event->metadata ?? '{}', true);
+                
+                return [
+                    'id' => $event->id,
+                    'session_id' => $event->session_id,
+                    'event_type' => $event->event_type,
+                    'order_id' => $meta['order_id'] ?? null,
+                    'order_total' => $meta['order_total'] ?? $event->product_price ?? 0,
+                    'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
+                    'had_chat' => $meta['had_chat_conversation'] ?? false,
+                    'products_from_chat' => $meta['products_from_chat'] ?? 0,
+                    'created_at' => $event->created_at,
+                ];
+            })
+            ->toArray();
     }
     
     public function viewSession($sessionId)

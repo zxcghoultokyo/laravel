@@ -276,18 +276,21 @@
                             <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'official' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">📋</div>
                                 <div class="font-medium text-sm">Офіційний</div>
+                                <div class="text-xs text-gray-500 mt-1 italic">«Доброго дня! З радістю допоможу.»</div>
                             </div>
                         </div>
                         <div class="cursor-pointer" wire:click="$set('tone', 'spartan')">
                             <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'spartan' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">⚡</div>
                                 <div class="font-medium text-sm">Лаконічний</div>
+                                <div class="text-xs text-gray-500 mt-1 italic">«Привіт. Що шукаєте?»</div>
                             </div>
                         </div>
                         <div class="cursor-pointer" wire:click="$set('tone', 'friendly')">
                             <div class="p-3 border-2 rounded-lg transition-all {{ $tone === 'friendly' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-400' }} text-center">
                                 <div class="text-lg">😊</div>
                                 <div class="font-medium text-sm">Дружній</div>
+                                <div class="text-xs text-gray-500 mt-1 italic">«Привіт! 👋 Що тебе цікавить?»</div>
                             </div>
                         </div>
                     </div>

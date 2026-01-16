@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.9';
+    const WIDGET_VERSION = '2.6.0';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -707,7 +707,7 @@
                     transition: all 0.3s ease;
                     overflow: hidden;
                 ">
-                    <img src="${BOT_AVATAR}" alt="Chat" style="width: 40px; height: 40px; border-radius: 50%;">
+                    <img src="${BOT_AVATAR}" alt="Chat" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
                 </button>
 
                 <div id="aintento-window" class="aintento-window" style="
@@ -738,13 +738,12 @@
                                 width: 40px; 
                                 height: 40px; 
                                 border-radius: 50%; 
-                                background: rgba(255,255,255,0.15); 
                                 display: flex; 
                                 align-items: center; 
                                 justify-content: center;
-                                border: 2px solid rgba(34, 211, 238, 0.6);
+                                overflow: hidden;
                             ">
-                                <img src="${BOT_AVATAR}" alt="${s.bot_name || 'AIntento'}" style="width: 32px; height: 32px; border-radius: 50%;">
+                                <img src="${BOT_AVATAR}" alt="${s.bot_name || 'AIntento'}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
                             </div>
                             <div style="display: flex; flex-direction: column;">
                                 <span style="font-weight: 600; font-size: 15px; color: ${s.text_color || 'white'};">${s.bot_name || 'AIntento'}</span>

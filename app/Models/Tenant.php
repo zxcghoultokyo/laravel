@@ -119,6 +119,14 @@ class Tenant extends Model
     }
 
     /**
+     * Active subscription for this tenant.
+     */
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(Subscription::class)->latest();
+    }
+
+    /**
      * Widget settings for this tenant.
      */
     public function widgetSettings(): HasOne

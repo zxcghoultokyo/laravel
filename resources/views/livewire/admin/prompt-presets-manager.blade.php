@@ -166,7 +166,7 @@ class="p-6 max-w-7xl mx-auto">
                             @if(!empty($preset->variables))
                                 <div class="flex flex-wrap gap-1">
                                     @foreach(array_slice($preset->variables, 0, 3) as $var)
-                                        <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded font-mono">{{ '{{' . $var['name'] . '}}' }}</span>
+                                        <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-700 rounded font-mono">@{{ {{ $var['name'] }} }}</span>
                                     @endforeach
                                     @if(count($preset->variables) > 3)
                                         <span class="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">+{{ count($preset->variables) - 3 }}</span>
@@ -308,7 +308,7 @@ class="p-6 max-w-7xl mx-auto">
                         <div class="space-y-2">
                             @foreach($variables as $index => $var)
                                 <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                    <code class="text-sm text-purple-600 font-mono bg-purple-50 px-2 py-0.5 rounded">{{ '{{' . ($var['name'] ?? 'unnamed') . '}}' }}</code>
+                                    <code class="text-sm text-purple-600 font-mono bg-purple-50 px-2 py-0.5 rounded">@{{ {{ $var['name'] ?? 'unnamed' }} }}</code>
                                     <span class="text-gray-400">=</span>
                                     <input type="text" wire:model="variables.{{ $index }}.default"
                                            class="flex-1 text-sm rounded border-gray-300"

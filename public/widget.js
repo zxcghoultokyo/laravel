@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.2';
+    const WIDGET_VERSION = '2.5.3';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -1132,9 +1132,11 @@
                             }
                             
                             // Fetch cross-sell for first product (skip if operator mode)
+                            log('Cross-sell check: products=' + receivedProducts.length + ', operatorMode=' + state.operatorMode);
                             if (receivedProducts.length > 0 && !state.operatorMode) {
                                 const firstProduct = receivedProducts[0];
                                 const productId = firstProduct.id || firstProduct.article;
+                                log('Cross-sell: productId=' + productId + ' from', firstProduct);
                                 if (productId) {
                                     fetchCrossSellAsync(messages, productId, settings, state.sessionId);
                                 }

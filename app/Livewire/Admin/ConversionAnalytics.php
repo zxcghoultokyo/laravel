@@ -160,45 +160,56 @@ class ConversionAnalytics extends Component
                 ->get();
         }
         
-        // Also load from chat_events
+        // Also load from chat_events (only those with chat!)
         $events = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->whereIn('event_type', ['checkout_success', 'checkout_submit'])
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->filter(function ($event) {
+                $meta = json_decode($event->metadata ?? '{}', true);
+                return $meta['had_chat_conversation'] ?? false;
+            });
         
-        // Map orders (preferred - has Horoshop data with products)
-        $checkoutsFromOrders = $orders->map(function ($order) {
-            $raw = json_decode($order->raw ?? '{}', true);
-            $analytics = json_decode($order->analytics ?? '{}', true);
+        // Map orders (preferred - has Horoshop data with products) - ONLY with chat
+        $checkoutsFromOrders = $orders
+            ->filter(fn($order) => (bool)($order->had_chat ?? false))
+            ->map(function ($order) {
+                $raw = json_decode($order->raw ?? '{}', true);
             
-            // Extract products from raw Horoshop data
-            $products = $raw['products'] ?? [];
+                // Extract products from raw Horoshop data
+                $products = $raw['products'] ?? [];
             
-            return [
-                'id' => $order->id,
-                'source' => 'horoshop',
-                'order_id' => $order->order_id ?? $order->id,
-                'session_id' => $order->session_id,
-                'event_type' => 'checkout_success',
-                'status' => $order->status ?? 'new',
-                'status_label' => $this->getOrderStatusLabel($order->status ?? 'new'),
-                'order_total' => $order->total_sum ?? 0,
-                'items_count' => count($products),
-                'had_chat' => (bool)($order->had_chat ?? false),
-                'products_from_chat' => $order->products_from_chat ?? 0,
-                'created_at' => $order->created_at,
-                // Customer info
-                'customer_name' => $order->delivery_name ?? null,
-                'customer_phone' => $order->delivery_phone ?? null,
-                'customer_email' => $order->customer_email ?? null,
-                // UTM
-                'utm_source' => $analytics['utm_source'] ?? null,
-                'utm_campaign' => $analytics['utm_campaign'] ?? null,
-                // Products count only, not full data (to reduce payload)
-                'has_products' => count($products) > 0,
-            ];
-        });
+                return [
+                    'id' => $order->id,
+                    'source' => 'horoshop',
+                    'order_id' => $order->order_id ?? $order->id,
+                    'session_id' => $order->session_id ?? null,
+                    'event_type' => 'checkout_success',
+                    'status' => $order->status_code ?? 'new',
+                    'status_label' => $order->status_label ?? $this->getOrderStatusLabel($order->status_code ?? 'new'),
+                    'order_total' => $order->total_sum ?? 0,
+                    'items_count' => $order->total_quantity ?? count($products),
+                    'had_chat' => true,
+                    'products_from_chat' => $order->products_from_chat ?? 0,
+                    'created_at' => $order->ordered_at ?? $order->created_at,
+                    // Full customer info from Horoshop
+                    'customer_name' => $order->customer_name,
+                    'customer_phone' => $order->customer_phone,
+                    'customer_email' => $order->customer_email,
+                    'customer_city' => $order->customer_city,
+                    'customer_address' => $order->customer_address,
+                    // Delivery
+                    'delivery_type' => $order->delivery_type_title,
+                    'delivery_price' => $order->delivery_price,
+                    'delivery_comment' => $order->delivery_comment,
+                    // Payment
+                    'payment_type' => $order->payment_type_title,
+                    'payed' => (bool)$order->payed,
+                    // Products count only, not full data (to reduce payload)
+                    'has_products' => count($products) > 0,
+                ];
+            });
         
         // Map events (fallback for orders without Horoshop sync)
         $orderIds = $orders->pluck('order_id')->filter()->toArray();
@@ -222,13 +233,20 @@ class ConversionAnalytics extends Component
                 'status_label' => 'Новий',
                 'order_total' => $meta['order_total'] ?? $event->product_price ?? 0,
                 'items_count' => $meta['items_count'] ?? $meta['order_items_count'] ?? 0,
-                'had_chat' => $meta['had_chat_conversation'] ?? false,
+                'had_chat' => true,
                 'products_from_chat' => $meta['products_from_chat'] ?? 0,
                 'created_at' => $event->created_at,
-                // Customer info (from event)
+                // Customer info (from event metadata)
                 'customer_name' => $meta['customer_name'] ?? $meta['name'] ?? null,
                 'customer_phone' => $meta['phone'] ?? null,
                 'customer_email' => $meta['email'] ?? null,
+                'customer_city' => null,
+                'customer_address' => null,
+                'delivery_type' => null,
+                'delivery_price' => null,
+                'delivery_comment' => null,
+                'payment_type' => null,
+                'payed' => false,
                 'has_products' => false,
             ];
         });

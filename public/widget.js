@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.6.1';
+    const WIDGET_VERSION = '2.6.2';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -284,19 +284,37 @@
             '[class*="submit"]'
         ];
         
-        // Find the checkout form
-        let checkoutForm = null;
-        for (const selector of checkoutFormSelectors) {
-            checkoutForm = document.querySelector(selector);
-            if (checkoutForm) break;
-        }
+        // Find the checkout form with retry (form may load dynamically)
+        const findAndHookForm = (attempt = 1) => {
+            let checkoutForm = null;
+            for (const selector of checkoutFormSelectors) {
+                checkoutForm = document.querySelector(selector);
+                if (checkoutForm) break;
+            }
+            
+            if (!checkoutForm) {
+                if (attempt < 5) {
+                    // Retry up to 5 times with increasing delay
+                    setTimeout(() => findAndHookForm(attempt + 1), attempt * 500);
+                    log('Checkout form not found, retrying... (attempt ' + attempt + ')');
+                    return;
+                }
+                log('Checkout form not found after ' + attempt + ' attempts');
+                return;
+            }
+            
+            log('Checkout form found:', checkoutForm);
+            setupFormSubmitHandler(checkoutForm);
+        };
         
-        if (!checkoutForm) {
-            log('Checkout form not found');
-            return;
-        }
+        findAndHookForm();
+    }
+    
+    function setupFormSubmitHandler(checkoutForm) {
+        if (checkoutForm._aintentoHooked) return; // Prevent double-hooking
+        checkoutForm._aintentoHooked = true;
         
-        log('Checkout form found:', checkoutForm);
+        log('Checkout tracking initialized');
         
         // Track form submission
         checkoutForm.addEventListener('submit', function(e) {

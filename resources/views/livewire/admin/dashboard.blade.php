@@ -110,12 +110,67 @@
             </div>
         </div>
         
-        <!-- Revenue Chart -->
+        <!-- Conversion Funnel -->
         <div class="bg-white rounded-xl shadow-sm p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">💰 Конверсії та виручка</h3>
-            <div class="h-64">
-                <canvas id="revenueChart"></canvas>
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">🔄 Воронка конверсії</h3>
+                @if(($funnelData['overall_rate'] ?? 0) > 0)
+                    <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                        {{ $funnelData['overall_rate'] }}% загальна конверсія
+                    </span>
+                @endif
             </div>
+            
+            @if(!empty($funnelData['stages']))
+                <div class="space-y-3">
+                    @php $maxCount = max(array_column($funnelData['stages'], 'count')) ?: 1; @endphp
+                    @foreach($funnelData['stages'] as $index => $stage)
+                        <div class="group">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg">{{ $stage['icon'] }}</span>
+                                    <span class="text-sm font-medium text-gray-700">{{ $stage['label'] }}</span>
+                                    <span class="text-xs text-gray-400 hidden group-hover:inline" title="{{ $stage['hint'] }}">
+                                        (??)
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-bold text-gray-900">{{ number_format($stage['count']) }}</span>
+                                    @if($index > 0 && $stage['rate'] > 0)
+                                        <span class="text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                            {{ $stage['rate'] }}%
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                            <!-- Progress bar -->
+                            <div class="h-6 bg-gray-100 rounded-lg overflow-hidden relative">
+                                <div class="h-full rounded-lg transition-all duration-500 {{ $index === count($funnelData['stages']) - 1 ? 'bg-green-500' : 'bg-blue-500' }}"
+                                     style="width: {{ ($stage['count'] / $maxCount) * 100 }}%">
+                                </div>
+                                @if($index > 0 && $stage['dropoff'] > 0)
+                                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                                        -{{ $stage['dropoff'] }}% відсіялось
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        @if($index < count($funnelData['stages']) - 1)
+                            <div class="flex justify-center">
+                                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+            @else
+                <div class="flex flex-col items-center justify-center h-48 text-gray-400">
+                    <span class="text-4xl mb-2">📊</span>
+                    <p class="text-sm">Ще немає даних</p>
+                    <p class="text-xs mt-1">Дані з'являться після перших відвідувачів</p>
+                </div>
+            @endif
         </div>
     </div>
 
@@ -241,19 +296,16 @@
         function dashboardCharts() {
             return {
                 conversationsChart: null,
-                revenueChart: null,
                 
                 initCharts() {
                     this.$nextTick(() => {
                         this.createConversationsChart();
-                        this.createRevenueChart();
                     });
                     
                     // Re-init charts when Livewire updates
                     Livewire.on('data-refreshed', () => {
                         this.$nextTick(() => {
                             this.createConversationsChart();
-                            this.createRevenueChart();
                         });
                     });
                 },
@@ -292,70 +344,6 @@
                                 y: {
                                     beginAtZero: true,
                                     grid: { color: '#F3F4F6' }
-                                },
-                                x: {
-                                    grid: { display: false }
-                                }
-                            }
-                        }
-                    });
-                },
-                
-                createRevenueChart() {
-                    const ctx = document.getElementById('revenueChart');
-                    if (!ctx) return;
-                    
-                    if (this.revenueChart) {
-                        this.revenueChart.destroy();
-                    }
-                    
-                    const chartData = @json($chartData);
-                    
-                    this.revenueChart = new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: chartData.labels || [],
-                            datasets: [
-                                {
-                                    label: 'Конверсії',
-                                    data: chartData.datasets?.conversions || [],
-                                    backgroundColor: '#10B981',
-                                    borderRadius: 4,
-                                    yAxisID: 'y',
-                                },
-                                {
-                                    label: 'Виручка (₴)',
-                                    data: chartData.datasets?.revenue || [],
-                                    type: 'line',
-                                    borderColor: '#F59E0B',
-                                    backgroundColor: 'transparent',
-                                    borderWidth: 2,
-                                    tension: 0.4,
-                                    yAxisID: 'y1',
-                                }
-                            ]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                    labels: { usePointStyle: true, padding: 20 }
-                                }
-                            },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    position: 'left',
-                                    grid: { color: '#F3F4F6' },
-                                    title: { display: true, text: 'Конверсії' }
-                                },
-                                y1: {
-                                    beginAtZero: true,
-                                    position: 'right',
-                                    grid: { display: false },
-                                    title: { display: true, text: 'Виручка (₴)' }
                                 },
                                 x: {
                                     grid: { display: false }

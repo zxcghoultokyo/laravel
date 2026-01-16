@@ -339,4 +339,69 @@ class DashboardMetricsService
         
         return round((($currentRate - $prevRate) / $prevRate) * 100, 1);
     }
+    
+    /**
+     * Get funnel data for conversion tracking.
+     * Shows drop-off at each stage: page_view → chat_opened → message → product_click → add_to_cart → checkout_success
+     */
+    public function getFunnelData(string $period = '7d'): array
+    {
+        $cacheKey = "dashboard_funnel:{$period}";
+        
+        return Cache::remember($cacheKey, 120, function () use ($period) {
+            [$startDate, $endDate] = $this->getPeriodDates($period);
+            
+            // Define funnel stages with their event types
+            $stages = [
+                'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Відкрили сторінку з віджетом'],
+                'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Натиснули на іконку чату'],
+                'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
+                'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
+                'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар у кошик'],
+                'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+            ];
+            
+            $funnel = [];
+            $prevCount = 0;
+            
+            foreach ($stages as $eventType => $stage) {
+                try {
+                    // Count unique sessions for this event type
+                    $count = DB::table('chat_events')
+                        ->where('event_type', $eventType)
+                        ->whereBetween('created_at', [$startDate, $endDate])
+                        ->distinct('session_id')
+                        ->count('session_id');
+                } catch (\Throwable $e) {
+                    $count = 0;
+                }
+                
+                // Calculate conversion rate from previous stage
+                $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
+                $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
+                
+                $funnel[] = [
+                    'stage' => $eventType,
+                    'label' => $stage['label'],
+                    'icon' => $stage['icon'],
+                    'hint' => $stage['hint'],
+                    'count' => $count,
+                    'rate' => $rate,
+                    'dropoff' => $dropoff,
+                ];
+                
+                $prevCount = $count ?: $prevCount; // Keep prev for rate calculation
+            }
+            
+            // Calculate overall conversion rate
+            $firstStage = $funnel[0]['count'] ?? 0;
+            $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
+            $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
+            
+            return [
+                'stages' => $funnel,
+                'overall_rate' => $overallRate,
+            ];
+        });
+    }
 }

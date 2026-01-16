@@ -15,6 +15,7 @@ class Dashboard extends Component
     public string $period = '7d';
     public array $kpis = [];
     public array $chartData = [];
+    public array $funnelData = [];
     public array $topProducts = [];
     public array $recentChats = [];
     public array $liveStats = [];
@@ -36,6 +37,7 @@ class Dashboard extends Component
         
         $this->kpis = $metricsService->getKPIs($this->period);
         $this->chartData = $metricsService->getChartData($this->period);
+        $this->funnelData = $metricsService->getFunnelData($this->period);
         $this->topProducts = $metricsService->getTopProducts(5, $this->period);
         $this->recentChats = $metricsService->getRecentChats(8);
         $this->liveStats = $metricsService->getLiveStats();
@@ -62,6 +64,7 @@ class Dashboard extends Component
     {
         Cache::forget("dashboard_kpis:{$this->period}");
         Cache::forget("dashboard_chart:{$this->period}");
+        Cache::forget("dashboard_funnel:{$this->period}");
         Cache::forget("dashboard_top_products:{$this->period}:5");
         Cache::forget("dashboard_recent_chats:8");
     }

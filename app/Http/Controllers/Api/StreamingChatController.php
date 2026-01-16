@@ -61,6 +61,13 @@ class StreamingChatController extends Controller
             while (ob_get_level() > 0) {
                 ob_end_flush();
             }
+            
+            // Send initial keepalive to establish connection
+            $this->sendEvent('status', [
+                'text' => 'Обробляю...',
+                'session_id' => $sessionId,
+                'request_id' => $requestId,
+            ]);
 
             // Validate input
             if (mb_strlen($message) > self::MAX_MESSAGE_LENGTH) {

@@ -308,7 +308,7 @@ class="p-6 max-w-7xl mx-auto">
                         <div class="space-y-2">
                             @foreach($variables as $index => $var)
                                 <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
-                                    <code class="text-sm text-purple-600">@{{ {{ $var['name'] ?? 'unnamed' }} }}</code>
+                                    <code class="text-sm text-purple-600">@{{ {{ '{{' . ($var['name'] ?? 'unnamed') . '}}' }} }}</code>
                                     <span class="text-gray-400">=</span>
                                     <input type="text" wire:model="variables.{{ $index }}.default"
                                            class="flex-1 text-sm rounded border-gray-300"

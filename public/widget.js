@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.8';
+    const WIDGET_VERSION = '2.5.9';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -931,35 +931,75 @@
             let info = '';
             
             // Store name
-            const storeName = s.store_name || 'Наш магазин';
+            const storeName = s.store_name || 'CONTRACTOR';
             info += `🏪 **${storeName}**\n\n`;
             
-            if (s.store_address) {
-                info += `📍 ${s.store_address}\n`;
-            }
-            if (s.store_phone) {
-                info += `📞 ${s.store_phone}\n`;
-            }
-            if (s.store_hours) {
-                info += `🕐 ${s.store_hours}\n`;
+            // Parse address from faq_contacts_text if store_address contains full FAQ
+            let address = '';
+            let phone = s.store_phone || '';
+            let hours = s.store_hours || '';
+            let email = '';
+            let instagram = '';
+            let telegram = '';
+            
+            // If store_address contains FAQ text, parse it
+            if (s.store_address && s.store_address.length > 50) {
+                const text = s.store_address;
+                
+                // Extract address (м. Київ, ...)
+                const addressMatch = text.match(/м\.\s*Київ[^\\n]+/i) || text.match(/Адреса[:\s]+([^\n]+)/i);
+                if (addressMatch) {
+                    address = addressMatch[0].replace(/^Адреса[:\s]+/i, '').trim();
+                }
+                
+                // Extract hours
+                const hoursMatch = text.match(/Пн-Пт[:\s]+[\d:–\s]+/i) || text.match(/Графік[^:]*:[^\n]+/i);
+                if (hoursMatch) {
+                    hours = hoursMatch[0].replace(/^Графік[^:]*:/i, '').trim();
+                }
+                
+                // Extract email
+                const emailMatch = text.match(/E-mail[:\s]+([^\n\s]+)/i);
+                if (emailMatch) email = emailMatch[1];
+                
+                // Extract Instagram
+                const igMatch = text.match(/@contractor_kyiv|Instagram[:\s]+@?([^\n\s]+)/i);
+                if (igMatch) instagram = igMatch[1] || igMatch[0];
+                
+            } else if (s.store_address) {
+                address = s.store_address;
             }
             
-            // Short description from store_about (first 2 sentences max)
+            // Build clean info
+            if (address) {
+                info += `📍 ${address}\n`;
+            }
+            if (phone) {
+                info += `📞 ${phone}\n`;
+            }
+            if (hours) {
+                info += `🕐 ${hours}\n`;
+            }
+            if (email) {
+                info += `✉️ ${email}\n`;
+            }
+            if (instagram) {
+                info += `📸 Instagram: ${instagram}\n`;
+            }
+            
+            // Callback button hint
+            info += `\n💬 [Замовити дзвінок](#callback)\n`;
+            
+            // Short description from store_about (first sentence only)
             if (s.store_about) {
-                // Extract first meaningful sentence (up to 200 chars)
-                const shortAbout = s.store_about
+                const firstSentence = s.store_about
                     .replace(/\n+/g, ' ')
                     .replace(/\s+/g, ' ')
                     .trim()
                     .split(/[.!?]\s/)[0];
-                if (shortAbout && shortAbout.length < 200) {
-                    info += `\n${shortAbout}.\n`;
+                if (firstSentence && firstSentence.length < 150) {
+                    info += `\n_${firstSentence}._\n`;
                 }
-            }
-            
-            if (!s.store_address && !s.store_phone && !s.store_hours) {
-                info += '📞 Зв\'яжіться з нами через сайт\n';
-                info += '🕐 Працюємо щодня\n';
             }
             
             info += '\nЧим можу допомогти? 😊';
@@ -1778,7 +1818,10 @@
         html = html.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
         html = html.replace(/_([^_]+?)_/g, '<em>$1</em>');
         
-        // Links: [text](url)
+        // Special callback link: [text](#callback) -> opens site's callback modal
+        html = html.replace(/\[([^\]]+)\]\(#callback\)/g, '<a href="#" onclick="window.aintentoOpenCallback(); return false;" style="color: inherit; text-decoration: underline; cursor: pointer;">$1</a>');
+        
+        // Regular links: [text](url)
         html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">$1</a>');
         
         // Newlines to <br> (preserve pre-wrap behavior for multiple newlines)
@@ -1786,6 +1829,19 @@
         
         return html;
     }
+    
+    // Expose callback function to open site's modal
+    window.aintentoOpenCallback = function() {
+        // Try to find and click the site's callback link
+        const callbackLink = document.querySelector('[data-modal="#call-me"], .phones__callback-link, [href="#call-me"]');
+        if (callbackLink) {
+            callbackLink.click();
+        } else {
+            // Fallback: show phone number in alert
+            const phone = window.aintentoSettings?.store_phone || '+380 63 631 9919';
+            alert('Зателефонуйте нам: ' + phone);
+        }
+    };
 
     function addMessage(messagesContainer, text, role, sessionId, save = true, scrollToView = false) {
         const s = window.aintentoSettings || { primary_color: '#2563eb' };

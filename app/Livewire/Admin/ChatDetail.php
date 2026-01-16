@@ -4,6 +4,7 @@ namespace App\Livewire\Admin;
 
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
+use App\Models\CannedResponse;
 use App\Services\Metrics\MetricsService;
 use App\Events\OperatorMessage;
 use Livewire\Component;
@@ -17,11 +18,18 @@ class ChatDetail extends Component
     public $operatorMode = false;
     public $operatorMessage = '';
     public $activeSessionData = null;
+    
+    // Canned responses
+    public $cannedResponses = [];
+    public $showCannedResponses = false;
+    public $cannedSearch = '';
+    public $selectedCategory = '';
 
     public function mount($sessionId)
     {
         $this->sessionId = $sessionId;
         $this->loadSession();
+        $this->loadCannedResponses();
     }
 
     public function loadSession()
@@ -36,6 +44,62 @@ class ChatDetail extends Component
             ->where('session_id', $this->sessionId)
             ->first();
         $this->operatorMode = $this->activeSessionData && $this->activeSessionData->status === 'operator';
+    }
+    
+    public function loadCannedResponses()
+    {
+        $query = CannedResponse::where('is_active', true);
+        
+        if ($this->cannedSearch) {
+            $query->where(function($q) {
+                $q->where('title', 'like', "%{$this->cannedSearch}%")
+                  ->orWhere('content', 'like', "%{$this->cannedSearch}%")
+                  ->orWhere('shortcut', 'like', "%{$this->cannedSearch}%");
+            });
+        }
+        
+        if ($this->selectedCategory) {
+            $query->where('category', $this->selectedCategory);
+        }
+        
+        $this->cannedResponses = $query->orderBy('usage_count', 'desc')->take(20)->get();
+    }
+    
+    public function updatedCannedSearch()
+    {
+        $this->loadCannedResponses();
+    }
+    
+    public function updatedSelectedCategory()
+    {
+        $this->loadCannedResponses();
+    }
+    
+    public function toggleCannedResponses()
+    {
+        $this->showCannedResponses = !$this->showCannedResponses;
+        if ($this->showCannedResponses) {
+            $this->loadCannedResponses();
+        }
+    }
+    
+    public function useCannedResponse($responseId)
+    {
+        $response = CannedResponse::find($responseId);
+        if ($response) {
+            $this->operatorMessage = $response->content;
+            $response->increment('usage_count');
+            $this->showCannedResponses = false;
+        }
+    }
+    
+    public function appendCannedResponse($responseId)
+    {
+        $response = CannedResponse::find($responseId);
+        if ($response) {
+            $this->operatorMessage .= ($this->operatorMessage ? "\n\n" : '') . $response->content;
+            $response->increment('usage_count');
+        }
     }
 
     public function takeOver()

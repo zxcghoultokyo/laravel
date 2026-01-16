@@ -1,41 +1,45 @@
-<div class="h-[calc(100vh-6rem)] flex" wire:poll.3s.keep-alive="loadSession">
+<div class="h-[calc(100vh-4rem)] md:h-[calc(100vh-6rem)] flex flex-col md:flex-row" wire:poll.3s.keep-alive="loadSession">
     <!-- Main Chat Area -->
-    <div class="flex-1 flex flex-col bg-gray-50 rounded-l-lg overflow-hidden">
+    <div class="flex-1 flex flex-col bg-gray-50 md:rounded-l-lg overflow-hidden min-h-0">
         <!-- Chat Header -->
-        <div class="bg-white border-b px-4 py-3 flex items-center justify-between shrink-0">
-            <div class="flex items-center gap-4">
-                <a href="{{ route('admin.chats.index') }}" class="text-gray-400 hover:text-gray-600">
+        <div class="bg-white border-b px-3 md:px-4 py-2 md:py-3 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2 md:gap-4">
+                <a href="{{ route('admin.chats.index') }}" class="text-gray-400 hover:text-gray-600 p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
                 </a>
                 <div>
-                    <h2 class="font-semibold text-gray-900">Чат #{{ substr($session->session_id, -8) }}</h2>
-                    <p class="text-xs text-gray-500">{{ $session->messages_count }} повідомлень</p>
+                    <h2 class="font-semibold text-gray-900 text-sm md:text-base">Чат #{{ substr($session->session_id, -8) }}</h2>
+                    <p class="text-xs text-gray-500 hidden md:block">{{ $session->messages_count }} повідомлень</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 md:gap-2">
                 @if($operatorMode)
-                    <span class="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                    <span class="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium">
                         <span class="relative flex h-2 w-2">
                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                             <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                         </span>
                         Ви ведете
                     </span>
-                    <button wire:click="release" class="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition">
-                        Повернути AI
+                    <span class="md:hidden w-3 h-3 bg-green-500 rounded-full"></span>
+                    <button wire:click="release" class="px-2 md:px-3 py-1.5 text-xs md:text-sm bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition">
+                        <span class="hidden md:inline">Повернути AI</span>
+                        <span class="md:hidden">AI</span>
                     </button>
                 @else
-                    <span class="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                    <span class="hidden md:flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
                         <span class="relative flex h-2 w-2">
                             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                             <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                         </span>
                         AI обробляє
                     </span>
-                    <button wire:click="takeOver" class="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                        Взяти в роботу
+                    <span class="md:hidden w-3 h-3 bg-blue-500 rounded-full animate-pulse"></span>
+                    <button wire:click="takeOver" class="px-2 md:px-3 py-1.5 text-xs md:text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                        <span class="hidden md:inline">Взяти в роботу</span>
+                        <span class="md:hidden">Взяти</span>
                     </button>
                 @endif
             </div>
@@ -44,7 +48,7 @@
         <!-- Messages Container -->
         <div 
             id="messages-container" 
-            class="flex-1 overflow-y-auto p-4 space-y-3"
+            class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3"
             x-data
             x-init="$nextTick(() => $el.scrollTop = $el.scrollHeight)"
             wire:ignore.self
@@ -59,12 +63,12 @@
                 <div class="flex {{ $isUser ? 'justify-end' : 'justify-start' }} gap-2">
                     @if(!$isUser)
                     <!-- Avatar -->
-                    <div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center {{ $isOperator ? 'bg-green-500' : 'bg-gray-600' }} text-white text-xs font-bold">
+                    <div class="w-7 h-7 md:w-8 md:h-8 rounded-full flex-shrink-0 flex items-center justify-center {{ $isOperator ? 'bg-green-500' : 'bg-gray-600' }} text-white text-xs font-bold">
                         {{ $isOperator ? '👤' : '🤖' }}
                     </div>
                     @endif
                     
-                    <div class="max-w-[70%] {{ $isUser ? 'order-first' : '' }}">
+                    <div class="max-w-[85%] md:max-w-[70%] {{ $isUser ? 'order-first' : '' }}">
                         <!-- Role & Time -->
                         <div class="flex items-center gap-2 mb-1 {{ $isUser ? 'justify-end' : 'justify-start' }}">
                             <span class="text-xs font-medium {{ $isUser ? 'text-blue-600' : ($isOperator ? 'text-green-600' : 'text-gray-600') }}">
@@ -74,7 +78,7 @@
                         </div>
                         
                         <!-- Message Bubble -->
-                        <div class="rounded-2xl px-4 py-2.5 {{ $isUser ? 'bg-blue-500 text-white rounded-br-md' : ($isOperator ? 'bg-green-100 text-gray-900 rounded-bl-md' : 'bg-white text-gray-900 shadow-sm rounded-bl-md') }}">
+                        <div class="rounded-2xl px-3 md:px-4 py-2 md:py-2.5 {{ $isUser ? 'bg-blue-500 text-white rounded-br-md' : ($isOperator ? 'bg-green-100 text-gray-900 rounded-bl-md' : 'bg-white text-gray-900 shadow-sm rounded-bl-md') }}">
                             @php
                                 $content = $message->content;
                                 $parsedContent = null;
@@ -141,43 +145,125 @@
         </div>
 
         <!-- Input Area (always visible, disabled when not operator) -->
-        <div class="bg-white border-t p-4 shrink-0">
+        <div class="bg-white border-t p-2 md:p-4 shrink-0">
             @if($operatorMode)
-            <form wire:submit="sendOperatorMessage" class="flex gap-3">
+            <!-- Canned Responses Panel -->
+            @if($showCannedResponses)
+            <div class="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200" x-data>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">📋 Шаблони відповідей</span>
+                    <button wire:click="toggleCannedResponses" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                
+                <!-- Search -->
+                <div class="mb-2">
+                    <input type="text" wire:model.live.debounce.300ms="cannedSearch" 
+                           class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500"
+                           placeholder="Пошук шаблонів... (або введіть /shortcut)">
+                </div>
+                
+                <!-- Category Filter -->
+                <div class="flex flex-wrap gap-1 mb-2">
+                    <button wire:click="$set('selectedCategory', '')" 
+                            class="px-2 py-1 text-xs rounded {{ $selectedCategory === '' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        Всі
+                    </button>
+                    <button wire:click="$set('selectedCategory', 'greeting')" 
+                            class="px-2 py-1 text-xs rounded {{ $selectedCategory === 'greeting' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        👋 Привітання
+                    </button>
+                    <button wire:click="$set('selectedCategory', 'closing')" 
+                            class="px-2 py-1 text-xs rounded {{ $selectedCategory === 'closing' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        👋 Завершення
+                    </button>
+                    <button wire:click="$set('selectedCategory', 'info')" 
+                            class="px-2 py-1 text-xs rounded {{ $selectedCategory === 'info' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        ℹ️ Інформація
+                    </button>
+                    <button wire:click="$set('selectedCategory', 'clarify')" 
+                            class="px-2 py-1 text-xs rounded {{ $selectedCategory === 'clarify' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
+                        ❓ Уточнення
+                    </button>
+                </div>
+                
+                <!-- Templates Grid -->
+                <div class="max-h-40 overflow-y-auto space-y-1">
+                    @forelse($cannedResponses as $response)
+                    <div class="flex items-start gap-2 p-2 bg-white rounded-lg border border-gray-100 hover:border-green-300 cursor-pointer group"
+                         wire:click="useCannedResponse({{ $response->id }})">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm text-gray-900 truncate">{{ $response->title }}</span>
+                                @if($response->shortcut)
+                                <code class="text-xs text-green-600 bg-green-50 px-1 rounded">/{{ $response->shortcut }}</code>
+                                @endif
+                            </div>
+                            <p class="text-xs text-gray-500 truncate">{{ Str::limit($response->content, 60) }}</p>
+                        </div>
+                        <button wire:click.stop="appendCannedResponse({{ $response->id }})" 
+                                class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-green-600 transition"
+                                title="Додати до повідомлення">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        </button>
+                    </div>
+                    @empty
+                    <div class="text-center py-4 text-sm text-gray-400">
+                        Шаблонів не знайдено
+                    </div>
+                    @endforelse
+                </div>
+            </div>
+            @endif
+
+            <form wire:submit="sendOperatorMessage" class="flex gap-2 md:gap-3">
+                <!-- Templates Button -->
+                <button 
+                    type="button"
+                    wire:click="toggleCannedResponses"
+                    class="px-3 py-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition flex-shrink-0 {{ $showCannedResponses ? 'ring-2 ring-green-500' : '' }}"
+                    title="Шаблони відповідей"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                    </svg>
+                </button>
+                
                 <input 
                     type="text" 
                     wire:model="operatorMessage"
-                    placeholder="Напишіть відповідь клієнту..."
-                    class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+                    placeholder="Напишіть відповідь..."
+                    class="flex-1 px-3 md:px-4 py-2.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                     autofocus
                     x-on:keydown.enter.prevent="$wire.sendOperatorMessage()"
                 >
                 <button 
                     type="submit" 
-                    class="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition flex items-center gap-2 font-medium"
+                    class="px-4 md:px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition flex items-center gap-2 font-medium flex-shrink-0"
                     wire:loading.attr="disabled"
                     wire:loading.class="opacity-50"
                 >
-                    <span wire:loading.remove wire:target="sendOperatorMessage">Надіслати</span>
-                    <span wire:loading wire:target="sendOperatorMessage">Відправка...</span>
+                    <span class="hidden md:inline" wire:loading.remove wire:target="sendOperatorMessage">Надіслати</span>
+                    <span class="hidden md:inline" wire:loading wire:target="sendOperatorMessage">...</span>
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
                     </svg>
                 </button>
             </form>
             @else
-            <div class="flex items-center justify-center gap-2 py-3 text-gray-400 text-sm">
+            <div class="flex items-center justify-center gap-2 py-2 md:py-3 text-gray-400 text-sm">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                 </svg>
-                <span>Натисніть "Взяти в роботу" щоб відповісти клієнту</span>
+                <span class="text-xs md:text-sm">Натисніть "Взяти в роботу" щоб відповісти клієнту</span>
             </div>
             @endif
         </div>
     </div>
 
-    <!-- Right Sidebar -->
-    <div class="w-80 bg-white border-l flex flex-col overflow-hidden shrink-0">
+    <!-- Right Sidebar (hidden on mobile by default) -->
+    <div class="hidden md:flex w-80 bg-white border-l flex-col overflow-hidden shrink-0">
         <!-- Session Info Header -->
         <div class="p-4 border-b">
             <h3 class="font-semibold text-gray-900 mb-3">Інформація</h3>

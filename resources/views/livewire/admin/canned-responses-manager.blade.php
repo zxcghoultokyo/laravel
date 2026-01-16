@@ -1,6 +1,23 @@
 <div>
     @section('title', 'Шаблони відповідей')
 
+    <!-- Info Banner -->
+    <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+        <div class="flex items-start gap-3">
+            <span class="text-2xl">💡</span>
+            <div class="text-sm text-blue-800">
+                <p class="font-semibold mb-2">Як працюють шаблони відповідей?</p>
+                <ul class="list-disc list-inside space-y-1 text-blue-700">
+                    <li><strong>Шорткат</strong> — швидкий доступ через /команду (напр. /привіт)</li>
+                    <li><strong>Категорії:</strong> 👋 Привітання, 👋 Завершення, ℹ️ Інформація, ❓ Уточнення, 📦 Доставка</li>
+                    <li>Шаблони доступні при натисканні кнопки 📋 в чаті оператора</li>
+                    <li>Клік на шаблон — вставляє текст, ➕ — додає до існуючого тексту</li>
+                    <li>Популярні шаблони відображаються першими (сортування за кількістю використань)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div>

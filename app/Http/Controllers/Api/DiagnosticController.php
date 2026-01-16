@@ -1448,6 +1448,37 @@ class DiagnosticController extends Controller
     }
     
     /**
+     * POST /api/diagnostic/reset-views-count
+     * Reset views_count for all products (to recalculate from clean events)
+     */
+    public function resetViewsCount(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        // Count products with views > 0 before reset
+        $productsWithViews = DB::table('products')
+            ->where('views_count', '>', 0)
+            ->count();
+        
+        $totalViews = DB::table('products')
+            ->sum('views_count');
+        
+        // Reset all views_count to 0
+        $affected = DB::table('products')
+            ->update(['views_count' => 0]);
+        
+        return response()->json([
+            'success' => true,
+            'products_with_views_before' => $productsWithViews,
+            'total_views_before' => $totalViews,
+            'products_reset' => $affected,
+            'message' => "Reset views_count to 0 for {$affected} products",
+        ]);
+    }
+    
+    /**
      * GET /api/diagnostic/chat-events-stats
      * Get statistics about chat_events table
      */

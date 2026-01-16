@@ -95,6 +95,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/ab-test-variant', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestVariant']);
     Route::post('/ab-test-force', [\App\Http\Controllers\Api\DiagnosticController::class, 'abTestForce']);
     Route::post('/clear-product-shown', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearProductShown']);
+    Route::post('/reset-views-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'resetViewsCount']);
     Route::get('/chat-events-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatEventsStats']);
     Route::post('/clear-all-analytics', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearAllAnalytics']);
 });

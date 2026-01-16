@@ -70,7 +70,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 'rankingRules' => [
                     'words',              // Basic word matching
                     'typo',               // Typo tolerance
-                    'orders_count:desc',  // More orders = better ranking (early boost!)
+                    'orders_count:desc',  // More orders = better ranking (sales priority)
                     'popularity:desc',    // Higher popularity = better ranking
                     'proximity',          // Word proximity
                     'attribute',          // Attribute position

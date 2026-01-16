@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.5.1';
+    const WIDGET_VERSION = '2.5.2';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -2993,33 +2993,56 @@
 
     /**
      * Track products shown in chat
+     * Only tracks each product ONCE per session to avoid duplicate counting
      */
     function trackProductsShown(products) {
         const sessionId = localStorage.getItem('aintento_session_id');
-        if (sessionId) {
-            // Save shown products to localStorage for add-to-cart attribution
-            const shownKey = 'aintento_shown_products_' + sessionId;
-            const existingShown = JSON.parse(localStorage.getItem(shownKey) || '[]');
-            
-            products.forEach(product => {
-                if (product.id && !existingShown.includes(String(product.id))) {
-                    existingShown.push(String(product.id));
-                }
-                if (product.article && !existingShown.includes(product.article)) {
-                    existingShown.push(product.article);
-                }
-            });
-            
-            localStorage.setItem(shownKey, JSON.stringify(existingShown));
-        }
+        if (!sessionId) return;
+        
+        // Get already tracked products for this session
+        const trackedKey = 'aintento_tracked_shown_' + sessionId;
+        const alreadyTracked = new Set(JSON.parse(localStorage.getItem(trackedKey) || '[]'));
+        
+        // Save shown products to localStorage for add-to-cart attribution
+        const shownKey = 'aintento_shown_products_' + sessionId;
+        const existingShown = JSON.parse(localStorage.getItem(shownKey) || '[]');
+        
+        const newProducts = [];
         
         products.forEach(product => {
-            sendAnalyticsEvent('product_shown', {
-                product_id: product.id,
-                product_article: product.article,
-                product_price: product.price
-            });
+            const productKey = product.id ? String(product.id) : product.article;
+            
+            // Add to shown products list (for attribution)
+            if (product.id && !existingShown.includes(String(product.id))) {
+                existingShown.push(String(product.id));
+            }
+            if (product.article && !existingShown.includes(product.article)) {
+                existingShown.push(product.article);
+            }
+            
+            // Only track analytics if not already tracked in this session
+            if (productKey && !alreadyTracked.has(productKey)) {
+                alreadyTracked.add(productKey);
+                newProducts.push(product);
+            }
         });
+        
+        localStorage.setItem(shownKey, JSON.stringify(existingShown));
+        localStorage.setItem(trackedKey, JSON.stringify([...alreadyTracked]));
+        
+        // Only send analytics for NEW products (not seen before in this session)
+        if (newProducts.length > 0) {
+            log('Tracking product_shown for', newProducts.length, 'new products (skipped', products.length - newProducts.length, 'duplicates)');
+            newProducts.forEach(product => {
+                sendAnalyticsEvent('product_shown', {
+                    product_id: product.id,
+                    product_article: product.article,
+                    product_price: product.price
+                });
+            });
+        } else {
+            log('Skipping product_shown tracking - all', products.length, 'products already tracked');
+        }
     }
 
     /**

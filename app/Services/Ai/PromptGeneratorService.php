@@ -161,34 +161,41 @@ class PromptGeneratorService
         $metaPrompt = <<<PROMPT
 Ти — експерт з налаштування AI-асистентів для інтернет-магазинів.
 
-Згенеруй системний промпт для AI-консультанта магазину на основі цих даних:
+Згенеруй КОРОТКИЙ системний промпт для AI-консультанта.
 
-НАЗВА МАГАЗИНУ: {$storeData['name']}
+ДАНІ МАГАЗИНУ:
+- Назва: "{$storeData['name']}"
+- Основні категорії: {$storeData['categories']}
+- Бренди: {$storeData['brands']}
+- Ціни: {$storeData['price_min']}–{$storeData['price_max']} грн, середня {$storeData['price_avg']} грн
+- Товарів: {$storeData['product_count']}
 
-КАТЕГОРІЇ ТОВАРІВ:
-{$storeData['categories']}
+ФОРМАТ ПРОМПТУ (строго дотримуйся):
 
-БРЕНДИ: {$storeData['brands']}
+```
+Ти — AI-консультант магазину "{$storeData['name']}".
 
-ЦІНИ: від {$storeData['price_min']} до {$storeData['price_max']} грн (середня: {$storeData['price_avg']} грн)
-КІЛЬКІСТЬ ТОВАРІВ: {$storeData['product_count']}
+ЕКСПЕРТИЗА (3-4 пункти):
+- [Перша категорія]
+- [Друга категорія]  
+- [...]
 
-ДОСТАВКА: {$storeData['delivery']}
-ПОВЕРНЕННЯ: {$storeData['returns']}
+ТОП БРЕНДИ: [список через кому]
 
-ВИМОГИ ДО ПРОМПТУ:
-1. Почни з "Ти — AI-консультант магазину \"{$storeData['name']}\"."
-2. Опиши експертизу AI виходячи з категорій (2-3 пункти що він знає)
-3. Додай 3-5 коротких знань про товари цієї ніші
-4. Додай цінові сегменти (бюджетний/середній/преміум) з конкретними цінами
-5. Обов'язково включи рядок: {{tone_section}}
-6. КРИТИЧНО — секція ПРАВИЛА повинна включати:
-   - "Відповідай МАКСИМУМ 2-3 реченнями"
-   - "НЕ використовуй Markdown/емодзі крім карток товарів"
-   - "Після пошуку товарів — ТІЛЬКИ JSON формат"
-   - "НЕ пиши розлогих описів — показуй товари!"
+ЦІНИ:
+- Бюджет: до X грн
+- Середній: X–Y грн
+- Преміум: від Y грн
 
-Відповідай ТІЛЬКИ системним промптом українською мовою, без пояснень.
+{{tone_section}}
+
+ПРАВИЛА:
+1. Відповідай МАКСИМУМ 2-3 реченнями
+2. НЕ пиши описів — ПОКАЗУЙ товари через search_products!
+3. Без Markdown та зайвих емодзі
+```
+
+Виведи ТІЛЬКИ промпт (без пояснень). Українською.
 PROMPT;
 
         try {
@@ -300,13 +307,31 @@ PROMPT;
         // Get widget settings if available
         $settings = $widgetSettingsId ? WidgetSettings::find($widgetSettingsId) : null;
         
-        // Collect categories with counts
-        $categories = Product::select('category_path', DB::raw('count(*) as cnt'))
+        // Collect all unique category paths
+        $allCategories = Product::select('category_path', DB::raw('count(*) as cnt'))
             ->whereNotNull('category_path')
             ->where('category_path', '!=', '')
             ->groupBy('category_path')
             ->orderByDesc('cnt')
-            ->pluck('category_path');
+            ->pluck('cnt', 'category_path');
+        
+        // Extract unique root categories (first level)
+        $rootCategories = collect();
+        foreach ($allCategories->keys() as $path) {
+            $parts = explode('/', $path);
+            $root = $parts[0];
+            if (!$rootCategories->has($root)) {
+                $rootCategories->put($root, 0);
+            }
+            $rootCategories[$root] += $allCategories[$path];
+        }
+        
+        // Combine: top root categories + top full paths
+        $topRoots = $rootCategories->sortDesc()->take(10)->keys();
+        $topPaths = $allCategories->sortDesc()->take(15)->keys();
+        
+        // Merge unique categories, prioritizing roots
+        $categories = $topRoots->merge($topPaths)->unique()->values();
 
         // Collect brands with counts
         $brands = Product::select('brand', DB::raw('count(*) as cnt'))

@@ -475,9 +475,21 @@
                                 </div>
                             @endif
                             
-                            @if($event->page_url)
-                                <div class="mt-1 pl-5 text-gray-400 truncate" title="{{ $event->page_url }}">
-                                    {{ parse_url($event->page_url, PHP_URL_PATH) ?: '/' }}
+                            @if($event->page_url && trim(parse_url($event->page_url, PHP_URL_PATH) ?: '') !== '' && parse_url($event->page_url, PHP_URL_PATH) !== '/')
+                                <div class="mt-1 pl-5 flex items-center gap-1">
+                                    <a href="{{ $event->page_url }}" 
+                                       target="_blank" 
+                                       class="text-blue-500 hover:text-blue-700 hover:underline truncate text-xs"
+                                       title="{{ $event->page_url }}">
+                                        {{ parse_url($event->page_url, PHP_URL_PATH) }}
+                                    </a>
+                                    <a href="{{ $event->page_url }}" 
+                                       target="_blank"
+                                       class="text-gray-400 hover:text-gray-600 flex-shrink-0">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                        </svg>
+                                    </a>
                                 </div>
                             @endif
                         </div>

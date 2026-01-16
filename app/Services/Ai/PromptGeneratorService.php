@@ -258,10 +258,11 @@ PROMPT;
         // Try to extract from FAQ about text
         $aboutText = $settings?->faq_about_text ?? '';
         if (!empty($aboutText)) {
-            // Look for patterns like "CONTRACTOR — українська команда" or "Магазин X — це"
-            if (preg_match('/^([A-ZА-ЯІЇЄҐ][A-Za-zА-Яа-яІіЇїЄєҐґ\s\.]+?)\s*[—–-]\s*/mu', $aboutText, $matches)) {
+            // Look for uppercase brand name followed by em-dash (CONTRACTOR — ...)
+            // More specific: must start with uppercase and followed immediately by em-dash
+            if (preg_match('/^([A-ZА-ЯІЇЄҐ][A-Za-zА-Яа-яІіЇїЄєҐґ0-9]*)\s*[—–-]\s*/m', $aboutText, $matches)) {
                 $name = trim($matches[1]);
-                if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
+                if (mb_strlen($name) >= 2 && mb_strlen($name) < 50) {
                     return $name;
                 }
             }
@@ -270,6 +271,14 @@ PROMPT;
             if (preg_match('/магазин[у]?\s+["\']?([А-Яа-яA-Za-z][А-Яа-яA-Za-z0-9\s\.]+)["\']?/iu', $aboutText, $matches)) {
                 $name = trim($matches[1]);
                 if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
+                    return $name;
+                }
+            }
+            
+            // Try brand name at the start of any line followed by dash
+            if (preg_match('/^([A-ZА-ЯІЇЄҐ]{2,}[A-Za-zА-Яа-яІіЇїЄєҐґ]*)\s*[—–-]/m', $aboutText, $matches)) {
+                $name = trim($matches[1]);
+                if (mb_strlen($name) >= 2 && mb_strlen($name) < 50) {
                     return $name;
                 }
             }

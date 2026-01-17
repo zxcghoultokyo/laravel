@@ -415,7 +415,7 @@ class="p-6 max-w-7xl mx-auto">
                                 @endforeach
                             </div>
                             <div class="flex gap-2">
-                                <select wire:model="newCategory" class="flex-1 text-sm rounded-lg border-gray-300">
+                                <select wire:model="newCategory" wire:change="addCategory" class="w-3/4 text-sm rounded-lg border-gray-300">
                                     <option value="">-- Оберіть категорію --</option>
                                     @foreach($availableCategories as $cat)
                                         @if(!in_array($cat, $categories))
@@ -424,17 +424,17 @@ class="p-6 max-w-7xl mx-auto">
                                     @endforeach
                                 </select>
                                 <button wire:click="addCategory" type="button"
-                                        class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">
+                                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm whitespace-nowrap">
                                     Додати
                                 </button>
                             </div>
                             {{-- Custom category input --}}
                             <div class="mt-2 flex gap-2">
                                 <input type="text" wire:model="customCategory"
-                                       class="flex-1 text-sm rounded-lg border-gray-300"
+                                       class="w-3/4 text-sm rounded-lg border-gray-300"
                                        placeholder="Або введіть свою категорію...">
                                 <button wire:click="addCustomCategory" type="button"
-                                        class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600">
+                                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm whitespace-nowrap">
                                     +
                                 </button>
                             </div>

@@ -830,12 +830,15 @@
                     padding: 12px 16px;
                     border-radius: 16px;
                     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-                    max-width: 220px;
+                    min-width: 200px;
+                    max-width: 280px;
+                    width: max-content;
                     font-size: 14px;
                     line-height: 1.4;
                     color: #1f2937;
                     cursor: pointer;
                     transition: opacity 0.4s ease;
+                    white-space: normal;
                 ">
                     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                         <span style="font-size: 16px;">👋</span>

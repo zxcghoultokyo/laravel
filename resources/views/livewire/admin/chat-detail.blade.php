@@ -1,4 +1,7 @@
-<div class="h-[calc(100vh-4rem)] md:h-[calc(100vh-6rem)] flex flex-col md:flex-row" wire:poll.3s.keep-alive="loadSession">
+<div class="h-[calc(100vh-4rem)] md:h-[calc(100vh-6rem)] flex flex-col md:flex-row" 
+     wire:poll.3s.keep-alive="loadSession"
+     x-data="{ showSidebar: false }">
+    
     <!-- Main Chat Area -->
     <div class="flex-1 flex flex-col bg-gray-50 md:rounded-l-lg overflow-hidden min-h-0">
         <!-- Chat Header -->
@@ -42,6 +45,17 @@
                         <span class="md:hidden">Взяти</span>
                     </button>
                 @endif
+                
+                <!-- Mobile Info Button -->
+                <button 
+                    @click="showSidebar = true" 
+                    class="md:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                    title="Інформація"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
@@ -262,11 +276,37 @@
         </div>
     </div>
 
-    <!-- Right Sidebar (hidden on mobile by default) -->
-    <div class="hidden md:flex w-80 bg-white border-l flex-col overflow-hidden shrink-0">
+    <!-- Right Sidebar - Desktop: always visible, Mobile: slide-in overlay -->
+    <div 
+        x-show="showSidebar"
+        x-cloak
+        @click.self="showSidebar = false"
+        class="md:hidden fixed inset-0 bg-black/50 z-40"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+    ></div>
+    
+    <div 
+        :class="{ 'translate-x-0': showSidebar, 'translate-x-full': !showSidebar }"
+        class="fixed md:relative inset-y-0 right-0 z-50 md:z-auto md:translate-x-0 w-80 bg-white border-l flex flex-col overflow-hidden shrink-0 transform transition-transform duration-300 ease-in-out md:transition-none"
+    >
+        <!-- Mobile Close Button -->
+        <div class="md:hidden flex items-center justify-between p-4 border-b bg-gray-50">
+            <h3 class="font-semibold text-gray-900">Інформація про сесію</h3>
+            <button @click="showSidebar = false" class="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        
         <!-- Session Info Header -->
-        <div class="p-4 border-b">
-            <h3 class="font-semibold text-gray-900 mb-3">Інформація</h3>
+        <div class="p-4 border-b md:border-t-0">
+            <h3 class="hidden md:block font-semibold text-gray-900 mb-3">Інформація</h3>
             
             <!-- Status -->
             <div class="flex items-center justify-between py-2">

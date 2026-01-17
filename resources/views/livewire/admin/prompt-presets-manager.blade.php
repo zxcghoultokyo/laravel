@@ -322,18 +322,35 @@ class="p-6 max-w-7xl mx-auto">
                                 </div>
                             @endforeach
                         </div>
-                        <div class="flex gap-2 mt-2">
-                            <input type="text" wire:model="newVarName" 
-                                   class="w-1/3 text-sm rounded-lg border-gray-300"
-                                   placeholder="Назва змінної (напр. brand_name)">
-                            <input type="text" wire:model="newVarDefault"
-                                   class="w-1/3 text-sm rounded-lg border-gray-300"
-                                   placeholder="Значення за замовчуванням">
+                        <div class="flex gap-2 mt-2 items-end">
+                            <div class="w-2/5">
+                                <select wire:model="newVarName" class="w-full text-sm rounded-lg border-gray-300">
+                                    <option value="">-- Оберіть змінну --</option>
+                                    @foreach($availableVariables as $varName => $varInfo)
+                                        @if(!collect($variables)->pluck('name')->contains($varName))
+                                            <option value="{{ $varName }}">&#123;&#123;{{ $varName }}&#125;&#125; — {{ $varInfo['description'] }}</option>
+                                        @endif
+                                    @endforeach
+                                    <option value="_custom">📝 Своя змінна...</option>
+                                </select>
+                            </div>
+                            <div class="w-2/5">
+                                <input type="text" wire:model="newVarDefault"
+                                       class="w-full text-sm rounded-lg border-gray-300"
+                                       placeholder="Значення за замовчуванням">
+                            </div>
                             <button wire:click="addVariable" type="button"
                                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm whitespace-nowrap">
                                 Додати
                             </button>
                         </div>
+                        @if($newVarName === '_custom')
+                        <div class="mt-2">
+                            <input type="text" wire:model="customVarName"
+                                   class="w-2/5 text-sm rounded-lg border-gray-300"
+                                   placeholder="Назва своєї змінної (напр. my_variable)">
+                        </div>
+                        @endif
                     </div>
 
                     {{-- Conditions --}}

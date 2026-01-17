@@ -37,6 +37,7 @@ class PromptPresetsManager extends Component
     // Variable editor
     public $newVarName = '';
     public $newVarDefault = '';
+    public $customVarName = '';
     public $newCategory = '';
     public $customCategory = '';
 
@@ -90,6 +91,7 @@ class PromptPresetsManager extends Component
             'presets' => $presets,
             'availableCategories' => $availableCategories,
             'storeTypes' => $storeTypes,
+            'availableVariables' => $this->getAvailableVariables(),
             'tones' => [
                 '' => 'Будь-який',
                 'official' => 'Офіційний',
@@ -103,6 +105,67 @@ class PromptPresetsManager extends Component
                 'ru' => 'Русский',
             ],
         ])->layout('admin.layout');
+    }
+
+    /**
+     * Get list of available variables with descriptions.
+     */
+    protected function getAvailableVariables(): array
+    {
+        return [
+            'shop_name' => [
+                'description' => 'Назва магазину',
+                'default' => 'CONTRACTOR',
+            ],
+            'shop_phone' => [
+                'description' => 'Телефон магазину',
+                'default' => '+380 63 631 9919',
+            ],
+            'brand_name' => [
+                'description' => 'Назва бренду (те саме що shop_name)',
+                'default' => 'CONTRACTOR',
+            ],
+            'language' => [
+                'description' => 'Мова спілкування',
+                'default' => 'українською',
+            ],
+            'tone_section' => [
+                'description' => 'Блок з налаштуваннями тону',
+                'default' => '',
+            ],
+            'delivery_info' => [
+                'description' => 'Інформація про доставку',
+                'default' => 'Нова Пошта по Україні',
+            ],
+            'return_policy' => [
+                'description' => 'Умови повернення',
+                'default' => '14 днів на повернення',
+            ],
+            'store_address' => [
+                'description' => 'Адреса магазину/складу',
+                'default' => 'Київ, вул. Волоська 37а',
+            ],
+            'work_hours' => [
+                'description' => 'Графік роботи',
+                'default' => 'Пн-Пт: 10:00-19:00',
+            ],
+            'payment_methods' => [
+                'description' => 'Способи оплати',
+                'default' => 'Карта, IBAN, безготівково',
+            ],
+            'specialization' => [
+                'description' => 'Спеціалізація магазину',
+                'default' => 'тактичне спорядження',
+            ],
+            'warranty_info' => [
+                'description' => 'Гарантійні умови',
+                'default' => 'Гарантія від виробника',
+            ],
+            'current_promo' => [
+                'description' => 'Поточна акція (якщо є)',
+                'default' => '',
+            ],
+        ];
     }
 
     public function create()
@@ -233,17 +296,40 @@ class PromptPresetsManager extends Component
     // Variable management
     public function addVariable()
     {
-        if (empty($this->newVarName)) {
+        // Handle custom variable
+        $varName = $this->newVarName;
+        if ($varName === '_custom') {
+            $varName = trim($this->customVarName);
+            if (empty($varName)) {
+                return;
+            }
+        }
+        
+        if (empty($varName)) {
             return;
         }
 
-        $this->variables[] = [
-            'name' => Str::snake($this->newVarName),
-            'default' => $this->newVarDefault,
-        ];
+        $varName = Str::snake($varName);
+        
+        // Get default from available variables if not provided
+        $default = $this->newVarDefault;
+        if (empty($default)) {
+            $availableVars = $this->getAvailableVariables();
+            $default = $availableVars[$varName]['default'] ?? '';
+        }
+
+        // Check if already exists
+        $exists = collect($this->variables)->contains(fn($v) => $v['name'] === $varName);
+        if (!$exists) {
+            $this->variables[] = [
+                'name' => $varName,
+                'default' => $default,
+            ];
+        }
 
         $this->newVarName = '';
         $this->newVarDefault = '';
+        $this->customVarName = '';
     }
 
     public function removeVariable($index)
@@ -457,6 +543,7 @@ class PromptPresetsManager extends Component
         $this->priority = 0;
         $this->newVarName = '';
         $this->newVarDefault = '';
+        $this->customVarName = '';
         $this->newCategory = '';
         $this->customCategory = '';
     }

@@ -324,13 +324,13 @@ class="p-6 max-w-7xl mx-auto">
                         </div>
                         <div class="flex gap-2 mt-2">
                             <input type="text" wire:model="newVarName" 
-                                   class="flex-1 text-sm rounded-lg border-gray-300"
+                                   class="w-1/3 text-sm rounded-lg border-gray-300"
                                    placeholder="Назва змінної (напр. brand_name)">
                             <input type="text" wire:model="newVarDefault"
-                                   class="flex-1 text-sm rounded-lg border-gray-300"
+                                   class="w-1/3 text-sm rounded-lg border-gray-300"
                                    placeholder="Значення за замовчуванням">
                             <button wire:click="addVariable" type="button"
-                                    class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">
+                                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm whitespace-nowrap">
                                 Додати
                             </button>
                         </div>

@@ -138,11 +138,27 @@ class MeiliProductSearchTool
                     'category_path',
                     'in_stock',
                     'popularity',
+                    'orders_count',
                     'ai_product_type',
                     'display_in_showcase',
                     'brand',
                 ],
             ];
+            
+            // Add sorting if specified
+            if (!empty($filters['sort_by'])) {
+                $sortBy = $filters['sort_by'];
+                $searchParams['sort'] = match($sortBy) {
+                    'popularity' => ['orders_count:desc', 'popularity:desc'],
+                    'price_asc' => ['price:asc'],
+                    'price_desc' => ['price:desc'],
+                    default => null,
+                };
+                if ($searchParams['sort'] === null) {
+                    unset($searchParams['sort']);
+                }
+                Log::info('MeiliProductSearchTool: sorting by', ['sort_by' => $sortBy, 'sort' => $searchParams['sort'] ?? 'default']);
+            }
             
             if ($filterString) {
                 $searchParams['filter'] = $filterString;

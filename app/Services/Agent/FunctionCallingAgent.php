@@ -429,11 +429,17 @@ FOLLOW-UP (розрізняй типи):
 - "ще варіанти" → той самий пошук
 - "більший розмір" → + size
 
-СЕЗОННІ ЗАПИТИ - ОБОВ'ЯЗКОВО ПОШУК:
-- "що беруть зимою/взимку" → search_products("зимовий одяг куртка термобілизна") - НЕ get_popular_products!
-- "що беруть влітку" → search_products("літній одяг футболка")
-- "що актуально зараз" → search_products з урахуванням сезону (грудень-лютий = зима)
-- Сезонні питання = ПОШУК конкретних товарів для сезону, а не загальний топ!
+СЕЗОННІ ЗАПИТИ - ОБОВ'ЯЗКОВО ПОШУК З СОРТУВАННЯМ ПО ПОПУЛЯРНОСТІ:
+- "що беруть зимою/взимку" → search_products(query="куртка зимова флісова термобілизна", sort_by="popularity") - категорії зимового одягу!
+- "що беруть влітку" → search_products(query="футболка літня сорочка", sort_by="popularity")
+- "що актуально/популярне зараз" → search_products(query="...", sort_by="popularity") з урахуванням сезону
+- "хіти", "топ", "що найчастіше купують" → ДОДАВАЙ sort_by="popularity"!
+- Сезонні питання = ПОШУК конкретних товарів для сезону з сортуванням по продажах!
+
+КАТЕГОРІЇ ПО СЕЗОНАХ:
+- ЗИМА (грудень-лютий): куртки зимові, флісові, термобілизна, утеплені штани, шапки
+- ЛІТО (червень-серпень): футболки, сорочки, шорти, легкі штани, панами
+- ВЕСНА/ОСІНЬ: софтшел, дощовики, легкі куртки
 
 НОВИЙ ЗАПИТ (шукай ТІЛЬКИ новий товар, НЕ повторюй попередній!):
 - "і хочу кавер" → search_products(query="кавер") - ТІЛЬКИ кавери!
@@ -640,6 +646,11 @@ PROMPT;
                             'limit' => [
                                 'type' => 'integer',
                                 'description' => 'Кількість результатів (за замовчуванням 5)',
+                            ],
+                            'sort_by' => [
+                                'type' => 'string',
+                                'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc'],
+                                'description' => 'Сортування: "popularity" для "що беруть/хіти/топ", "price_asc" для дешевих, "price_desc" для дорогих. За замовчуванням relevance.',
                             ],
                         ],
                         'required' => ['query'],
@@ -998,8 +1009,9 @@ PROMPT;
     {
         $query = $args['query'] ?? '';
         $limit = $args['limit'] ?? 20; // Increased to show more variety
+        $sortBy = $args['sort_by'] ?? 'relevance';
         
-        Log::info('toolSearchProducts: args', ['args' => $args]);
+        Log::info('toolSearchProducts: args', ['args' => $args, 'sort_by' => $sortBy]);
         
         // Build filters
         $filters = [];
@@ -1011,6 +1023,11 @@ PROMPT;
         }
         if (!empty($args['brand'])) {
             $filters['brand'] = $args['brand'];
+        }
+        
+        // Add sort_by to filters for Meilisearch
+        if ($sortBy !== 'relevance') {
+            $filters['sort_by'] = $sortBy;
         }
 
         // Search in Meilisearch (request more to account for filtering)

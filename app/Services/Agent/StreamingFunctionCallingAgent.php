@@ -518,11 +518,17 @@ RULES;
 - Будь-який запит про категорію товарів → одразу search_products()
 - НЕ давай "загальні поради" — показуй тільки ТЕ ЩО МОЖЕШ ПРОДАТИ
 
-СЕЗОННІ ЗАПИТИ - ОБОВ'ЯЗКОВО ПОШУК:
-- "що беруть зимою/взимку" → search_products("зимовий одяг куртка термобілизна") - НЕ get_popular_products!
-- "що беруть влітку" → search_products("літній одяг футболка") 
-- "що актуально зараз" → search_products з урахуванням сезону (грудень-лютий = зима)
-- Сезонні питання = ПОШУК конкретних товарів для сезону, а не загальний топ!
+СЕЗОННІ ЗАПИТИ - ОБОВ'ЯЗКОВО ПОШУК З СОРТУВАННЯМ ПО ПОПУЛЯРНОСТІ:
+- "що беруть зимою/взимку" → search_products(query="куртка зимова флісова термобілизна", sort_by="popularity") - категорії зимового одягу!
+- "що беруть влітку" → search_products(query="футболка літня сорочка", sort_by="popularity")
+- "що актуально/популярне зараз" → search_products(query="...", sort_by="popularity") з урахуванням сезону
+- "хіти", "топ", "що найчастіше купують" → ДОДАВАЙ sort_by="popularity"!
+- Сезонні питання = ПОШУК конкретних товарів для сезону з сортуванням по продажах!
+
+КАТЕГОРІЇ ПО СЕЗОНАХ:
+- ЗИМА (грудень-лютий): куртки зимові, флісові, термобілизна, утеплені штани, шапки
+- ЛІТО (червень-серпень): футболки, сорочки, шорти, легкі штани, панами
+- ВЕСНА/ОСІНЬ: софтшел, дощовики, легкі куртки
 
 КРИТИЧНО ВАЖЛИВО ДЛЯ ПОШУКУ:
 - При search_products ЗБЕРІГАЙ ОРИГІНАЛЬНІ НАЗВИ моделей/брендів (TRIDENT, Mechanix, Ops-Core тощо) — НЕ перекладай їх!
@@ -640,7 +646,7 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'search_products',
-                    'description' => 'Пошук товарів в каталозі. ВАЖЛИВО: для запитів з "недорого", "бюджетний", "дешевий" — ОБОВ\'ЯЗКОВО передавай price_max! Для "преміум", "дорогий" — передавай price_min!',
+                    'description' => 'Пошук товарів в каталозі. ВАЖЛИВО: для запитів з "недорого", "бюджетний", "дешевий" — ОБОВ\'ЯЗКОВО передавай price_max! Для "що беруть/хіти/топ" — ОБОВ\'ЯЗКОВО передавай sort_by="popularity"!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -652,6 +658,11 @@ PROMPT;
                             'color' => ['type' => 'string', 'description' => 'Колір'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово'],
                             'limit' => ['type' => 'integer', 'description' => 'Кількість результатів'],
+                            'sort_by' => [
+                                'type' => 'string', 
+                                'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc'],
+                                'description' => 'Сортування: "popularity" для "що беруть/хіти/топ", "price_asc" для дешевих, "price_desc" для дорогих. За замовчуванням relevance.'
+                            ],
                         ],
                         'required' => ['query'],
                     ],
@@ -661,7 +672,7 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'get_popular_products',
-                    'description' => 'Отримати найпопулярніші товари за кількістю продажів. Використовуй ТІЛЬКИ для загальних питань "що зараз популярне", "топ продажів". Для сезонних питань ("що беруть зимою") - використовуй search_products замість цього!',
+                    'description' => 'Отримати найпопулярніші товари за кількістю продажів. Використовуй ТІЛЬКИ для загальних питань "що зараз популярне", "топ продажів" БЕЗ категорії. Для сезонних питань ("що беруть зимою") або конкретних категорій - використовуй search_products з sort_by="popularity" замість цього!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -723,11 +734,19 @@ PROMPT;
     {
         $query = $args['query'] ?? '';
         $limit = $args['limit'] ?? 20; // Increased to show more variety
+        $sortBy = $args['sort_by'] ?? 'relevance';
         
         $filters = [];
         if (!empty($args['price_min'])) $filters['price_min'] = (float) $args['price_min'];
         if (!empty($args['price_max'])) $filters['price_max'] = (float) $args['price_max'];
         if (!empty($args['brand'])) $filters['brand'] = $args['brand'];
+        
+        // Add sort_by to filters for Meilisearch
+        if ($sortBy !== 'relevance') {
+            $filters['sort_by'] = $sortBy;
+        }
+
+        Log::info('toolSearchProducts (streaming): args', ['args' => $args, 'sort_by' => $sortBy]);
 
         $results = $this->searchTool->search($query, $filters, $limit * 3);
 

@@ -1,71 +1,72 @@
 <div wire:poll.60s="loadData" x-data="dashboardCharts()" x-init="initCharts()">
     <!-- Header with Period Selector -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900">Dashboard</h2>
+            <h2 class="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h2>
             <p class="mt-1 text-sm text-gray-500">Бізнес-метрики та аналітика</p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             <!-- Period Selector -->
-            <div class="flex bg-gray-100 rounded-lg p-1">
-                <button wire:click="setPeriod('today')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === 'today' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+            <div class="flex bg-gray-100 rounded-lg p-1 overflow-x-auto">
+                <button wire:click="setPeriod('today')" class="px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-md transition whitespace-nowrap {{ $period === 'today' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
                     Сьогодні
                 </button>
-                <button wire:click="setPeriod('7d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '7d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
-                    7 днів
+                <button wire:click="setPeriod('7d')" class="px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-md transition whitespace-nowrap {{ $period === '7d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    7д
                 </button>
-                <button wire:click="setPeriod('30d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '30d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
-                    30 днів
+                <button wire:click="setPeriod('30d')" class="px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-md transition whitespace-nowrap {{ $period === '30d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    30д
                 </button>
-                <button wire:click="setPeriod('90d')" class="px-3 py-1.5 text-sm rounded-md transition {{ $period === '90d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
-                    90 днів
+                <button wire:click="setPeriod('90d')" class="px-2 sm:px-3 py-1.5 text-xs sm:text-sm rounded-md transition whitespace-nowrap {{ $period === '90d' ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600 hover:text-gray-900' }}">
+                    90д
                 </button>
             </div>
             <button 
                 wire:click="refreshData" 
                 wire:loading.attr="disabled"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                class="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
             >
                 <svg wire:loading wire:target="refreshData" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                 </svg>
                 <span wire:loading.remove wire:target="refreshData">🔄</span>
-                Оновити
+                <span class="hidden sm:inline">Оновити</span>
             </button>
         </div>
     </div>
 
     <!-- Live Stats Bar -->
-    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-4 mb-6 text-white">
-        <div class="flex items-center justify-between">
-            <div class="flex items-center gap-8">
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-3 sm:p-4 mb-6 text-white">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3 sm:gap-6">
                 <div class="flex items-center gap-2">
                     <span class="flex h-2 w-2 relative">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
                     </span>
-                    <span class="text-sm font-medium">{{ $liveStats['active_now'] ?? 0 }} активних зараз</span>
+                    <span class="text-xs sm:text-sm font-medium">{{ $liveStats['active_now'] ?? 0 }} активних</span>
                 </div>
-                <div class="text-sm">
-                    <span class="opacity-70">Оператор веде:</span>
+                <div class="text-xs sm:text-sm">
+                    <span class="opacity-70">Опер:</span>
                     <span class="font-medium">{{ $liveStats['operator_sessions'] ?? 0 }}</span>
                 </div>
-                <div class="text-sm">
-                    <span class="opacity-70">Запитів сьогодні:</span>
+                <div class="text-xs sm:text-sm">
+                    <span class="opacity-70">Сьогодні:</span>
                     <span class="font-medium">{{ number_format($liveStats['today_requests'] ?? 0) }}</span>
                 </div>
             </div>
-            <div class="flex items-center gap-4">
+            <div class="flex items-center">
                 @if(($health['overall'] ?? 'healthy') === 'healthy')
-                    <span class="flex items-center gap-1 text-sm bg-white/20 px-3 py-1 rounded-full">
+                    <span class="flex items-center gap-1 text-xs sm:text-sm bg-white/20 px-2 sm:px-3 py-1 rounded-full">
                         <span class="w-2 h-2 bg-green-400 rounded-full"></span>
-                        Все працює
+                        <span class="hidden sm:inline">Все працює</span>
+                        <span class="sm:hidden">OK</span>
                     </span>
                 @else
-                    <span class="flex items-center gap-1 text-sm bg-yellow-500/30 px-3 py-1 rounded-full">
+                    <span class="flex items-center gap-1 text-xs sm:text-sm bg-yellow-500/30 px-2 sm:px-3 py-1 rounded-full">
                         <span class="w-2 h-2 bg-yellow-400 rounded-full"></span>
-                        Є проблеми
+                        ⚠️
                     </span>
                 @endif
             </div>

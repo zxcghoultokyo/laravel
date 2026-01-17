@@ -1,61 +1,61 @@
-<div wire:poll.10s class="dark:bg-gray-900">
+<div wire:poll.10s class="dark:bg-gray-900 px-2 sm:px-0">
     <!-- Header -->
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-            <h2 class="text-2xl font-bold text-gray-900">Діалоги</h2>
+            <h2 class="text-xl sm:text-2xl font-bold text-gray-900">Діалоги</h2>
             <p class="mt-1 text-sm text-gray-500">Історії чатів з користувачами</p>
         </div>
         <button 
             wire:click="$refresh" 
-            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            class="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm sm:text-base"
         >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-            Оновити
+            <span class="hidden sm:inline">Оновити</span>
         </button>
     </div>
 
     <!-- Filters -->
-    <div class="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div class="grid grid-cols-5 gap-4">
-            <div>
+    <div class="bg-white rounded-lg shadow-sm p-3 sm:p-4 mb-4 sm:mb-6">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+            <div class="col-span-2 sm:col-span-1">
                 <input 
                     type="text" 
                     wire:model.live.debounce.300ms="search" 
-                    placeholder="Пошук по сесії або запиту..."
+                    placeholder="Пошук..."
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
             </div>
             <div>
-                <select wire:model.live="statusFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="all">Всі статуси</option>
+                <select wire:model.live="statusFilter" class="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="all">Всі</option>
                     <option value="open">Відкриті</option>
                     <option value="closed">Закриті</option>
                     <option value="flagged">Позначені</option>
                 </select>
             </div>
             <div>
-                <select wire:model.live="escalationFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <select wire:model.live="escalationFilter" class="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option value="all">Всі чати</option>
-                    <option value="escalated">🚨 Потребують допомоги</option>
+                    <option value="escalated">🚨 Допомога</option>
                     <option value="not_escalated">✅ Звичайні</option>
                 </select>
             </div>
             <div>
-                <select wire:model.live="intentFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <select wire:model.live="intentFilter" class="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm">
                     <option value="all">Всі інтенти</option>
-                    <option value="product_search">Пошук товару</option>
-                    <option value="order_status">Статус замовлення</option>
+                    <option value="product_search">Товар</option>
+                    <option value="order_status">Замовлення</option>
                     <option value="faq">FAQ</option>
                     <option value="small_talk">Розмова</option>
                 </select>
             </div>
             <div>
-                <select wire:model.live="dateFilter" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="all">Всі періоди</option>
+                <select wire:model.live="dateFilter" class="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="all">Всі</option>
                     <option value="today">Сьогодні</option>
-                    <option value="7days">Останні 7 днів</option>
+                    <option value="7days">7 днів</option>
                 </select>
             </div>
         </div>

@@ -49,6 +49,14 @@ Route::get('/widget/settings', [WidgetController::class, 'settings'])
 Route::get('/widget/greeting', [WidgetController::class, 'greeting'])
     ->middleware('widget.cors');
 
+// Proactive triggers API
+Route::prefix('triggers')->middleware('widget.cors')->group(function () {
+    Route::get('/rules', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'getRules']);
+    Route::post('/event', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'trackEvent']);
+    Route::post('/check', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'checkTrigger']);
+    Route::get('/stats', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'getStats']);
+});
+
 // AI context settings (admin)
 Route::get('/widget/ai-context', [WidgetController::class, 'getAiContext']);
 Route::put('/widget/ai-context', [WidgetController::class, 'updateAiContext']);

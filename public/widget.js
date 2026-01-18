@@ -1201,6 +1201,11 @@
             // Track chat opened
             sendAnalyticsEvent('chat_opened');
             
+            // Notify ProactiveTriggers
+            if (window.aintentoTriggers) {
+                window.aintentoTriggers.onChatOpened();
+            }
+            
             // Start polling for operator messages (will auto-stop if not in operator mode)
             startOperatorPolling();
             
@@ -1231,6 +1236,10 @@
             stopOperatorPolling();
             // Track chat closed
             sendAnalyticsEvent('chat_closed');
+            // Notify ProactiveTriggers
+            if (window.aintentoTriggers) {
+                window.aintentoTriggers.onChatClosed();
+            }
         }
 
         // Send message function with SSE streaming support
@@ -3442,6 +3451,646 @@
     // Flush analytics on page unload
     window.addEventListener('pagehide', flushAnalytics);
     window.addEventListener('beforeunload', flushAnalytics);
+
+    // ============================================
+    // PROACTIVE TRIGGERS SYSTEM
+    // ============================================
+    
+    const ProactiveTriggers = {
+        rules: [],
+        state: {
+            triggersShown: 0,
+            lastTriggerTime: 0,
+            sessionTriggersShown: [],
+            pageStartTime: Date.now(),
+            lastActivity: Date.now(),
+            productsViewed: [],
+            variantSelected: false,
+            chatOpened: false,
+            initialized: false
+        },
+        
+        // Initialize triggers system
+        init: function() {
+            if (this.state.initialized) return;
+            this.state.initialized = true;
+            
+            log('ProactiveTriggers: Initializing...');
+            
+            // Load state from localStorage
+            this.loadState();
+            
+            // Fetch rules from server
+            this.fetchRules();
+            
+            // Setup detectors
+            this.setupExitIntentDetector();
+            this.setupTimeOnPageDetector();
+            this.setupActivityTracker();
+            this.setupVariantSelectionDetector();
+            
+            // Check UTM triggers on page load
+            setTimeout(() => this.checkUtmTriggers(), 1000);
+            
+            log('ProactiveTriggers: Initialized');
+        },
+        
+        // Load state from localStorage
+        loadState: function() {
+            try {
+                const saved = localStorage.getItem('aintento_triggers_state');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    // Check if same day
+                    if (parsed.date === new Date().toDateString()) {
+                        this.state.triggersShown = parsed.triggersShown || 0;
+                        this.state.sessionTriggersShown = parsed.sessionTriggersShown || [];
+                    }
+                }
+            } catch (e) {
+                log('ProactiveTriggers: Failed to load state', e);
+            }
+        },
+        
+        // Save state to localStorage
+        saveState: function() {
+            try {
+                localStorage.setItem('aintento_triggers_state', JSON.stringify({
+                    date: new Date().toDateString(),
+                    triggersShown: this.state.triggersShown,
+                    sessionTriggersShown: this.state.sessionTriggersShown,
+                    lastTriggerTime: this.state.lastTriggerTime
+                }));
+            } catch (e) {
+                log('ProactiveTriggers: Failed to save state', e);
+            }
+        },
+        
+        // Fetch rules from server
+        fetchRules: function() {
+            fetch(BASE_URL + '/api/triggers/rules')
+                .then(res => res.json())
+                .then(data => {
+                    this.rules = data.rules || [];
+                    log('ProactiveTriggers: Loaded', this.rules.length, 'rules');
+                })
+                .catch(err => {
+                    log('ProactiveTriggers: Failed to fetch rules', err);
+                });
+        },
+        
+        // Check if can show trigger
+        canShowTrigger: function(triggerType) {
+            // Don't show if chat is open
+            if (this.state.chatOpened || window.aintentoIsOpen) {
+                return false;
+            }
+            
+            // Session limit (1 per session by default)
+            if (this.state.sessionTriggersShown.length >= 1) {
+                return false;
+            }
+            
+            // Cooldown (5 minutes between triggers)
+            const cooldown = 5 * 60 * 1000;
+            if (Date.now() - this.state.lastTriggerTime < cooldown) {
+                return false;
+            }
+            
+            // Check if this type was already shown
+            if (this.state.sessionTriggersShown.includes(triggerType)) {
+                return false;
+            }
+            
+            return true;
+        },
+        
+        // Find matching rule
+        findMatchingRule: function(triggerType, context = {}) {
+            return this.rules.find(rule => {
+                if (rule.type !== triggerType || !rule.conditions) return false;
+                
+                // For UTM rules, check UTM match
+                if (triggerType === 'utm_campaign') {
+                    const utm = this.getUtmParams();
+                    const conditions = rule.conditions;
+                    
+                    if (conditions.utm_source && !this.matchUtmParam(utm.utm_source, conditions.utm_source)) {
+                        return false;
+                    }
+                    if (conditions.utm_medium && !this.matchUtmParam(utm.utm_medium, conditions.utm_medium)) {
+                        return false;
+                    }
+                    if (conditions.utm_campaign && !this.matchUtmParam(utm.utm_campaign, conditions.utm_campaign)) {
+                        return false;
+                    }
+                    return true;
+                }
+                
+                // For page-based rules, check page type
+                if (rule.conditions.page_types) {
+                    const pageType = this.detectPageType();
+                    if (!rule.conditions.page_types.includes(pageType)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+        },
+        
+        // Match UTM parameter (case insensitive, partial match)
+        matchUtmParam: function(value, pattern) {
+            if (!value) return false;
+            return value.toLowerCase().includes(pattern.toLowerCase());
+        },
+        
+        // Get UTM parameters from URL
+        getUtmParams: function() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                utm_source: params.get('utm_source') || '',
+                utm_medium: params.get('utm_medium') || '',
+                utm_campaign: params.get('utm_campaign') || '',
+                utm_content: params.get('utm_content') || '',
+                utm_term: params.get('utm_term') || ''
+            };
+        },
+        
+        // Detect current page type
+        detectPageType: function() {
+            const url = window.location.pathname.toLowerCase();
+            const body = document.body;
+            
+            // Check for product page indicators
+            if (
+                url.includes('/product/') ||
+                url.includes('/tovar/') ||
+                url.includes('/p/') ||
+                document.querySelector('[itemtype*="Product"]') ||
+                document.querySelector('.product-page') ||
+                document.querySelector('.product-detail') ||
+                document.querySelector('[data-product-id]') ||
+                // Horoshop specific
+                document.querySelector('.hs-product-page') ||
+                document.querySelector('.j-product-container')
+            ) {
+                return 'product';
+            }
+            
+            // Check for category page
+            if (
+                url.includes('/category/') ||
+                url.includes('/catalog/') ||
+                url.includes('/c/') ||
+                document.querySelector('.category-page') ||
+                document.querySelector('.product-list') ||
+                document.querySelector('[itemtype*="ItemList"]') ||
+                // Horoshop specific
+                document.querySelector('.hs-catalog') ||
+                document.querySelector('.j-catalog-container')
+            ) {
+                return 'category';
+            }
+            
+            // Check for cart page
+            if (
+                url.includes('/cart') ||
+                url.includes('/basket') ||
+                url.includes('/korzina')
+            ) {
+                return 'cart';
+            }
+            
+            // Check for checkout
+            if (
+                url.includes('/checkout') ||
+                url.includes('/order') ||
+                url.includes('/oformlenie')
+            ) {
+                return 'checkout';
+            }
+            
+            return 'other';
+        },
+        
+        // Show proactive trigger popup
+        showTrigger: function(rule, context = {}) {
+            if (!this.canShowTrigger(rule.type)) {
+                log('ProactiveTriggers: Cannot show trigger', rule.type);
+                return;
+            }
+            
+            log('ProactiveTriggers: Showing trigger', rule.id, rule.type);
+            
+            // Create trigger popup
+            const popup = this.createTriggerPopup(rule, context);
+            document.body.appendChild(popup);
+            
+            // Animate in
+            setTimeout(() => {
+                popup.style.opacity = '1';
+                popup.style.transform = 'translateY(0)';
+            }, 50);
+            
+            // Track shown event
+            this.trackEvent(rule.id, 'shown', context);
+            
+            // Update state
+            this.state.triggersShown++;
+            this.state.lastTriggerTime = Date.now();
+            this.state.sessionTriggersShown.push(rule.type);
+            this.saveState();
+            
+            // Auto-hide after 15 seconds if not interacted
+            setTimeout(() => {
+                if (popup.parentNode) {
+                    this.dismissTrigger(popup, rule, context);
+                }
+            }, 15000);
+        },
+        
+        // Create trigger popup element
+        createTriggerPopup: function(rule, context) {
+            const popup = document.createElement('div');
+            popup.id = 'aintento-proactive-trigger';
+            popup.className = 'aintento-trigger-popup';
+            
+            const primaryColor = window.aintentoSettings?.primary_color || '#2563eb';
+            
+            popup.style.cssText = `
+                position: fixed;
+                bottom: 100px;
+                right: 24px;
+                max-width: 320px;
+                background: white;
+                border-radius: 16px;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1);
+                padding: 16px;
+                z-index: 999998;
+                opacity: 0;
+                transform: translateY(20px);
+                transition: all 0.3s ease;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            `;
+            
+            // Replace variables in message
+            let message = rule.message || '';
+            if (context.category) {
+                message = message.replace(/\{\{category\}\}/g, context.category);
+            }
+            if (context.product) {
+                message = message.replace(/\{\{product\}\}/g, context.product);
+            }
+            
+            popup.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="font-size: 24px; flex-shrink: 0;">${rule.icon || '💬'}</div>
+                    <div style="flex: 1;">
+                        <div style="font-size: 14px; color: #1f2937; line-height: 1.5; margin-bottom: 12px;">
+                            ${message}
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="aintento-trigger-accept" style="
+                                flex: 1;
+                                padding: 10px 16px;
+                                background: ${primaryColor};
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 13px;
+                                font-weight: 500;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                            ">${rule.button_text || 'Показати'}</button>
+                            <button id="aintento-trigger-dismiss" style="
+                                padding: 10px 12px;
+                                background: #f3f4f6;
+                                color: #6b7280;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 13px;
+                                cursor: pointer;
+                                transition: all 0.2s;
+                            ">✕</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Event handlers
+            const acceptBtn = popup.querySelector('#aintento-trigger-accept');
+            const dismissBtn = popup.querySelector('#aintento-trigger-dismiss');
+            
+            acceptBtn.onmouseenter = () => {
+                acceptBtn.style.filter = 'brightness(1.1)';
+                acceptBtn.style.transform = 'translateY(-1px)';
+            };
+            acceptBtn.onmouseleave = () => {
+                acceptBtn.style.filter = 'brightness(1)';
+                acceptBtn.style.transform = 'translateY(0)';
+            };
+            acceptBtn.onclick = () => {
+                this.acceptTrigger(popup, rule, context);
+            };
+            
+            dismissBtn.onmouseenter = () => {
+                dismissBtn.style.background = '#e5e7eb';
+            };
+            dismissBtn.onmouseleave = () => {
+                dismissBtn.style.background = '#f3f4f6';
+            };
+            dismissBtn.onclick = () => {
+                this.dismissTrigger(popup, rule, context);
+            };
+            
+            return popup;
+        },
+        
+        // Accept trigger (click action button)
+        acceptTrigger: function(popup, rule, context) {
+            log('ProactiveTriggers: Trigger accepted', rule.id);
+            
+            // Track clicked event
+            this.trackEvent(rule.id, 'clicked', context);
+            
+            // Remove popup
+            popup.style.opacity = '0';
+            popup.style.transform = 'translateY(20px)';
+            setTimeout(() => popup.remove(), 300);
+            
+            // Execute action
+            if (rule.action_type === 'open_chat' || rule.action_type === 'open_chat_with_context') {
+                // Open chat
+                if (window.openChat) {
+                    window.openChat();
+                }
+                
+                // If has initial message, send it after small delay
+                if (rule.action_config?.initial_message) {
+                    setTimeout(() => {
+                        const input = document.getElementById('aintento-input');
+                        if (input) {
+                            input.value = rule.action_config.initial_message;
+                            // Trigger send
+                            const sendBtn = document.getElementById('aintento-send');
+                            if (sendBtn) sendBtn.click();
+                        }
+                    }, 500);
+                }
+            }
+        },
+        
+        // Dismiss trigger
+        dismissTrigger: function(popup, rule, context) {
+            log('ProactiveTriggers: Trigger dismissed', rule.id);
+            
+            // Track dismissed event
+            this.trackEvent(rule.id, 'dismissed', context);
+            
+            // Remove popup with animation
+            popup.style.opacity = '0';
+            popup.style.transform = 'translateY(20px)';
+            setTimeout(() => popup.remove(), 300);
+        },
+        
+        // Track trigger event
+        trackEvent: function(ruleId, eventType, context = {}) {
+            const sessionId = localStorage.getItem('aintento_session_id') || 'unknown';
+            
+            fetch(BASE_URL + '/api/triggers/event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rule_id: ruleId,
+                    session_id: sessionId,
+                    event_type: eventType,
+                    context: {
+                        ...context,
+                        page_url: window.location.href,
+                        page_type: this.detectPageType(),
+                        utm: this.getUtmParams(),
+                        time_on_page: Math.floor((Date.now() - this.state.pageStartTime) / 1000)
+                    }
+                })
+            }).catch(err => {
+                log('ProactiveTriggers: Failed to track event', err);
+            });
+        },
+        
+        // ========================================
+        // TRIGGER DETECTORS
+        // ========================================
+        
+        // Exit intent detector
+        setupExitIntentDetector: function() {
+            let exitIntentTriggered = false;
+            
+            // Mouse leave detection (desktop)
+            document.addEventListener('mouseleave', (e) => {
+                if (exitIntentTriggered) return;
+                if (e.clientY > 5) return; // Only trigger when moving to top
+                
+                const timeOnPage = (Date.now() - this.state.pageStartTime) / 1000;
+                if (timeOnPage < 5) return; // Minimum 5 seconds on page
+                
+                const rule = this.findMatchingRule('exit_intent');
+                if (rule && this.canShowTrigger('exit_intent')) {
+                    exitIntentTriggered = true;
+                    this.showTrigger(rule, {
+                        trigger_reason: 'mouse_leave'
+                    });
+                }
+            });
+            
+            // Fast scroll up detection
+            let lastScrollY = window.scrollY;
+            let lastScrollTime = Date.now();
+            
+            window.addEventListener('scroll', () => {
+                if (exitIntentTriggered) return;
+                
+                const now = Date.now();
+                const deltaY = lastScrollY - window.scrollY; // Positive = scrolling up
+                const deltaTime = now - lastScrollTime;
+                
+                if (deltaTime > 0) {
+                    const velocity = deltaY / deltaTime * 100; // px per 100ms
+                    
+                    // Fast scroll up near top of page
+                    if (velocity > 50 && window.scrollY < 200) {
+                        const timeOnPage = (Date.now() - this.state.pageStartTime) / 1000;
+                        if (timeOnPage >= 5) {
+                            const rule = this.findMatchingRule('exit_intent');
+                            if (rule && this.canShowTrigger('exit_intent')) {
+                                exitIntentTriggered = true;
+                                this.showTrigger(rule, {
+                                    trigger_reason: 'fast_scroll_up'
+                                });
+                            }
+                        }
+                    }
+                }
+                
+                lastScrollY = window.scrollY;
+                lastScrollTime = now;
+            }, { passive: true });
+            
+            log('ProactiveTriggers: Exit intent detector setup');
+        },
+        
+        // Time on page detector
+        setupTimeOnPageDetector: function() {
+            // Check every 5 seconds
+            setInterval(() => {
+                const timeOnPage = (Date.now() - this.state.pageStartTime) / 1000;
+                const idleTime = (Date.now() - this.state.lastActivity) / 1000;
+                const pageType = this.detectPageType();
+                
+                // Product page: 45 seconds + 15 seconds idle
+                if (pageType === 'product' && timeOnPage >= 45 && idleTime >= 15) {
+                    const rule = this.findMatchingRule('time_on_page', { pageType: 'product' });
+                    if (rule && this.canShowTrigger('time_on_page')) {
+                        this.showTrigger(rule, {
+                            trigger_reason: 'time_on_product_page',
+                            time_on_page: Math.floor(timeOnPage),
+                            idle_time: Math.floor(idleTime)
+                        });
+                    }
+                }
+                
+                // Category page: 60 seconds + 3 products viewed
+                if (pageType === 'category' && timeOnPage >= 60 && this.state.productsViewed.length >= 3) {
+                    const rule = this.findMatchingRule('time_on_page', { pageType: 'category' });
+                    if (rule && this.canShowTrigger('time_on_page')) {
+                        this.showTrigger(rule, {
+                            trigger_reason: 'browsing_category',
+                            products_viewed: this.state.productsViewed.length
+                        });
+                    }
+                }
+                
+                // PDP no variant: 30 seconds without selection
+                if (pageType === 'product' && timeOnPage >= 30 && !this.state.variantSelected) {
+                    const hasVariants = document.querySelector('[data-variant], .variant-select, .size-select, .hs-variants');
+                    if (hasVariants) {
+                        const rule = this.findMatchingRule('pdp_no_variant');
+                        if (rule && this.canShowTrigger('pdp_no_variant')) {
+                            this.showTrigger(rule, {
+                                trigger_reason: 'no_variant_selected',
+                                time_without_selection: Math.floor(timeOnPage)
+                            });
+                        }
+                    }
+                }
+            }, 5000);
+            
+            log('ProactiveTriggers: Time on page detector setup');
+        },
+        
+        // Activity tracker
+        setupActivityTracker: function() {
+            const updateActivity = () => {
+                this.state.lastActivity = Date.now();
+            };
+            
+            ['scroll', 'click', 'mousemove', 'keypress', 'touchstart'].forEach(event => {
+                document.addEventListener(event, updateActivity, { passive: true });
+            });
+            
+            // Track product views in category
+            document.addEventListener('click', (e) => {
+                const productLink = e.target.closest('a[href*="/product/"], a[href*="/tovar/"], a[href*="/p/"], .product-card, .product-item');
+                if (productLink) {
+                    const productId = productLink.dataset?.productId || productLink.href;
+                    if (!this.state.productsViewed.includes(productId)) {
+                        this.state.productsViewed.push(productId);
+                    }
+                }
+            }, { passive: true });
+            
+            log('ProactiveTriggers: Activity tracker setup');
+        },
+        
+        // Variant selection detector
+        setupVariantSelectionDetector: function() {
+            // Watch for clicks on variant selectors
+            document.addEventListener('click', (e) => {
+                const variantSelector = e.target.closest(
+                    '[data-variant], .variant-select, .size-select, .color-select, ' +
+                    '.hs-variants button, .hs-variant-item, [data-size], [data-color]'
+                );
+                if (variantSelector) {
+                    this.state.variantSelected = true;
+                    log('ProactiveTriggers: Variant selected');
+                }
+            }, { passive: true });
+            
+            // Watch for select changes
+            document.addEventListener('change', (e) => {
+                if (e.target.matches('select[name*="size"], select[name*="variant"], select[name*="color"]')) {
+                    this.state.variantSelected = true;
+                    log('ProactiveTriggers: Variant selected via dropdown');
+                }
+            }, { passive: true });
+            
+            log('ProactiveTriggers: Variant selection detector setup');
+        },
+        
+        // Check UTM triggers
+        checkUtmTriggers: function() {
+            const utm = this.getUtmParams();
+            
+            // Skip if no UTM params
+            if (!utm.utm_source && !utm.utm_medium && !utm.utm_campaign) {
+                return;
+            }
+            
+            log('ProactiveTriggers: Checking UTM triggers', utm);
+            
+            // Find matching UTM rule
+            const rule = this.findMatchingRule('utm_campaign', { utm });
+            if (rule && this.canShowTrigger('utm_campaign')) {
+                // Delay from conditions (default 10 seconds)
+                const delay = (rule.conditions?.delay_seconds || 10) * 1000;
+                
+                setTimeout(() => {
+                    // Re-check if can show (user might have opened chat)
+                    if (this.canShowTrigger('utm_campaign')) {
+                        this.showTrigger(rule, {
+                            trigger_reason: 'utm_match',
+                            utm: utm
+                        });
+                    }
+                }, delay);
+            }
+        },
+        
+        // Notify that chat was opened (pause triggers)
+        onChatOpened: function() {
+            this.state.chatOpened = true;
+            // Remove any visible trigger popups
+            const popup = document.getElementById('aintento-proactive-trigger');
+            if (popup) popup.remove();
+        },
+        
+        // Notify that chat was closed
+        onChatClosed: function() {
+            this.state.chatOpened = false;
+        }
+    };
+    
+    // Initialize ProactiveTriggers after DOM ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => ProactiveTriggers.init(), 2000);
+        });
+    } else {
+        setTimeout(() => ProactiveTriggers.init(), 2000);
+    }
+    
+    // Expose for external use
+    window.aintentoTriggers = ProactiveTriggers;
 
 })();
 

@@ -226,14 +226,32 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        $meiliEnabled = config('meilisearch.enabled', false);
+        $meiliHost = config('meilisearch.host', 'not set');
+        
+        if (!$meiliEnabled) {
+            return response()->json([
+                'error' => 'Meilisearch is disabled in config',
+                'meili_enabled' => false,
+                'meili_host' => $meiliHost,
+            ]);
+        }
+
         try {
             $meili = app(MeiliClient::class);
-            $index = $meili->client()->index('products');
-
+            $client = $meili->client();
+            
+            // First check if client can connect
+            $health = $client->health();
+            
+            $index = $client->index('products');
             $stats = $index->getStats();
             $settings = $index->getSettings();
 
             return response()->json([
+                'meili_enabled' => true,
+                'meili_host' => $meiliHost,
+                'health' => $health,
                 'documents' => $stats['numberOfDocuments'],
                 'is_indexing' => $stats['isIndexing'],
                 'field_distribution' => $stats['fieldDistribution'] ?? [],
@@ -243,7 +261,9 @@ class DiagnosticController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
-                'meili_enabled' => config('meilisearch.enabled', false),
+                'error_class' => get_class($e),
+                'meili_enabled' => $meiliEnabled,
+                'meili_host' => $meiliHost,
             ], 500);
         }
     }

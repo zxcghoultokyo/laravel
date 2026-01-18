@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Models\ProductAiIndex;
+use App\Models\SyncLog;
 use App\Services\Horoshop\ProductService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,116 +46,142 @@ class IncrementalProductSyncJob implements ShouldQueue
     {
         $startTime = microtime(true);
         Log::info('[IncrementalSync] Starting incremental product sync');
-
-        // Отримуємо всі товари з Horoshop
-        $horoshopProducts = $this->fetchAllHoroshopProducts($productService);
         
-        if (empty($horoshopProducts)) {
-            Log::warning('[IncrementalSync] No products from Horoshop, aborting');
-            return;
-        }
+        // Start sync log
+        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, 'Incremental sync');
 
-        Log::info('[IncrementalSync] Fetched products from Horoshop', [
-            'count' => count($horoshopProducts),
-        ]);
-
-        // Отримуємо існуючі товари з БД
-        $existingProducts = Product::pluck('id', 'article')->toArray();
-        $existingHashes = $this->getExistingHashes();
-
-        $stats = [
-            'new' => 0,
-            'updated' => 0,
-            'unchanged' => 0,
-            'deleted' => 0,
-            'errors' => 0,
-        ];
-
-        $horoshopArticles = [];
-        $changedProductIds = [];
-
-        foreach ($horoshopProducts as $item) {
-            $article = $item['article'] ?? null;
-            if (!$article) continue;
-
-            $horoshopArticles[] = $article;
-            $newHash = $this->computeProductHash($item);
-
-            try {
-                if (!isset($existingProducts[$article])) {
-                    // Новий товар
-                    $product = $productService->upsertProductFromHoroshopPublic($item);
-                    $changedProductIds[] = $product->id;
-                    $this->saveProductHash($article, $newHash);
-                    $stats['new']++;
-                } elseif (!isset($existingHashes[$article]) || $existingHashes[$article] !== $newHash) {
-                    // Змінений товар
-                    $product = $productService->upsertProductFromHoroshopPublic($item);
-                    $changedProductIds[] = $product->id;
-                    $this->saveProductHash($article, $newHash);
-                    $stats['updated']++;
-                } else {
-                    // Без змін
-                    $stats['unchanged']++;
-                }
-            } catch (\Throwable $e) {
-                Log::error('[IncrementalSync] Error processing product', [
-                    'article' => $article,
-                    'error' => $e->getMessage(),
-                ]);
-                $stats['errors']++;
-            }
-        }
-
-        // Позначаємо видалені товари
-        $deletedArticles = array_diff(array_keys($existingProducts), $horoshopArticles);
-        if (!empty($deletedArticles)) {
-            // Ensure all articles are strings to avoid SQL type confusion
-            $deletedArticles = array_map('strval', array_values($deletedArticles));
+        try {
+            // Отримуємо всі товари з Horoshop
+            $horoshopProducts = $this->fetchAllHoroshopProducts($productService);
             
-            // Process in chunks to avoid huge SQL queries
-            $deletedCount = 0;
-            foreach (array_chunk($deletedArticles, 100) as $chunk) {
-                $deletedCount += Product::whereIn('article', $chunk)
-                    ->update(['in_stock' => false, 'quantity' => 0]);
+            if (empty($horoshopProducts)) {
+                Log::warning('[IncrementalSync] No products from Horoshop, aborting');
+                $syncLog->fail('No products received from Horoshop API');
+                return;
             }
-            $stats['deleted'] = $deletedCount;
-            
-            // Видаляємо хеші для видалених товарів
-            foreach ($deletedArticles as $article) {
-                Cache::forget("product_hash:{$article}");
-            }
-            
-            Log::info('[IncrementalSync] Marked products as deleted', [
-                'count' => $deletedCount,
-                'sample_articles' => array_slice($deletedArticles, 0, 10),
+
+            Log::info('[IncrementalSync] Fetched products from Horoshop', [
+                'count' => count($horoshopProducts),
             ]);
+
+            // Отримуємо існуючі товари з БД
+            $existingProducts = Product::pluck('id', 'article')->toArray();
+            $existingHashes = $this->getExistingHashes();
+
+            $stats = [
+                'new' => 0,
+                'updated' => 0,
+                'unchanged' => 0,
+                'deleted' => 0,
+                'errors' => 0,
+            ];
+
+            $horoshopArticles = [];
+            $changedProductIds = [];
+
+            foreach ($horoshopProducts as $item) {
+                $article = $item['article'] ?? null;
+                if (!$article) continue;
+
+                $horoshopArticles[] = $article;
+                $newHash = $this->computeProductHash($item);
+
+                try {
+                    if (!isset($existingProducts[$article])) {
+                        // Новий товар
+                        $product = $productService->upsertProductFromHoroshopPublic($item);
+                        $changedProductIds[] = $product->id;
+                        $this->saveProductHash($article, $newHash);
+                        $stats['new']++;
+                    } elseif (!isset($existingHashes[$article]) || $existingHashes[$article] !== $newHash) {
+                        // Змінений товар
+                        $product = $productService->upsertProductFromHoroshopPublic($item);
+                        $changedProductIds[] = $product->id;
+                        $this->saveProductHash($article, $newHash);
+                        $stats['updated']++;
+                    } else {
+                        // Без змін
+                        $stats['unchanged']++;
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('[IncrementalSync] Error processing product', [
+                        'article' => $article,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $stats['errors']++;
+                }
+            }
+
+            // Позначаємо видалені товари
+            $deletedArticles = array_diff(array_keys($existingProducts), $horoshopArticles);
+            if (!empty($deletedArticles)) {
+                // Ensure all articles are strings to avoid SQL type confusion
+                $deletedArticles = array_map('strval', array_values($deletedArticles));
+                
+                // Process in chunks to avoid huge SQL queries
+                $deletedCount = 0;
+                foreach (array_chunk($deletedArticles, 100) as $chunk) {
+                    $deletedCount += Product::whereIn('article', $chunk)
+                        ->update(['in_stock' => false, 'quantity' => 0]);
+                }
+                $stats['deleted'] = $deletedCount;
+                
+                // Видаляємо хеші для видалених товарів
+                foreach ($deletedArticles as $article) {
+                    Cache::forget("product_hash:{$article}");
+                }
+                
+                Log::info('[IncrementalSync] Marked products as deleted', [
+                    'count' => $deletedCount,
+                    'sample_articles' => array_slice($deletedArticles, 0, 10),
+                ]);
+            }
+
+            $elapsed = round(microtime(true) - $startTime, 2);
+
+            Log::info('[IncrementalSync] Completed', [
+                'stats' => $stats,
+                'changed_count' => count($changedProductIds),
+                'elapsed_seconds' => $elapsed,
+            ]);
+
+            // Complete sync log
+            $syncLog->complete([
+                'total_processed' => count($horoshopProducts),
+                'created' => $stats['new'],
+                'updated' => $stats['updated'],
+                'skipped' => $stats['unchanged'],
+                'failed' => $stats['errors'],
+            ], [
+                'deleted' => $stats['deleted'],
+                'changed_ids_count' => count($changedProductIds),
+            ]);
+
+            // Тригеримо AI enrichment тільки для нових/змінених
+            if ($this->triggerEnrichment && !empty($changedProductIds)) {
+                $this->triggerEnrichmentForChanged($changedProductIds);
+            }
+
+            // Тригеримо Meili реіндексацію тільки якщо були зміни
+            if ($this->triggerMeiliReindex && ($stats['new'] + $stats['updated'] + $stats['deleted']) > 0) {
+                $this->triggerMeiliReindex();
+            }
+
+            // Зберігаємо статистику останнього sync
+            Cache::put('incremental_sync_stats', [
+                'stats' => $stats,
+                'elapsed_seconds' => $elapsed,
+                'completed_at' => now()->toIso8601String(),
+            ], now()->addDays(7));
+            
+        } catch (\Throwable $e) {
+            Log::error('[IncrementalSync] Fatal error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            $syncLog->fail($e->getMessage());
+            throw $e;
         }
-
-        $elapsed = round(microtime(true) - $startTime, 2);
-
-        Log::info('[IncrementalSync] Completed', [
-            'stats' => $stats,
-            'changed_count' => count($changedProductIds),
-            'elapsed_seconds' => $elapsed,
-        ]);
-
-        // Тригеримо AI enrichment тільки для нових/змінених
-        if ($this->triggerEnrichment && !empty($changedProductIds)) {
-            $this->triggerEnrichmentForChanged($changedProductIds);
-        }
-
-        // Тригеримо Meili реіндексацію тільки якщо були зміни
-        if ($this->triggerMeiliReindex && ($stats['new'] + $stats['updated'] + $stats['deleted']) > 0) {
-            $this->triggerMeiliReindex();
-        }
-
-        // Зберігаємо статистику останнього sync
-        Cache::put('incremental_sync_stats', [
-            'stats' => $stats,
-            'elapsed_seconds' => $elapsed,
-            'completed_at' => now()->toIso8601String(),
-        ], now()->addDays(7));
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Product;
+use App\Models\SyncLog;
 use App\Services\Search\MeiliClient;
 use App\Support\ProductRawExtractor;
 use App\Support\ColorNormalizer;
@@ -47,13 +48,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
         $totalCount = Product::count();
         $processedCount = 0;
         $startTime = microtime(true);
+        
+        // Start sync log
+        $syncLog = SyncLog::start(SyncLog::TYPE_MEILISEARCH, "Reindex {$totalCount} products");
 
         echo "🔄 Індексація товарів у Meilisearch...\n";
         echo "📦 Всього товарів: {$totalCount}\n";
         echo "📊 Розмір чанку: {$chunkSize}\n\n";
         
-        // 🧹 Cleanup: видаляємо з Meili товари, яких немає в БД або мають in_stock=false
-        $this->cleanupStaleDocuments($index, $meili);
+        try {
+            // 🧹 Cleanup: видаляємо з Meili товари, яких немає в БД або мають in_stock=false
+            $this->cleanupStaleDocuments($index, $meili);
 
         // Ensure filterable attributes for AI flags exist (idempotent)
         try {
@@ -235,6 +240,20 @@ class IndexProductsToMeiliJob implements ShouldQueue
         echo "\n✅ Індексація завершена!\n";
         echo "📊 Оброблено товарів: {$processedCount}\n";
         echo "⏱️  Час виконання: {$duration} сек\n";
+        
+        // Complete sync log
+        $syncLog->complete([
+            'total_processed' => $processedCount,
+            'created' => $processedCount, // All indexed
+            'updated' => 0,
+            'skipped' => 0,
+            'failed' => 0,
+        ]);
+        
+        } catch (\Throwable $e) {
+            $syncLog->fail($e->getMessage());
+            throw $e;
+        }
     }
 
     /**

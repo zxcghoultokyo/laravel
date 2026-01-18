@@ -232,7 +232,7 @@ class SyncReports extends Component
 
     public function runSync(string $command)
     {
-        // Run sync command via Artisan (in background via queue job)
+        // Run sync command directly via Artisan (not via queue)
         try {
             // Parse command and arguments
             $parts = explode(' ', $command);
@@ -245,14 +245,23 @@ class SyncReports extends Component
                 }
             }
             
-            // Dispatch to queue for background execution
-            dispatch(function () use ($cmd, $args) {
-                \Artisan::call($cmd, $args);
-            })->onQueue('default');
+            // Run directly (synchronously) for immediate feedback
+            $exitCode = \Artisan::call($cmd, $args);
+            $output = \Artisan::output();
             
-            session()->flash('message', "✅ Команду '{$command}' запущено у фоні.");
+            if ($exitCode === 0) {
+                session()->flash('message', "✅ Команду '{$command}' виконано успішно.");
+            } else {
+                session()->flash('error', "⚠️ Команда завершилась з кодом {$exitCode}.");
+            }
+            
+            // Log output for debugging
+            if (!empty(trim($output))) {
+                \Log::info("SyncReports runSync '{$command}'", ['output' => $output]);
+            }
         } catch (\Exception $e) {
             session()->flash('error', "❌ Помилка: {$e->getMessage()}");
+            \Log::error("SyncReports runSync error", ['command' => $command, 'error' => $e->getMessage()]);
         }
 
         $this->loadStats();

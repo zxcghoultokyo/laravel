@@ -24,41 +24,46 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule): void
     {
-        // 1. Sync products from Horoshop
+        // 1. Sync products from Horoshop (runs everywhere)
         $schedule->job(new SyncHoroshopProductsJob())
-            ->dailyAt('03:00');
+            ->dailyAt('03:00')
+            ->withoutOverlapping();
 
         // 2. Sync brands after products sync (with 30min delay)
         $schedule->job(new SyncBrandsJob())
-            ->dailyAt('03:30');
+            ->dailyAt('03:30')
+            ->withoutOverlapping();
 
-        // 3. AI enrichment for new products (after sync)
+        // 3. AI enrichment for new products (production only - uses OpenAI API)
         $schedule->job(new AnalyzeProductsWithAiJob())
             ->dailyAt('04:00')
-            ->environments(['production']);
+            ->environments(['production'])
+            ->withoutOverlapping();
 
         // 4. Reindex Meilisearch after enrichment
         $schedule->job(new IndexProductsToMeiliJob())
             ->dailyAt('05:00')
-            ->environments(['production']);
+            ->withoutOverlapping();
 
         // 5. Incremental sync every 4 hours (faster updates for price/stock changes)
         $schedule->job(new IncrementalProductSyncJob(true, true))
             ->cron('0 */4 * * *')  // Every 4 hours: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+            ->withoutOverlapping();
+
+        // Category scenarios (production only - uses OpenAI)
+        $schedule->job(new GenerateCategoryScenariosJob())
+            ->dailyAt('06:00')
             ->environments(['production'])
             ->withoutOverlapping();
 
-        // Category scenarios
-        $schedule->job(new GenerateCategoryScenariosJob())
-            ->dailyAt('06:00');
-
         $schedule->job(new GenerateCategoryScriptsJob())
-            ->weeklyOn(1, '07:00');
+            ->weeklyOn(1, '07:00')
+            ->environments(['production'])
+            ->withoutOverlapping();
             
         // 6. Sync orders from Horoshop (twice a day: morning + evening)
         $schedule->command('orders:sync', ['--days' => 3, '--update-counts'])
             ->twiceDaily(8, 20)
-            ->environments(['production'])
             ->withoutOverlapping();
     }
 

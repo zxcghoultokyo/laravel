@@ -1181,7 +1181,7 @@
                         <a href="#features">Функції</a>
                         <a href="#pricing">Ціни</a>
                         <a href="/admin">Адмін-панель</a>
-                        <a href="mailto:support@aimbot.laravel.cloud">Підтримка</a>
+                        <a href="https://t.me/AIntento" target="_blank">💬 Підтримка</a>
                     </div>
                 </div>
                 <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color);">

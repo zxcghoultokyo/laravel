@@ -509,21 +509,34 @@ trackEvent('proactive_trigger_conversion', {
 
 ## Implementation Phases
 
-### Phase 1 (Week 1): Core Infrastructure
-- [ ] DB migration for `proactive_trigger_rules`
-- [ ] API endpoints for rules CRUD
-- [ ] Basic widget.js trigger engine
-- [ ] Exit-intent detection
+### Phase 1 (Week 1): Core Infrastructure ✅ COMPLETED
+- [x] DB migration for `proactive_trigger_rules` and `proactive_trigger_events`
+- [x] API endpoints for rules (GET /api/triggers/rules, POST /api/triggers/event, POST /api/triggers/check, GET /api/triggers/stats)
+- [x] Basic widget.js trigger engine (ProactiveTriggers object)
+- [x] Exit-intent detection
+- [x] Seeder with 16 default rules (all UTM sources)
 
-### Phase 2 (Week 2): Admin UI + More Triggers
-- [ ] Livewire admin page for trigger management
-- [ ] Time-on-page trigger
-- [ ] UTM campaign trigger
-- [ ] Analytics tracking
+### Phase 2 (Week 2): Admin UI + More Triggers ✅ COMPLETED
+- [x] Livewire admin page for trigger management (`/admin/triggers`)
+- [x] Time-on-page trigger
+- [x] UTM campaign triggers (Google CPC, Shopping, Facebook, Instagram, TikTok, Telegram, Email)
+- [x] Analytics tracking (shown_count, clicked_count, converted_count)
+- [x] Returning visitor trigger
+- [x] PDP no variant trigger
 
-### Phase 3 (Week 3): Advanced Features
-- [ ] Returning visitor trigger
-- [ ] PDP no variant trigger
+### Phase 3 (Week 3): Advanced Features 🔄 IN PROGRESS
 - [ ] A/B testing for trigger messages
-- [ ] Performance dashboard
+- [ ] Performance dashboard with charts
+- [ ] Trigger scheduling (time-of-day, day-of-week)
+- [ ] Advanced targeting (geo, device type)
 
+## Admin UI
+
+Access admin panel at `/admin/triggers`:
+
+- **List View**: See all triggers with type, priority, statistics (shown, clicked, CTR)
+- **Create/Edit**: Configure trigger type, conditions, message, button, action
+- **Toggle**: Enable/disable triggers with one click
+- **Duplicate**: Clone existing triggers for A/B testing
+- **Reset Stats**: Clear statistics for a trigger
+- **Filter**: By trigger type or enabled status

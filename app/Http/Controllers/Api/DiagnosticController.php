@@ -2090,9 +2090,10 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $fromTenantId = (int) $request->input('from_tenant_id', 1);
+        $fromTenantId = $request->input('from_tenant_id', 1);
         $toTenantId = (int) $request->input('to_tenant_id', 2);
         $dryRun = $request->boolean('dry_run', true);
+        $migrateNull = $request->boolean('migrate_null', false);
 
         // Only validate target tenant exists
         $toTenant = \App\Models\Tenant::find($toTenantId);
@@ -2101,7 +2102,7 @@ class DiagnosticController extends Controller
         }
 
         // Source tenant might not exist (orphaned data cleanup)
-        $fromTenant = \App\Models\Tenant::find($fromTenantId);
+        $fromTenant = $fromTenantId !== null ? \App\Models\Tenant::find($fromTenantId) : null;
 
         $tables = [
             'products' => ['model' => \App\Models\Product::class],
@@ -2129,21 +2130,37 @@ class DiagnosticController extends Controller
                 continue;
             }
 
-            $count = DB::table($tableName)->where('tenant_id', $fromTenantId)->count();
+            // Build query - either by tenant_id or NULL
+            $query = DB::table($tableName);
+            if ($migrateNull || $fromTenantId === null || $fromTenantId === 'null') {
+                $query->whereNull('tenant_id');
+                $fromLabel = 'NULL';
+            } else {
+                $query->where('tenant_id', (int) $fromTenantId);
+                $fromLabel = $fromTenantId;
+            }
+
+            $count = $query->count();
             
             if ($dryRun) {
-                $results[$tableName] = ['would_migrate' => $count];
+                $results[$tableName] = ['would_migrate' => $count, 'from' => $fromLabel];
             } else {
-                $updated = DB::table($tableName)
-                    ->where('tenant_id', $fromTenantId)
-                    ->update(['tenant_id' => $toTenantId]);
-                $results[$tableName] = ['migrated' => $updated];
+                // Re-build query for update
+                $updateQuery = DB::table($tableName);
+                if ($migrateNull || $fromTenantId === null || $fromTenantId === 'null') {
+                    $updateQuery->whereNull('tenant_id');
+                } else {
+                    $updateQuery->where('tenant_id', (int) $fromTenantId);
+                }
+                $updated = $updateQuery->update(['tenant_id' => $toTenantId]);
+                $results[$tableName] = ['migrated' => $updated, 'from' => $fromLabel];
             }
         }
 
         return response()->json([
             'dry_run' => $dryRun,
-            'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant?->name ?? '(orphaned data)'],
+            'migrate_null' => $migrateNull,
+            'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant?->name ?? ($migrateNull ? '(NULL records)' : '(orphaned data)')],
             'to_tenant' => ['id' => $toTenantId, 'name' => $toTenant->name],
             'results' => $results,
             'note' => $dryRun 

@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.6.3';
+    const WIDGET_VERSION = '2.6.4';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -3552,19 +3552,27 @@
                 return false;
             }
             
-            // Session limit (1 per session by default)
-            if (this.state.sessionTriggersShown.length >= 1) {
+            // Check if this specific type was already shown
+            if (this.state.sessionTriggersShown.includes(triggerType)) {
                 return false;
             }
             
-            // Cooldown (5 minutes between triggers)
+            // EXIT INTENT is highest priority - can show even if other triggers were shown
+            // This is the last chance to engage user before they leave
+            if (triggerType === 'exit_intent') {
+                return true; // Only blocked if exit_intent itself was already shown (checked above)
+            }
+            
+            // For other triggers: session limit (1 per session)
+            // But don't count exit_intent towards this limit
+            const nonExitTriggersShown = this.state.sessionTriggersShown.filter(t => t !== 'exit_intent');
+            if (nonExitTriggersShown.length >= 1) {
+                return false;
+            }
+            
+            // Cooldown (5 minutes between non-exit triggers)
             const cooldown = 5 * 60 * 1000;
             if (Date.now() - this.state.lastTriggerTime < cooldown) {
-                return false;
-            }
-            
-            // Check if this type was already shown
-            if (this.state.sessionTriggersShown.includes(triggerType)) {
                 return false;
             }
             

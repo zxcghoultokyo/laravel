@@ -430,9 +430,20 @@ class StreamingFunctionCallingAgent
             }
         }
         
-        // Low stock urgency
-        if ($quantity > 0 && $quantity <= 3) {
-            return "Залишилось лише {$quantity} шт. в наявності. Резервуємо?";
+        // FIRST: Determine product type and appropriate CTA
+        
+        // Helmets - need head circumference
+        $isHelmet = str_contains($categoryPath, 'шолом') || str_contains($title, 'шолом') || 
+                    str_contains($categoryPath, 'helmet') || str_contains($title, 'helmet');
+        if ($isHelmet) {
+            return 'Який обхват голови? Допоможу з підбором розміру шолома!';
+        }
+        
+        // Plate carriers - need plate size
+        $isPlateCarrier = str_contains($categoryPath, 'плитоноска') || str_contains($title, 'плитоноска') ||
+                          str_contains($categoryPath, 'plate carrier') || str_contains($title, 'plate carrier');
+        if ($isPlateCarrier) {
+            return 'Який розмір плит використовуєте? Допоможу з підбором!';
         }
         
         // Clothing/footwear with sizes
@@ -440,16 +451,9 @@ class StreamingFunctionCallingAgent
             return 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
         }
         
-        // Helmets - check both category and title
-        if (str_contains($categoryPath, 'шолом') || str_contains($title, 'шолом') || 
-            str_contains($categoryPath, 'helmet') || str_contains($title, 'helmet')) {
-            return 'Який обхват голови? Допоможу з підбором розміру шолома!';
-        }
-        
-        // Plate carriers - need plate size
-        if (str_contains($categoryPath, 'плитоноска') || str_contains($title, 'плитоноска') ||
-            str_contains($categoryPath, 'plate carrier') || str_contains($title, 'plate carrier')) {
-            return 'Який розмір плит використовуєте? Допоможу з підбором!';
+        // THEN: Low stock urgency (only for products that don't need sizing)
+        if ($quantity > 0 && $quantity <= 3) {
+            return "Залишилось лише {$quantity} шт. в наявності. Резервуємо?";
         }
         
         // Default for accessories/gear without sizes

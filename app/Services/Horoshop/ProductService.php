@@ -75,6 +75,162 @@ class ProductService
     }
 
     /**
+     * Синхронізація товарів для конкретного тенанта з його Horoshop.
+     *
+     * @param  Tenant  $tenant
+     * @param  int     $limit
+     * @return array   Stats about sync
+     */
+    public function syncFromHoroshopForTenant(\App\Models\Tenant $tenant, int $limit = 200): array
+    {
+        $credentials = $tenant->platform_credentials;
+        
+        if (empty($credentials) || empty($credentials['domain'])) {
+            throw new \RuntimeException('Tenant has no Horoshop credentials');
+        }
+        
+        // Create tenant-specific client
+        $tenantClient = new HoroshopClient(
+            $credentials['domain'],
+            $credentials['login'],
+            $credentials['password']
+        );
+        
+        $offset = 0;
+        $created = 0;
+        $updated = 0;
+        $total = 0;
+
+        do {
+            // Check if cancelled
+            $cacheKey = "sync_running_{$tenant->id}";
+            if (!\Illuminate\Support\Facades\Cache::get($cacheKey)) {
+                Log::info('Sync cancelled for tenant', ['tenant_id' => $tenant->id]);
+                break;
+            }
+            
+            $payload = [
+                'expr' => [
+                    'display_in_showcase' => 1,
+                ],
+                'limit' => $limit,
+                'offset' => $offset,
+                'includedParams' => [
+                    'title', 'article', 'parent_article', 'price', 'price_old',
+                    'parent', 'images', 'slug', 'link', 'presence', 'quantity',
+                    'display_in_showcase', 'popularity', 'color', 'brand',
+                    'description', 'characteristics', 'short_description',
+                    'select', 'params', 'mod_title', 'Rozmir', 'Kolir', 'Dovzhina',
+                    'seo_title', 'seo_keywords', 'seo_description',
+                    'we_recommended', 'icons',
+                ],
+            ];
+
+            Log::info('Horoshop tenant sync request', [
+                'tenant_id' => $tenant->id,
+                'offset' => $offset,
+            ]);
+
+            try {
+                $response = $tenantClient->request('catalog/export', $payload);
+            } catch (\Exception $e) {
+                Log::error('Horoshop sync error for tenant', [
+                    'tenant_id' => $tenant->id,
+                    'error' => $e->getMessage(),
+                ]);
+                throw $e;
+            }
+
+            $products = Arr::get($response, 'products', []);
+
+            if (empty($products)) {
+                Log::info('Horoshop tenant sync: no more products', ['tenant_id' => $tenant->id]);
+                break;
+            }
+
+            foreach ($products as $item) {
+                $result = $this->upsertProductForTenant($tenant, $item);
+                if ($result === 'created') {
+                    $created++;
+                } elseif ($result === 'updated') {
+                    $updated++;
+                }
+                $total++;
+            }
+
+            $offset += $limit;
+        } while (true);
+        
+        return [
+            'total' => $total,
+            'created' => $created,
+            'updated' => $updated,
+            'tenant_id' => $tenant->id,
+        ];
+    }
+
+    /**
+     * Upsert product for a specific tenant.
+     */
+    protected function upsertProductForTenant(\App\Models\Tenant $tenant, array $item): string
+    {
+        $article = $item['article'] ?? null;
+
+        if (!$article) {
+            return 'skipped';
+        }
+
+        // Find or create product scoped to tenant
+        $product = Product::where('tenant_id', $tenant->id)
+            ->where('article', $article)
+            ->first();
+        
+        $isNew = !$product;
+        
+        if (!$product) {
+            $product = new Product();
+            $product->tenant_id = $tenant->id;
+        }
+
+        $brand = Arr::get($item, 'brand.value.ua')
+            ?? Arr::get($item, 'brand.value.ru')
+            ?? null;
+
+        $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
+        $size = $this->extractSizeFromItem($item, $title);
+
+        $product->fill([
+            'article' => $article,
+            'parent_article' => $item['parent_article'] ?? null,
+            'title' => $title,
+            'title_json' => $item['title'] ?? null,
+            'price' => $item['price'] ?? 0,
+            'price_old' => $item['price_old'] ?? 0,
+            'category_path' => $item['parent']['value'] ?? null,
+            'slug' => $item['slug'] ?? null,
+            'link' => $item['link'] ?? null,
+            'images' => $item['images'] ?? [],
+            'raw' => $item,
+            'presence' => Arr::get($item, 'presence.value.ua')
+                                   ?? Arr::get($item, 'presence.value.ru')
+                                   ?? null,
+            'quantity' => $item['quantity'] ?? 0,
+            'brand' => $brand,
+            'popularity' => $item['popularity'] ?? 0,
+            'we_recommended' => (bool) ($item['we_recommended'] ?? false),
+            'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
+            'in_stock' => $this->isInStock($item),
+            'color' => $this->extractColorFromItem($item),
+            'size' => $size,
+        ]);
+
+        $product->search_index = $this->buildSearchIndex($item, $product);
+        $product->save();
+        
+        return $isNew ? 'created' : 'updated';
+    }
+
+    /**
      * Оновлюємо / створюємо локальний запис Product з даних Horoshop.
      */
     protected function upsertProductFromHoroshop(array $item): void

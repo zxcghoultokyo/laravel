@@ -5,7 +5,9 @@ namespace App\Livewire\Admin;
 use App\Models\Tenant;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Jobs\SyncHoroshopProductsJob;
 use App\Services\Usage\UsageTrackingService;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -121,6 +123,88 @@ class TenantsManager extends Component
         $tenant = Tenant::findOrFail($id);
         app(UsageTrackingService::class)->resetMonthlyUsage($tenant);
         session()->flash('success', "Лічильники {$tenant->name} скинуто");
+    }
+
+    /**
+     * Start sync for a tenant.
+     */
+    public function startSync(int $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+        
+        if ($tenant->platform !== 'horoshop') {
+            session()->flash('error', "Синхронізація доступна тільки для Horoshop");
+            return;
+        }
+        
+        if (empty($tenant->platform_credentials)) {
+            session()->flash('error', "API credentials не налаштовані");
+            return;
+        }
+        
+        // Check if sync already running
+        $cacheKey = "sync_running_{$tenant->id}";
+        if (Cache::get($cacheKey)) {
+            session()->flash('warning', "Синхронізація вже запущена");
+            return;
+        }
+        
+        // Mark sync as running
+        Cache::put($cacheKey, true, 3600); // 1 hour max
+        
+        // Dispatch sync job
+        SyncHoroshopProductsJob::dispatch($tenant->id);
+        
+        session()->flash('success', "Синхронізацію {$tenant->name} запущено");
+    }
+
+    /**
+     * Cancel running sync for a tenant.
+     */
+    public function cancelSync(int $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+        
+        // Remove sync flag from cache
+        $cacheKey = "sync_running_{$tenant->id}";
+        Cache::forget($cacheKey);
+        
+        // Note: The actual job may continue, but next iteration will check this flag
+        // and stop gracefully
+        
+        session()->flash('success', "Синхронізацію {$tenant->name} скасовано");
+    }
+
+    /**
+     * Check sync status for a tenant.
+     */
+    public function getSyncStatus(int $id): array
+    {
+        $tenant = Tenant::findOrFail($id);
+        
+        $cacheKey = "sync_running_{$tenant->id}";
+        $isRunning = Cache::get($cacheKey, false);
+        
+        return [
+            'is_running' => $isRunning,
+            'products_count' => $tenant->products()->count(),
+            'last_sync' => $tenant->last_sync_at?->diffForHumans(),
+            'platform' => $tenant->platform,
+            'has_credentials' => !empty($tenant->platform_credentials),
+        ];
+    }
+
+    /**
+     * Clear all products for a tenant (for re-sync).
+     */
+    public function clearProducts(int $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+        
+        $count = $tenant->products()->count();
+        $tenant->products()->delete();
+        
+        session()->flash('success', "Видалено {$count} товарів з {$tenant->name}");
     }
 
     public function openCreateModal()

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\ProductAiIndex;
 
 class Product extends Model
@@ -11,6 +12,7 @@ class Product extends Model
     use SoftDeletes;
 
     protected $fillable = [
+        'tenant_id',
         'article',
         'parent_article',
         'title',
@@ -52,6 +54,14 @@ class Product extends Model
         'color'                => 'string',
         'brand' => 'string',
     ];
+    
+    /**
+     * Tenant this product belongs to.
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
     
     public function tags()
     {

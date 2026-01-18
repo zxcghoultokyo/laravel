@@ -1701,17 +1701,77 @@ class DiagnosticController extends Controller
                     'status' => $log->status,
                     'started_at' => $log->started_at?->format('Y-m-d H:i:s'),
                     'duration' => $log->duration_seconds,
+                    'error' => $log->error_message,
                 ]);
         }
+        
+        // Check queue status
+        $queueInfo = $this->getQueueStatus();
         
         return response()->json([
             'timezone' => config('app.timezone'),
             'server_time' => now()->format('Y-m-d H:i:s'),
             'scheduled_tasks_count' => count($tasks),
             'tasks' => $tasks,
+            'queue' => $queueInfo,
             'last_syncs' => $lastSyncs,
             'note' => 'On Laravel Cloud, scheduler requires a Scheduler Worker in Dashboard > Workers',
         ]);
+    }
+    
+    /**
+     * Get queue status (pending jobs, failed jobs)
+     */
+    private function getQueueStatus(): array
+    {
+        $result = [
+            'connection' => config('queue.default'),
+            'pending_jobs' => 0,
+            'failed_jobs' => 0,
+            'recent_failed' => [],
+        ];
+        
+        try {
+            // Check jobs table if using database driver
+            if (config('queue.default') === 'database' && \Schema::hasTable('jobs')) {
+                $result['pending_jobs'] = DB::table('jobs')->count();
+                
+                // Get pending jobs breakdown
+                $pendingByQueue = DB::table('jobs')
+                    ->select('queue', DB::raw('count(*) as count'))
+                    ->groupBy('queue')
+                    ->get()
+                    ->pluck('count', 'queue')
+                    ->toArray();
+                $result['pending_by_queue'] = $pendingByQueue;
+            }
+            
+            // Check failed_jobs table
+            if (\Schema::hasTable('failed_jobs')) {
+                $result['failed_jobs'] = DB::table('failed_jobs')->count();
+                
+                // Get recent failed jobs
+                $recentFailed = DB::table('failed_jobs')
+                    ->orderByDesc('failed_at')
+                    ->take(5)
+                    ->get(['uuid', 'queue', 'payload', 'exception', 'failed_at']);
+                
+                $result['recent_failed'] = $recentFailed->map(function ($job) {
+                    $payload = json_decode($job->payload, true);
+                    return [
+                        'uuid' => $job->uuid,
+                        'queue' => $job->queue,
+                        'job' => $payload['displayName'] ?? 'unknown',
+                        'failed_at' => $job->failed_at,
+                        'error' => \Str::limit($job->exception, 200),
+                    ];
+                })->toArray();
+            }
+        } catch (\Exception $e) {
+            $result['error'] = $e->getMessage();
+        }
+        
+        return $result;
     }
 
     /**

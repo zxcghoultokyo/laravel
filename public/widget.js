@@ -3636,34 +3636,52 @@
             const url = window.location.pathname.toLowerCase();
             const body = document.body;
             
-            // Check for product page indicators
-            if (
-                url.includes('/product/') ||
-                url.includes('/tovar/') ||
-                url.includes('/p/') ||
+            // Check for product page indicators - must have specific product selectors
+            const hasProductSelectors = 
                 document.querySelector('[itemtype*="Product"]') ||
                 document.querySelector('.product-page') ||
                 document.querySelector('.product-detail') ||
                 document.querySelector('[data-product-id]') ||
                 // Horoshop specific
                 document.querySelector('.hs-product-page') ||
-                document.querySelector('.j-product-container')
-            ) {
+                document.querySelector('.j-product-container') ||
+                // Product page typically has add-to-cart button AND variant selectors
+                (document.querySelector('[data-add-to-cart], .add-to-cart, .buy-button') && 
+                 document.querySelector('[data-variant], .variant-select, .size-select, .hs-variants'));
+            
+            // Product page URL patterns
+            const isProductUrl = 
+                url.includes('/product/') ||
+                url.includes('/tovar/') ||
+                url.includes('/p/') ||
+                // Pattern: category/product-slug-123 where 123 is product ID
+                /\/[a-z-]+\/[a-z0-9-]+-\d+\/?$/.test(url);
+            
+            if (hasProductSelectors && isProductUrl) {
                 return 'product';
             }
             
-            // Check for category page
-            if (
-                url.includes('/category/') ||
-                url.includes('/catalog/') ||
-                url.includes('/c/') ||
+            // Check for category page - multiple products displayed
+            const hasCategorySelectors = 
                 document.querySelector('.category-page') ||
                 document.querySelector('.product-list') ||
+                document.querySelector('.products-grid') ||
+                document.querySelector('.catalog-products') ||
                 document.querySelector('[itemtype*="ItemList"]') ||
                 // Horoshop specific
                 document.querySelector('.hs-catalog') ||
-                document.querySelector('.j-catalog-container')
-            ) {
+                document.querySelector('.j-catalog-container') ||
+                // Multiple product cards
+                document.querySelectorAll('.product-card, .product-item, [data-product-id]').length >= 3;
+            
+            const isCategoryUrl =
+                url.includes('/category/') ||
+                url.includes('/catalog/') ||
+                url.includes('/c/') ||
+                // Generic category URL: /category-name/ or /category-name
+                /^\/[a-z0-9-]+\/?$/.test(url);
+            
+            if (hasCategorySelectors || isCategoryUrl) {
                 return 'category';
             }
             
@@ -3683,6 +3701,18 @@
                 url.includes('/oformlenie')
             ) {
                 return 'checkout';
+            }
+            
+            // If we have an h1 with common category keywords, treat as category
+            const h1 = document.querySelector('h1');
+            if (h1) {
+                const h1Text = h1.textContent.trim().toLowerCase();
+                const categoryKeywords = ['тактич', 'військов', 'спорядження', 'одяг', 'взуття', 'рюкзак', 
+                    'підсумк', 'плитоносц', 'бронежилет', 'шолом', 'камуфляж', 'форма', 'куртк', 
+                    'штан', 'футболк', 'термобіл', 'аксесуар', 'захист'];
+                if (categoryKeywords.some(kw => h1Text.includes(kw))) {
+                    return 'category';
+                }
             }
             
             return 'other';
@@ -3892,31 +3922,49 @@
                 }
                 
                 // Build contextual message based on page type and category
-                let message = rule.action_config?.initial_message || '';
                 const pageType = this.detectPageType();
                 const category = this.detectCurrentCategory();
+                let message = '';
                 
-                // If on category page and rule is for category context, ask for top products
+                log('ProactiveTriggers: Building message for', { pageType, category, rule_type: rule.type });
+                
+                // Priority 1: Category page - always ask for top products in that category
                 if (pageType === 'category' && category) {
-                    // Replace generic message with specific category request
-                    if (rule.action_config?.include_category_context || 
-                        message.includes('категорії') || 
-                        message.includes('хіти')) {
-                        message = `Покажи топ товари в категорії "${category}"`;
-                    }
-                }
-                
-                // If on product page, include product info
-                if (pageType === 'product' && rule.action_config?.include_product_context) {
-                    const productTitle = document.querySelector('h1')?.textContent?.trim() || '';
-                    if (productTitle && productTitle.length < 100) {
-                        message = `Допоможіть з товаром "${productTitle}"`;
-                    }
-                }
-                
-                // If still no category context but we're on a category page, add it
-                if (pageType === 'category' && category && !message.includes(category)) {
                     message = `Покажи топ товари в категорії "${category}"`;
+                    log('ProactiveTriggers: Using category context message:', message);
+                }
+                // Priority 2: Product page - include product info
+                else if (pageType === 'product') {
+                    const productTitle = document.querySelector('h1')?.textContent?.trim() || '';
+                    // Make sure it's a product name, not a category name
+                    // Product pages usually have longer titles
+                    if (productTitle && productTitle.length > 10 && productTitle.length < 100) {
+                        // Check if this looks like a category title (common patterns)
+                        const categoryPatterns = /^(тактич|військов|камуфляж|спорядження|одяг|взуття|рюкзак|підсумк|плитоносц|бронежилет|шолом)/i;
+                        if (!categoryPatterns.test(productTitle)) {
+                            message = `Допоможіть з товаром "${productTitle}"`;
+                        } else {
+                            // It's actually a category page, ask for top products
+                            message = `Покажи топ товари в категорії "${productTitle}"`;
+                        }
+                    }
+                    log('ProactiveTriggers: Product page message:', message);
+                }
+                
+                // Fallback to rule's initial_message if no context-specific message
+                if (!message && rule.action_config?.initial_message) {
+                    message = rule.action_config.initial_message;
+                    // Replace {{category}} placeholder if we have category
+                    if (category) {
+                        message = message.replace(/\{\{category\}\}/g, category);
+                    }
+                    log('ProactiveTriggers: Using rule initial message:', message);
+                }
+                
+                // Final fallback - if we still have no message but have category, ask for top products
+                if (!message && category) {
+                    message = `Покажи топ товари в категорії "${category}"`;
+                    log('ProactiveTriggers: Using fallback category message:', message);
                 }
                 
                 // If we have a message, send it
@@ -3980,11 +4028,38 @@
         setupExitIntentDetector: function() {
             let exitIntentTriggered = false;
             let exitIntentDebounce = null;
+            let isNavigatingAway = false; // Flag to prevent trigger during page navigation
+            
+            // Detect when user is navigating away (link click, form submit, etc.)
+            // This prevents exit-intent from firing when user clicks a link to another page
+            document.addEventListener('click', (e) => {
+                const link = e.target.closest('a[href]');
+                if (link && link.href && !link.href.startsWith('javascript:') && !link.href.startsWith('#')) {
+                    // User clicked a navigation link
+                    isNavigatingAway = true;
+                    log('ProactiveTriggers: Navigation detected, disabling exit intent');
+                    // Reset after a delay in case navigation was cancelled
+                    setTimeout(() => { isNavigatingAway = false; }, 2000);
+                }
+            }, true);
+            
+            // Also detect form submissions
+            document.addEventListener('submit', () => {
+                isNavigatingAway = true;
+                log('ProactiveTriggers: Form submit detected, disabling exit intent');
+            }, true);
+            
+            // Detect beforeunload (page refresh, close tab, navigate away)
+            window.addEventListener('beforeunload', () => {
+                isNavigatingAway = true;
+                log('ProactiveTriggers: beforeunload - page is unloading');
+            });
             
             // Mouse leave detection (desktop) - using mouseout on documentElement
             // This fires when mouse leaves the viewport to the TOP (e.g., to close tab or go to address bar)
             document.documentElement.addEventListener('mouseout', (e) => {
                 if (exitIntentTriggered) return;
+                if (isNavigatingAway) return; // Don't trigger during navigation
                 
                 // Only trigger when mouse actually leaves the document (relatedTarget is null)
                 // and moves toward the TOP of the page (clientY <= 0)
@@ -4005,6 +4080,7 @@
                 exitIntentDebounce = setTimeout(() => {
                     // Double-check we're still on the page (not navigating away)
                     if (document.hidden) return;
+                    if (isNavigatingAway) return;
                     
                     const rule = this.findMatchingRule('exit_intent');
                     if (rule && this.canShowTrigger('exit_intent')) {

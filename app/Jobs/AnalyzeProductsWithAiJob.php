@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Models\ProductAiIndex;
+use App\Models\SyncLog;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -35,15 +36,37 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         public int $batchSize = 10,
         public int $offset = 0,
         public bool $forceReanalyze = false
-    ) {}
+    ) {
+        $this->onQueue('default');
+    }
 
     public function handle(): void
+    {
+        // Only log SyncLog for first batch (offset = 0)
+        $syncLog = $this->offset === 0 
+            ? SyncLog::start(SyncLog::TYPE_AI_ENRICHMENT, "AI enrichment batch={$this->batchSize}")
+            : null;
+        
+        try {
+            $this->processAnalysis($syncLog);
+        } catch (\Throwable $e) {
+            if ($syncLog) {
+                $syncLog->fail($e->getMessage());
+            }
+            throw $e;
+        }
+    }
+
+    private function processAnalysis(?SyncLog $syncLog): void
     {
         $config = config('services.openai', []);
         $apiKey = $config['key'] ?? null;
         
         if (!$apiKey) {
             Log::error('AnalyzeProductsWithAiJob: OpenAI API key not configured');
+            if ($syncLog) {
+                $syncLog->fail('OpenAI API key not configured');
+            }
             return;
         }
 
@@ -68,6 +91,9 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         if ($products->isEmpty()) {
             Log::info('AnalyzeProductsWithAiJob: no more products to analyze');
+            if ($syncLog) {
+                $syncLog->complete(['message' => 'No more products to analyze']);
+            }
             return;
         }
 
@@ -76,15 +102,28 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             'count' => $products->count(),
         ]);
 
+        $analyzed = 0;
+        $errors = 0;
         foreach ($products as $product) {
             try {
                 $this->analyzeProduct($product, $apiKey, $config);
+                $analyzed++;
             } catch (\Throwable $e) {
+                $errors++;
                 Log::error('AnalyzeProductsWithAiJob: failed to analyze product', [
                     'product_id' => $product->id,
                     'error' => $e->getMessage(),
                 ]);
             }
+        }
+
+        // Complete sync log for first batch only
+        if ($syncLog) {
+            $syncLog->complete([
+                'analyzed' => $analyzed,
+                'errors' => $errors,
+                'batch_size' => $this->batchSize,
+            ]);
         }
 
         // Dispatch next batch

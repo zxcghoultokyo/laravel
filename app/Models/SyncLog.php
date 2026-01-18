@@ -36,6 +36,7 @@ class SyncLog extends Model
     public const TYPE_CATEGORIES = 'categories';
     public const TYPE_EMBEDDINGS = 'embeddings';
     public const TYPE_STATS = 'stats';
+    public const TYPE_BRANDS = 'brands';
 
     // Statuses
     public const STATUS_RUNNING = 'running';
@@ -50,6 +51,7 @@ class SyncLog extends Model
         self::TYPE_CATEGORIES => '📁 Категорії',
         self::TYPE_EMBEDDINGS => '🧬 Embeddings',
         self::TYPE_STATS => '📊 Статистика',
+        self::TYPE_BRANDS => '🏷️ Бренди',
     ];
 
     public static array $statusLabels = [

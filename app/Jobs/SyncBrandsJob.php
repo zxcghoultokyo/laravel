@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Brand;
 use App\Models\Product;
+use App\Models\SyncLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -13,12 +14,15 @@ class SyncBrandsJob implements ShouldQueue
 {
     use Queueable;
 
+    public int $timeout = 120;
+    public int $tries = 2;
+
     /**
      * Create a new job instance.
      */
     public function __construct()
     {
-        //
+        $this->onQueue('default');
     }
 
     /**
@@ -26,6 +30,8 @@ class SyncBrandsJob implements ShouldQueue
      */
     public function handle(): void
     {
+        $syncLog = SyncLog::start(SyncLog::TYPE_BRANDS, 'Sync brands from products');
+        
         Log::info('SyncBrandsJob: starting');
         
         try {
@@ -40,6 +46,7 @@ class SyncBrandsJob implements ShouldQueue
             
             if ($brandStats->isEmpty()) {
                 Log::warning('SyncBrandsJob: no brands found in products table');
+                $syncLog->complete(['message' => 'No brands found']);
                 return;
             }
             
@@ -82,12 +89,19 @@ class SyncBrandsJob implements ShouldQueue
                 'total' => Brand::count(),
             ]);
             
+            $syncLog->complete([
+                'created' => $created,
+                'updated' => $updated,
+                'total' => Brand::count(),
+            ]);
+            
         } catch (\Exception $e) {
             Log::error('SyncBrandsJob: failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
             
+            $syncLog->fail($e->getMessage());
             throw $e;
         }
     }

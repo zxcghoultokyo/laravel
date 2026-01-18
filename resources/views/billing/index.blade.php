@@ -7,6 +7,14 @@
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            {{-- Trial expired warning --}}
+            @if(session('warning'))
+                <div class="mb-4 bg-amber-100 border border-amber-400 text-amber-800 px-4 py-3 rounded-lg flex items-center">
+                    <span class="text-xl mr-3">⏰</span>
+                    <span>{{ session('warning') }}</span>
+                </div>
+            @endif
+
             {{-- Flash messages --}}
             @if(session('success'))
                 <div class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">

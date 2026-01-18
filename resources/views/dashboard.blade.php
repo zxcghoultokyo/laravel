@@ -5,11 +5,11 @@
                 Dashboard — {{ $tenant->name }}
             </h2>
             @if($stats['is_trial'])
-                <span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-                    Trial: {{ $stats['days_left'] }} днів
+                <span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
+                    🎁 Trial Pro: {{ $stats['days_left'] }} днів
                 </span>
             @else
-                <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                <span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
                     {{ $stats['plan_label'] }}
                 </span>
             @endif
@@ -22,6 +22,62 @@
             @if(session('success'))
                 <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                     <p class="text-green-800">{{ session('success') }}</p>
+                </div>
+            @endif
+
+            <!-- Trial Banner -->
+            @if($stats['is_trial'])
+                <div class="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">🎁</span>
+                            <div>
+                                <h3 class="font-bold text-amber-900">Ваш Pro-тріал активний!</h3>
+                                <p class="text-amber-700 text-sm mt-1">
+                                    Залишилось <strong>{{ $stats['days_left'] }} днів</strong> безкоштовного доступу до всіх Pro-функцій: 
+                                    5000 повідомлень, розширена аналітика, кастомні промпти.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <a href="{{ route('billing.index') }}" 
+                               class="inline-flex items-center px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition shadow-sm">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+                                </svg>
+                                Обрати план
+                            </a>
+                        </div>
+                    </div>
+                    @if($stats['days_left'] <= 3)
+                        <div class="mt-3 p-2 bg-red-100 border border-red-200 rounded-lg">
+                            <p class="text-red-700 text-sm font-medium">
+                                ⚠️ Тріал закінчується через {{ $stats['days_left'] }} {{ $stats['days_left'] == 1 ? 'день' : 'дні' }}! 
+                                Оберіть план, щоб не втратити доступ.
+                            </p>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            <!-- Trial Expired Banner -->
+            @if($stats['is_trial_expired'] ?? false)
+                <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">⏰</span>
+                            <div>
+                                <h3 class="font-bold text-red-900">Тріал завершено</h3>
+                                <p class="text-red-700 text-sm mt-1">
+                                    Ваш безкоштовний період закінчився. Оберіть план, щоб продовжити користуватись AI-асистентом.
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('billing.index') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-sm">
+                            Обрати план →
+                        </a>
+                    </div>
                 </div>
             @endif
 

@@ -65,7 +65,8 @@ class TenantDashboardController extends Controller
             'plan_label' => $tenant->getPlanLabel(),
             'trial_ends_at' => $tenant->trial_ends_at,
             'is_trial' => $tenant->isOnTrial(),
-            'days_left' => $tenant->trial_ends_at ? now()->diffInDays($tenant->trial_ends_at, false) : null,
+            'is_trial_expired' => $tenant->isTrialExpired(),
+            'days_left' => $tenant->trial_ends_at ? max(0, now()->diffInDays($tenant->trial_ends_at, false)) : null,
         ];
 
         // Daily messages for chart (last 14 days)

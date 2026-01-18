@@ -128,9 +128,10 @@ return [
     'trial' => [
         'enabled' => env('BILLING_TRIAL_ENABLED', true),
         'days' => env('BILLING_TRIAL_DAYS', 14),
+        // Trial gets Pro limits to hook users on Pro experience!
         'limits' => [
-            'messages_per_month' => 100,
-            'products_limit' => 100,
+            'messages_per_month' => 5000,
+            'products_limit' => 5000,
         ],
     ],
 

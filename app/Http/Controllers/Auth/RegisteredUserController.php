@@ -49,14 +49,15 @@ class RegisteredUserController extends Controller
                 $slug = $baseSlug . '-' . $counter++;
             }
 
-            // Create tenant
+            // Create tenant with Pro limits during trial
+            // This encourages users to stay on Pro after trial ends
             $tenant = Tenant::create([
                 'name' => $request->store_name,
                 'slug' => $slug,
                 'email' => $request->email,
                 'plan' => Tenant::PLAN_TRIAL,
                 'trial_ends_at' => now()->addDays(14),
-                'messages_limit' => Tenant::PLAN_LIMITS[Tenant::PLAN_TRIAL],
+                'messages_limit' => Tenant::PLAN_LIMITS[Tenant::PLAN_PRO], // Pro limits during trial!
                 'status' => Tenant::STATUS_ACTIVE,
             ]);
 

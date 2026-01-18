@@ -10,9 +10,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-// Dashboard - tenant scoped
+// Dashboard - tenant scoped (protected by trial middleware)
 Route::get('/dashboard', [TenantDashboardController::class, 'index'])
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth', 'verified', 'trial.active'])
     ->name('dashboard');
 
 // Profile

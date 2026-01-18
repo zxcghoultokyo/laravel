@@ -932,13 +932,20 @@ PROMPT;
             }
         }
         
-        // Post-process for trigger queries: add CTA outro if missing
+        // Post-process for trigger queries: ALWAYS use our smart CTA outro
         $outro = $structuredResponse['outro'] ?? null;
-        if ($isTriggerQuery && empty($outro) && !empty($products)) {
+        if ($isTriggerQuery && !empty($products)) {
+            // For trigger queries, always generate our smart CTA based on product type
             $outro = $this->generateTriggerOutro($products);
             
-            // Add outro to messages
+            // Replace GPT's outro in messages with ours
             if (!empty($structuredResponse['messages'])) {
+                // Remove existing text outro (last message if it's text)
+                $lastIdx = count($structuredResponse['messages']) - 1;
+                if ($lastIdx >= 0 && ($structuredResponse['messages'][$lastIdx]['type'] ?? '') === 'text') {
+                    array_pop($structuredResponse['messages']);
+                }
+                // Add our smart outro
                 $structuredResponse['messages'][] = ['type' => 'text', 'content' => $outro];
             }
         }

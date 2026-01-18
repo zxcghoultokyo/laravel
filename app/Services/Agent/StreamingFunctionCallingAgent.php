@@ -248,9 +248,9 @@ class StreamingFunctionCallingAgent
                 ]];
             }
             
-            // Determine outro (from GPT or auto-generate for trigger queries)
+            // For trigger queries, ALWAYS use our smart CTA outro
             $outro = $structured['outro'] ?? null;
-            if ($isTriggerQuery && empty($outro) && !empty($allProducts)) {
+            if ($isTriggerQuery && !empty($allProducts)) {
                 $outro = $this->generateTriggerOutro($allProducts);
             }
             

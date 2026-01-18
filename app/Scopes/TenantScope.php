@@ -44,7 +44,15 @@ class TenantScope implements Scope
      */
     protected function resolveTenantId(): ?int
     {
-        // 1. Check authenticated user
+        // 1. Check app binding first (set by middleware for API calls)
+        if (app()->bound('current_tenant')) {
+            $tenant = app('current_tenant');
+            if ($tenant && $tenant->id) {
+                return (int) $tenant->id;
+            }
+        }
+        
+        // 2. Check authenticated user
         if (Auth::check()) {
             $user = Auth::user();
             
@@ -64,19 +72,14 @@ class TenantScope implements Scope
             }
         }
         
-        // 2. Check request context (for widget/API calls)
+        // 3. Check request context (for widget/API calls)
         if (request()->has('tenant_id')) {
             return (int) request()->input('tenant_id');
         }
         
-        // 3. Check session context (for non-auth contexts)
+        // 4. Check session context (for non-auth contexts)
         if (session()->has('tenant_id')) {
             return (int) session()->get('tenant_id');
-        }
-        
-        // 4. Check app binding (for jobs/commands that set tenant context)
-        if (app()->bound('current_tenant_id')) {
-            return app('current_tenant_id');
         }
         
         // No tenant context - don't apply filter

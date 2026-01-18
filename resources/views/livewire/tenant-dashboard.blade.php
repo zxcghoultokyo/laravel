@@ -238,6 +238,41 @@
                         @endforeach
                     </div>
                 </div>
+
+                <!-- Conversion Funnel -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-lg">🔄 Воронка конверсії</h3>
+                        @if(($funnelData['overall_rate'] ?? 0) > 0)
+                            <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                                {{ $funnelData['overall_rate'] }}% конверсія
+                            </span>
+                        @endif
+                    </div>
+                    
+                    @if(!empty($funnelData['stages']) && collect($funnelData['stages'])->sum('count') > 0)
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            @foreach($funnelData['stages'] as $index => $stage)
+                                <div class="bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-center">
+                                    <span class="text-2xl">{{ $stage['icon'] }}</span>
+                                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ number_format($stage['count']) }}</p>
+                                    <p class="text-xs text-gray-500">{{ $stage['label'] }}</p>
+                                    @if($index > 0 && $stage['rate'] > 0)
+                                        <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                            {{ $stage['rate'] }}%
+                                        </span>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="text-center py-8 text-gray-400">
+                            <span class="text-4xl">📊</span>
+                            <p class="mt-2">Ще немає даних для воронки</p>
+                            <p class="text-sm mt-1">Дані з'являться коли відвідувачі почнуть взаємодіяти з віджетом</p>
+                        </div>
+                    @endif
+                </div>
             @endif
 
             <!-- Chats Tab -->

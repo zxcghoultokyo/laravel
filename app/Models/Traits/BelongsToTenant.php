@@ -3,8 +3,9 @@
 namespace App\Models\Traits;
 
 use App\Models\Tenant;
-use App\Models\Scopes\TenantScope;
+use App\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 /**
  * Trait for models that belong to a tenant.
@@ -65,10 +66,30 @@ trait BelongsToTenant
     }
 
     /**
-     * Get the current tenant from app context.
+     * Get the current tenant from auth/session context.
      */
     protected static function getCurrentTenant(): ?Tenant
     {
-        return app()->bound('current_tenant') ? app('current_tenant') : null;
+        // 1. Authenticated user's tenant
+        if (Auth::check()) {
+            $user = Auth::user();
+            
+            // Super admin with active tenant context
+            if ($user->role === 'super_admin' && session()->has('admin_active_tenant_id')) {
+                return Tenant::find(session()->get('admin_active_tenant_id'));
+            }
+            
+            // Regular user's tenant
+            if ($user->tenant_id) {
+                return $user->tenant;
+            }
+        }
+        
+        // 2. App binding (for jobs/commands)
+        if (app()->bound('current_tenant')) {
+            return app('current_tenant');
+        }
+        
+        return null;
     }
 }

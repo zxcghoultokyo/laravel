@@ -26,31 +26,31 @@ Route::options('/widget/settings', function () {
 // AI-чат — БЕЗ use ChatController, прямо повний namespace
 // Rate limit: 30 requests per minute per IP
 Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle'])
-    ->middleware(['widget.cors', 'throttle:30,1']);
+    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
 
 // Streaming chat via Server-Sent Events (SSE)
 // Usage: GET /api/chat/stream?message=плитоноска&session_id=xxx
 Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::class, 'stream'])
-    ->middleware(['widget.cors', 'throttle:30,1']);
+    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
 
 // Clear chat session (delete from DB and cache)
 Route::delete('/chat/session/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'clearSession'])
-    ->middleware(['widget.cors']);
+    ->middleware(['widget.cors', 'tenant']);
 
 // Poll for operator messages (used by widget when operator takes over)
 Route::get('/chat/poll/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'poll'])
-    ->middleware(['widget.cors', 'throttle:60,1']);
+    ->middleware(['widget.cors', 'tenant', 'throttle:60,1']);
 
 // Віджет налаштування
 Route::get('/widget/settings', [WidgetController::class, 'settings'])
-    ->middleware('widget.cors');
+    ->middleware(['widget.cors', 'tenant']);
 
 // Dynamic greeting based on visitor context
 Route::get('/widget/greeting', [WidgetController::class, 'greeting'])
-    ->middleware('widget.cors');
+    ->middleware(['widget.cors', 'tenant']);
 
 // Proactive triggers API
-Route::prefix('triggers')->middleware('widget.cors')->group(function () {
+Route::prefix('triggers')->middleware(['widget.cors', 'tenant'])->group(function () {
     Route::get('/rules', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'getRules']);
     Route::post('/event', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'trackEvent']);
     Route::post('/check', [\App\Http\Controllers\Api\ProactiveTriggersController::class, 'checkTrigger']);

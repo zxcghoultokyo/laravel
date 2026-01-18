@@ -10,6 +10,7 @@ use App\Scopes\TenantScope;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TenantDashboard extends Component
 {
@@ -18,6 +19,7 @@ class TenantDashboard extends Component
     public string $activeTab = 'overview';
     public array $stats = [];
     public array $chartData = [];
+    public array $funnelData = [];
 
     // Chat filters
     public string $chatSearch = '';
@@ -29,6 +31,7 @@ class TenantDashboard extends Component
     {
         $this->loadStats();
         $this->loadChartData();
+        $this->loadFunnelData();
     }
 
     public function getTenantProperty(): Tenant
@@ -65,12 +68,13 @@ class TenantDashboard extends Component
             'products_count' => $tenant->products()->withoutGlobalScope(TenantScope::class)->count(),
             'products_in_stock' => $tenant->products()->withoutGlobalScope(TenantScope::class)->where('in_stock', true)->count(),
             
-            // Categories
+            // Categories - count unique category paths
             'categories_count' => $tenant->products()
                 ->withoutGlobalScope(TenantScope::class)
-                ->select('category_path')
-                ->distinct()
-                ->count(),
+                ->whereNotNull('category_path')
+                ->where('category_path', '!=', '')
+                ->selectRaw('COUNT(DISTINCT category_path) as cnt')
+                ->value('cnt') ?? 0,
             
             // Plan
             'plan' => $tenant->plan,
@@ -107,6 +111,61 @@ class TenantDashboard extends Component
             $date = now()->subDays($i)->format('Y-m-d');
             $this->chartData[$date] = $dailyMessages[$date] ?? 0;
         }
+    }
+
+    public function loadFunnelData()
+    {
+        $tenant = $this->tenant;
+        $startDate = now()->subDays(30);
+        
+        // Define funnel stages
+        $stages = [
+            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️'],
+            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬'],
+            'message' => ['label' => 'Написали', 'icon' => '✍️'],
+            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆'],
+            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒'],
+        ];
+        
+        $funnel = [];
+        $prevCount = 0;
+        
+        foreach ($stages as $eventType => $stage) {
+            try {
+                // Count events for this tenant
+                $count = DB::table('chat_events')
+                    ->where('event_type', $eventType)
+                    ->where('tenant_id', $tenant->id)
+                    ->where('created_at', '>=', $startDate)
+                    ->distinct('session_id')
+                    ->count('session_id');
+            } catch (\Throwable $e) {
+                $count = 0;
+            }
+            
+            $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
+            $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
+            
+            $funnel[] = [
+                'stage' => $eventType,
+                'label' => $stage['label'],
+                'icon' => $stage['icon'],
+                'count' => $count,
+                'rate' => $rate,
+                'dropoff' => $dropoff,
+            ];
+            
+            $prevCount = $count ?: $prevCount;
+        }
+        
+        $firstStage = $funnel[0]['count'] ?? 0;
+        $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
+        $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
+        
+        $this->funnelData = [
+            'stages' => $funnel,
+            'overall_rate' => $overallRate,
+        ];
     }
 
     public function setTab(string $tab)
@@ -173,6 +232,7 @@ class TenantDashboard extends Component
             'products' => $this->products,
             'features' => $this->features,
             'embedCode' => $this->embedCode,
+            'funnelData' => $this->funnelData,
         ])->layout('layouts.app');
     }
 }

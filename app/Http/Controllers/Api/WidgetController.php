@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Greeting;
+use App\Models\Tenant;
 use App\Models\WidgetSettings;
+use App\Scopes\TenantScope;
 use App\Services\Store\StoreContextService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,13 +18,34 @@ class WidgetController extends Controller
     {
     }
     
-    public function settings(): JsonResponse
+    /**
+     * Resolve tenant from request token header.
+     */
+    private function resolveTenant(Request $request): ?Tenant
+    {
+        $token = $request->header('X-Widget-Token');
+        if (!$token) {
+            return null;
+        }
+        
+        // Token is tenant slug
+        return Tenant::where('slug', $token)->first();
+    }
+    
+    public function settings(Request $request): JsonResponse
     {
         Log::info('WidgetController::settings called');
         
-        $settings = WidgetSettings::first();
+        $tenant = $this->resolveTenant($request);
         
-        Log::info('WidgetSettings fetched', ['settings' => $settings]);
+        // Get settings for specific tenant or first available
+        $settings = $tenant 
+            ? WidgetSettings::withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $tenant->id)
+                ->first()
+            : WidgetSettings::first();
+        
+        Log::info('WidgetSettings fetched', ['settings' => $settings, 'tenant_id' => $tenant?->id]);
         
         $data = $settings ? [
             'enabled' => $settings->enabled,
@@ -164,6 +187,8 @@ class WidgetController extends Controller
      */
     public function greeting(Request $request): JsonResponse
     {
+        $tenant = $this->resolveTenant($request);
+        
         $context = [
             'utm_campaign' => $request->query('utm_campaign'),
             'utm_source' => $request->query('utm_source'),
@@ -175,11 +200,39 @@ class WidgetController extends Controller
             'language' => $request->query('language'),
         ];
 
-        $greeting = Greeting::matchContext($context);
+        $greeting = null;
+        
+        if ($tenant) {
+            // Get greetings for specific tenant
+            $greetings = Greeting::withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $tenant->id)
+                ->where('is_active', true)
+                ->orderByDesc('priority')
+                ->get();
+            
+            // Find matching greeting
+            foreach ($greetings as $g) {
+                if (!$g->is_default && $g->matchesContext($context)) {
+                    $greeting = $g;
+                    break;
+                }
+            }
+            
+            // Fallback to default
+            if (!$greeting) {
+                $greeting = $greetings->firstWhere('is_default', true);
+            }
+        } else {
+            $greeting = Greeting::matchContext($context);
+        }
 
         if (!$greeting) {
             // No greetings in DB, return default
-            $settings = WidgetSettings::first();
+            $settings = $tenant
+                ? WidgetSettings::withoutGlobalScope(TenantScope::class)
+                    ->where('tenant_id', $tenant->id)
+                    ->first()
+                : WidgetSettings::first();
             return response()->json([
                 'message' => $settings?->welcome_message ?? 'Вітаю! 👋 Чим можу допомогти?',
                 'quick_actions' => [],

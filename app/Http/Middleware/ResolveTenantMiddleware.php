@@ -50,14 +50,35 @@ class ResolveTenantMiddleware
      */
     protected function resolveTenant(Request $request): ?Tenant
     {
-        // 1. Header-based resolution (for API calls)
+        // 1. Widget token (most common for API calls)
+        if ($token = $request->header('X-Widget-Token')) {
+            return Tenant::where('slug', $token)
+                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                         ->first();
+        }
+
+        // 2. Header-based resolution (for API calls)
         if ($slug = $request->header('X-Tenant-Slug')) {
             return Tenant::where('slug', $slug)
                          ->where('status', '!=', Tenant::STATUS_CANCELLED)
                          ->first();
         }
 
-        // 2. Query parameter (for widget JS)
+        // 3. Query parameter (for widget JS)
+        if ($slug = $request->query('tenant')) {
+            return Tenant::where('slug', $slug)
+                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                         ->first();
+        }
+
+        // 4. Query parameter - token (alternative)
+        if ($slug = $request->query('token')) {
+            return Tenant::where('slug', $slug)
+                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                         ->first();
+        }
+
+        // 5. Route parameter
         if ($slug = $request->query('tenant')) {
             return Tenant::where('slug', $slug)
                          ->where('status', '!=', Tenant::STATUS_CANCELLED)

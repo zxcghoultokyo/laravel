@@ -249,13 +249,28 @@ class OnboardingController extends Controller
             // Set sync running flag
             \Illuminate\Support\Facades\Cache::put("sync_running_{$tenant->id}", true, 3600);
             
-            // Dispatch sync job
-            SyncHoroshopProductsJob::dispatch($tenant->id);
-            
-            return response()->json([
-                'status' => 'started',
-                'message' => 'Синхронізація розпочата',
-            ]);
+            // Use dispatchSync for immediate execution (no queue required)
+            // This is blocking but ensures sync works even without queue worker
+            try {
+                SyncHoroshopProductsJob::dispatchSync($tenant->id);
+                
+                return response()->json([
+                    'status' => 'completed',
+                    'message' => 'Синхронізація завершена',
+                    'products' => $tenant->products()->count(),
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Cache::forget("sync_running_{$tenant->id}");
+                \Illuminate\Support\Facades\Log::error('Onboarding sync failed', [
+                    'tenant_id' => $tenant->id,
+                    'error' => $e->getMessage(),
+                ]);
+                
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Помилка синхронізації: ' . $e->getMessage(),
+                ], 500);
+            }
         }
         
         return response()->json([

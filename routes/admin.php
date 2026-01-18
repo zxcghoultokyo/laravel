@@ -56,6 +56,7 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     // Super Admin only routes
     Route::middleware('super-admin')->group(function () {
         Route::get('/tenants', TenantsManager::class)->name('tenants');
+        Route::get('/tenants/{tenant}', \App\Livewire\Admin\TenantDetails::class)->name('tenants.show');
         Route::get('/sync-reports', SyncReports::class)->name('sync-reports');
     });
 });

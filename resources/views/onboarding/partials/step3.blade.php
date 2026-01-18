@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const progressDiv = document.getElementById('sync-progress');
     const productsSpan = document.getElementById('products-count');
     const continueBtn = document.getElementById('continue-btn');
+    const syncStatus = document.getElementById('sync-status');
 
     if (startBtn) {
         startBtn.addEventListener('click', function() {
@@ -97,34 +98,54 @@ document.addEventListener('DOMContentLoaded', function() {
             readyDiv.classList.add('hidden');
             progressDiv.classList.remove('hidden');
             
-            // Start sync
+            // Start sync (now synchronous - will wait for completion)
             fetch('{{ route("onboarding.step3.start") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 }
-            }).then(r => r.json()).then(data => {
-                // Poll for status
-                pollStatus();
-            });
-        });
-    }
-
-    function pollStatus() {
-        fetch('{{ route("onboarding.step3.status") }}')
+            })
             .then(r => r.json())
             .then(data => {
-                productsSpan.textContent = data.products;
-                
-                if (data.completed) {
-                    // Reload page to show completed state
+                if (data.status === 'completed') {
+                    // Sync completed successfully - reload to show results
                     window.location.reload();
-                } else {
-                    // Continue polling
-                    setTimeout(pollStatus, 2000);
+                } else if (data.status === 'error') {
+                    // Show error
+                    progressDiv.innerHTML = `
+                        <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                            <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </div>
+                        <h4 class="font-semibold text-lg text-red-700">Помилка синхронізації</h4>
+                        <p class="text-sm text-red-600 mt-2">${data.message}</p>
+                        <button type="button" onclick="window.location.reload()" class="mt-4 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                            Спробувати знову
+                        </button>
+                    `;
+                } else if (data.status === 'skip') {
+                    // Manual mode - just proceed
+                    window.location.reload();
                 }
+            })
+            .catch(err => {
+                // Network error
+                progressDiv.innerHTML = `
+                    <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <h4 class="font-semibold text-lg text-red-700">Помилка мережі</h4>
+                    <p class="text-sm text-gray-600 mt-2">Перевірте з'єднання та спробуйте знову</p>
+                    <button type="button" onclick="window.location.reload()" class="mt-4 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                        Спробувати знову
+                    </button>
+                `;
             });
+        });
     }
 });
 </script>

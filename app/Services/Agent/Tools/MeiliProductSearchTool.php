@@ -1017,7 +1017,7 @@ class MeiliProductSearchTool
      * Get current tenant ID from various sources.
      * Returns null for super admin or when no tenant context (shows all products).
      */
-    protected function getCurrentTenantId(): ?int
+    public function getCurrentTenantId(): ?int
     {
         // 1. Check authenticated user
         if (auth()->check()) {

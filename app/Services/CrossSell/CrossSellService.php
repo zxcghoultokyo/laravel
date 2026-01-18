@@ -44,22 +44,41 @@ class CrossSellService
     public function getSuggestions(Product $product, int $limit = 3): array
     {
         $suggestions = collect();
+        $seenIds = [$product->id]; // Exclude the source product itself
         
         // 1. First check direct product cross-sells (manual links)
         $directSuggestions = $this->getDirectCrossSells($product);
-        $suggestions = $suggestions->merge($directSuggestions);
+        foreach ($directSuggestions as $suggestion) {
+            $id = $suggestion['product']->id ?? null;
+            if ($id && !in_array($id, $seenIds)) {
+                $seenIds[] = $id;
+                $suggestions->push($suggestion);
+            }
+        }
         
         // 2. If not enough, use category-based rules
         if ($suggestions->count() < $limit) {
             $categoryKey = $this->extractCategoryKey($product->category_path);
             $categorySuggestions = $this->getCategoryBasedSuggestions($product, $categoryKey, $limit - $suggestions->count());
-            $suggestions = $suggestions->merge($categorySuggestions);
+            foreach ($categorySuggestions as $suggestion) {
+                $id = $suggestion['product']->id ?? null;
+                if ($id && !in_array($id, $seenIds)) {
+                    $seenIds[] = $id;
+                    $suggestions->push($suggestion);
+                }
+            }
         }
         
         // 3. If still not enough, use AI-based suggestions (same ai_product_type)
         if ($suggestions->count() < $limit) {
-            $aiSuggestions = $this->getAiBasedSuggestions($product, $limit - $suggestions->count(), $suggestions->pluck('product.id')->toArray());
-            $suggestions = $suggestions->merge($aiSuggestions);
+            $aiSuggestions = $this->getAiBasedSuggestions($product, $limit - $suggestions->count(), $seenIds);
+            foreach ($aiSuggestions as $suggestion) {
+                $id = $suggestion['product']->id ?? null;
+                if ($id && !in_array($id, $seenIds)) {
+                    $seenIds[] = $id;
+                    $suggestions->push($suggestion);
+                }
+            }
         }
         
         return $suggestions->take($limit)->values()->toArray();

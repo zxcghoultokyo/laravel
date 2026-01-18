@@ -552,6 +552,11 @@ USER: "Допоможіть з товаром Комплект армії США
 - НЕ використовуй Markdown (**, ##, -, •) в текстових відповідях
 - Емодзі — тільки 1-2 на повідомлення
 
+ЛІМІТ КАРТОК: МАКСИМУМ 3!
+- Завжди показуй НЕ БІЛЬШЕ 3 товарів за раз
+- НЕ кажи "топ 5" або "покажу 5" — кажи "топ 3" або просто "ось найкращі варіанти"
+- Якщо хочеш показати більше — спитай клієнта "показати ще?"
+
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
 Не кажи "цього немає" поки не перевіриш пошуком.
 
@@ -559,6 +564,7 @@ USER: "Допоможіть з товаром Комплект армії США
 1. ПІСЛЯ search_products → JSON: {"intro": "...", "products": [{"article": "xxx", "comment": "..."}], "_context": "..."}
 2. Текстові питання → JSON: {"text": "...", "_context": "..."}
 3. intro/text — максимум 2-3 речення!
+4. products — максимум 3 товари!
 
 АВТОВИПРАВЛЕННЯ:
 - плитноска → плитоноска
@@ -642,17 +648,20 @@ RULES;
 - Будь-який запит про категорію товарів → одразу search_products()
 - НЕ давай "загальні поради" — показуй тільки ТЕ ЩО МОЖЕШ ПРОДАТИ
 
-СЕЗОННІ ЗАПИТИ - ОБОВ'ЯЗКОВО ПОШУК З СОРТУВАННЯМ ПО ПОПУЛЯРНОСТІ:
-- "що беруть зимою/взимку" → search_products(query="куртка зимова флісова термобілизна", sort_by="popularity") - категорії зимового одягу!
-- "що беруть влітку" → search_products(query="футболка літня сорочка", sort_by="popularity")
-- "що актуально/популярне зараз" → search_products(query="...", sort_by="popularity") з урахуванням сезону
-- "хіти", "топ", "що найчастіше купують" → ДОДАВАЙ sort_by="popularity"!
-- Сезонні питання = ПОШУК конкретних товарів для сезону з сортуванням по продажах!
+СЕЗОННІ ЗАПИТИ — НЕ ВИКОРИСТОВУЙ get_popular_products!:
+- "що беруть зимою/взимку", "чьто бэрут зимой" → ТІЛЬКИ search_products(query="куртка зимова OR флісова OR термобілизна", sort_by="popularity")!
+- "що беруть влітку" → ТІЛЬКИ search_products(query="футболка OR сорочка літня", sort_by="popularity")!
+- НІКОЛИ не викликай get_popular_products для сезонних питань!
+- Сезон = ПОШУК товарів відповідного сезону!
 
-КАТЕГОРІЇ ПО СЕЗОНАХ:
-- ЗИМА (грудень-лютий): куртки зимові, флісові, термобілизна, утеплені штани, шапки
-- ЛІТО (червень-серпень): футболки, сорочки, шорти, легкі штани, панами
-- ВЕСНА/ОСІНЬ: софтшел, дощовики, легкі куртки
+КАТЕГОРІЇ ПО СЕЗОНАХ (для search_products):
+- ЗИМА (грудень-лютий): куртка зимова, флісова, термобілизна, штани утеплені, шапка
+- ЛІТО (червень-серпень): футболка, сорочка, шорти
+- ВЕСНА/ОСІНЬ: софтшел, дощовик
+
+КОЛИ ВИКОРИСТОВУВАТИ get_popular_products:
+- ТІЛЬКИ для "топ продажів", "що найчастіше купують", "популярне" БЕЗ згадки сезону
+- Якщо є слово "зима/літо/осінь/весна" → search_products!
 
 КРИТИЧНО ВАЖЛИВО ДЛЯ ПОШУКУ:
 - При search_products ЗБЕРІГАЙ ОРИГІНАЛЬНІ НАЗВИ моделей/брендів (TRIDENT, Mechanix, Ops-Core тощо) — НЕ перекладай їх!
@@ -770,7 +779,7 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'search_products',
-                    'description' => 'Пошук товарів в каталозі. ВАЖЛИВО: для запитів з "недорого", "бюджетний", "дешевий" — ОБОВ\'ЯЗКОВО передавай price_max! Для "що беруть/хіти/топ" — ОБОВ\'ЯЗКОВО передавай sort_by="popularity"!',
+                    'description' => 'Пошук товарів в каталозі. МАКСИМУМ 3 КАРТКИ! ВАЖЛИВО: для запитів з "недорого", "бюджетний", "дешевий" — ОБОВ\'ЯЗКОВО передавай price_max! Для "що беруть/хіти/топ" — ОБОВ\'ЯЗКОВО передавай sort_by="popularity"!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -781,7 +790,7 @@ PROMPT;
                             'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (ОБОВ\'ЯЗКОВО для недорогих/бюджетних запитів!)'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово'],
-                            'limit' => ['type' => 'integer', 'description' => 'Кількість результатів'],
+                            'limit' => ['type' => 'integer', 'description' => 'Кількість результатів (максимум 3)'],
                             'sort_by' => [
                                 'type' => 'string', 
                                 'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc'],
@@ -796,12 +805,12 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'get_popular_products',
-                    'description' => 'Отримати найпопулярніші товари за кількістю продажів. Використовуй ТІЛЬКИ для загальних питань "що зараз популярне", "топ продажів" БЕЗ категорії. Для сезонних питань ("що беруть зимою") або конкретних категорій - використовуй search_products з sort_by="popularity" замість цього!',
+                    'description' => 'ТІЛЬКИ для загальних "топ продажів" БЕЗ сезону! ЗАБОРОНЕНО для "що беруть зимою/влітку" — там використовуй search_products! Максимум 3 картки.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
                             'category' => ['type' => 'string', 'description' => 'Опційно: категорія товарів для фільтрації (наприклад "куртки", "рукавиці")'],
-                            'limit' => ['type' => 'integer', 'description' => 'Кількість'],
+                            'limit' => ['type' => 'integer', 'description' => 'Кількість (максимум 3)'],
                         ],
                     ],
                 ],
@@ -857,7 +866,7 @@ PROMPT;
     private function toolSearchProducts(array $args): array
     {
         $query = $args['query'] ?? '';
-        $limit = $args['limit'] ?? 20; // Increased to show more variety
+        $limit = min($args['limit'] ?? 3, 3); // Max 3 cards for display
         $sortBy = $args['sort_by'] ?? 'relevance';
         
         $filters = [];
@@ -911,7 +920,8 @@ PROMPT;
         // Get full product cards
         if (!empty($results)) {
             $ids = array_column($results, 'id');
-            $cards = $this->detailsTool->getCards($ids);
+            $tenantId = $this->searchTool->getCurrentTenantId();
+            $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
             if (!empty($cards)) $results = $cards;
         }
 
@@ -925,7 +935,7 @@ PROMPT;
     private function toolGetPopularProducts(array $args): array
     {
         $category = $args['category'] ?? null;
-        $limit = $args['limit'] ?? 5;
+        $limit = min($args['limit'] ?? 3, 3); // Max 3 cards for display
         $cacheKey = 'popular_products_v5:' . ($category ?? 'all') . ':' . $limit;
         
         return Cache::remember($cacheKey, 300, function () use ($category, $limit) {
@@ -1046,7 +1056,8 @@ PROMPT;
 
             if (!empty($products)) {
                 $ids = array_column($products, 'id');
-                $cards = $this->detailsTool->getCards($ids);
+                $tenantId = $this->searchTool->getCurrentTenantId();
+                $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
                 if (!empty($cards)) $products = $cards;
             }
 
@@ -1290,7 +1301,8 @@ PROMPT;
                             'id' => $dbProduct->id,
                             'title' => $dbProduct->title,
                         ]);
-                        $cards = $this->detailsTool->getCards([$dbProduct->id]);
+                        $tenantId = $this->searchTool->getCurrentTenantId();
+                        $cards = $this->detailsTool->getCards([$dbProduct->id], 10, $tenantId);
                         $product = $cards[0] ?? null;
                         
                         if (!$product) {
@@ -1351,7 +1363,8 @@ PROMPT;
         
         if (!empty($results)) {
             $ids = array_column($results, 'id');
-            $cards = $this->detailsTool->getCards($ids);
+            $tenantId = $this->searchTool->getCurrentTenantId();
+            $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
             
             yield ['type' => 'chunk', 'data' => ['text' => 'Ось що я знайшов:']];
             yield ['type' => 'products', 'data' => [

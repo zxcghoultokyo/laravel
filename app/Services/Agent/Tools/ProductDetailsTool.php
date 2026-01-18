@@ -11,8 +11,12 @@ class ProductDetailsTool
     /**
      * Get full product cards for display
      * Returns array of product cards ready for widget
+     * 
+     * @param array $ids Product IDs to fetch
+     * @param int $limit Max number of cards
+     * @param int|null $tenantId Filter by tenant (to avoid mixing variants from different stores)
      */
-    public function getCards(array $ids, int $limit = 10): array
+    public function getCards(array $ids, int $limit = 10, ?int $tenantId = null): array
     {
         if (empty($ids)) {
             return [];
@@ -20,19 +24,29 @@ class ProductDetailsTool
         
         $ids = array_slice($ids, 0, $limit);
         
-        Log::info('ProductDetailsTool: fetching cards', ['ids' => $ids]);
+        Log::info('ProductDetailsTool: fetching cards', ['ids' => $ids, 'tenant_id' => $tenantId]);
         
-        $products = Product::whereIn('id', $ids)
-            ->where('in_stock', true)
-            ->get();
+        $query = Product::whereIn('id', $ids)->where('in_stock', true);
+        
+        // Filter by tenant if specified (important for multi-tenant)
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $products = $query->get();
+        
+        // Get tenant_id from first product for consistency in variant fetching
+        $productTenantId = $tenantId ?? $products->first()?->tenant_id;
 
         // Prefetch parent raw payloads to reuse for description/characteristics fallbacks
         $parentArticles = $products->pluck('parent_article')->filter()->unique()->all();
         $parentRawMap = [];
         if ($parentArticles) {
-            Product::query()
-                ->whereIn('article', $parentArticles)
-                ->get(['article', 'raw'])
+            $parentQuery = Product::query()->whereIn('article', $parentArticles);
+            if ($productTenantId) {
+                $parentQuery->where('tenant_id', $productTenantId);
+            }
+            $parentQuery->get(['article', 'raw'])
                 ->each(function ($parent) use (&$parentRawMap) {
                     $parentRawMap[$parent->article] = is_array($parent->raw ?? null)
                         ? $parent->raw
@@ -51,11 +65,17 @@ class ProductDetailsTool
         $allParentArticles = $orderedProducts->pluck('parent_article')->filter()->unique()->all();
         $variantsMap = [];
         if ($allParentArticles) {
-            // Get all products with the same parent_article (siblings)
-            $allSiblings = Product::query()
+            // Get all products with the same parent_article (siblings) - FILTER BY TENANT!
+            $siblingsQuery = Product::query()
                 ->whereIn('parent_article', $allParentArticles)
-                ->where('in_stock', true)
-                ->get(['id', 'article', 'parent_article', 'link', 'raw', 'title', 'size', 'color']);
+                ->where('in_stock', true);
+            
+            // Important: filter siblings by same tenant to avoid mixing variants from different stores
+            if ($productTenantId) {
+                $siblingsQuery->where('tenant_id', $productTenantId);
+            }
+            
+            $allSiblings = $siblingsQuery->get(['id', 'article', 'parent_article', 'link', 'raw', 'title', 'size', 'color']);
             
             foreach ($allSiblings as $sibling) {
                 $parentArt = $sibling->parent_article;

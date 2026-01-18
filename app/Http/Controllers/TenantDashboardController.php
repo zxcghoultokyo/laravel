@@ -24,6 +24,51 @@ class TenantDashboardController extends Controller
     }
 
     /**
+     * Determine which onboarding step user should be on.
+     */
+    protected function determineOnboardingStep(Tenant $tenant): int
+    {
+        // Step 1: Platform not set
+        if (!$tenant->platform) {
+            return 1;
+        }
+        
+        // Step 2: Credentials not set (for non-manual)
+        if ($tenant->platform !== 'manual' && empty($tenant->platform_credentials)) {
+            return 2;
+        }
+        
+        // Step 3: No products synced (skip for manual)
+        if ($tenant->platform !== 'manual' && $tenant->products()->count() === 0) {
+            return 3;
+        }
+        
+        // Step 4: Widget not customized
+        $settings = $tenant->widgetSettings;
+        if (!$settings || $settings->header_text === 'AI Асистент') {
+            return 4;
+        }
+        
+        // Step 5: Final
+        return 5;
+    }
+
+    /**
+     * Get route name for onboarding step.
+     */
+    protected function getOnboardingRoute(int $step): string
+    {
+        return match($step) {
+            1 => 'onboarding.step1',
+            2 => 'onboarding.step2',
+            3 => 'onboarding.step3',
+            4 => 'onboarding.step4',
+            5 => 'onboarding.step5',
+            default => 'onboarding.index',
+        };
+    }
+
+    /**
      * Main dashboard page.
      */
     public function index(): View|RedirectResponse
@@ -31,9 +76,11 @@ class TenantDashboardController extends Controller
         $tenant = $this->tenant();
         $user = Auth::user();
 
-        // Check if onboarding completed
+        // Check if onboarding completed - redirect to specific step
         if (!($tenant->settings['onboarding_completed'] ?? false)) {
-            return redirect()->route('onboarding.index');
+            // Determine which step user should be on
+            $step = $this->determineOnboardingStep($tenant);
+            return redirect()->route($this->getOnboardingRoute($step));
         }
 
         // Stats for last 30 days

@@ -84,7 +84,21 @@
 - `app/Services/Analytics/ConversionFunnelService.php`
 - `app/Http/Controllers/Api/AnalyticsExportController.php`
 
-### 3.4 TODO (Next)
+### 3.4 Platform Integrations (Roadmap)
+
+| Platform | Type | Priority | Status |
+|----------|------|----------|--------|
+| **Horoshop** | Native | ⭐ High | ✅ Done |
+| **Shopify** | App | ⭐ High | 🔲 Planned |
+| **WooCommerce** | Plugin | ⭐ High | 🔲 Planned |
+| **Prom.ua** | API | Medium | 🔲 Planned |
+| **Rozetka** | Marketplace | Medium | 🔲 Planned |
+| **OpenCart** | Module | Medium | 🔲 Planned |
+| **PrestaShop** | Module | Low | 🔲 Planned |
+| **Tilda** | Widget only | Low | ✅ Works |
+| **Wix** | Widget only | Low | ✅ Works |
+
+### 3.5 TODO (Next)
 - [ ] Shopify app integration
 - [ ] WooCommerce plugin
 - [ ] Custom AI prompts in admin (UI)

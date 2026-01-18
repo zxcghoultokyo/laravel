@@ -1042,8 +1042,8 @@
 
                     <div class="advantage-card" data-aos="zoom-in" data-aos-delay="200">
                         <div class="advantage-icon">💰</div>
-                        <h4>3-5× дешевше</h4>
-                        <p>Західні платформи від $99/міс. У нас — від 499 грн. Ті ж функції, локальна підтримка.</p>
+                        <h4>100× дешевше менеджера</h4>
+                        <p>Менеджер — 25 000 грн/міс + навантаження. AI-бот від 799 грн працює 24/7 без відпусток і лікарняних.</p>
                     </div>
 
                     <div class="advantage-card" data-aos="zoom-in" data-aos-delay="300">

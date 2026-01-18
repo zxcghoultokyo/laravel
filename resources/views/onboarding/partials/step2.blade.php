@@ -8,21 +8,16 @@
     @csrf
 
     @if($tenant->platform === 'horoshop')
-        <!-- Instructions accordion -->
-        <div class="mb-6 max-w-xl mx-auto" x-data="{ open: true }">
-            <button type="button" 
-                    @click="open = !open" 
-                    class="w-full flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg text-left hover:bg-amber-100 transition">
-                <div class="flex items-center gap-3">
+        <!-- Instructions - always visible blocks -->
+        <div class="mb-6 max-w-xl mx-auto">
+            <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+                <div class="flex items-center gap-3 mb-3">
                     <span class="text-2xl">📋</span>
                     <span class="font-medium text-amber-800">Як створити користувача для API?</span>
                 </div>
-                <svg class="w-5 h-5 text-amber-600 transition-transform" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-            </button>
+            </div>
             
-            <div x-show="open" x-collapse class="mt-2 p-4 bg-white border border-gray-200 rounded-lg">
+            <div class="p-4 bg-white border border-gray-200 rounded-lg">
                 <ol class="space-y-3 text-sm text-gray-700">
                     <li class="flex gap-3">
                         <span class="flex-shrink-0 w-6 h-6 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>

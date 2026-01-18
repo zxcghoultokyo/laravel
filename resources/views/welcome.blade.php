@@ -1151,23 +1151,42 @@
         <section class="roadmap">
             <div class="container">
                 <h2 class="section-title" data-aos="fade-up">Дорожня карта</h2>
-                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Над чим зараз працюємо</p>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Підтримувані та майбутні платформи</p>
                 
                 <div class="coming-grid">
-                    <div class="coming-card" data-aos="fade-up" data-aos-delay="100">
-                        <h4>🧠 AI Рекомендації <span class="badge badge-soon">Q1 2025</span></h4>
-                        <p>Персоналізовані рекомендації на основі історії переглядів.</p>
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="100" style="border: 2px solid var(--primary-color); background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, transparent 100%);">
+                        <h4>🛒 Horoshop <span class="badge" style="background: var(--primary-color); color: white;">✓ Готово</span></h4>
+                        <p>Повна інтеграція з українською e-commerce платформою. Автоматична синхронізація каталогу.</p>
                     </div>
 
                     <div class="coming-card" data-aos="fade-up" data-aos-delay="200">
-                        <h4>📊 Розширена аналітика <span class="badge badge-soon">Q1 2025</span></h4>
-                        <p>Глибокий аналіз конверсій, популярних питань, AI-інсайти.</p>
+                        <h4>🛍️ Shopify <span class="badge badge-soon">Q1 2026</span></h4>
+                        <p>Офіційний Shopify App для глобальних магазинів. OAuth, webhook синхронізація.</p>
                     </div>
 
                     <div class="coming-card" data-aos="fade-up" data-aos-delay="300">
-                        <h4>🔌 Prom.ua інтеграція <span class="badge badge-soon">Q2 2025</span></h4>
-                        <p>Підключення до найбільшого маркетплейсу України.</p>
+                        <h4>🔮 WooCommerce <span class="badge badge-soon">Q1 2026</span></h4>
+                        <p>WordPress плагін для найпопулярнішої CMS. Інтеграція з REST API.</p>
                     </div>
+
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="400">
+                        <h4>🇺🇦 Prom.ua <span class="badge badge-soon">Q2 2026</span></h4>
+                        <p>Підключення до найбільшого маркетплейсу України. Синхронізація товарів та замовлень.</p>
+                    </div>
+
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="500">
+                        <h4>🌹 Rozetka <span class="badge badge-soon">Q2 2026</span></h4>
+                        <p>Інтеграція з Rozetka Marketplace для продавців на майданчику.</p>
+                    </div>
+
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="600">
+                        <h4>🛠 OpenCart <span class="badge badge-soon">Q2 2026</span></h4>
+                        <p>Модуль для OcStore / OpenCart 3-4. Популярна CMS в Україні.</p>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-8" data-aos="fade-up" data-aos-delay="700">
+                    <p style="color: var(--text-muted);">Не знайшли свою платформу? <a href="https://t.me/AIntento" target="_blank" style="color: var(--primary-color);">Напишіть нам</a> — додамо в пріоритет!</p>
                 </div>
             </div>
         </section>

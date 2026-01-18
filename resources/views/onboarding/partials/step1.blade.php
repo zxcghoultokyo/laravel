@@ -85,32 +85,29 @@
             </div>
         </div>
 
-        <!-- Tilda - Widget Works -->
+        <!-- PrestaShop - Coming Soon -->
         <div class="relative opacity-60 cursor-not-allowed">
             <div class="p-4 md:p-6 border-2 border-gray-200 rounded-xl text-center bg-gray-50">
-                <div class="w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <span class="text-xl md:text-2xl">📄</span>
+                <div class="w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 bg-pink-100 rounded-full flex items-center justify-center">
+                    <span class="text-xl md:text-2xl">🎪</span>
                 </div>
-                <h4 class="font-semibold text-sm md:text-lg text-gray-600">Tilda</h4>
-                <p class="text-xs text-gray-400 mt-1 hidden md:block">Конструктор</p>
-                <span class="inline-block mt-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium">Віджет</span>
+                <h4 class="font-semibold text-sm md:text-lg text-gray-600">PrestaShop</h4>
+                <p class="text-xs text-gray-400 mt-1 hidden md:block">Модуль</p>
+                <span class="inline-block mt-2 px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded font-medium">Q3 2026</span>
             </div>
         </div>
 
-        <!-- Other platforms - Manual -->
-        <label class="relative cursor-pointer">
-            <input type="radio" name="platform" value="manual" class="peer sr-only">
-            <div class="p-4 md:p-6 border-2 rounded-xl text-center transition-all
-                        peer-checked:border-emerald-500 peer-checked:bg-emerald-50
-                        hover:border-gray-300 hover:shadow-md">
+        <!-- Other platforms - Manual (Coming Soon) -->
+        <div class="relative opacity-60 cursor-not-allowed">
+            <div class="p-4 md:p-6 border-2 border-gray-200 rounded-xl text-center bg-gray-50">
                 <div class="w-12 h-12 md:w-16 md:h-16 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
                     <span class="text-xl md:text-2xl">📦</span>
                 </div>
-                <h4 class="font-semibold text-sm md:text-lg">Інше</h4>
-                <p class="text-xs text-gray-500 mt-1 hidden md:block">CSV / ручний імпорт</p>
-                <span class="inline-block mt-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded font-medium">Ручний</span>
+                <h4 class="font-semibold text-sm md:text-lg text-gray-600">CSV імпорт</h4>
+                <p class="text-xs text-gray-400 mt-1 hidden md:block">Ручний імпорт</p>
+                <span class="inline-block mt-2 px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded font-medium">Q1 2026</span>
             </div>
-        </label>
+        </div>
     </div>
 
     @error('platform')

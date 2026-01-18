@@ -1662,4 +1662,99 @@ class DiagnosticController extends Controller
             'events' => $events,
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/scheduler-status
+     * Check scheduler status and list scheduled tasks
+     */
+    public function schedulerStatus(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        // Get scheduled tasks
+        $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
+        $events = $schedule->events();
+        
+        $tasks = collect($events)->map(function ($event) {
+            return [
+                'command' => $event->command ?? $event->description ?? get_class($event),
+                'expression' => $event->expression,
+                'timezone' => $event->timezone,
+                'without_overlapping' => $event->withoutOverlapping ?? false,
+                'environments' => $event->environments ?? [],
+                'next_run' => \Carbon\Carbon::now()->setTimezone(config('app.timezone'))
+                    ->endOfMinute()->addMinute()
+                    ->format('Y-m-d H:i:s'),
+            ];
+        });
+        
+        // Check last sync logs
+        $lastSyncs = [];
+        if (\Schema::hasTable('sync_logs')) {
+            $lastSyncs = \App\Models\SyncLog::orderByDesc('started_at')
+                ->take(10)
+                ->get()
+                ->map(fn($log) => [
+                    'type' => $log->sync_type,
+                    'status' => $log->status,
+                    'started_at' => $log->started_at?->format('Y-m-d H:i:s'),
+                    'duration' => $log->duration_seconds,
+                ]);
+        }
+        
+        return response()->json([
+            'timezone' => config('app.timezone'),
+            'server_time' => now()->format('Y-m-d H:i:s'),
+            'scheduled_tasks_count' => count($tasks),
+            'tasks' => $tasks,
+            'last_syncs' => $lastSyncs,
+            'note' => 'On Laravel Cloud, scheduler requires a Scheduler Worker in Dashboard > Workers',
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/run-sync
+     * Manually trigger a sync job
+     */
+    public function runSyncJob(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $job = $request->input('job', 'horoshop');
+        
+        $jobMap = [
+            'horoshop' => \App\Jobs\SyncHoroshopProductsJob::class,
+            'brands' => \App\Jobs\SyncBrandsJob::class,
+            'meili' => \App\Jobs\IndexProductsToMeiliJob::class,
+            'ai' => \App\Jobs\AnalyzeProductsWithAiJob::class,
+        ];
+        
+        if (!isset($jobMap[$job])) {
+            return response()->json([
+                'error' => "Unknown job: {$job}",
+                'available' => array_keys($jobMap),
+            ], 400);
+        }
+        
+        try {
+            $jobClass = $jobMap[$job];
+            dispatch(new $jobClass());
+            
+            return response()->json([
+                'success' => true,
+                'job' => $job,
+                'dispatched' => $jobClass,
+                'message' => "Job dispatched to queue. Check queue worker logs.",
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

@@ -26,6 +26,9 @@ class Analytics extends Component
     
     // A/B Testing
     public array $abTestStats = [];
+    
+    // Embedded mode for tenant dashboard
+    public bool $embedded = false;
 
     public function mount()
     {
@@ -252,6 +255,12 @@ class Analytics extends Component
 
     public function render()
     {
-        return view('livewire.admin.analytics')->layout('admin.layout');
+        $view = view('livewire.admin.analytics');
+        
+        if ($this->embedded) {
+            return $view;
+        }
+        
+        return $view->layout('admin.layout');
     }
 }

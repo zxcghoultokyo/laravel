@@ -25,7 +25,16 @@ class TenantDashboard extends Component
     public string $chatSearch = '';
     public string $chatStatus = '';
     
-    protected $queryString = ['activeTab'];
+    // Selected chat for inline view
+    public ?string $selectedChatId = null;
+    
+    // Settings form
+    public string $settingsName = '';
+    public string $settingsDomain = '';
+    public string $settingsPlatform = '';
+    public bool $editingSettings = false;
+    
+    protected $queryString = ['activeTab', 'selectedChatId'];
 
     public function mount()
     {
@@ -118,6 +127,11 @@ class TenantDashboard extends Component
         $tenant = $this->tenant;
         $startDate = now()->subDays(30);
         
+        // Get merchant identifiers for filtering
+        // Old widget used token as merchant_id, new uses slug
+        $apiToken = $tenant->widgetSettings?->api_token;
+        $slug = $tenant->slug;
+        
         // Define funnel stages
         $stages = [
             'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️'],
@@ -133,15 +147,18 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // Count events - filter by merchant_id (tenant slug) if available
+                // Count events - filter by merchant_id (slug OR token for backwards compatibility)
                 $query = DB::table('chat_events')
                     ->where('event_type', $eventType)
                     ->where('created_at', '>=', $startDate);
                 
-                // Filter by merchant_id (tenant slug) for tenant isolation
-                if ($tenant->slug) {
-                    $query->where('merchant_id', $tenant->slug);
-                }
+                // Filter by merchant_id - check both slug and token for backward compatibility
+                $query->where(function($q) use ($slug, $apiToken) {
+                    $q->where('merchant_id', $slug);
+                    if ($apiToken) {
+                        $q->orWhere('merchant_id', $apiToken);
+                    }
+                });
                 
                 $count = $query->distinct('session_id')->count('session_id');
             } catch (\Throwable $e) {
@@ -176,7 +193,61 @@ class TenantDashboard extends Component
     public function setTab(string $tab)
     {
         $this->activeTab = $tab;
+        $this->selectedChatId = null; // Reset selected chat when changing tabs
         $this->resetPage();
+    }
+    
+    public function selectChat(string $sessionId)
+    {
+        $this->selectedChatId = $sessionId;
+    }
+    
+    public function closeChat()
+    {
+        $this->selectedChatId = null;
+    }
+
+    // Settings methods
+    public function startEditingSettings()
+    {
+        $this->settingsName = $this->tenant->name;
+        $this->settingsDomain = $this->tenant->domain ?? '';
+        $this->settingsPlatform = $this->tenant->platform ?? '';
+        $this->editingSettings = true;
+    }
+
+    public function saveSettings()
+    {
+        $this->validate([
+            'settingsName' => 'required|string|max:255',
+            'settingsDomain' => 'nullable|string|max:255',
+            'settingsPlatform' => 'nullable|string|max:50',
+        ], [
+            'settingsName.required' => 'Назва магазину обовʼязкова',
+        ]);
+
+        $this->tenant->update([
+            'name' => $this->settingsName,
+            'domain' => $this->settingsDomain ?: null,
+            'platform' => $this->settingsPlatform ?: null,
+        ]);
+
+        $this->editingSettings = false;
+        session()->flash('settings-saved', 'Налаштування збережено');
+    }
+
+    public function cancelEditingSettings()
+    {
+        $this->editingSettings = false;
+    }
+
+    public function regenerateApiToken()
+    {
+        $this->tenant->update([
+            'api_token' => \Illuminate\Support\Str::random(32),
+        ]);
+        
+        session()->flash('token-regenerated', 'API токен оновлено');
     }
 
     public function getChatsProperty()

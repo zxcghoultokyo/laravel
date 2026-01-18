@@ -26,6 +26,9 @@ class ChatDetail extends Component
     public $showCannedResponses = false;
     public $cannedSearch = '';
     public $selectedCategory = '';
+    
+    // Embedded mode for tenant dashboard
+    public bool $embedded = false;
 
     public function mount($sessionId)
     {
@@ -255,6 +258,12 @@ class ChatDetail extends Component
 
     public function render()
     {
-        return view('livewire.admin.chat-detail')->layout('admin.layout');
+        $view = view('livewire.admin.chat-detail');
+        
+        if ($this->embedded) {
+            return $view;
+        }
+        
+        return $view->layout('admin.layout');
     }
 }

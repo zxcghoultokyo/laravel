@@ -152,8 +152,11 @@
                     <!-- Activity Chart -->
                     <div class="lg:col-span-2">
                         <h3 class="font-semibold text-lg mb-4">Активність за 14 днів</h3>
-                        <div class="h-64">
-                            <canvas id="messages-chart" wire:ignore></canvas>
+                        <div class="h-64" 
+                             x-data="activityChart(@js($chartData))" 
+                             x-init="init()"
+                             wire:ignore>
+                            <canvas x-ref="canvas"></canvas>
                         </div>
                     </div>
 
@@ -281,85 +284,99 @@
             <!-- Chats Tab -->
             @if($activeTab === 'chats')
                 <div>
-                    <div class="flex flex-col md:flex-row gap-4 mb-6">
-                        <div class="flex-1">
-                            <input type="text" 
-                                   wire:model.live.debounce.300ms="chatSearch"
-                                   placeholder="Пошук по сесії або вмісту..."
-                                   class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                    @if($selectedChatId)
+                        {{-- Inline Chat Detail View --}}
+                        <div class="mb-4">
+                            <button wire:click="closeChat" 
+                                    class="inline-flex items-center text-gray-600 hover:text-gray-900">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                </svg>
+                                Назад до списку
+                            </button>
                         </div>
-                        <select wire:model.live="chatStatus"
-                                class="rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                            <option value="">Всі статуси</option>
-                            <option value="open">Відкриті</option>
-                            <option value="closed">Закриті</option>
-                            <option value="flagged">Позначені</option>
-                        </select>
-                    </div>
-
-                    @if($chats->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сесія</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Останнє повідомлення</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Повідомлень</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
-                                        <th class="px-4 py-3"></th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    @foreach($chats as $chat)
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-4 py-3 whitespace-nowrap">
-                                                <code class="text-xs bg-gray-100 px-2 py-1 rounded">
-                                                    {{ Str::limit($chat->session_id, 20) }}
-                                                </code>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-sm text-gray-600">
-                                                    {{ Str::limit($chat->messages->first()?->content ?? '—', 50) }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3 whitespace-nowrap">
-                                                <span class="text-sm font-medium">{{ $chat->messages_count }}</span>
-                                            </td>
-                                            <td class="px-4 py-3 whitespace-nowrap">
-                                                <span class="px-2 py-1 text-xs rounded-full 
-                                                    {{ $chat->status === 'open' ? 'bg-green-100 text-green-700' : '' }}
-                                                    {{ $chat->status === 'closed' ? 'bg-gray-100 text-gray-700' : '' }}
-                                                    {{ $chat->status === 'flagged' ? 'bg-red-100 text-red-700' : '' }}">
-                                                    {{ $chat->status }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                {{ $chat->created_at->format('d.m.Y H:i') }}
-                                            </td>
-                                            <td class="px-4 py-3 whitespace-nowrap text-right">
-                                                <a href="{{ route('admin.chats.show', ['sessionId' => $chat->session_id]) }}" 
-                                                   class="text-blue-600 hover:text-blue-800 text-sm">
-                                                    Переглянути →
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="mt-4">
-                            {{ $chats->links() }}
-                        </div>
+                        @livewire('admin.chat-detail', ['sessionId' => $selectedChatId, 'embedded' => true], key('chat-'.$selectedChatId))
                     @else
-                        <div class="text-center py-12 text-gray-500">
-                            <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                            </svg>
-                            <p>Ще немає чатів</p>
-                            <p class="text-sm mt-2">Чати з'являться після того, як відвідувачі почнуть користуватись віджетом</p>
+                        {{-- Chat List --}}
+                        <div class="flex flex-col md:flex-row gap-4 mb-6">
+                            <div class="flex-1">
+                                <input type="text" 
+                                       wire:model.live.debounce.300ms="chatSearch"
+                                       placeholder="Пошук по сесії або вмісту..."
+                                       class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                            </div>
+                            <select wire:model.live="chatStatus"
+                                    class="rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">Всі статуси</option>
+                                <option value="open">Відкриті</option>
+                                <option value="closed">Закриті</option>
+                                <option value="flagged">Позначені</option>
+                            </select>
                         </div>
+
+                        @if($chats->count() > 0)
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Сесія</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Останнє повідомлення</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Повідомлень</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Статус</th>
+                                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                                            <th class="px-4 py-3"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        @foreach($chats as $chat)
+                                            <tr class="hover:bg-gray-50 cursor-pointer" wire:click="selectChat('{{ $chat->session_id }}')">
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <code class="text-xs bg-gray-100 px-2 py-1 rounded">
+                                                        {{ Str::limit($chat->session_id, 20) }}
+                                                    </code>
+                                                </td>
+                                                <td class="px-4 py-3">
+                                                    <span class="text-sm text-gray-600">
+                                                        {{ Str::limit($chat->messages->first()?->content ?? '—', 50) }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <span class="text-sm font-medium">{{ $chat->messages_count }}</span>
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap">
+                                                    <span class="px-2 py-1 text-xs rounded-full 
+                                                        {{ $chat->status === 'open' ? 'bg-green-100 text-green-700' : '' }}
+                                                        {{ $chat->status === 'closed' ? 'bg-gray-100 text-gray-700' : '' }}
+                                                        {{ $chat->status === 'flagged' ? 'bg-red-100 text-red-700' : '' }}">
+                                                        {{ $chat->status }}
+                                                    </span>
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                                    {{ $chat->created_at->format('d.m.Y H:i') }}
+                                                </td>
+                                                <td class="px-4 py-3 whitespace-nowrap text-right">
+                                                    <span class="text-blue-600 text-sm">
+                                                        Переглянути →
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="mt-4">
+                                {{ $chats->links() }}
+                            </div>
+                        @else
+                            <div class="text-center py-12 text-gray-500">
+                                <svg class="w-12 h-12 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                                </svg>
+                                <p>Ще немає чатів</p>
+                                <p class="text-sm mt-2">Чати з'являться після того, як відвідувачі почнуть користуватись віджетом</p>
+                            </div>
+                        @endif
                     @endif
                 </div>
             @endif
@@ -394,6 +411,7 @@
             <!-- Analytics Tab -->
             @if($activeTab === 'analytics')
                 <div>
+                    {{-- Quick Stats --}}
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                         <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6">
                             <div class="text-4xl font-bold text-blue-700">{{ number_format($stats['messages_30d']) }}</div>
@@ -411,43 +429,113 @@
                         </div>
                     </div>
 
-                    <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                        <h4 class="font-medium text-amber-900 mb-2">📊 Розширена аналітика</h4>
-                        <p class="text-amber-700 text-sm">
-                            Детальні звіти про конверсії, популярні товари та поведінку користувачів доступні в 
-                            <a href="{{ route('admin.analytics') }}" class="underline font-medium">розділі аналітики</a>.
-                        </p>
-                    </div>
+                    {{-- Embedded Analytics Component --}}
+                    @livewire('admin.analytics', ['embedded' => true])
                 </div>
             @endif
 
             <!-- Settings Tab -->
             @if($activeTab === 'settings')
                 <div class="max-w-2xl space-y-6">
+                    <!-- Flash Messages -->
+                    @if (session('settings-saved'))
+                        <div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
+                            {{ session('settings-saved') }}
+                        </div>
+                    @endif
+                    @if (session('token-regenerated'))
+                        <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
+                            {{ session('token-regenerated') }}
+                        </div>
+                    @endif
+
+                    @if($editingSettings)
+                        <!-- Edit Form -->
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <h4 class="font-medium text-gray-900 mb-4">Редагування налаштувань</h4>
+                            <form wire:submit.prevent="saveSettings" class="space-y-4">
+                                <div>
+                                    <label for="settingsName" class="block text-sm font-medium text-gray-700 mb-1">Назва магазину</label>
+                                    <input type="text" id="settingsName" wire:model="settingsName" 
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                    @error('settingsName') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label for="settingsDomain" class="block text-sm font-medium text-gray-700 mb-1">Домен</label>
+                                    <input type="text" id="settingsDomain" wire:model="settingsDomain" placeholder="example.com"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label for="settingsPlatform" class="block text-sm font-medium text-gray-700 mb-1">Платформа</label>
+                                    <select id="settingsPlatform" wire:model="settingsPlatform"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">Не вказано</option>
+                                        <option value="horoshop">Horoshop</option>
+                                        <option value="shopify">Shopify</option>
+                                        <option value="woocommerce">WooCommerce</option>
+                                        <option value="opencart">OpenCart</option>
+                                        <option value="prom">Prom.ua</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                <div class="flex gap-3 pt-2">
+                                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                                        Зберегти
+                                    </button>
+                                    <button type="button" wire:click="cancelEditingSettings" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition">
+                                        Скасувати
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    @else
+                        <!-- View Mode -->
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <div class="flex justify-between items-start mb-4">
+                                <h4 class="font-medium text-gray-900">Основні налаштування</h4>
+                                <button wire:click="startEditingSettings" class="text-blue-600 hover:text-blue-700 text-sm">
+                                    Редагувати
+                                </button>
+                            </div>
+                            <dl class="space-y-3">
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Назва магазину</dt>
+                                    <dd class="font-medium">{{ $tenant->name }}</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Домен</dt>
+                                    <dd class="font-medium">{{ $tenant->domain ?? '—' }}</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Платформа</dt>
+                                    <dd class="font-medium">{{ ucfirst($tenant->platform ?? 'Не вказано') }}</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">План</dt>
+                                    <dd class="font-medium">{{ $stats['plan_label'] }}</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Ліміт повідомлень</dt>
+                                    <dd class="font-medium">{{ number_format($stats['messages_limit']) }} / місяць</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    @endif
+
+                    <!-- API Token Section -->
                     <div class="bg-gray-50 rounded-lg p-6">
-                        <h4 class="font-medium text-gray-900 mb-4">Основні налаштування</h4>
-                        <dl class="space-y-3">
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Назва магазину</dt>
-                                <dd class="font-medium">{{ $tenant->name }}</dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Домен</dt>
-                                <dd class="font-medium">{{ $tenant->domain ?? '—' }}</dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Платформа</dt>
-                                <dd class="font-medium">{{ ucfirst($tenant->platform ?? 'Не вказано') }}</dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">План</dt>
-                                <dd class="font-medium">{{ $stats['plan_label'] }}</dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Ліміт повідомлень</dt>
-                                <dd class="font-medium">{{ number_format($stats['messages_limit']) }} / місяць</dd>
-                            </div>
-                        </dl>
+                        <div class="flex justify-between items-start mb-4">
+                            <h4 class="font-medium text-gray-900">API Токен</h4>
+                            <button wire:click="regenerateApiToken" 
+                                    wire:confirm="Це інвалідує старий токен. Ви впевнені?"
+                                    class="text-orange-600 hover:text-orange-700 text-sm">
+                                Оновити токен
+                            </button>
+                        </div>
+                        <div class="bg-white border rounded-lg p-3 font-mono text-sm break-all">
+                            {{ $tenant->api_token }}
+                        </div>
+                        <p class="text-gray-500 text-sm mt-2">Використовується для автентифікації віджета</p>
                     </div>
 
                     <div class="flex gap-3">
@@ -492,48 +580,71 @@
     @push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
+        // Alpine.js chart component
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('activityChart', (chartData) => ({
+                chart: null,
+                chartData: chartData,
+                
+                init() {
+                    this.$nextTick(() => {
+                        this.createChart();
+                    });
+                    
+                    // Reinitialize on resize
+                    window.addEventListener('resize', () => {
+                        if (this.chart) {
+                            this.chart.resize();
+                        }
+                    });
+                },
+                
+                createChart() {
+                    const ctx = this.$refs.canvas;
+                    if (!ctx) return;
+                    
+                    // Destroy existing chart
+                    if (this.chart) {
+                        this.chart.destroy();
+                    }
+                    
+                    this.chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: Object.keys(this.chartData).map(d => {
+                                const date = new Date(d);
+                                return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+                            }),
+                            datasets: [{
+                                label: 'Повідомлень',
+                                data: Object.values(this.chartData),
+                                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                                borderColor: 'rgb(59, 130, 246)',
+                                borderWidth: 1,
+                                borderRadius: 4,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                            }
+                        }
+                    });
+                }
+            }));
+        });
+        
+        // Copy to clipboard handler
         document.addEventListener('livewire:initialized', () => {
-            initChart();
-            
             Livewire.on('copy-to-clipboard', ({ code }) => {
                 navigator.clipboard.writeText(code).then(() => {
                     alert('Код скопійовано!');
                 });
             });
         });
-
-        function initChart() {
-            const ctx = document.getElementById('messages-chart');
-            if (!ctx) return;
-            
-            const chartData = @json($chartData);
-            
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(chartData).map(d => {
-                        const date = new Date(d);
-                        return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-                    }),
-                    datasets: [{
-                        label: 'Повідомлень',
-                        data: Object.values(chartData),
-                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                        borderColor: 'rgb(59, 130, 246)',
-                        borderWidth: 1,
-                        borderRadius: 4,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                    }
-                }
-            });
-        }
     </script>
     @endpush
 </div>

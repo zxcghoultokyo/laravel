@@ -544,10 +544,23 @@ class Tenant extends Model
 
     /**
      * Get widget embed code.
+     * Returns the standardized format with token for proper tenant isolation.
      */
     public function getEmbedCode(): string
     {
-        $baseUrl = config('app.widget_url', 'https://chat.ailure.ai');
-        return "<script src=\"{$baseUrl}/widget/{$this->slug}.js\" async></script>";
+        $baseUrl = config('app.url', 'https://aimbot.laravel.cloud');
+        $token = $this->widgetSettings?->api_token ?? '';
+        
+        return <<<HTML
+<!-- AIntento Chat Widget -->
+<div id="aintento-chat" data-token="{$token}"></div>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = '{$baseUrl}/widget.js?v=' + Date.now();
+  document.body.appendChild(s);
+})();
+</script>
+HTML;
     }
 }

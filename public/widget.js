@@ -3437,8 +3437,12 @@
     }
 
     function getMerchantId() {
-        const container = document.getElementById('aintento-chat');
-        return container?.dataset?.token || window.location.hostname;
+        // Use merchant_id from settings (tenant slug) for proper tenant isolation
+        if (window.aintentoSettings?.merchant_id) {
+            return window.aintentoSettings.merchant_id;
+        }
+        // Fallback to hostname if no settings loaded yet
+        return window.location.hostname;
     }
 
     function detectDeviceType() {

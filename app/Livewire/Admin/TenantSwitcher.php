@@ -63,9 +63,17 @@ class TenantSwitcher extends Component
     {
         // Only render for super admin
         if (!Auth::user()?->isSuperAdmin()) {
-            return '';
+            return view('livewire.admin.tenant-switcher', [
+                'isSuperAdmin' => false,
+                'currentTenant' => null,
+                'tenants' => collect(),
+            ]);
         }
 
-        return view('livewire.admin.tenant-switcher');
+        return view('livewire.admin.tenant-switcher', [
+            'isSuperAdmin' => true,
+            'currentTenant' => $this->currentTenant,
+            'tenants' => $this->tenants,
+        ]);
     }
 }

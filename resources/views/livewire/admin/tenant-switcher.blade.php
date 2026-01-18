@@ -1,5 +1,5 @@
 <div class="relative" x-data="{ open: @entangle('showDropdown') }">
-    @if(Auth::user()?->isSuperAdmin())
+    @if($isSuperAdmin)
         <button @click="open = !open" 
                 class="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition
                        {{ $selectedTenantId 

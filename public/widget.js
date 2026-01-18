@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.6.4';
+    const WIDGET_VERSION = '2.6.5';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -3979,22 +3979,42 @@
         // Exit intent detector
         setupExitIntentDetector: function() {
             let exitIntentTriggered = false;
+            let exitIntentDebounce = null;
             
-            // Mouse leave detection (desktop)
-            document.addEventListener('mouseleave', (e) => {
+            // Mouse leave detection (desktop) - using mouseout on documentElement
+            // This fires when mouse leaves the viewport to the TOP (e.g., to close tab or go to address bar)
+            document.documentElement.addEventListener('mouseout', (e) => {
                 if (exitIntentTriggered) return;
-                if (e.clientY > 5) return; // Only trigger when moving to top
+                
+                // Only trigger when mouse actually leaves the document (relatedTarget is null)
+                // and moves toward the TOP of the page (clientY <= 0)
+                if (e.relatedTarget !== null && e.relatedTarget !== undefined) return;
+                if (e.clientY > 0) return; // Only trigger when moving to top (Y <= 0)
+                
+                // Additional check: toElement should be null for real exit
+                if (e.toElement !== null && e.toElement !== undefined) return;
                 
                 const timeOnPage = (Date.now() - this.state.pageStartTime) / 1000;
                 if (timeOnPage < 5) return; // Minimum 5 seconds on page
                 
-                const rule = this.findMatchingRule('exit_intent');
-                if (rule && this.canShowTrigger('exit_intent')) {
-                    exitIntentTriggered = true;
-                    this.showTrigger(rule, {
-                        trigger_reason: 'mouse_leave'
-                    });
+                // Debounce to prevent false triggers during fast mouse movements
+                if (exitIntentDebounce) {
+                    clearTimeout(exitIntentDebounce);
                 }
+                
+                exitIntentDebounce = setTimeout(() => {
+                    // Double-check we're still on the page (not navigating away)
+                    if (document.hidden) return;
+                    
+                    const rule = this.findMatchingRule('exit_intent');
+                    if (rule && this.canShowTrigger('exit_intent')) {
+                        exitIntentTriggered = true;
+                        log('ProactiveTriggers: Exit intent triggered (mouse left viewport top)');
+                        this.showTrigger(rule, {
+                            trigger_reason: 'mouse_leave_top'
+                        });
+                    }
+                }, 100); // Small delay to filter out false positives
             });
             
             // Fast scroll up detection

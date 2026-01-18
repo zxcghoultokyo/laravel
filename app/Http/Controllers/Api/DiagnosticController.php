@@ -255,7 +255,7 @@ class DiagnosticController extends Controller
             $health = $client->health();
             
             $index = $client->index('products');
-            $stats = $index->getStats();
+            $stats = $index->stats(); // v1.x uses stats() not getStats()
             $settings = $index->getSettings();
 
             return response()->json([
@@ -263,8 +263,8 @@ class DiagnosticController extends Controller
                 'meili_enabled' => true,
                 'meili_host' => $meiliHost,
                 'health' => $health,
-                'documents' => $stats['numberOfDocuments'],
-                'is_indexing' => $stats['isIndexing'],
+                'documents' => $stats['numberOfDocuments'] ?? 0,
+                'is_indexing' => $stats['isIndexing'] ?? false,
                 'field_distribution' => $stats['fieldDistribution'] ?? [],
                 'filterable_attributes' => $settings['filterableAttributes'] ?? [],
                 'searchable_attributes' => $settings['searchableAttributes'] ?? [],

@@ -107,6 +107,27 @@
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Віджет
                 </button>
+                <button wire:click="setTab('greetings')"
+                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                            {{ $activeTab === 'greetings' 
+                                ? 'border-blue-500 text-blue-600' 
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Привітання
+                </button>
+                <button wire:click="setTab('prompts')"
+                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                            {{ $activeTab === 'prompts' 
+                                ? 'border-blue-500 text-blue-600' 
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Промпти
+                </button>
+                <button wire:click="setTab('triggers')"
+                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                            {{ $activeTab === 'triggers' 
+                                ? 'border-blue-500 text-blue-600' 
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
+                    Тригери
+                </button>
                 <button wire:click="setTab('analytics')"
                         class="px-6 py-3 text-sm font-medium border-b-2 transition
                             {{ $activeTab === 'analytics' 
@@ -400,6 +421,27 @@
                             Змінити план
                         </a>
                     </div>
+                </div>
+            @endif
+
+            <!-- Greetings Tab -->
+            @if($activeTab === 'greetings')
+                <div>
+                    @livewire('admin.greetings-manager')
+                </div>
+            @endif
+
+            <!-- Prompts Tab -->
+            @if($activeTab === 'prompts')
+                <div>
+                    @livewire('admin.prompt-presets-manager')
+                </div>
+            @endif
+
+            <!-- Triggers Tab -->
+            @if($activeTab === 'triggers')
+                <div>
+                    @livewire('admin.proactive-triggers-manager')
                 </div>
             @endif
         </div>

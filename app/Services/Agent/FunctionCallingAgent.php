@@ -1013,7 +1013,6 @@ PROMPT;
         if ($quantity > 0 && $quantity <= 3) {
             return "Залишилось лише {$quantity} шт. в наявності. Резервуємо?";
         }
-        }
         
         // Default for accessories/gear without sizes
         return 'Оформлюємо? Або є питання по характеристиках?';

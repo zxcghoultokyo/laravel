@@ -864,6 +864,9 @@ PROMPT;
     {
         $products = [];
         $toolResults = [];
+        
+        // Detect if this is a trigger query for post-processing
+        $isTriggerQuery = $this->detectTriggerQuery($originalMessage);
 
         foreach ($toolCalls as $toolCall) {
             $functionName = $toolCall['function']['name'];
@@ -925,6 +928,30 @@ PROMPT;
                 $this->extractAndSaveContext($sessionId, $contextJson);
             }
         }
+        
+        // Post-process for trigger queries: add CTA outro if missing
+        $outro = $structuredResponse['outro'] ?? null;
+        if ($isTriggerQuery && empty($outro) && !empty($products)) {
+            // Check if products have sizes
+            $hasSize = false;
+            foreach ($products as $p) {
+                if (!empty($p['size_variants']) && count($p['size_variants']) > 1) {
+                    $hasSize = true;
+                    break;
+                }
+            }
+            
+            if ($hasSize) {
+                $outro = 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
+            } else {
+                $outro = 'Зацікавив цей товар? Можу допомогти з оформленням або відповісти на питання!';
+            }
+            
+            // Add outro to messages
+            if (!empty($structuredResponse['messages'])) {
+                $structuredResponse['messages'][] = ['type' => 'text', 'content' => $outro];
+            }
+        }
 
         return [
             'message' => $structuredResponse['intro'] ?? 'Ось що я знайшов:',
@@ -935,7 +962,8 @@ PROMPT;
                 'agent' => 'function_calling',
                 'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
                 'products_found' => count($products),
-                'outro' => $structuredResponse['outro'] ?? null,
+                'outro' => $outro,
+                'is_trigger' => $isTriggerQuery,
             ],
         ];
     }

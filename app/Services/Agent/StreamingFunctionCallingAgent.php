@@ -224,6 +224,9 @@ class StreamingFunctionCallingAgent
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
             
+            // Detect trigger query for CTA outro
+            $isTriggerQuery = $this->detectTriggerQuery($message);
+            
             // Send intro text (NOT the raw JSON!)
             if (!empty($structured['intro'])) {
                 // Stream intro character by character for typing effect
@@ -242,10 +245,29 @@ class StreamingFunctionCallingAgent
                 ]];
             }
             
+            // Determine outro (from GPT or auto-generate for trigger queries)
+            $outro = $structured['outro'] ?? null;
+            if ($isTriggerQuery && empty($outro) && !empty($allProducts)) {
+                // Check if products have sizes
+                $hasSize = false;
+                foreach ($allProducts as $p) {
+                    if (!empty($p['size_variants']) && count($p['size_variants']) > 1) {
+                        $hasSize = true;
+                        break;
+                    }
+                }
+                
+                if ($hasSize) {
+                    $outro = 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
+                } else {
+                    $outro = 'Зацікавив цей товар? Можу допомогти з оформленням або відповісти на питання!';
+                }
+            }
+            
             // Send outro if exists
-            if (!empty($structured['outro'])) {
-                yield ['type' => 'chunk', 'data' => ['text' => "\n\n" . $structured['outro']]];
-                $responseText .= "\n\n" . $structured['outro'];
+            if (!empty($outro)) {
+                yield ['type' => 'chunk', 'data' => ['text' => "\n\n" . $outro]];
+                $responseText .= "\n\n" . $outro;
             }
             
         } else {

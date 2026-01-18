@@ -64,9 +64,10 @@ class TenantDetails extends Component
      */
     public function getSyncLogsProperty()
     {
-        return SyncLog::where('context->tenant_id', $this->tenant->id)
-            ->orWhere('context->tenant_name', $this->tenant->name)
-            ->orWhere('details', 'like', "%Tenant sync: {$this->tenant->name}%")
+        // Sync logs don't have tenant_id column, so we search by notes field
+        // which contains tenant info when sync is run for specific tenant
+        return SyncLog::where('notes', 'like', "%Tenant sync: {$this->tenant->name}%")
+            ->orWhere('notes', 'like', "%tenant_id\":{$this->tenant->id}%")
             ->orderBy('created_at', 'desc')
             ->take(20)
             ->get();

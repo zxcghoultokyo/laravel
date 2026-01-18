@@ -297,7 +297,7 @@
                                 <tbody class="divide-y divide-gray-100">
                                     @foreach($syncLogs as $log)
                                         <tr>
-                                            <td class="px-3 py-2 whitespace-nowrap">{{ $log->created_at->format('d.m H:i') }}</td>
+                                            <td class="px-3 py-2 whitespace-nowrap">{{ $log->started_at?->format('d.m H:i') ?? $log->created_at->format('d.m H:i') }}</td>
                                             <td class="px-3 py-2">
                                                 <span class="px-2 py-1 text-xs font-medium rounded-full 
                                                     {{ $log->status === 'completed' ? 'bg-green-100 text-green-700' : '' }}
@@ -307,11 +307,16 @@
                                                 </span>
                                             </td>
                                             <td class="px-3 py-2 text-gray-600 max-w-md truncate">
-                                                {{ $log->details }}
+                                                {{ $log->notes ?? $log->sync_type }}
+                                                @if($log->total_processed > 0)
+                                                    <span class="text-xs text-gray-500">({{ $log->total_processed }} оброблено)</span>
+                                                @endif
                                             </td>
                                             <td class="px-3 py-2 text-gray-500">
-                                                @if($log->completed_at)
-                                                    {{ $log->created_at->diffInSeconds($log->completed_at) }}s
+                                                @if($log->duration_seconds)
+                                                    {{ $log->duration_seconds }}s
+                                                @elseif($log->finished_at)
+                                                    {{ $log->started_at->diffInSeconds($log->finished_at) }}s
                                                 @else
                                                     —
                                                 @endif

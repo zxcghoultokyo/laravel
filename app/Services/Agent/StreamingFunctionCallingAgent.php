@@ -120,7 +120,10 @@ class StreamingFunctionCallingAgent
                     "ТВОЯ ЗАДАЧА — ЗАКРИТИ ПРОДАЖ:\n" .
                     "1. Знайди товар через search_products\n" .
                     "2. Дай КОРОТКУ але ВПЕВНЕНУ відповідь (1-2 речення про особливості товару)\n" .
-                    "3. ОБОВ'ЯЗКОВО закінчи питанням про РОЗМІР: 'Який розмір вам потрібен? Підкажіть зріст/вагу'\n" .
+                    "3. Закінчи КОНКРЕТНИМ CTA залежно від товару:\n" .
+                    "   - Одяг/взуття → 'Який розмір вам потрібен? Підкажіть зріст/вагу'\n" .
+                    "   - Аксесуари/рюкзаки/шоломи → 'Оформлюємо? Або є питання по характеристиках?'\n" .
+                    "   - Якщо мало в наявності → 'Залишилось X шт. Резервуємо?'\n" .
                     "НЕ питай 'що саме потрібно?' — ДІЙ ВПЕВНЕНО!"
             ];
         }
@@ -248,20 +251,7 @@ class StreamingFunctionCallingAgent
             // Determine outro (from GPT or auto-generate for trigger queries)
             $outro = $structured['outro'] ?? null;
             if ($isTriggerQuery && empty($outro) && !empty($allProducts)) {
-                // Check if products have sizes
-                $hasSize = false;
-                foreach ($allProducts as $p) {
-                    if (!empty($p['size_variants']) && count($p['size_variants']) > 1) {
-                        $hasSize = true;
-                        break;
-                    }
-                }
-                
-                if ($hasSize) {
-                    $outro = 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
-                } else {
-                    $outro = 'Зацікавив цей товар? Можу допомогти з оформленням або відповісти на питання!';
-                }
+                $outro = $this->generateTriggerOutro($allProducts);
             }
             
             // Send outro if exists
@@ -415,6 +405,52 @@ class StreamingFunctionCallingAgent
         }
         
         return false;
+    }
+    
+    /**
+     * Generate appropriate CTA outro for trigger queries based on product type.
+     */
+    private function generateTriggerOutro(array $products): string
+    {
+        if (empty($products)) {
+            return 'Є питання? Радий допомогти!';
+        }
+        
+        $firstProduct = $products[0];
+        $categoryPath = $firstProduct['category_path'] ?? '';
+        $quantity = $firstProduct['quantity'] ?? 0;
+        
+        // Check if products have sizes (clothing/footwear)
+        $hasSize = false;
+        foreach ($products as $p) {
+            if (!empty($p['size_variants']) && count($p['size_variants']) > 1) {
+                $hasSize = true;
+                break;
+            }
+        }
+        
+        // Low stock urgency
+        if ($quantity > 0 && $quantity <= 3) {
+            return "Залишилось лише {$quantity} шт. в наявності. Резервуємо?";
+        }
+        
+        // Clothing/footwear with sizes
+        if ($hasSize) {
+            return 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
+        }
+        
+        // Helmets - special case (need head circumference)
+        if (str_contains(mb_strtolower($categoryPath), 'шолом') || str_contains(mb_strtolower($categoryPath), 'helmet')) {
+            return 'Який обхват голови? Допоможу з підбором розміру шолома!';
+        }
+        
+        // Plate carriers - need plate size
+        if (str_contains(mb_strtolower($categoryPath), 'плитоноска') || str_contains(mb_strtolower($categoryPath), 'plate carrier')) {
+            return 'Який розмір плит використовуєте? Допоможу з підбором!';
+        }
+        
+        // Default for accessories/gear without sizes
+        return 'Оформлюємо? Або є питання по характеристиках?';
     }
 
     /**

@@ -968,7 +968,8 @@ PROMPT;
         }
         
         $firstProduct = $products[0];
-        $categoryPath = $firstProduct['category_path'] ?? '';
+        $categoryPath = mb_strtolower($firstProduct['category_path'] ?? '');
+        $title = mb_strtolower($firstProduct['title'] ?? '');
         $quantity = $firstProduct['quantity'] ?? 0;
         
         // Check if products have sizes (clothing/footwear)
@@ -990,13 +991,15 @@ PROMPT;
             return 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
         }
         
-        // Helmets - special case (need head circumference)
-        if (str_contains(mb_strtolower($categoryPath), 'шолом') || str_contains(mb_strtolower($categoryPath), 'helmet')) {
+        // Helmets - check both category and title
+        if (str_contains($categoryPath, 'шолом') || str_contains($title, 'шолом') || 
+            str_contains($categoryPath, 'helmet') || str_contains($title, 'helmet')) {
             return 'Який обхват голови? Допоможу з підбором розміру шолома!';
         }
         
         // Plate carriers - need plate size
-        if (str_contains(mb_strtolower($categoryPath), 'плитоноска') || str_contains(mb_strtolower($categoryPath), 'plate carrier')) {
+        if (str_contains($categoryPath, 'плитоноска') || str_contains($title, 'плитоноска') ||
+            str_contains($categoryPath, 'plate carrier') || str_contains($title, 'plate carrier')) {
             return 'Який розмір плит використовуєте? Допоможу з підбором!';
         }
         

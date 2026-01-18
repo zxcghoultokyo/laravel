@@ -8,6 +8,7 @@ use App\Models\ProductAiIndex;
 use App\Models\ProductSynonym;
 use App\Models\ProductTag;
 use App\Services\Ai\AiRouter;
+use App\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -180,8 +181,9 @@ class ProductService
             return 'skipped';
         }
 
-        // Find or create product scoped to tenant
-        $product = Product::where('tenant_id', $tenant->id)
+        // Find or create product scoped to tenant (bypass global scope since we filter explicitly)
+        $product = Product::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenant->id)
             ->where('article', $article)
             ->first();
         
@@ -251,9 +253,8 @@ class ProductService
         }
 
         /** @var Product $product */
-        $product = Product::query()->firstOrNew([
-            'article' => $article,
-        ]);
+        $product = Product::withoutGlobalScope(TenantScope::class)
+            ->firstOrNew(['article' => $article]);
 
         $brand = Arr::get($item, 'brand.value.ua')
             ?? Arr::get($item, 'brand.value.ru')

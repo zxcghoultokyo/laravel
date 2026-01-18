@@ -7,6 +7,7 @@ use App\Models\SyncLog;
 use App\Services\Search\MeiliClient;
 use App\Support\ProductRawExtractor;
 use App\Support\ColorNormalizer;
+use App\Scopes\TenantScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -45,7 +46,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
         $index = $meili->productsIndex();
         $chunkSize = $this->effectiveChunkSize();
         
-        $totalCount = Product::count();
+        // Count ALL products (bypass tenant scope for system job)
+        $totalCount = Product::withoutGlobalScope(TenantScope::class)->count();
         $processedCount = 0;
         $startTime = microtime(true);
         
@@ -64,7 +66,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price',
+                    'tenant_id', 'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price',
                 ])),
                 'sortableAttributes' => [
                     'popularity',
@@ -133,7 +135,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
             echo "⚠️  Налаштування Meili: {$e->getMessage()}\n\n";
         }
 
-        Product::query()
+        // Index ALL products (bypass tenant scope - this is a system job)
+        Product::withoutGlobalScope(TenantScope::class)
             ->with('aiIndex')
             ->orderBy('id')
             ->chunk($chunkSize, function ($products) use ($index, $meili, &$processedCount, $totalCount) {
@@ -143,7 +146,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 $parentArticles = $products->pluck('parent_article')->filter()->unique()->all();
                 $parentRawMap = [];
                 if ($parentArticles) {
-                    Product::query()
+                    Product::withoutGlobalScope(TenantScope::class)
                         ->whereIn('article', $parentArticles)
                         ->get(['article', 'raw'])
                         ->each(function ($parent) use (&$parentRawMap) {
@@ -166,6 +169,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
                     $docs[] = [
                         'id' => (int) $p->id,
+                        'tenant_id' => (int) ($p->tenant_id ?? 1),
 
                         'article' => (string) ($p->article ?? ''),
                         'parent_article' => (string) ($p->parent_article ?? ''),
@@ -340,8 +344,9 @@ class IndexProductsToMeiliJob implements ShouldQueue
             
             echo "   📋 Знайдено " . count($meiliIds) . " товарів у Meili\n";
             
-            // Отримуємо валідні ID з БД (тільки in_stock=true)
-            $validIds = Product::where('in_stock', true)
+            // Отримуємо валідні ID з БД (тільки in_stock=true, без tenant scope)
+            $validIds = Product::withoutGlobalScope(TenantScope::class)
+                ->where('in_stock', true)
                 ->whereIn('id', $meiliIds)
                 ->pluck('id')
                 ->map(fn($id) => (int) $id)

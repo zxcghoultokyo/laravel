@@ -5,11 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Builder;
 use App\Models\ProductAiIndex;
+use App\Scopes\TenantScope;
 
 class Product extends Model
 {
     use SoftDeletes;
+
+    /**
+     * Boot the model and add global tenant scope.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new TenantScope());
+    }
 
     protected $fillable = [
         'tenant_id',

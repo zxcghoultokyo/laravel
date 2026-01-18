@@ -4,10 +4,20 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Scopes\TenantScope;
 
 class ChatSession extends Model
 {
+    /**
+     * Boot the model and add global tenant scope.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new TenantScope());
+    }
+
     protected $fillable = [
+        'tenant_id',
         'session_id',
         'last_intent',
         'last_user_query',

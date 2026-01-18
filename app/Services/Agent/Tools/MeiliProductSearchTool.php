@@ -90,6 +90,12 @@ class MeiliProductSearchTool
             // Build filter string
             $filterParts = [];
             
+            // Tenant isolation: only show products from current tenant
+            $tenantId = $filters['tenant_id'] ?? $this->getCurrentTenantId();
+            if ($tenantId) {
+                $filterParts[] = "tenant_id = {$tenantId}";
+            }
+            
             // Only include in-stock products
             $filterParts[] = 'in_stock = true';
             
@@ -1005,5 +1011,45 @@ class MeiliProductSearchTool
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+    
+    /**
+     * Get current tenant ID from various sources.
+     * Returns null for super admin or when no tenant context (shows all products).
+     */
+    protected function getCurrentTenantId(): ?int
+    {
+        // 1. Check authenticated user
+        if (auth()->check()) {
+            $user = auth()->user();
+            
+            // Super admin sees all data
+            if ($user->role === 'super_admin') {
+                return null;
+            }
+            
+            if ($user->tenant_id) {
+                return (int) $user->tenant_id;
+            }
+        }
+        
+        // 2. Check request context (widget/API calls pass tenant_id)
+        if (request()->has('tenant_id')) {
+            return (int) request()->input('tenant_id');
+        }
+        
+        // 3. Check session
+        if (session()->has('tenant_id')) {
+            return (int) session()->get('tenant_id');
+        }
+        
+        // 4. Check app binding (for background jobs)
+        if (app()->bound('current_tenant_id')) {
+            return app('current_tenant_id');
+        }
+        
+        // Default to main tenant (Contractor) for backwards compatibility
+        // TODO: Remove this default when all clients are migrated
+        return 1;
     }
 }

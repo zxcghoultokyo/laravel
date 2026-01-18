@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    const WIDGET_VERSION = '2.6.2';
+    const WIDGET_VERSION = '2.6.3';
     const DEBUG = true; // Enable for troubleshooting
     
     // Capture script reference immediately (before DOMContentLoaded makes it null)
@@ -3467,7 +3467,8 @@
             productsViewed: [],
             variantSelected: false,
             chatOpened: false,
-            initialized: false
+            initialized: false,
+            showingTrigger: false // Mutex to prevent simultaneous triggers
         },
         
         // Initialize triggers system
@@ -3543,6 +3544,11 @@
         canShowTrigger: function(triggerType) {
             // Don't show if chat is open
             if (this.state.chatOpened || window.aintentoIsOpen) {
+                return false;
+            }
+            
+            // Prevent race condition - check if trigger is currently being shown
+            if (this.state.showingTrigger) {
                 return false;
             }
             
@@ -3674,6 +3680,48 @@
             return 'other';
         },
         
+        // Detect current category name from page
+        detectCurrentCategory: function() {
+            // Try breadcrumbs first
+            const breadcrumbs = document.querySelector('.breadcrumbs, .breadcrumb, [itemtype*="BreadcrumbList"]');
+            if (breadcrumbs) {
+                const items = breadcrumbs.querySelectorAll('a, span[itemprop="name"]');
+                if (items.length > 1) {
+                    // Last item is usually current, but if it's a link, use second-to-last
+                    const lastLink = breadcrumbs.querySelector('a:last-of-type');
+                    if (lastLink && lastLink.textContent.trim()) {
+                        return lastLink.textContent.trim();
+                    }
+                    const lastName = items[items.length - 1];
+                    if (lastName && lastName.textContent.trim()) {
+                        return lastName.textContent.trim();
+                    }
+                }
+            }
+            
+            // Try page title/h1
+            const h1 = document.querySelector('h1');
+            if (h1) {
+                const text = h1.textContent.trim();
+                // Avoid using product names (usually longer)
+                if (text.length < 50) {
+                    return text;
+                }
+            }
+            
+            // Try URL path - e.g., /bronezakhyst/1124 -> Бронезахист
+            const pathParts = window.location.pathname.split('/').filter(p => p && !/^\d+$/.test(p));
+            if (pathParts.length > 0) {
+                // Decode and capitalize
+                const lastPart = decodeURIComponent(pathParts[pathParts.length - 1])
+                    .replace(/-/g, ' ')
+                    .replace(/_/g, ' ');
+                return lastPart;
+            }
+            
+            return null;
+        },
+        
         // Show proactive trigger popup
         showTrigger: function(rule, context = {}) {
             if (!this.canShowTrigger(rule.type)) {
@@ -3681,7 +3729,16 @@
                 return;
             }
             
+            // Set mutex immediately to prevent race conditions
+            this.state.showingTrigger = true;
+            
             log('ProactiveTriggers: Showing trigger', rule.id, rule.type);
+            
+            // Add current category to context if available
+            const category = this.detectCurrentCategory();
+            if (category) {
+                context.category = category;
+            }
             
             // Create trigger popup
             const popup = this.createTriggerPopup(rule, context);
@@ -3693,7 +3750,7 @@
                 popup.style.transform = 'translateY(0)';
             }, 50);
             
-            // Track shown event
+            // Track shown event with category context
             this.trackEvent(rule.id, 'shown', context);
             
             // Update state
@@ -3826,12 +3883,41 @@
                     window.openChat();
                 }
                 
-                // If has initial message, send it after small delay
-                if (rule.action_config?.initial_message) {
+                // Build contextual message based on page type and category
+                let message = rule.action_config?.initial_message || '';
+                const pageType = this.detectPageType();
+                const category = this.detectCurrentCategory();
+                
+                // If on category page and rule is for category context, ask for top products
+                if (pageType === 'category' && category) {
+                    // Replace generic message with specific category request
+                    if (rule.action_config?.include_category_context || 
+                        message.includes('категорії') || 
+                        message.includes('хіти')) {
+                        message = `Покажи топ товари в категорії "${category}"`;
+                    }
+                }
+                
+                // If on product page, include product info
+                if (pageType === 'product' && rule.action_config?.include_product_context) {
+                    const productTitle = document.querySelector('h1')?.textContent?.trim() || '';
+                    if (productTitle && productTitle.length < 100) {
+                        message = `Допоможіть з товаром "${productTitle}"`;
+                    }
+                }
+                
+                // If still no category context but we're on a category page, add it
+                if (pageType === 'category' && category && !message.includes(category)) {
+                    message = `Покажи топ товари в категорії "${category}"`;
+                }
+                
+                // If we have a message, send it
+                if (message) {
                     setTimeout(() => {
                         const input = document.getElementById('aintento-input');
                         if (input) {
-                            input.value = rule.action_config.initial_message;
+                            input.value = message;
+                            log('ProactiveTriggers: Sending message:', message);
                             // Trigger send
                             const sendBtn = document.getElementById('aintento-send');
                             if (sendBtn) sendBtn.click();

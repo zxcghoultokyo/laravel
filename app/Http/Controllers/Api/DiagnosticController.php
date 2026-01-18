@@ -1615,4 +1615,51 @@ class DiagnosticController extends Controller
             'users' => $users,
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/trigger-events
+     * List recent trigger events for debugging
+     */
+    public function triggerEvents(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $sessionId = $request->query('session_id');
+        $limit = min((int) $request->query('limit', 50), 200);
+        
+        $query = \App\Models\ProactiveTriggerEvent::with('rule:id,name,trigger_type')
+            ->orderByDesc('created_at');
+        
+        if ($sessionId) {
+            $query->where('session_id', $sessionId);
+        }
+        
+        $events = $query->take($limit)->get()->map(function ($event) {
+            return [
+                'id' => $event->id,
+                'rule_id' => $event->rule_id,
+                'rule_name' => $event->rule?->name,
+                'rule_type' => $event->rule?->trigger_type,
+                'session_id' => $event->session_id,
+                'event_type' => $event->event_type,
+                'context' => $event->context,
+                'created_at' => $event->created_at->format('Y-m-d H:i:s'),
+            ];
+        });
+        
+        // Summary stats
+        $stats = [
+            'total_events' => \App\Models\ProactiveTriggerEvent::count(),
+            'today_shown' => \App\Models\ProactiveTriggerEvent::today()->where('event_type', 'shown')->count(),
+            'today_clicked' => \App\Models\ProactiveTriggerEvent::today()->where('event_type', 'clicked')->count(),
+            'today_dismissed' => \App\Models\ProactiveTriggerEvent::today()->where('event_type', 'dismissed')->count(),
+        ];
+        
+        return response()->json([
+            'stats' => $stats,
+            'events' => $events,
+        ]);
+    }
 }

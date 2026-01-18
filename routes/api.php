@@ -109,6 +109,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/clear-all-analytics', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearAllAnalytics']);
     Route::get('/users', [\App\Http\Controllers\Api\DiagnosticController::class, 'listUsers']);
     Route::post('/set-super-admin', [\App\Http\Controllers\Api\DiagnosticController::class, 'setSuperAdmin']);
+    Route::get('/trigger-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'triggerEvents']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

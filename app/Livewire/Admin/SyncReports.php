@@ -154,17 +154,17 @@ class SyncReports extends Component
         $this->scheduleInfo = [
             [
                 'name' => '🛒 Horoshop Products',
-                'command' => 'horoshop:sync-products',
+                'command' => 'horoshop:sync',
                 'schedule' => 'Щодня о 03:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_HOROSHOP_PRODUCTS),
                 'next_run' => 'Завтра о 03:00',
             ],
             [
                 'name' => '📦 Orders',
-                'command' => 'orders:sync --days=1',
-                'schedule' => 'Щодня о 03:30',
+                'command' => 'orders:sync --days=3',
+                'schedule' => 'Двічі на день о 08:00 та 20:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_ORDERS),
-                'next_run' => 'Завтра о 03:30',
+                'next_run' => 'Сьогодні/завтра',
             ],
             [
                 'name' => '🤖 AI Enrichment',
@@ -188,11 +188,11 @@ class SyncReports extends Component
                 'next_run' => 'Завтра о 06:00',
             ],
             [
-                'name' => '📁 Categories',
-                'command' => 'categories:rebuild',
-                'schedule' => 'Щонеділі о 02:00',
+                'name' => '🏷️ Brands',
+                'command' => 'brands:sync',
+                'schedule' => 'Щодня о 03:30',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_CATEGORIES),
-                'next_run' => 'Неділя о 02:00',
+                'next_run' => 'Завтра о 03:30',
             ],
             [
                 'name' => '🧬 Embeddings',

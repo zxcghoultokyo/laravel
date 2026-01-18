@@ -26,7 +26,9 @@ class IndexProductsToMeiliJob implements ShouldQueue
     public function __construct(int $chunkSize = 500)
     {
         $this->chunkSize = max(50, (int) $chunkSize);
-        $this->onQueue('meili');
+        // Use default queue - ensure queue worker processes this
+        // If you have separate meili queue worker, change back to 'meili'
+        $this->onQueue('default');
     }
 
     protected function effectiveChunkSize(): int

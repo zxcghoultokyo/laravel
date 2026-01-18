@@ -113,6 +113,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/scheduler-status', [\App\Http\Controllers\Api\DiagnosticController::class, 'schedulerStatus']);
     Route::post('/run-sync', [\App\Http\Controllers\Api\DiagnosticController::class, 'runSyncJob']);
     Route::post('/clear-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearQueue']);
+    Route::get('/test-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueue']);
+    Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

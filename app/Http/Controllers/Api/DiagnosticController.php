@@ -1869,4 +1869,60 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * GET /api/diagnostic/test-queue
+     * Test if queue worker is processing jobs
+     */
+    public function testQueue(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        // Create a simple test job that just writes to cache
+        $testId = uniqid('queue_test_');
+        
+        // Write "pending" to cache
+        \Cache::put("queue_test_{$testId}", 'pending', 300);
+        
+        // Dispatch a simple closure job
+        dispatch(function () use ($testId) {
+            \Cache::put("queue_test_{$testId}", 'completed_at_' . now()->toIso8601String(), 300);
+        })->onQueue('default');
+        
+        return response()->json([
+            'test_id' => $testId,
+            'status' => 'dispatched',
+            'check_url' => "/api/diagnostic/test-queue-result?key={$this->secretKey}&test_id={$testId}",
+            'message' => 'Job dispatched. Check result in 10-30 seconds.',
+        ]);
+    }
+    
+    /**
+     * GET /api/diagnostic/test-queue-result
+     * Check result of queue test
+     */
+    public function testQueueResult(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $testId = $request->query('test_id');
+        if (!$testId) {
+            return response()->json(['error' => 'Missing test_id'], 400);
+        }
+        
+        $result = \Cache::get("queue_test_{$testId}", 'not_found');
+        
+        $queueWorkerActive = str_starts_with($result, 'completed_at_');
+        
+        return response()->json([
+            'test_id' => $testId,
+            'result' => $result,
+            'queue_worker_active' => $queueWorkerActive,
+            'pending_jobs' => DB::table('jobs')->count(),
+        ]);
+    }
 }

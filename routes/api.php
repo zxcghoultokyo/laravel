@@ -115,6 +115,11 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/clear-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearQueue']);
     Route::get('/test-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueue']);
     Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);
+    
+    // Tenant management
+    Route::get('/tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenants']);
+    Route::get('/tenant/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantDetails']);
+    Route::post('/migrate-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'migrateDataToTenant']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

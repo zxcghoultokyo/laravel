@@ -1957,4 +1957,197 @@ class DiagnosticController extends Controller
             'pending_jobs' => DB::table('jobs')->count(),
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/tenants
+     * List all tenants with stats
+     */
+    public function tenants(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenants = \App\Models\Tenant::all()->map(function ($tenant) {
+            return [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'domain' => $tenant->domain,
+                'plan' => $tenant->plan,
+                'status' => $tenant->status,
+                'platform' => $tenant->platform,
+                'trial_ends_at' => $tenant->trial_ends_at?->toDateTimeString(),
+                'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
+                'messages_used' => $tenant->messages_used,
+                'messages_limit' => $tenant->messages_limit,
+                'stats' => [
+                    'products' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                        ->where('tenant_id', $tenant->id)->count(),
+                    'products_in_stock' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                        ->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
+                    'chat_sessions' => \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                        ->where('tenant_id', $tenant->id)->count(),
+                    'chat_messages' => \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                        ->where('tenant_id', $tenant->id)->count(),
+                    'prompt_presets' => DB::table('prompt_presets')->where('tenant_id', $tenant->id)->count(),
+                    'greetings' => DB::table('greetings')->where('tenant_id', $tenant->id)->count(),
+                    'sync_logs' => DB::table('sync_logs')->where('tenant_id', $tenant->id)->count(),
+                ],
+            ];
+        });
+
+        return response()->json([
+            'total' => $tenants->count(),
+            'tenants' => $tenants,
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/tenant/{id}
+     * Detailed tenant info
+     */
+    public function tenantDetails(Request $request, int $id): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($id);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        // Get widget settings
+        $widgetSettings = $tenant->widgetSettings;
+
+        // Get recent sync logs
+        $syncLogs = DB::table('sync_logs')
+            ->where('tenant_id', $tenant->id)
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get(['id', 'sync_type', 'status', 'started_at', 'total_processed', 'created', 'updated', 'failed']);
+
+        // Get categories
+        $categories = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->where('in_stock', true)
+            ->whereNotNull('category_path')
+            ->select('category_path', DB::raw('COUNT(*) as count'))
+            ->groupBy('category_path')
+            ->orderByDesc('count')
+            ->limit(20)
+            ->get();
+
+        return response()->json([
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'slug' => $tenant->slug,
+                'domain' => $tenant->domain,
+                'plan' => $tenant->plan,
+                'status' => $tenant->status,
+                'platform' => $tenant->platform,
+                'trial_ends_at' => $tenant->trial_ends_at?->toDateTimeString(),
+                'plan_expires_at' => $tenant->plan_expires_at?->toDateTimeString(),
+                'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
+                'messages_used' => $tenant->messages_used,
+                'messages_limit' => $tenant->messages_limit,
+                'has_credentials' => !empty($tenant->platform_credentials),
+            ],
+            'widget_settings' => $widgetSettings ? [
+                'id' => $widgetSettings->id,
+                'domain' => $widgetSettings->domain,
+                'bot_name' => $widgetSettings->bot_name,
+                'store_name' => $widgetSettings->store_name,
+                'enabled' => $widgetSettings->enabled,
+                'horoshop_domain' => $widgetSettings->horoshop_domain,
+            ] : null,
+            'stats' => [
+                'products' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenant->id)->count(),
+                'products_in_stock' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
+                'chat_sessions' => \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenant->id)->count(),
+                'chat_messages' => \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenant->id)->count(),
+                'prompt_presets' => DB::table('prompt_presets')->where('tenant_id', $tenant->id)->count(),
+                'greetings' => DB::table('greetings')->where('tenant_id', $tenant->id)->count(),
+            ],
+            'top_categories' => $categories,
+            'recent_sync_logs' => $syncLogs,
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/migrate-data
+     * Migrate products/chats from tenant 1 to tenant 2 (one-time operation)
+     */
+    public function migrateDataToTenant(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $fromTenantId = (int) $request->input('from_tenant_id', 1);
+        $toTenantId = (int) $request->input('to_tenant_id', 2);
+        $dryRun = $request->boolean('dry_run', true);
+
+        // Validate tenants exist
+        $fromTenant = \App\Models\Tenant::find($fromTenantId);
+        $toTenant = \App\Models\Tenant::find($toTenantId);
+
+        if (!$fromTenant || !$toTenant) {
+            return response()->json(['error' => 'One or both tenants not found'], 404);
+        }
+
+        $tables = [
+            'products' => ['model' => \App\Models\Product::class],
+            'product_ai_index' => ['table' => true],
+            'chat_sessions' => ['model' => \App\Models\ChatSession::class],
+            'chat_messages' => ['model' => \App\Models\ChatMessage::class],
+            'prompt_presets' => ['table' => true],
+            'greetings' => ['table' => true],
+            'sync_logs' => ['table' => true],
+            'widget_settings' => ['table' => true],
+            'store_contexts' => ['table' => true],
+            'proactive_trigger_rules' => ['table' => true],
+        ];
+
+        $results = [];
+
+        foreach ($tables as $tableName => $config) {
+            if (!DB::getSchemaBuilder()->hasTable($tableName)) {
+                $results[$tableName] = ['skipped' => 'table does not exist'];
+                continue;
+            }
+
+            if (!DB::getSchemaBuilder()->hasColumn($tableName, 'tenant_id')) {
+                $results[$tableName] = ['skipped' => 'no tenant_id column'];
+                continue;
+            }
+
+            $count = DB::table($tableName)->where('tenant_id', $fromTenantId)->count();
+            
+            if ($dryRun) {
+                $results[$tableName] = ['would_migrate' => $count];
+            } else {
+                $updated = DB::table($tableName)
+                    ->where('tenant_id', $fromTenantId)
+                    ->update(['tenant_id' => $toTenantId]);
+                $results[$tableName] = ['migrated' => $updated];
+            }
+        }
+
+        return response()->json([
+            'dry_run' => $dryRun,
+            'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant->name],
+            'to_tenant' => ['id' => $toTenantId, 'name' => $toTenant->name],
+            'results' => $results,
+            'note' => $dryRun 
+                ? 'This is a dry run. Set dry_run=false to actually migrate data.' 
+                : 'Data has been migrated. Remember to reindex Meilisearch!',
+        ]);
+    }
 }

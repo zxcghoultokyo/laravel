@@ -306,6 +306,11 @@ x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); $watch
 
                 <!-- Right: Search + Actions -->
                 <div class="flex items-center gap-2">
+                    <!-- Tenant Switcher (Super Admin only) -->
+                    @if(auth()->user()?->isSuperAdmin())
+                        <livewire:admin.tenant-switcher />
+                    @endif
+
                     <!-- Search Button -->
                     <button @click="searchOpen = true" 
                             class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors">

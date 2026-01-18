@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Log;
  *   - Applied automatically to Product model
  *   - To bypass: Product::withoutGlobalScope(TenantScope::class)->get()
  *   - For admin queries: Product::withoutGlobalScope('tenant')->get()
+ * 
+ * Super Admin Behavior:
+ *   - If session has 'admin_active_tenant_id', filters by that tenant
+ *   - Otherwise, sees all data (no filter applied)
  */
 class TenantScope implements Scope
 {
@@ -44,8 +48,13 @@ class TenantScope implements Scope
         if (Auth::check()) {
             $user = Auth::user();
             
-            // Super admin sees all data
+            // Super admin can work in context of specific tenant
             if ($user->role === 'super_admin') {
+                // Check if super admin has selected an active tenant to work with
+                if (session()->has('admin_active_tenant_id')) {
+                    return (int) session()->get('admin_active_tenant_id');
+                }
+                // Otherwise super admin sees all data
                 return null;
             }
             
@@ -60,7 +69,7 @@ class TenantScope implements Scope
             return (int) request()->input('tenant_id');
         }
         
-        // 3. Check session context
+        // 3. Check session context (for non-auth contexts)
         if (session()->has('tenant_id')) {
             return (int) session()->get('tenant_id');
         }

@@ -90,7 +90,7 @@
 
 ---
 
-## 🚀 НАШІ КОНКУРЕНТНІ ПЕРЕВАГИ (AImbot)
+## 🚀 НАШІ КОНКУРЕНТНІ ПЕРЕВАГИ (AIntento)
 
 ### 1. 🎯 **Глибока E-commerce інтеграція**
 
@@ -211,7 +211,7 @@
 | Intercom | "Customer platform" | Ми = e-com фокус + доступно |
 
 ### Цільова аудиторія:
-1. **Primary:** UA інтернет-магазини на Horoshop (5,000+ магазинів)
+1. **Primary:** UA інтернет-магазини на Horoshop (11,000+ магазинів)
 2. **Secondary:** Prom.ua продавці, Shopify UA stores
 3. **Future:** WooCommerce, OpenCart, custom
 

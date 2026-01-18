@@ -62,4 +62,8 @@ Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(fu
     Route::post('/complete', [OnboardingController::class, 'complete'])->name('complete');
 });
 
+// Widget embed route (public, no auth required)
+Route::get('/widget/{slug}.js', [\App\Http\Controllers\TenantWidgetController::class, 'serveWidget'])
+    ->name('widget.serve');
+
 require __DIR__.'/auth.php';

@@ -10,6 +10,9 @@
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700|space-grotesk:600,700" rel="stylesheet" />
+        
+        <!-- AOS.js Animation Library -->
+        <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 
         <style>
             * {
@@ -162,6 +165,28 @@
                 gap: 16px;
                 justify-content: center;
                 flex-wrap: wrap;
+            }
+            
+            /* Trust Badges */
+            .trust-badges {
+                display: flex;
+                justify-content: center;
+                gap: 32px;
+                margin-top: 48px;
+                flex-wrap: wrap;
+            }
+            
+            .trust-badge {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: var(--text-gray);
+                font-size: 14px;
+                font-weight: 500;
+            }
+            
+            .trust-icon {
+                font-size: 20px;
             }
             
             /* Features Section - Split Layout */
@@ -477,8 +502,8 @@
                 font-size: 24px;
             }
             
-            /* Coming Soon */
-            .coming-soon {
+            /* Coming Soon / Roadmap */
+            .coming-soon, .roadmap {
                 padding: 100px 0;
             }
             
@@ -515,6 +540,146 @@
                 color: var(--text-gray);
                 font-size: 13px;
                 line-height: 1.6;
+            }
+            
+            /* Advantages Section */
+            .advantages {
+                padding: 100px 0;
+                background: linear-gradient(180deg, #ffffff 0%, var(--bg-light) 100%);
+            }
+            
+            .advantages-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+                gap: 24px;
+                max-width: 1100px;
+                margin: 0 auto;
+            }
+            
+            .advantage-card {
+                background: white;
+                border-radius: 20px;
+                padding: 28px;
+                border: 1px solid var(--border-color);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            .advantage-card:hover {
+                transform: translateY(-8px);
+                box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15);
+                border-color: var(--primary);
+            }
+            
+            .advantage-icon {
+                font-size: 40px;
+                margin-bottom: 16px;
+            }
+            
+            .advantage-card h4 {
+                font-size: 18px;
+                margin-bottom: 12px;
+            }
+            
+            .advantage-card p {
+                color: var(--text-gray);
+                font-size: 14px;
+                line-height: 1.6;
+            }
+            
+            /* Pricing Section */
+            .pricing {
+                padding: 100px 0;
+                background: var(--bg-light);
+            }
+            
+            .pricing-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 24px;
+                max-width: 1000px;
+                margin: 0 auto;
+            }
+            
+            .pricing-card {
+                background: white;
+                border-radius: 24px;
+                padding: 32px;
+                border: 2px solid var(--border-color);
+                position: relative;
+                transition: all 0.3s;
+            }
+            
+            .pricing-card.featured {
+                border-color: var(--primary);
+                transform: scale(1.05);
+                box-shadow: 0 25px 60px rgba(16, 185, 129, 0.2);
+            }
+            
+            .pricing-badge {
+                position: absolute;
+                top: -12px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: var(--primary);
+                color: white;
+                padding: 6px 16px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            
+            .pricing-header {
+                text-align: center;
+                margin-bottom: 24px;
+            }
+            
+            .pricing-header h3 {
+                font-size: 20px;
+                margin-bottom: 12px;
+            }
+            
+            .pricing-price {
+                display: flex;
+                align-items: baseline;
+                justify-content: center;
+                gap: 4px;
+            }
+            
+            .price-amount {
+                font-size: 42px;
+                font-weight: 700;
+                color: var(--primary);
+            }
+            
+            .price-currency {
+                font-size: 16px;
+                color: var(--text-gray);
+            }
+            
+            .pricing-desc {
+                color: var(--text-gray);
+                font-size: 14px;
+                margin-top: 8px;
+            }
+            
+            .pricing-features {
+                list-style: none;
+                margin-bottom: 24px;
+            }
+            
+            .pricing-features li {
+                padding: 10px 0;
+                border-bottom: 1px solid var(--border-color);
+                font-size: 14px;
+            }
+            
+            .pricing-features li:last-child {
+                border-bottom: none;
+            }
+            
+            .btn-full {
+                width: 100%;
+                justify-content: center;
             }
             
             /* Footer */
@@ -587,6 +752,19 @@
                 .scenario-btn .emoji {
                     font-size: 20px;
                 }
+                
+                .advantages-grid {
+                    grid-template-columns: 1fr;
+                }
+                
+                .pricing-grid {
+                    grid-template-columns: 1fr;
+                    max-width: 400px;
+                }
+                
+                .pricing-card.featured {
+                    transform: none;
+                }
             }
             
             @media (max-width: 768px) {
@@ -607,8 +785,13 @@
                     font-size: 16px;
                 }
                 
-                .features, .demo-section, .coming-soon {
+                .features, .demo-section, .coming-soon, .advantages, .pricing, .roadmap {
                     padding: 60px 0;
+                }
+                
+                .trust-badges {
+                    flex-direction: column;
+                    gap: 16px;
                 }
                 
                 .feature-item {
@@ -692,13 +875,31 @@
         <!-- Hero Section -->
         <section class="hero">
             <div class="container">
-                <h1>AI Асистент для<br>e-commerce</h1>
-                <p>Розумний чат-бот для вашого інтернет-магазину. Підбір товарів, консультації 24/7, персоналізовані рекомендації — все на автопілоті.</p>
-                <div class="hero-actions">
+                <div data-aos="fade-up" data-aos-duration="800">
+                    <h1>AI що знає ваші<br>товари</h1>
+                    <p>Не просто чат-бот — розумний консультант, який дійсно розуміє ваш каталог. Підбирає, рекомендує, продає. 24/7 без перерв і вихідних.</p>
+                </div>
+                <div class="hero-actions" data-aos="fade-up" data-aos-delay="200">
                     @if (Route::has('register'))
-                        <a href="{{ route('register') }}" class="btn btn-primary">Спробувати безкоштовно</a>
+                        <a href="{{ route('register') }}" class="btn btn-primary">Спробувати 14 днів безкоштовно</a>
                     @endif
-                    <a href="#demo" class="btn btn-outline">Дивитись демо</a>
+                    <a href="#demo" class="btn btn-outline">Подивитись демо</a>
+                </div>
+                
+                <!-- Trust badges -->
+                <div class="trust-badges" data-aos="fade-up" data-aos-delay="400">
+                    <div class="trust-badge">
+                        <span class="trust-icon">🇺🇦</span>
+                        <span>Українська локалізація</span>
+                    </div>
+                    <div class="trust-badge">
+                        <span class="trust-icon">⚡</span>
+                        <span>Відповідь &lt; 2 сек</span>
+                    </div>
+                    <div class="trust-badge">
+                        <span class="trust-icon">🔗</span>
+                        <span>Horoshop інтеграція</span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -706,61 +907,61 @@
         <!-- Features Section -->
         <section class="features" id="features">
             <div class="container">
-                <h2 class="section-title">Що вміє AIntento</h2>
-                <p class="section-subtitle">Натисніть на функцію, щоб побачити демонстрацію</p>
+                <h2 class="section-title" data-aos="fade-up">Що вміє AIntento</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Не обіцянки — реальні функції, що працюють прямо зараз</p>
                 
                 <div class="features-layout">
                     <div class="features-list">
-                        <div class="feature-item active" onclick="showFeatureDemo(0)">
+                        <div class="feature-item active" onclick="showFeatureDemo(0)" data-aos="fade-right" data-aos-delay="100">
                             <div class="icon">🤖</div>
                             <div class="info">
                                 <h3>Розумний підбір товарів <span class="badge badge-success">Працює</span></h3>
-                                <p>GPT аналізує запит і підбирає товари з урахуванням бюджету</p>
+                                <p>GPT аналізує запит і підбирає товари з урахуванням бюджету, розміру, кольору</p>
                             </div>
                         </div>
                         
-                        <div class="feature-item" onclick="showFeatureDemo(1)">
+                        <div class="feature-item" onclick="showFeatureDemo(1)" data-aos="fade-right" data-aos-delay="200">
                             <div class="icon">⚡</div>
                             <div class="info">
                                 <h3>Streaming відповіді <span class="badge badge-success">Працює</span></h3>
-                                <p>Текст з'являється миттєво через SSE</p>
+                                <p>Миттєва реакція — текст з'являється посимвольно як у ChatGPT</p>
                             </div>
                         </div>
                         
-                        <div class="feature-item" onclick="showFeatureDemo(2)">
-                            <div class="icon">🎯</div>
+                        <div class="feature-item" onclick="showFeatureDemo(2)" data-aos="fade-right" data-aos-delay="300">
+                            <div class="icon">🧠</div>
                             <div class="info">
                                 <h3>Контекстна пам'ять <span class="badge badge-success">Працює</span></h3>
-                                <p>Бот запам'ятовує історію, розміри та бюджет</p>
+                                <p>Бот запам'ятовує історію розмови, розміри та бюджет</p>
                             </div>
                         </div>
                         
-                        <div class="feature-item" onclick="showFeatureDemo(3)">
+                        <div class="feature-item" onclick="showFeatureDemo(3)" data-aos="fade-right" data-aos-delay="400">
                             <div class="icon">🔍</div>
                             <div class="info">
                                 <h3>Meilisearch пошук <span class="badge badge-success">Працює</span></h3>
-                                <p>Блискавичний пошук з typo-tolerance</p>
+                                <p>Блискавичний пошук за 10-50ms з виправленням помилок</p>
                             </div>
                         </div>
                         
-                        <div class="feature-item" onclick="showFeatureDemo(4)">
+                        <div class="feature-item" onclick="showFeatureDemo(4)" data-aos="fade-right" data-aos-delay="500">
+                            <div class="icon">🎯</div>
+                            <div class="info">
+                                <h3>Proactive тригери <span class="badge badge-success">Працює</span></h3>
+                                <p>Бот сам пропонує уточнити розмір, колір чи питає про оформлення</p>
+                            </div>
+                        </div>
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(5)" data-aos="fade-right" data-aos-delay="600">
                             <div class="icon">🎨</div>
                             <div class="info">
-                                <h3>Кастомізація віджета <span class="badge badge-success">Працює</span></h3>
-                                <p>Кольори, шрифти, положення під ваш бренд</p>
-                            </div>
-                        </div>
-                        
-                        <div class="feature-item" onclick="showFeatureDemo(5)">
-                            <div class="icon">📊</div>
-                            <div class="info">
-                                <h3>Базова аналітика <span class="badge badge-success">Працює</span></h3>
-                                <p>Трекінг взаємодій та конверсій</p>
+                                <h3>Кастомний віджет <span class="badge badge-success">Працює</span></h3>
+                                <p>Кольори, шрифти, положення — все під ваш бренд</p>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="demo-preview">
+                    <div class="demo-preview" data-aos="fade-left" data-aos-delay="300">
                         <div class="demo-window">
                             <div class="demo-header">
                                 <span class="demo-header-icon">🤖</span>
@@ -782,7 +983,7 @@
         <section class="demo-section" id="demo">
             <div class="container">
                 <div class="demo-container">
-                    <div class="demo-info">
+                    <div class="demo-info" data-aos="fade-right">
                         <h2>Спробуйте прямо зараз</h2>
                         <p>Оберіть сценарій і подивіться, як AIntento веде діалог з клієнтом магазину.</p>
                         <div class="scenario-buttons">
@@ -800,7 +1001,7 @@
                             </button>
                         </div>
                     </div>
-                    <div class="demo-window">
+                    <div class="demo-window" data-aos="fade-left">
                         <div class="demo-header">
                             <span class="demo-header-icon">🤖</span>
                             <div>
@@ -819,41 +1020,138 @@
             </div>
         </section>
 
-        <!-- Coming Soon Section -->
-        <section class="coming-soon">
+        <!-- Why AIntento Section (Advantages) -->
+        <section class="advantages">
             <div class="container">
-                <h2 class="section-title">Скоро в AIntento</h2>
-                <p class="section-subtitle">Функції, над якими ми працюємо</p>
+                <h2 class="section-title" data-aos="fade-up">Чому AIntento</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Глибока інтеграція, а не черговий чат-бот з шаблонами</p>
+                
+                <div class="advantages-grid">
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="100">
+                        <div class="advantage-icon">🎯</div>
+                        <h4>Знає ваші товари</h4>
+                        <p>AI індексує весь каталог: назви, описи, характеристики, залишки. Відповідає на питання про конкретні товари.</p>
+                    </div>
+
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="200">
+                        <div class="advantage-icon">💰</div>
+                        <h4>3-5× дешевше</h4>
+                        <p>Західні платформи від $99/міс. У нас — від 499 грн. Ті ж функції, локальна підтримка.</p>
+                    </div>
+
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="300">
+                        <div class="advantage-icon">🇺🇦</div>
+                        <h4>Для UA ринку</h4>
+                        <p>Українська локалізація, суржик-толерантність, розуміння місцевих реалій.</p>
+                    </div>
+
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="400">
+                        <div class="advantage-icon">⚡</div>
+                        <h4>Підключення за годину</h4>
+                        <p>Horoshop API інтеграція автоматично. Один скрипт на сайт — готово.</p>
+                    </div>
+
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="500">
+                        <div class="advantage-icon">🧠</div>
+                        <h4>Не скриптовий</h4>
+                        <p>GPT-5.1 за лаштунками. Реальний AI, а не дерево відповідей з 90-х.</p>
+                    </div>
+
+                    <div class="advantage-card" data-aos="zoom-in" data-aos-delay="600">
+                        <div class="advantage-icon">📈</div>
+                        <h4>Proactive продажі</h4>
+                        <p>Тригери: "Залишилось 3 шт", "Який розмір?", "Оформлюємо?" — сам штовхає до покупки.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section class="pricing" id="pricing">
+            <div class="container">
+                <h2 class="section-title" data-aos="fade-up">Прозоре ціноутворення</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">14 днів безкоштовно, без картки</p>
+                
+                <div class="pricing-grid">
+                    <div class="pricing-card" data-aos="fade-up" data-aos-delay="100">
+                        <div class="pricing-header">
+                            <h3>Starter</h3>
+                            <div class="pricing-price">
+                                <span class="price-amount">799</span>
+                                <span class="price-currency">₴/міс</span>
+                            </div>
+                            <p class="pricing-desc">~$20 • Для малого бізнесу</p>
+                        </div>
+                        <ul class="pricing-features">
+                            <li>✓ 1 000 повідомлень/міс</li>
+                            <li>✓ До 500 товарів</li>
+                            <li>✓ Базова аналітика</li>
+                            <li>✓ Email підтримка</li>
+                        </ul>
+                        <a href="{{ route('register') }}" class="btn btn-outline btn-full">Спробувати</a>
+                    </div>
+
+                    <div class="pricing-card featured" data-aos="fade-up" data-aos-delay="200">
+                        <div class="pricing-badge">Популярний</div>
+                        <div class="pricing-header">
+                            <h3>Pro</h3>
+                            <div class="pricing-price">
+                                <span class="price-amount">1 999</span>
+                                <span class="price-currency">₴/міс</span>
+                            </div>
+                            <p class="pricing-desc">~$50 • Для зростаючих магазинів</p>
+                        </div>
+                        <ul class="pricing-features">
+                            <li>✓ 5 000 повідомлень/міс</li>
+                            <li>✓ До 10 000 товарів</li>
+                            <li>✓ Розширена аналітика</li>
+                            <li>✓ Proactive тригери</li>
+                            <li>✓ Пріоритетна підтримка</li>
+                        </ul>
+                        <a href="{{ route('register') }}" class="btn btn-primary btn-full">Почати безкоштовно</a>
+                    </div>
+
+                    <div class="pricing-card" data-aos="fade-up" data-aos-delay="300">
+                        <div class="pricing-header">
+                            <h3>Enterprise</h3>
+                            <div class="pricing-price">
+                                <span class="price-amount">Custom</span>
+                            </div>
+                            <p class="pricing-desc">Для великих каталогів</p>
+                        </div>
+                        <ul class="pricing-features">
+                            <li>✓ Необмежені діалоги</li>
+                            <li>✓ Необмежені товари</li>
+                            <li>✓ Кастомні інтеграції</li>
+                            <li>✓ Виділений менеджер</li>
+                            <li>✓ SLA гарантії</li>
+                        </ul>
+                        <a href="mailto:support@aimbot.laravel.cloud" class="btn btn-outline btn-full">Зв'язатися</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Roadmap Section (replaces Coming Soon) -->
+        <section class="roadmap">
+            <div class="container">
+                <h2 class="section-title" data-aos="fade-up">Дорожня карта</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Над чим зараз працюємо</p>
                 
                 <div class="coming-grid">
-                    <div class="coming-card">
-                        <h4>🧠 AI Рекомендації <span class="badge badge-soon">Soon</span></h4>
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="100">
+                        <h4>🧠 AI Рекомендації <span class="badge badge-soon">Q1 2025</span></h4>
                         <p>Персоналізовані рекомендації на основі історії переглядів.</p>
                     </div>
 
-                    <div class="coming-card">
-                        <h4>🎯 Міні-квіз <span class="badge badge-soon">Soon</span></h4>
-                        <p>Інтерактивний квіз для швидкого підбору товарів.</p>
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="200">
+                        <h4>📊 Розширена аналітика <span class="badge badge-soon">Q1 2025</span></h4>
+                        <p>Глибокий аналіз конверсій, популярних питань, AI-інсайти.</p>
                     </div>
 
-                    <div class="coming-card">
-                        <h4>📊 Розширена аналітика <span class="badge badge-soon">Soon</span></h4>
-                        <p>Глибокий аналіз продажів, AI-інсайти.</p>
-                    </div>
-
-                    <div class="coming-card">
-                        <h4>💡 Оптимізація каталогу <span class="badge badge-soon">Soon</span></h4>
-                        <p>AI пропонує що додати для збільшення продажів.</p>
-                    </div>
-
-                    <div class="coming-card">
-                        <h4>🔔 Push-нотифікації <span class="badge badge-soon">Soon</span></h4>
-                        <p>Розумні пуші про знижки та новинки.</p>
-                    </div>
-
-                    <div class="coming-card">
-                        <h4>🎨 AI-контент <span class="badge badge-soon">Soon</span></h4>
-                        <p>Автоматична генерація описів товарів.</p>
+                    <div class="coming-card" data-aos="fade-up" data-aos-delay="300">
+                        <h4>🔌 Prom.ua інтеграція <span class="badge badge-soon">Q2 2025</span></h4>
+                        <p>Підключення до найбільшого маркетплейсу України.</p>
                     </div>
                 </div>
             </div>
@@ -863,11 +1161,19 @@
         <footer>
             <div class="container">
                 <div class="footer-content">
-                    <p>© 2025 AIntento — AI асистент для вашого e-commerce</p>
+                    <div>
+                        <a href="/" class="logo" style="font-size: 20px;">🤖 AIntento</a>
+                        <p style="margin-top: 8px;">AI-асистент, що знає ваші товари</p>
+                    </div>
                     <div class="footer-links">
+                        <a href="#features">Функції</a>
+                        <a href="#pricing">Ціни</a>
                         <a href="/admin">Адмін-панель</a>
                         <a href="mailto:support@aimbot.laravel.cloud">Підтримка</a>
                     </div>
+                </div>
+                <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <p>© 2025 AIntento — зроблено в 🇺🇦 Україні</p>
                 </div>
             </div>
         </footer>
@@ -904,13 +1210,17 @@
                         { name: 'Розвантажувальний жилет Olive', price: '3 200 ₴', emoji: '🦺' }
                     ], note: '✓ Виправлено: "тактічна" → "тактична"' }
                 ],
-                // 4: Customization
+                // 4: Proactive triggers
+                [
+                    { role: 'user', text: 'Подобається ця куртка' },
+                    { role: 'bot', text: 'Чудовий вибір! 🎯', products: [
+                        { name: 'Тактична куртка SoftShell', price: '2 890 ₴', emoji: '🧥' }
+                    ]},
+                    { role: 'bot', text: '⚠️ Залишилось лише 3 шт. Який розмір вам потрібен — S, M, L, XL?', trigger: true }
+                ],
+                // 5: Customization
                 [
                     { role: 'bot', text: 'Віджет можна налаштувати під ваш бренд:', themes: true }
-                ],
-                // 5: Analytics
-                [
-                    { role: 'bot', text: 'Статистика за сьогодні:', stats: true }
                 ]
             ];
             
@@ -980,6 +1290,10 @@
                 
                 if (message.note) {
                     content += '<div style="font-size: 11px; color: var(--text-gray); margin-top: 8px;">' + message.note + '</div>';
+                }
+                
+                if (message.trigger) {
+                    div.querySelector('.demo-bubble') && (div.style.animation = 'pulse 2s infinite');
                 }
                 
                 if (message.themes) {
@@ -1080,6 +1394,17 @@
             document.addEventListener('DOMContentLoaded', () => {
                 showFeatureDemo(0);
                 setTimeout(() => runScenario(0), 500);
+            });
+        </script>
+        
+        <!-- AOS.js Animation Library -->
+        <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+        <script>
+            AOS.init({
+                duration: 700,
+                easing: 'ease-out-cubic',
+                once: true,
+                offset: 50
             });
         </script>
     </body>

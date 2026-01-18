@@ -163,20 +163,54 @@
                             <span>Копіювати embed код</span>
                         </button>
 
-                        <a href="#" 
+                        <a href="{{ route('billing.index') }}" 
                            class="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition">
                             <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
                                 <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
                                 </svg>
                             </div>
-                            <span>Переглянути чати</span>
+                            <span>Тарифи та оплата</span>
                         </a>
                     </div>
 
                     <!-- Embed code hidden -->
                     <textarea id="embed-code" class="hidden">{{ $embedCode }}</textarea>
                 </div>
+            </div>
+
+            <!-- Features Section -->
+            <div class="mt-6 bg-white rounded-xl shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold text-lg">Ваші функції</h3>
+                    @if($tenant->plan === 'starter' || $tenant->plan === 'trial')
+                        <a href="{{ route('billing.index') }}" class="text-sm text-purple-600 hover:text-purple-700 font-medium">
+                            Розблокувати всі →
+                        </a>
+                    @endif
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    @foreach($features as $featureKey => $feature)
+                        <x-feature-item 
+                            :feature="$featureKey"
+                            :meta="$feature"
+                            :available="$feature['available']"
+                            :upgrade-to="$feature['upgrade_to'] ?? 'pro'"
+                            size="default"
+                        />
+                    @endforeach
+                </div>
+                
+                @if($tenant->plan === 'starter')
+                    <div class="mt-4 p-3 bg-purple-50 border border-purple-100 rounded-lg">
+                        <p class="text-purple-700 text-sm">
+                            <span class="font-medium">💡 Порада:</span> 
+                            Перейдіть на Pro щоб отримати розширену аналітику та кастомні промпти. 
+                            <a href="{{ route('billing.index') }}" class="underline font-medium">Дізнатися більше</a>
+                        </p>
+                    </div>
+                @endif
             </div>
         </div>
     </div>

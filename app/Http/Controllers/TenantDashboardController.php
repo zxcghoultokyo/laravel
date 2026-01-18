@@ -93,6 +93,7 @@ class TenantDashboardController extends Controller
             'stats' => $stats,
             'chartData' => $chartData,
             'embedCode' => $tenant->getEmbedCode(),
+            'features' => $tenant->getFeaturesStatus(),
         ]);
     }
 }

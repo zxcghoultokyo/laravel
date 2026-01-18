@@ -77,10 +77,96 @@ class Tenant extends Model
      * Plan limits
      */
     public const PLAN_LIMITS = [
-        self::PLAN_TRIAL => 100,
+        self::PLAN_TRIAL => 5000,    // Pro limits during trial!
         self::PLAN_STARTER => 1000,
         self::PLAN_PRO => 5000,
         self::PLAN_ENTERPRISE => PHP_INT_MAX,
+    ];
+
+    /**
+     * Features available per plan.
+     * Trial gets Pro features to hook users!
+     */
+    public const PLAN_FEATURES = [
+        self::PLAN_TRIAL => [
+            'chat_widget',
+            'advanced_analytics',
+            'custom_prompts',
+            'priority_support',
+        ],
+        self::PLAN_STARTER => [
+            'chat_widget',
+            'basic_analytics',
+        ],
+        self::PLAN_PRO => [
+            'chat_widget',
+            'advanced_analytics',
+            'custom_prompts',
+            'priority_support',
+        ],
+        self::PLAN_ENTERPRISE => [
+            'chat_widget',
+            'advanced_analytics',
+            'custom_prompts',
+            'priority_support',
+            'api_access',
+            'white_label',
+            'dedicated_support',
+        ],
+    ];
+
+    /**
+     * Feature metadata for UI (labels, descriptions, icons).
+     */
+    public const FEATURE_META = [
+        'chat_widget' => [
+            'label' => 'AI Чат-віджет',
+            'description' => 'Розумний асистент на вашому сайті',
+            'icon' => '💬',
+            'min_plan' => 'starter',
+        ],
+        'basic_analytics' => [
+            'label' => 'Базова аналітика',
+            'description' => 'Перегляд кількості повідомлень та сесій',
+            'icon' => '📊',
+            'min_plan' => 'starter',
+        ],
+        'advanced_analytics' => [
+            'label' => 'Розширена аналітика',
+            'description' => 'Детальні звіти, популярні товари, конверсії',
+            'icon' => '📈',
+            'min_plan' => 'pro',
+        ],
+        'custom_prompts' => [
+            'label' => 'Кастомні промпти',
+            'description' => 'Налаштуйте тон та стиль відповідей бота',
+            'icon' => '✨',
+            'min_plan' => 'pro',
+        ],
+        'priority_support' => [
+            'label' => 'Пріоритетна підтримка',
+            'description' => 'Відповідь протягом 4 годин у робочий час',
+            'icon' => '🚀',
+            'min_plan' => 'pro',
+        ],
+        'api_access' => [
+            'label' => 'API доступ',
+            'description' => 'Інтеграція з вашими системами через REST API',
+            'icon' => '🔌',
+            'min_plan' => 'enterprise',
+        ],
+        'white_label' => [
+            'label' => 'White Label',
+            'description' => 'Повністю ваш бренд, без згадки AIntento',
+            'icon' => '🏷️',
+            'min_plan' => 'enterprise',
+        ],
+        'dedicated_support' => [
+            'label' => 'Виділений менеджер',
+            'description' => 'Персональний менеджер для вашого акаунту',
+            'icon' => '👤',
+            'min_plan' => 'enterprise',
+        ],
     ];
 
     /**
@@ -246,6 +332,51 @@ class Tenant extends Model
         }
 
         return $this->messages_used < $this->messages_limit;
+    }
+
+    /**
+     * Check if tenant has access to a specific feature.
+     */
+    public function hasFeature(string $feature): bool
+    {
+        $features = self::PLAN_FEATURES[$this->plan] ?? [];
+        return in_array($feature, $features);
+    }
+
+    /**
+     * Get all features with their availability status.
+     * Returns array with 'available', 'locked', 'upgrade_to' info.
+     */
+    public function getFeaturesStatus(): array
+    {
+        $result = [];
+        $currentFeatures = self::PLAN_FEATURES[$this->plan] ?? [];
+        
+        foreach (self::FEATURE_META as $feature => $meta) {
+            $result[$feature] = array_merge($meta, [
+                'available' => in_array($feature, $currentFeatures),
+                'upgrade_to' => in_array($feature, $currentFeatures) ? null : $meta['min_plan'],
+            ]);
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Get features that require upgrade (locked for current plan).
+     */
+    public function getLockedFeatures(): array
+    {
+        $features = $this->getFeaturesStatus();
+        return array_filter($features, fn($f) => !$f['available']);
+    }
+
+    /**
+     * Get minimum plan required for a feature.
+     */
+    public function getMinPlanForFeature(string $feature): ?string
+    {
+        return self::FEATURE_META[$feature]['min_plan'] ?? null;
     }
 
     /**

@@ -98,6 +98,12 @@ class SyncLog extends Model
      */
     public function fail(string $errorMessage): self
     {
+        // Truncate error message to fit in TEXT column (max ~65KB, we use 10KB to be safe)
+        $maxLength = 10000;
+        if (strlen($errorMessage) > $maxLength) {
+            $errorMessage = substr($errorMessage, 0, $maxLength) . '... [truncated]';
+        }
+        
         $this->update([
             'status' => self::STATUS_FAILED,
             'finished_at' => now(),

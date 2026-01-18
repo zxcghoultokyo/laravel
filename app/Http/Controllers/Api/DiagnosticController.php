@@ -2094,13 +2094,14 @@ class DiagnosticController extends Controller
         $toTenantId = (int) $request->input('to_tenant_id', 2);
         $dryRun = $request->boolean('dry_run', true);
 
-        // Validate tenants exist
-        $fromTenant = \App\Models\Tenant::find($fromTenantId);
+        // Only validate target tenant exists
         $toTenant = \App\Models\Tenant::find($toTenantId);
-
-        if (!$fromTenant || !$toTenant) {
-            return response()->json(['error' => 'One or both tenants not found'], 404);
+        if (!$toTenant) {
+            return response()->json(['error' => 'Target tenant not found'], 404);
         }
+
+        // Source tenant might not exist (orphaned data cleanup)
+        $fromTenant = \App\Models\Tenant::find($fromTenantId);
 
         $tables = [
             'products' => ['model' => \App\Models\Product::class],
@@ -2142,7 +2143,7 @@ class DiagnosticController extends Controller
 
         return response()->json([
             'dry_run' => $dryRun,
-            'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant->name],
+            'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant?->name ?? '(orphaned data)'],
             'to_tenant' => ['id' => $toTenantId, 'name' => $toTenant->name],
             'results' => $results,
             'note' => $dryRun 

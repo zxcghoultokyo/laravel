@@ -3,7 +3,7 @@
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\TenantDashboardController;
+use App\Livewire\TenantDashboard;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -11,7 +11,7 @@ Route::get('/', function () {
 });
 
 // Dashboard - tenant scoped (protected by trial middleware)
-Route::get('/dashboard', [TenantDashboardController::class, 'index'])
+Route::get('/dashboard', TenantDashboard::class)
     ->middleware(['auth', 'verified', 'trial.active'])
     ->name('dashboard');
 

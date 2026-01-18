@@ -346,13 +346,39 @@ class Tenant extends Model
     /**
      * Get all features with their availability status.
      * Returns array with 'available', 'locked', 'upgrade_to' info.
+     * 
+     * For Pro/Trial plans - only shows Pro+ features (not basic ones)
+     * For Starter - shows starter features + locked pro features
      */
     public function getFeaturesStatus(): array
     {
         $result = [];
         $currentFeatures = self::PLAN_FEATURES[$this->plan] ?? [];
+        $effectivePlan = $this->plan === self::PLAN_TRIAL ? self::PLAN_PRO : $this->plan;
+        
+        // Plan hierarchy for filtering
+        $planHierarchy = [
+            self::PLAN_STARTER => 1,
+            self::PLAN_PRO => 2,
+            self::PLAN_TRIAL => 2, // Trial = Pro level
+            self::PLAN_ENTERPRISE => 3,
+        ];
+        
+        $currentLevel = $planHierarchy[$effectivePlan] ?? 1;
         
         foreach (self::FEATURE_META as $feature => $meta) {
+            $featureMinPlan = $meta['min_plan'];
+            $featureLevel = $planHierarchy[$featureMinPlan] ?? 1;
+            
+            // For Pro/Trial: skip features below Pro level (don't show basic_analytics)
+            // User has them implicitly through advanced_analytics
+            if ($currentLevel >= 2 && $featureLevel < $currentLevel) {
+                // Skip basic features for Pro users (they have better versions)
+                if ($feature === 'basic_analytics') {
+                    continue;
+                }
+            }
+            
             $result[$feature] = array_merge($meta, [
                 'available' => in_array($feature, $currentFeatures),
                 'upgrade_to' => in_array($feature, $currentFeatures) ? null : $meta['min_plan'],

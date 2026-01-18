@@ -112,6 +112,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/trigger-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'triggerEvents']);
     Route::get('/scheduler-status', [\App\Http\Controllers\Api\DiagnosticController::class, 'schedulerStatus']);
     Route::post('/run-sync', [\App\Http\Controllers\Api\DiagnosticController::class, 'runSyncJob']);
+    Route::post('/clear-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearQueue']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

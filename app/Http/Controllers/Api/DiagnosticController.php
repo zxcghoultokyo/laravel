@@ -1785,6 +1785,7 @@ class DiagnosticController extends Controller
         }
         
         $job = $request->input('job', 'horoshop');
+        $sync = $request->input('sync', false); // Run synchronously instead of queue
         
         $jobMap = [
             'horoshop' => \App\Jobs\SyncHoroshopProductsJob::class,
@@ -1802,13 +1803,64 @@ class DiagnosticController extends Controller
         
         try {
             $jobClass = $jobMap[$job];
+            
+            if ($sync) {
+                // Run synchronously (will block the request)
+                $jobInstance = new $jobClass();
+                $jobInstance->handle();
+                
+                return response()->json([
+                    'success' => true,
+                    'job' => $job,
+                    'mode' => 'sync',
+                    'message' => "Job executed synchronously.",
+                ]);
+            }
+            
             dispatch(new $jobClass());
             
             return response()->json([
                 'success' => true,
                 'job' => $job,
+                'mode' => 'queue',
                 'dispatched' => $jobClass,
                 'message' => "Job dispatched to queue. Check queue worker logs.",
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    
+    /**
+     * POST /api/diagnostic/clear-queue
+     * Clear all pending jobs from queue (use when queue is backed up)
+     */
+    public function clearQueue(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $deleted = 0;
+        $failed = 0;
+        
+        try {
+            if (\Schema::hasTable('jobs')) {
+                $deleted = DB::table('jobs')->delete();
+            }
+            
+            if ($request->input('include_failed', false) && \Schema::hasTable('failed_jobs')) {
+                $failed = DB::table('failed_jobs')->delete();
+            }
+            
+            return response()->json([
+                'success' => true,
+                'deleted_pending' => $deleted,
+                'deleted_failed' => $failed,
+                'message' => "Queue cleared. {$deleted} pending and {$failed} failed jobs removed.",
             ]);
         } catch (\Exception $e) {
             return response()->json([

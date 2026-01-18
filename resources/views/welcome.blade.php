@@ -880,9 +880,13 @@
                     <p>Не просто чат-бот — розумний консультант, який дійсно розуміє ваш каталог. Підбирає, рекомендує, продає. 24/7 без перерв і вихідних.</p>
                 </div>
                 <div class="hero-actions" data-aos="fade-up" data-aos-delay="200">
-                    @if (Route::has('register'))
-                        <a href="{{ route('register') }}" class="btn btn-primary">Спробувати 14 днів безкоштовно</a>
-                    @endif
+                    @auth
+                        <a href="{{ url('/dashboard') }}" class="btn btn-primary">Перейти в Dashboard</a>
+                    @else
+                        @if (Route::has('register'))
+                            <a href="{{ route('register') }}" class="btn btn-primary">Спробувати 14 днів безкоштовно</a>
+                        @endif
+                    @endauth
                     <a href="#demo" class="btn btn-outline">Подивитись демо</a>
                 </div>
                 
@@ -1088,7 +1092,11 @@
                             <li>✓ Базова аналітика</li>
                             <li>✓ Email підтримка</li>
                         </ul>
-                        <a href="{{ route('register') }}" class="btn btn-outline btn-full">Спробувати</a>
+                        @auth
+                            <a href="{{ url('/dashboard') }}" class="btn btn-outline btn-full">Перейти в Dashboard</a>
+                        @else
+                            <a href="{{ route('register') }}" class="btn btn-outline btn-full">Спробувати</a>
+                        @endauth
                     </div>
 
                     <div class="pricing-card featured" data-aos="fade-up" data-aos-delay="200">
@@ -1108,7 +1116,11 @@
                             <li>✓ Proactive тригери</li>
                             <li>✓ Пріоритетна підтримка</li>
                         </ul>
-                        <a href="{{ route('register') }}" class="btn btn-primary btn-full">Почати безкоштовно</a>
+                        @auth
+                            <a href="{{ url('/dashboard') }}" class="btn btn-primary btn-full">Перейти в Dashboard</a>
+                        @else
+                            <a href="{{ route('register') }}" class="btn btn-primary btn-full">Почати безкоштовно</a>
+                        @endauth
                     </div>
 
                     <div class="pricing-card" data-aos="fade-up" data-aos-delay="300">
@@ -1126,7 +1138,7 @@
                             <li>✓ Виділений менеджер</li>
                             <li>✓ SLA гарантії</li>
                         </ul>
-                        <a href="mailto:support@aimbot.laravel.cloud" class="btn btn-outline btn-full">Зв'язатися</a>
+                        <a href="https://t.me/AIntento" target="_blank" class="btn btn-outline btn-full">💬 Написати в Telegram</a>
                     </div>
                 </div>
             </div>

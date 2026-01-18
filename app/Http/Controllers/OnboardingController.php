@@ -246,6 +246,9 @@ class OnboardingController extends Controller
         $tenant = $this->tenant();
         
         if ($tenant->platform === 'horoshop') {
+            // Set sync running flag
+            \Illuminate\Support\Facades\Cache::put("sync_running_{$tenant->id}", true, 3600);
+            
             // Dispatch sync job
             SyncHoroshopProductsJob::dispatch($tenant->id);
             

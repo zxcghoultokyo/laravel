@@ -159,6 +159,20 @@ class FunctionCallingAgent
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
+        // Detect trigger query (from proactive triggers)
+        $isTriggerQuery = $this->detectTriggerQuery($message);
+        if ($isTriggerQuery) {
+            $messages[] = [
+                'role' => 'system',
+                'content' => "🚨 УВАГА: Це ТРИГЕРНИЙ ЗАПИТ! Клієнт прийшов з підказки на сайті, він вже зацікавлений!\n" .
+                    "ТВОЯ ЗАДАЧА — ЗАКРИТИ ПРОДАЖ:\n" .
+                    "1. Знайди товар через search_products\n" .
+                    "2. Дай КОРОТКУ але ВПЕВНЕНУ відповідь (1-2 речення про особливості товару)\n" .
+                    "3. ОБОВ'ЯЗКОВО закінчи питанням про РОЗМІР: 'Який розмір вам потрібен? Підкажіть зріст/вагу'\n" .
+                    "НЕ питай 'що саме потрібно?' — ДІЙ ВПЕВНЕНО!"
+            ];
+        }
+
         // Add conversation history if available
         $history = $context['history'] ?? [];
         
@@ -168,6 +182,7 @@ class FunctionCallingAgent
         Log::info('FunctionCallingAgent: extracted context', [
             'context' => $conversationContext,
             'history_count' => count($history),
+            'is_trigger' => $isTriggerQuery,
         ]);
         
         if ($conversationContext) {
@@ -218,6 +233,32 @@ class FunctionCallingAgent
         $messages[] = ['role' => 'user', 'content' => $message];
 
         return $messages;
+    }
+    
+    /**
+     * Detect if message is a trigger query (from proactive triggers).
+     * These start with specific phrases like "Допоможіть з товаром" or "Цікавить товар".
+     */
+    private function detectTriggerQuery(string $message): bool
+    {
+        $triggerPhrases = [
+            'допоможіть з товаром',
+            'допоможи з товаром',
+            'цікавить товар',
+            'покажи топ товари в категорії',
+            'хочу дізнатись більше про',
+        ];
+        
+        $lowerMessage = mb_strtolower($message);
+        
+        foreach ($triggerPhrases as $phrase) {
+            if (str_starts_with($lowerMessage, $phrase)) {
+                Log::info('FunctionCallingAgent: detected trigger query', ['message' => $message]);
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     /**

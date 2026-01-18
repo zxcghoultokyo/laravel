@@ -158,6 +158,7 @@ class SyncReports extends Component
                 'schedule' => 'Щодня о 03:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_HOROSHOP_PRODUCTS),
                 'next_run' => 'Завтра о 03:00',
+                'is_queue' => true, // Long running - dispatched to queue
             ],
             [
                 'name' => '📦 Orders',
@@ -165,6 +166,7 @@ class SyncReports extends Component
                 'schedule' => 'Двічі на день о 08:00 та 20:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_ORDERS),
                 'next_run' => 'Сьогодні/завтра',
+                'is_queue' => false,
             ],
             [
                 'name' => '🤖 AI Enrichment',
@@ -172,6 +174,7 @@ class SyncReports extends Component
                 'schedule' => 'Щодня о 04:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_AI_ENRICHMENT),
                 'next_run' => 'Завтра о 04:00',
+                'is_queue' => true, // Long running - dispatched to queue
             ],
             [
                 'name' => '🔍 Meilisearch (async)',
@@ -179,6 +182,7 @@ class SyncReports extends Component
                 'schedule' => 'Щодня о 05:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
                 'next_run' => 'Завтра о 05:00',
+                'is_queue' => false,
             ],
             [
                 'name' => '🔍 Meilisearch (sync)',
@@ -186,6 +190,7 @@ class SyncReports extends Component
                 'schedule' => 'Ручний запуск',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
                 'next_run' => '-',
+                'is_queue' => false,
             ],
             [
                 'name' => '📊 Orders Count',
@@ -193,6 +198,7 @@ class SyncReports extends Component
                 'schedule' => 'Після синхронізації замовлень',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_STATS),
                 'next_run' => '-',
+                'is_queue' => false,
             ],
             [
                 'name' => '🏷️ Brands',
@@ -200,6 +206,7 @@ class SyncReports extends Component
                 'schedule' => 'Щодня о 03:30',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_CATEGORIES),
                 'next_run' => 'Завтра о 03:30',
+                'is_queue' => false,
             ],
             [
                 'name' => '🧬 Embeddings',
@@ -207,6 +214,7 @@ class SyncReports extends Component
                 'schedule' => 'Щотижня',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_EMBEDDINGS),
                 'next_run' => '-',
+                'is_queue' => true, // Long running - dispatched to queue
             ],
         ];
     }
@@ -257,10 +265,61 @@ class SyncReports extends Component
         return $map[$cmdName] ?? null;
     }
 
+    /**
+     * Commands that take too long for HTTP request - must run via queue
+     */
+    private function isLongRunningCommand(string $command): bool
+    {
+        $longRunning = [
+            'horoshop:sync',
+            'products:build-ai-index',
+            'products:generate-embeddings',
+        ];
+        
+        $cmdName = explode(' ', $command)[0];
+        return in_array($cmdName, $longRunning);
+    }
+
+    /**
+     * Clean up stuck "running" syncs older than 1 hour
+     */
+    public function cleanupStuckSyncs()
+    {
+        if (!Schema::hasTable('sync_logs')) {
+            return;
+        }
+        
+        $stuck = SyncLog::where('status', SyncLog::STATUS_RUNNING)
+            ->where('started_at', '<', now()->subHour())
+            ->get();
+        
+        foreach ($stuck as $log) {
+            $log->update([
+                'status' => SyncLog::STATUS_FAILED,
+                'finished_at' => now(),
+                'error_message' => 'Timeout - marked as failed automatically',
+            ]);
+        }
+        
+        if ($stuck->count() > 0) {
+            session()->flash('message', "🧹 Очищено {$stuck->count()} завислих синхронізацій.");
+        } else {
+            session()->flash('message', "✅ Немає завислих синхронізацій.");
+        }
+        
+        $this->loadSyncHistory();
+    }
+
     public function runSync(string $command)
     {
         // Determine sync type for logging
         $syncType = $this->commandToSyncType($command);
+        
+        // For long-running commands, dispatch to queue instead of running directly
+        if ($this->isLongRunningCommand($command)) {
+            return $this->dispatchToQueue($command, $syncType);
+        }
+        
         $syncLog = null;
         
         // Create sync log entry if we know the type
@@ -330,6 +389,48 @@ class SyncReports extends Component
             \Log::error("SyncReports runSync error", ['command' => $command, 'error' => $e->getMessage()]);
         }
 
+        $this->loadStats();
+        $this->loadSyncHistory();
+    }
+
+    /**
+     * Dispatch long-running command to queue
+     */
+    private function dispatchToQueue(string $command, ?string $syncType)
+    {
+        $cmdName = explode(' ', $command)[0];
+        
+        // Map commands to job classes with optional constructor arguments
+        $jobMap = [
+            'horoshop:sync' => ['class' => \App\Jobs\SyncHoroshopProductsJob::class, 'args' => [200]], // limit=200
+            'products:build-ai-index' => ['class' => \App\Jobs\AnalyzeProductsWithAiJob::class, 'args' => [50]], // batchSize=50
+            'products:generate-embeddings' => ['class' => \App\Jobs\GenerateProductEmbeddingsJob::class, 'args' => [50, 100]], // batchSize=50, limit=100
+        ];
+        
+        $jobConfig = $jobMap[$cmdName] ?? null;
+        
+        if (!$jobConfig) {
+            session()->flash('error', "❌ Команда '{$cmdName}' не підтримує фонове виконання.");
+            return;
+        }
+        
+        $jobClass = $jobConfig['class'];
+        $args = $jobConfig['args'] ?? [];
+        
+        try {
+            // Create job instance with arguments if any
+            $job = empty($args) ? new $jobClass() : new $jobClass(...$args);
+            
+            // Dispatch to queue
+            dispatch($job)->onQueue('default');
+            
+            session()->flash('message', "🚀 Команду '{$command}' запущено у фоновому режимі. Перевірте статус через 1-2 хвилини.");
+            \Log::info("SyncReports dispatched to queue", ['command' => $command, 'job' => $jobClass]);
+        } catch (\Exception $e) {
+            session()->flash('error', "❌ Помилка запуску: {$e->getMessage()}");
+            \Log::error("SyncReports dispatch error", ['command' => $command, 'error' => $e->getMessage()]);
+        }
+        
         $this->loadStats();
         $this->loadSyncHistory();
     }

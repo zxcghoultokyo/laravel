@@ -162,14 +162,26 @@
                 <tbody class="divide-y divide-gray-100">
                     @foreach($scheduleInfo as $schedule)
                         <tr class="hover:bg-gray-50">
-                            <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ $schedule['name'] }}</td>
+                            <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                                {{ $schedule['name'] }}
+                                @if($schedule['is_queue'] ?? false)
+                                    <span class="ml-1 px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded">queue</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 text-sm text-gray-600">{{ $schedule['schedule'] }}</td>
                             <td class="px-4 py-3 text-sm text-gray-500">{{ $schedule['last_run'] }}</td>
                             <td class="px-4 py-3 text-xs font-mono text-gray-400">{{ $schedule['command'] }}</td>
                             <td class="px-4 py-3 text-right">
                                 <button wire:click="runSync('{{ $schedule['command'] }}')" 
-                                        class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition">
-                                    ▶️ Запустити
+                                        wire:loading.attr="disabled"
+                                        wire:loading.class="opacity-50"
+                                        class="px-3 py-1 text-xs {{ ($schedule['is_queue'] ?? false) ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-blue-100 text-blue-700 hover:bg-blue-200' }} rounded transition">
+                                    <span wire:loading.remove wire:target="runSync('{{ $schedule['command'] }}')">
+                                        {{ ($schedule['is_queue'] ?? false) ? '🚀 У фоні' : '▶️ Запустити' }}
+                                    </span>
+                                    <span wire:loading wire:target="runSync('{{ $schedule['command'] }}')">
+                                        ⏳...
+                                    </span>
                                 </button>
                             </td>
                         </tr>
@@ -181,9 +193,13 @@
 
     {{-- Sync History --}}
     <div class="bg-white rounded-xl shadow-sm">
-        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+        <div class="p-4 border-b border-gray-200 flex flex-wrap justify-between items-center gap-2">
             <h2 class="text-lg font-semibold text-gray-900">📜 Історія синхронізацій</h2>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
+                <button wire:click="cleanupStuckSyncs" 
+                        class="px-3 py-1.5 text-xs bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200 transition">
+                    🧹 Очистити зависли
+                </button>
                 <select wire:change="setHistoryDays($event.target.value)" class="text-sm border-gray-300 rounded-lg">
                     <option value="1" {{ $historyDays == 1 ? 'selected' : '' }}>Сьогодні</option>
                     <option value="7" {{ $historyDays == 7 ? 'selected' : '' }}>7 днів</option>

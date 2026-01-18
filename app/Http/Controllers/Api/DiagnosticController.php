@@ -231,9 +231,19 @@ class DiagnosticController extends Controller
         
         if (!$meiliEnabled) {
             return response()->json([
-                'error' => 'Meilisearch is disabled in config',
+                'status' => 'disabled',
                 'meili_enabled' => false,
                 'meili_host' => $meiliHost,
+                'message' => 'Meilisearch is disabled in config (MEILI_ENABLED=false)',
+            ]);
+        }
+        
+        if (empty($meiliHost)) {
+            return response()->json([
+                'status' => 'not_configured', 
+                'meili_enabled' => true,
+                'meili_host' => $meiliHost,
+                'message' => 'Meilisearch host is not configured (MEILI_HOST is empty)',
             ]);
         }
 
@@ -249,6 +259,7 @@ class DiagnosticController extends Controller
             $settings = $index->getSettings();
 
             return response()->json([
+                'status' => 'ok',
                 'meili_enabled' => true,
                 'meili_host' => $meiliHost,
                 'health' => $health,
@@ -258,8 +269,9 @@ class DiagnosticController extends Controller
                 'filterable_attributes' => $settings['filterableAttributes'] ?? [],
                 'searchable_attributes' => $settings['searchableAttributes'] ?? [],
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
+                'status' => 'error',
                 'error' => $e->getMessage(),
                 'error_class' => get_class($e),
                 'meili_enabled' => $meiliEnabled,

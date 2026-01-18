@@ -13,6 +13,8 @@ class WidgetSettings extends Component
 {
     use WithFileUploads;
     
+    public bool $embedded = false; // If true, renders without layout
+    
     public $domain = 'default';
     public $primary_color = '#2563eb';
     public $text_color = '#ffffff';
@@ -276,6 +278,12 @@ class WidgetSettings extends Component
 
     public function render()
     {
-        return view('livewire.admin.widget-settings')->layout('admin.layout');
+        $view = view('livewire.admin.widget-settings');
+        
+        if ($this->embedded) {
+            return $view; // No layout wrapper for embedded mode
+        }
+        
+        return $view->layout('admin.layout');
     }
 }

@@ -125,6 +125,7 @@ class TenantDashboard extends Component
             'message' => ['label' => 'Написали', 'icon' => '✍️'],
             'product_click' => ['label' => 'Клік на товар', 'icon' => '👆'],
             'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅'],
         ];
         
         $funnel = [];
@@ -132,13 +133,17 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // Count events for this tenant
-                $count = DB::table('chat_events')
+                // Count events - filter by merchant_id (tenant slug) if available
+                $query = DB::table('chat_events')
                     ->where('event_type', $eventType)
-                    ->where('tenant_id', $tenant->id)
-                    ->where('created_at', '>=', $startDate)
-                    ->distinct('session_id')
-                    ->count('session_id');
+                    ->where('created_at', '>=', $startDate);
+                
+                // Filter by merchant_id (tenant slug) for tenant isolation
+                if ($tenant->slug) {
+                    $query->where('merchant_id', $tenant->slug);
+                }
+                
+                $count = $query->distinct('session_id')->count('session_id');
             } catch (\Throwable $e) {
                 $count = 0;
             }

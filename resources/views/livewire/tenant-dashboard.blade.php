@@ -215,7 +215,45 @@
                     </div>
                 </div>
 
-                <!-- Features Section -->
+                <!-- Conversion Funnel - FIRST -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-lg">🔄 Воронка конверсії</h3>
+                        @if(($funnelData['overall_rate'] ?? 0) > 0)
+                            <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                                {{ $funnelData['overall_rate'] }}% загальна конверсія
+                            </span>
+                        @endif
+                    </div>
+                    
+                    @if(!empty($funnelData['stages']) && collect($funnelData['stages'])->sum('count') > 0)
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            @foreach($funnelData['stages'] as $index => $stage)
+                                <div class="bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-center relative">
+                                    <span class="text-2xl">{{ $stage['icon'] }}</span>
+                                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ number_format($stage['count']) }}</p>
+                                    <p class="text-xs text-gray-500">{{ $stage['label'] }}</p>
+                                    @if($index > 0 && $stage['rate'] > 0)
+                                        <span class="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                            {{ $stage['rate'] }}%
+                                        </span>
+                                    @endif
+                                    @if($index > 0 && $stage['dropoff'] > 0)
+                                        <p class="text-xs text-gray-400 mt-1">-{{ $stage['dropoff'] }}% відсіялось</p>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="text-center py-8 text-gray-400">
+                            <span class="text-4xl">📊</span>
+                            <p class="mt-2">Ще немає даних для воронки</p>
+                            <p class="text-sm mt-1">Дані з'являться коли відвідувачі почнуть взаємодіяти з віджетом</p>
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Features Section - LAST -->
                 <div class="mt-6 pt-6 border-t border-gray-200">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-semibold text-lg">Ваші функції</h3>
@@ -237,41 +275,6 @@
                             />
                         @endforeach
                     </div>
-                </div>
-
-                <!-- Conversion Funnel -->
-                <div class="mt-6 pt-6 border-t border-gray-200">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-semibold text-lg">🔄 Воронка конверсії</h3>
-                        @if(($funnelData['overall_rate'] ?? 0) > 0)
-                            <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                                {{ $funnelData['overall_rate'] }}% конверсія
-                            </span>
-                        @endif
-                    </div>
-                    
-                    @if(!empty($funnelData['stages']) && collect($funnelData['stages'])->sum('count') > 0)
-                        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                            @foreach($funnelData['stages'] as $index => $stage)
-                                <div class="bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-center">
-                                    <span class="text-2xl">{{ $stage['icon'] }}</span>
-                                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ number_format($stage['count']) }}</p>
-                                    <p class="text-xs text-gray-500">{{ $stage['label'] }}</p>
-                                    @if($index > 0 && $stage['rate'] > 0)
-                                        <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
-                                            {{ $stage['rate'] }}%
-                                        </span>
-                                    @endif
-                                </div>
-                            @endforeach
-                        </div>
-                    @else
-                        <div class="text-center py-8 text-gray-400">
-                            <span class="text-4xl">📊</span>
-                            <p class="mt-2">Ще немає даних для воронки</p>
-                            <p class="text-sm mt-1">Дані з'являться коли відвідувачі почнуть взаємодіяти з віджетом</p>
-                        </div>
-                    @endif
                 </div>
             @endif
 
@@ -363,26 +366,27 @@
 
             <!-- Widget Tab -->
             @if($activeTab === 'widget')
-                <div class="max-w-2xl">
-                    <h3 class="font-semibold text-lg mb-4">Код віджета</h3>
-                    <p class="text-gray-600 mb-4">
-                        Додайте цей код перед закриваючим тегом <code class="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> на вашому сайті.
-                    </p>
-                    
-                    <div class="relative">
-                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">{{ $embedCode }}</pre>
-                        <button wire:click="copyEmbedCode"
-                                class="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">
-                            Копіювати
-                        </button>
+                <div>
+                    <!-- Embed Code Section -->
+                    <div class="mb-8">
+                        <h3 class="font-semibold text-lg mb-4">📋 Код віджета</h3>
+                        <p class="text-gray-600 mb-4">
+                            Додайте цей код перед закриваючим тегом <code class="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> на вашому сайті.
+                        </p>
+                        
+                        <div class="relative max-w-2xl">
+                            <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">{{ $embedCode }}</pre>
+                            <button wire:click="copyEmbedCode"
+                                    class="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">
+                                Копіювати
+                            </button>
+                        </div>
                     </div>
 
-                    <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 class="font-medium text-blue-900 mb-2">💡 Налаштування</h4>
-                        <p class="text-blue-700 text-sm">
-                            Ви можете змінити вигляд та поведінку віджета в 
-                            <a href="{{ route('admin.widget.settings') }}" class="underline font-medium">налаштуваннях віджета</a>.
-                        </p>
+                    <!-- Widget Settings - Embedded -->
+                    <div class="border-t border-gray-200 pt-6">
+                        <h3 class="font-semibold text-lg mb-4">⚙️ Налаштування віджета</h3>
+                        @livewire('admin.widget-settings', ['embedded' => true])
                     </div>
                 </div>
             @endif
@@ -462,21 +466,21 @@
             <!-- Greetings Tab -->
             @if($activeTab === 'greetings')
                 <div>
-                    @livewire('admin.greetings-manager')
+                    @livewire('admin.greetings-manager', ['embedded' => true])
                 </div>
             @endif
 
             <!-- Prompts Tab -->
             @if($activeTab === 'prompts')
                 <div>
-                    @livewire('admin.prompt-presets-manager')
+                    @livewire('admin.prompt-presets-manager', ['embedded' => true])
                 </div>
             @endif
 
             <!-- Triggers Tab -->
             @if($activeTab === 'triggers')
                 <div>
-                    @livewire('admin.proactive-triggers-manager')
+                    @livewire('admin.proactive-triggers-manager', ['embedded' => true])
                 </div>
             @endif
         </div>

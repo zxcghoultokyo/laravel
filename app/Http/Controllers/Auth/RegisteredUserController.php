@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\Tenant\DefaultTriggerService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -68,6 +69,9 @@ class RegisteredUserController extends Controller
                 'welcome_message' => 'Привіт! Чим можу допомогти?',
                 'position' => 'bottom-right',
             ]);
+
+            // Create default proactive triggers
+            app(DefaultTriggerService::class)->createDefaultTriggers($tenant);
 
             // Create user as owner
             $user = User::create([

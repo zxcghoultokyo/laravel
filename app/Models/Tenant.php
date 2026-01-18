@@ -283,6 +283,14 @@ class Tenant extends Model
     }
 
     /**
+     * Proactive trigger rules for this tenant.
+     */
+    public function proactiveTriggerRules(): HasMany
+    {
+        return $this->hasMany(ProactiveTriggerRule::class);
+    }
+
+    /**
      * Subscriptions for this tenant.
      */
     public function subscriptions(): HasMany

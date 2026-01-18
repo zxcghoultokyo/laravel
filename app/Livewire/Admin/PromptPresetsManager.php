@@ -55,6 +55,8 @@ class PromptPresetsManager extends Component
         'priority' => 'integer|min:0|max:1000',
     ];
 
+    public bool $embedded = false;
+
     public function render()
     {
         $presets = PromptPreset::orderByDesc('priority')
@@ -87,7 +89,7 @@ class PromptPresetsManager extends Component
             \App\Models\StoreContext::TYPE_GENERAL => 'Загальний',
         ];
 
-        return view('livewire.admin.prompt-presets-manager', [
+        $view = view('livewire.admin.prompt-presets-manager', [
             'presets' => $presets,
             'availableCategories' => $availableCategories,
             'storeTypes' => $storeTypes,
@@ -104,7 +106,13 @@ class PromptPresetsManager extends Component
                 'en' => 'English',
                 'ru' => 'Русский',
             ],
-        ])->layout('admin.layout');
+        ]);
+
+        if ($this->embedded) {
+            return $view;
+        }
+
+        return $view->layout('admin.layout');
     }
 
     /**

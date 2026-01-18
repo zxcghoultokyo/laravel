@@ -67,6 +67,8 @@ class ProactiveTriggersManager extends Component
         'cooldown_minutes' => 'integer|min:0|max:1440',
     ];
 
+    public bool $embedded = false;
+
     public function mount()
     {
         // Initialize empty conditions
@@ -86,12 +88,18 @@ class ProactiveTriggersManager extends Component
 
         $rules = $query->orderBy('priority')->orderBy('name')->paginate(10);
 
-        return view('livewire.admin.proactive-triggers-manager', [
+        $view = view('livewire.admin.proactive-triggers-manager', [
             'rules' => $rules,
             'triggerTypes' => $this->getTriggerTypes(),
             'actionTypes' => $this->getActionTypes(),
             'pageTypes' => $this->getPageTypes(),
-        ])->layout('admin.layout');
+        ]);
+
+        if ($this->embedded) {
+            return $view;
+        }
+
+        return $view->layout('admin.layout');
     }
 
     protected function getTriggerTypes(): array

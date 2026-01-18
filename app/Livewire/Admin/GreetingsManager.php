@@ -56,15 +56,23 @@ class GreetingsManager extends Component
         'is_default' => 'boolean',
     ];
 
+    public bool $embedded = false;
+
     public function render()
     {
         $greetings = Greeting::orderByDesc('priority')
             ->orderByDesc('is_default')
             ->paginate(10);
 
-        return view('livewire.admin.greetings-manager', [
+        $view = view('livewire.admin.greetings-manager', [
             'greetings' => $greetings,
-        ])->layout('admin.layout');
+        ]);
+
+        if ($this->embedded) {
+            return $view;
+        }
+
+        return $view->layout('admin.layout');
     }
 
     public function create()

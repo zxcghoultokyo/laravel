@@ -248,9 +248,10 @@ class StreamingFunctionCallingAgent
                 ]];
             }
             
-            // For trigger queries, ALWAYS use our smart CTA outro
+            // For trigger queries, use GPT outro if good, fallback to our generic
             $outro = $structured['outro'] ?? null;
-            if ($isTriggerQuery && !empty($allProducts)) {
+            if ($isTriggerQuery && !empty($allProducts) && empty($outro)) {
+                // GPT didn't provide outro - use our universal fallback
                 $outro = $this->generateTriggerOutro($allProducts);
             }
             
@@ -410,54 +411,51 @@ class StreamingFunctionCallingAgent
     /**
      * Generate appropriate CTA outro for trigger queries based on product type.
      */
+    /**
+     * Generate appropriate CTA outro for trigger queries based on product attributes.
+     * Universal logic - works for any shop (tactical, plumbing, cosmetics, etc.)
+     */
     private function generateTriggerOutro(array $products): string
     {
         if (empty($products)) {
-            return 'Є питання? Радий допомогти!';
+            return 'Є питання? Допоможу з вибором!';
         }
         
         $firstProduct = $products[0];
-        $categoryPath = mb_strtolower($firstProduct['category_path'] ?? '');
-        $title = mb_strtolower($firstProduct['title'] ?? '');
         $quantity = $firstProduct['quantity'] ?? 0;
         
-        // Check if products have sizes (clothing/footwear)
-        $hasSize = false;
+        // Check product attributes for smart CTA
+        $hasMultipleSizes = false;
+        $hasMultipleColors = false;
+        
         foreach ($products as $p) {
             if (!empty($p['size_variants']) && count($p['size_variants']) > 1) {
-                $hasSize = true;
-                break;
+                $hasMultipleSizes = true;
+            }
+            if (!empty($p['color_variants']) && count($p['color_variants']) > 1) {
+                $hasMultipleColors = true;
             }
         }
         
-        // FIRST: Determine product type and appropriate CTA
+        // Priority: size selection → color selection → low stock urgency → generic
         
-        // Helmets - need head circumference
-        $isHelmet = str_contains($categoryPath, 'шолом') || str_contains($title, 'шолом') || 
-                    str_contains($categoryPath, 'helmet') || str_contains($title, 'helmet');
-        if ($isHelmet) {
-            return 'Який обхват голови? Допоможу з підбором розміру шолома!';
+        // Product has multiple sizes - ask which one
+        if ($hasMultipleSizes) {
+            return 'Який розмір/варіант вам потрібен? Допоможу підібрати!';
         }
         
-        // Plate carriers - need plate size
-        $isPlateCarrier = str_contains($categoryPath, 'плитоноска') || str_contains($title, 'плитоноска') ||
-                          str_contains($categoryPath, 'plate carrier') || str_contains($title, 'plate carrier');
-        if ($isPlateCarrier) {
-            return 'Який розмір плит використовуєте? Допоможу з підбором!';
+        // Product has multiple colors - ask preference
+        if ($hasMultipleColors) {
+            return 'Який колір вам більше підходить?';
         }
         
-        // Clothing/footwear with sizes
-        if ($hasSize) {
-            return 'Який розмір вам потрібен? Підкажіть зріст та вагу — допоможу підібрати!';
-        }
-        
-        // THEN: Low stock urgency (only for products that don't need sizing)
+        // Low stock urgency
         if ($quantity > 0 && $quantity <= 3) {
-            return "Залишилось лише {$quantity} шт. в наявності. Резервуємо?";
+            return "Залишилось лише {$quantity} шт. в наявності. Оформлюємо?";
         }
         
-        // Default for accessories/gear without sizes
-        return 'Оформлюємо? Або є питання по характеристиках?';
+        // Generic CTA - works for any product type
+        return 'Оформлюємо замовлення? Або є питання?';
     }
 
     /**

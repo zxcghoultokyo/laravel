@@ -161,7 +161,7 @@ class SyncReports extends Component
             ],
             [
                 'name' => '📦 Orders',
-                'command' => 'orders:sync --days=3',
+                'command' => 'orders:sync --days=3 --update-counts',
                 'schedule' => 'Двічі на день о 08:00 та 20:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_ORDERS),
                 'next_run' => 'Сьогодні/завтра',
@@ -174,18 +174,25 @@ class SyncReports extends Component
                 'next_run' => 'Завтра о 04:00',
             ],
             [
-                'name' => '🔍 Meilisearch',
+                'name' => '🔍 Meilisearch (async)',
                 'command' => 'meili:reindex-products',
                 'schedule' => 'Щодня о 05:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
                 'next_run' => 'Завтра о 05:00',
             ],
             [
-                'name' => '📊 Stats Update',
+                'name' => '🔍 Meilisearch (sync)',
+                'command' => 'meili:reindex-products-sync',
+                'schedule' => 'Ручний запуск',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
+                'next_run' => '-',
+            ],
+            [
+                'name' => '📊 Orders Count',
                 'command' => 'products:update-orders-count',
-                'schedule' => 'Щодня о 06:00',
+                'schedule' => 'Після синхронізації замовлень',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_STATS),
-                'next_run' => 'Завтра о 06:00',
+                'next_run' => '-',
             ],
             [
                 'name' => '🏷️ Brands',
@@ -197,9 +204,9 @@ class SyncReports extends Component
             [
                 'name' => '🧬 Embeddings',
                 'command' => 'products:generate-embeddings --limit=100',
-                'schedule' => 'Щонеділі о 02:30',
+                'schedule' => 'Щотижня',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_EMBEDDINGS),
-                'next_run' => 'Неділя о 02:30',
+                'next_run' => '-',
             ],
         ];
     }
@@ -230,9 +237,44 @@ class SyncReports extends Component
         $this->loadSyncHistory();
     }
 
+    /**
+     * Map command to sync type for logging
+     */
+    private function commandToSyncType(string $command): ?string
+    {
+        $map = [
+            'horoshop:sync' => SyncLog::TYPE_HOROSHOP_PRODUCTS,
+            'orders:sync' => SyncLog::TYPE_ORDERS,
+            'products:build-ai-index' => SyncLog::TYPE_AI_ENRICHMENT,
+            'meili:reindex-products' => SyncLog::TYPE_MEILISEARCH,
+            'meili:reindex-products-sync' => SyncLog::TYPE_MEILISEARCH,
+            'brands:sync' => SyncLog::TYPE_CATEGORIES,
+            'products:update-orders-count' => SyncLog::TYPE_STATS,
+            'products:generate-embeddings' => SyncLog::TYPE_EMBEDDINGS,
+        ];
+        
+        $cmdName = explode(' ', $command)[0];
+        return $map[$cmdName] ?? null;
+    }
+
     public function runSync(string $command)
     {
-        // Run sync command directly via Artisan (not via queue)
+        // Determine sync type for logging
+        $syncType = $this->commandToSyncType($command);
+        $syncLog = null;
+        
+        // Create sync log entry if we know the type
+        if ($syncType && Schema::hasTable('sync_logs')) {
+            $syncLog = SyncLog::create([
+                'sync_type' => $syncType,
+                'status' => SyncLog::STATUS_RUNNING,
+                'started_at' => now(),
+                'notes' => "Manual run: {$command}",
+            ]);
+        }
+        
+        $startTime = microtime(true);
+        
         try {
             // Parse command and arguments
             $parts = explode(' ', $command);
@@ -249,17 +291,41 @@ class SyncReports extends Component
             $exitCode = \Artisan::call($cmd, $args);
             $output = \Artisan::output();
             
+            $duration = round(microtime(true) - $startTime, 2);
+            
+            // Update sync log
+            if ($syncLog) {
+                $syncLog->update([
+                    'status' => $exitCode === 0 ? SyncLog::STATUS_COMPLETED : SyncLog::STATUS_FAILED,
+                    'finished_at' => now(),
+                    'duration_seconds' => $duration,
+                    'notes' => "Manual run: {$command}\nOutput: " . substr($output, 0, 500),
+                ]);
+            }
+            
             if ($exitCode === 0) {
-                session()->flash('message', "✅ Команду '{$command}' виконано успішно.");
+                session()->flash('message', "✅ Команду '{$command}' виконано успішно за {$duration}с.");
             } else {
                 session()->flash('error', "⚠️ Команда завершилась з кодом {$exitCode}.");
             }
             
             // Log output for debugging
             if (!empty(trim($output))) {
-                \Log::info("SyncReports runSync '{$command}'", ['output' => $output]);
+                \Log::info("SyncReports runSync '{$command}'", ['output' => $output, 'duration' => $duration]);
             }
         } catch (\Exception $e) {
+            $duration = round(microtime(true) - $startTime, 2);
+            
+            // Update sync log with error
+            if ($syncLog) {
+                $syncLog->update([
+                    'status' => SyncLog::STATUS_FAILED,
+                    'finished_at' => now(),
+                    'duration_seconds' => $duration,
+                    'error_message' => $e->getMessage(),
+                ]);
+            }
+            
             session()->flash('error', "❌ Помилка: {$e->getMessage()}");
             \Log::error("SyncReports runSync error", ['command' => $command, 'error' => $e->getMessage()]);
         }

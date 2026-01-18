@@ -43,7 +43,7 @@ class ProactiveTriggersController extends Controller
         $validated = $request->validate([
             'rule_id' => 'required|integer|exists:proactive_trigger_rules,id',
             'session_id' => 'required|string|max:64',
-            'event_type' => 'required|string|in:shown,clicked,dismissed,converted,purchased',
+            'event_type' => 'required|string|in:shown,clicked,dismissed,product_viewed,converted,added_to_cart,purchased',
             'context' => 'nullable|array',
         ]);
 
@@ -64,7 +64,12 @@ class ProactiveTriggersController extends Controller
                     $validated['session_id'],
                     $validated['context'] ?? []
                 ),
-                'converted' => ProactiveTriggerEvent::recordConverted(
+                'product_viewed' => ProactiveTriggerEvent::recordProductViewed(
+                    $validated['rule_id'],
+                    $validated['session_id'],
+                    $validated['context'] ?? []
+                ),
+                'converted', 'added_to_cart' => ProactiveTriggerEvent::recordConverted(
                     $validated['rule_id'],
                     $validated['session_id'],
                     $validated['context'] ?? []

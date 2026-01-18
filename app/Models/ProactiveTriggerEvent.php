@@ -25,7 +25,8 @@ class ProactiveTriggerEvent extends Model
     public const EVENT_SHOWN = 'shown';
     public const EVENT_CLICKED = 'clicked';
     public const EVENT_DISMISSED = 'dismissed';
-    public const EVENT_CONVERTED = 'converted'; // Added to cart
+    public const EVENT_PRODUCT_VIEWED = 'product_viewed';
+    public const EVENT_CONVERTED = 'converted'; // Added to cart / added_to_cart
     public const EVENT_PURCHASED = 'purchased';
 
     /**
@@ -81,6 +82,19 @@ class ProactiveTriggerEvent extends Model
             'rule_id' => $ruleId,
             'session_id' => $sessionId,
             'event_type' => self::EVENT_DISMISSED,
+            'context' => $context,
+        ]);
+    }
+
+    /**
+     * Create a product viewed event.
+     */
+    public static function recordProductViewed(int $ruleId, string $sessionId, array $context = []): self
+    {
+        return self::create([
+            'rule_id' => $ruleId,
+            'session_id' => $sessionId,
+            'event_type' => self::EVENT_PRODUCT_VIEWED,
             'context' => $context,
         ]);
     }

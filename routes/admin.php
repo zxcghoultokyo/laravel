@@ -14,6 +14,7 @@ use App\Livewire\Admin\CannedResponsesManager;
 use App\Livewire\Admin\ExportsManager;
 use App\Livewire\Admin\SyncReports;
 use App\Livewire\Admin\ProactiveTriggersManager;
+use App\Livewire\Admin\TriggerStats;
 
 /*
 |--------------------------------------------------------------------------
@@ -44,6 +45,7 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     Route::get('/greetings', GreetingsManager::class)->name('greetings');
     Route::get('/prompts', PromptPresetsManager::class)->name('prompts');
     Route::get('/triggers', ProactiveTriggersManager::class)->name('triggers');
+    Route::get('/triggers/stats', TriggerStats::class)->name('triggers.stats');
     
     // Operator tools
     Route::get('/canned-responses', CannedResponsesManager::class)->name('canned-responses');

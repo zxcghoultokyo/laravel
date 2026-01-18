@@ -421,7 +421,8 @@
                 </div>
             </form>
 
-            <!-- Install Code -->
+            <!-- Install Code (hidden when embedded with hideEmbedCode) -->
+            @if(!$hideEmbedCode)
             <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
                 <div class="flex items-start justify-between mb-4">
                     <h3 class="text-lg font-semibold text-gray-900">📋 Код для вставки</h3>
@@ -451,6 +452,7 @@
                     📋 Скопіювати
                 </button>
             </div>
+            @endif
         </div>
 
         <!-- Preview (desktop only) -->

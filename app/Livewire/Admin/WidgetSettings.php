@@ -14,6 +14,7 @@ class WidgetSettings extends Component
     use WithFileUploads;
     
     public bool $embedded = false; // If true, renders without layout
+    public bool $hideEmbedCode = false; // If true, hides embed code section (when shown elsewhere)
     
     public $domain = 'default';
     public $primary_color = '#2563eb';

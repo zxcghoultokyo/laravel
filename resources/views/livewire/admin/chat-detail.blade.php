@@ -7,11 +7,13 @@
         <!-- Chat Header -->
         <div class="bg-white border-b px-3 md:px-4 py-2 md:py-3 flex items-center justify-between shrink-0">
             <div class="flex items-center gap-2 md:gap-4">
+                @if(!$embedded)
                 <a href="{{ route('admin.chats.index') }}" class="text-gray-400 hover:text-gray-600 p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                     </svg>
                 </a>
+                @endif
                 <div>
                     <h2 class="font-semibold text-gray-900 text-sm md:text-base">Чат #{{ substr($session->session_id, -8) }}</h2>
                     <p class="text-xs text-gray-500 hidden md:block">{{ $session->messages_count }} повідомлень</p>

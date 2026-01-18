@@ -400,11 +400,9 @@
                         </div>
                     </div>
 
-                    <!-- Widget Settings - Embedded -->
+                    <!-- Widget Settings - Embedded (без дублювання коду вставки) -->
                     <div class="border-t border-gray-200 pt-6">
-                        <h3 class="font-semibold text-lg mb-4">⚙️ Налаштування віджета</h3>
-                        @livewire('admin.widget-settings', ['embedded' => true])
-                    </div>
+                        @livewire('admin.widget-settings', ['embedded' => true, 'hideEmbedCode' => true])
                 </div>
             @endif
 
@@ -441,11 +439,6 @@
                     @if (session('settings-saved'))
                         <div class="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4">
                             {{ session('settings-saved') }}
-                        </div>
-                    @endif
-                    @if (session('token-regenerated'))
-                        <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4">
-                            {{ session('token-regenerated') }}
                         </div>
                     @endif
 
@@ -522,22 +515,6 @@
                         </div>
                     @endif
 
-                    <!-- API Token Section -->
-                    <div class="bg-gray-50 rounded-lg p-6">
-                        <div class="flex justify-between items-start mb-4">
-                            <h4 class="font-medium text-gray-900">API Токен</h4>
-                            <button wire:click="regenerateApiToken" 
-                                    wire:confirm="Це інвалідує старий токен. Ви впевнені?"
-                                    class="text-orange-600 hover:text-orange-700 text-sm">
-                                Оновити токен
-                            </button>
-                        </div>
-                        <div class="bg-white border rounded-lg p-3 font-mono text-sm break-all">
-                            {{ $tenant->api_token }}
-                        </div>
-                        <p class="text-gray-500 text-sm mt-2">Використовується для автентифікації віджета</p>
-                    </div>
-
                     <div class="flex gap-3">
                         <a href="{{ route('profile.edit') }}" 
                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition">
@@ -565,10 +542,32 @@
                 </div>
             @endif
 
-            <!-- Triggers Tab -->
+            <!-- Triggers Tab with subtabs -->
             @if($activeTab === 'triggers')
-                <div>
-                    @livewire('admin.proactive-triggers-manager', ['embedded' => true])
+                <div x-data="{ triggersSubtab: 'rules' }">
+                    <!-- Subtabs -->
+                    <div class="border-b border-gray-200 mb-6">
+                        <nav class="-mb-px flex space-x-8">
+                            <button @click="triggersSubtab = 'rules'"
+                                    :class="triggersSubtab === 'rules' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                    class="py-2 px-1 border-b-2 font-medium text-sm transition">
+                                📋 Правила
+                            </button>
+                            <button @click="triggersSubtab = 'stats'"
+                                    :class="triggersSubtab === 'stats' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                    class="py-2 px-1 border-b-2 font-medium text-sm transition">
+                                📊 Статистика
+                            </button>
+                        </nav>
+                    </div>
+
+                    <!-- Subtab content -->
+                    <div x-show="triggersSubtab === 'rules'">
+                        @livewire('admin.proactive-triggers-manager', ['embedded' => true])
+                    </div>
+                    <div x-show="triggersSubtab === 'stats'" x-cloak>
+                        @livewire('admin.trigger-stats', ['embedded' => true])
+                    </div>
                 </div>
             @endif
         </div>

@@ -29,9 +29,17 @@ class Analytics extends Component
     
     // Embedded mode for tenant dashboard
     public bool $embedded = false;
+    
+    // Tenant ID for filtering (when embedded)
+    public ?int $tenantId = null;
 
     public function mount()
     {
+        // If embedded, get tenant from authenticated user
+        if ($this->embedded) {
+            $this->tenantId = auth()->user()?->tenant_id;
+        }
+        
         $this->checkTables();
         // Always try to load stats - ChatStatsService handles missing tables
         $this->loadStats();
@@ -54,7 +62,7 @@ class Analytics extends Component
 
         // Use unified ChatStatsService for basic stats
         $chatStatsService = app(ChatStatsService::class);
-        $this->stats = $chatStatsService->getBasicStats($startDate);
+        $this->stats = $chatStatsService->getBasicStats($startDate, null, $this->tenantId);
         
         // Outcomes distribution
         $this->outcomes = $this->getOutcomes($startDate);
@@ -69,13 +77,13 @@ class Analytics extends Component
         $this->recentChatEvents = $this->getRecentChatEvents();
         
         // Daily chart data - from ChatStatsService
-        $this->dailyChart = $chatStatsService->getDailyChart($startDate);
+        $this->dailyChart = $chatStatsService->getDailyChart($startDate, null, $this->tenantId);
         
-        // AI Index Quality Score
-        $this->loadAiQuality();
-        
-        // A/B Testing Stats
-        $this->loadABTestStats();
+        // AI Index Quality Score (only for superadmin, not embedded)
+        if (!$this->embedded) {
+            $this->loadAiQuality();
+            $this->loadABTestStats();
+        }
         
         // Update timestamp
         $this->lastUpdated = now()->format('H:i:s');

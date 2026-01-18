@@ -20,25 +20,29 @@ class ChatStatsService
     /**
      * Get basic chat statistics for a period.
      * This is the SINGLE source of truth for sessions/messages counts.
+     * 
+     * @param Carbon $startDate Start date
+     * @param Carbon|null $endDate End date (defaults to now)
+     * @param int|null $tenantId Filter by tenant ID (null = all tenants for superadmin)
      */
-    public function getBasicStats(Carbon $startDate, ?Carbon $endDate = null): array
+    public function getBasicStats(Carbon $startDate, ?Carbon $endDate = null, ?int $tenantId = null): array
     {
         $endDate = $endDate ?? now();
         
         // PRIMARY SOURCE: chat_messages table (always most accurate)
-        $messagesStats = $this->getMessagesStats($startDate, $endDate);
+        $messagesStats = $this->getMessagesStats($startDate, $endDate, $tenantId);
         
         // SECONDARY: chat_sessions for session count confirmation
-        $sessionsCount = $this->getSessionsCount($startDate, $endDate);
+        $sessionsCount = $this->getSessionsCount($startDate, $endDate, $tenantId);
         
         // TERTIARY: chat_metrics for response time
         $metricsStats = $this->getMetricsStats($startDate, $endDate);
         
         // QUATERNARY: chat_events for funnel data (page views, widget opens)
-        $eventsStats = $this->getEventsStats($startDate, $endDate);
+        $eventsStats = $this->getEventsStats($startDate, $endDate, $tenantId);
         
         // CONVERSIONS: chat_conversions
-        $conversions = $this->getConversions($startDate, $endDate);
+        $conversions = $this->getConversions($startDate, $endDate, $tenantId);
         
         // Build unified response
         // Sessions: prefer chat_sessions count, fallback to unique session_ids from messages
@@ -100,7 +104,7 @@ class ChatStatsService
     /**
      * Get statistics from chat_messages (PRIMARY SOURCE).
      */
-    private function getMessagesStats(Carbon $startDate, Carbon $endDate): array
+    private function getMessagesStats(Carbon $startDate, Carbon $endDate, ?int $tenantId = null): array
     {
         $hasData = false;
         $totalMessages = 0;
@@ -118,9 +122,15 @@ class ChatStatsService
                 ? 'session_id' 
                 : 'chat_session_id';
             
-            $stats = DB::table('chat_messages')
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->selectRaw("
+            $query = DB::table('chat_messages')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            
+            // Filter by tenant if specified
+            if ($tenantId !== null && Schema::hasColumn('chat_messages', 'tenant_id')) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            $stats = $query->selectRaw("
                     COUNT(*) as total,
                     SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END) as user_count,
                     COUNT(DISTINCT {$sessionColumn}) as unique_sessions
@@ -134,7 +144,7 @@ class ChatStatsService
             
             // Count products shown from assistant messages meta
             if ($hasData) {
-                $productsShown = $this->countProductsFromMeta($startDate, $endDate);
+                $productsShown = $this->countProductsFromMeta($startDate, $endDate, $tenantId);
             }
         } catch (\Throwable $e) {
             // Ignore errors
@@ -152,16 +162,21 @@ class ChatStatsService
     /**
      * Count products shown from message meta JSON.
      */
-    private function countProductsFromMeta(Carbon $startDate, Carbon $endDate): int
+    private function countProductsFromMeta(Carbon $startDate, Carbon $endDate, ?int $tenantId = null): int
     {
         $count = 0;
         
         try {
-            $messages = DB::table('chat_messages')
+            $query = DB::table('chat_messages')
                 ->whereBetween('created_at', [$startDate, $endDate])
                 ->where('role', 'assistant')
-                ->whereNotNull('meta')
-                ->get(['meta']);
+                ->whereNotNull('meta');
+            
+            if ($tenantId !== null && Schema::hasColumn('chat_messages', 'tenant_id')) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            $messages = $query->get(['meta']);
             
             foreach ($messages as $msg) {
                 $meta = json_decode($msg->meta, true);
@@ -179,16 +194,21 @@ class ChatStatsService
     /**
      * Get session count from chat_sessions table.
      */
-    private function getSessionsCount(Carbon $startDate, Carbon $endDate): int
+    private function getSessionsCount(Carbon $startDate, Carbon $endDate, ?int $tenantId = null): int
     {
         try {
             if (!Schema::hasTable('chat_sessions')) {
                 return 0;
             }
             
-            return DB::table('chat_sessions')
-                ->whereBetween('created_at', [$startDate, $endDate])
-                ->count();
+            $query = DB::table('chat_sessions')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            
+            if ($tenantId !== null && Schema::hasColumn('chat_sessions', 'tenant_id')) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            return $query->count();
         } catch (\Throwable $e) {
             return 0;
         }
@@ -224,7 +244,7 @@ class ChatStatsService
     /**
      * Get funnel statistics from chat_events.
      */
-    private function getEventsStats(Carbon $startDate, Carbon $endDate): array
+    private function getEventsStats(Carbon $startDate, Carbon $endDate, ?int $tenantId = null): array
     {
         $default = [
             'has_data' => false,
@@ -242,29 +262,41 @@ class ChatStatsService
                 return $default;
             }
             
+            // Get merchant_id for filtering (tenant slug)
+            $merchantId = null;
+            if ($tenantId !== null) {
+                $merchantId = DB::table('tenants')->where('id', $tenantId)->value('slug');
+            }
+            
+            // Base query builder helper
+            $baseQuery = function() use ($startDate, $endDate, $merchantId) {
+                $q = DB::table('chat_events')
+                    ->whereBetween('created_at', [$startDate, $endDate]);
+                if ($merchantId) {
+                    $q->where('merchant_id', $merchantId);
+                }
+                return $q;
+            };
+            
             // Page views
-            $pageViews = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $pageViews = $baseQuery()
                 ->where('event_type', 'page_view')
                 ->count();
             
             // Unique page visitors
-            $pageVisitors = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $pageVisitors = $baseQuery()
                 ->where('event_type', 'page_view')
                 ->whereNotNull('client_id')
                 ->distinct('client_id')
                 ->count('client_id');
             
             // Chat opened
-            $chatOpened = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $chatOpened = $baseQuery()
                 ->where('event_type', 'chat_opened')
                 ->count();
             
             // Unique users who opened chat
-            $chatOpenedUsers = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $chatOpenedUsers = $baseQuery()
                 ->where('event_type', 'chat_opened')
                 ->whereNotNull('client_id')
                 ->distinct('client_id')
@@ -274,14 +306,12 @@ class ChatStatsService
             $widgetOpenRate = $pageVisitors > 0 ? round(($chatOpenedUsers / $pageVisitors) * 100, 1) : 0;
             
             // Products shown (from events)
-            $productsShown = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $productsShown = $baseQuery()
                 ->where('event_type', 'product_shown')
                 ->count();
             
             // Products clicked
-            $productsClicked = DB::table('chat_events')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            $productsClicked = $baseQuery()
                 ->where('event_type', 'product_click')
                 ->count();
             
@@ -305,7 +335,7 @@ class ChatStatsService
     /**
      * Get conversion statistics.
      */
-    private function getConversions(Carbon $startDate, Carbon $endDate): array
+    private function getConversions(Carbon $startDate, Carbon $endDate, ?int $tenantId = null): array
     {
         $default = [
             'add_to_cart' => 0,
@@ -319,8 +349,20 @@ class ChatStatsService
                 return $default;
             }
             
-            $conversions = DB::table('chat_conversions')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            // Get merchant_id for filtering (tenant slug)
+            $merchantId = null;
+            if ($tenantId !== null) {
+                $merchantId = DB::table('tenants')->where('id', $tenantId)->value('slug');
+            }
+            
+            $query = DB::table('chat_conversions')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            
+            if ($merchantId) {
+                $query->where('merchant_id', $merchantId);
+            }
+            
+            $conversions = $query
                 ->selectRaw('conversion_type, COUNT(*) as count, SUM(order_total) as total')
                 ->groupBy('conversion_type')
                 ->get()
@@ -354,7 +396,7 @@ class ChatStatsService
     /**
      * Get daily chart data.
      */
-    public function getDailyChart(Carbon $startDate, ?Carbon $endDate = null): array
+    public function getDailyChart(Carbon $startDate, ?Carbon $endDate = null, ?int $tenantId = null): array
     {
         $endDate = $endDate ?? now();
         
@@ -364,8 +406,14 @@ class ChatStatsService
             : 'chat_session_id';
         
         // Primary source: chat_messages grouped by day
-        $daily = DB::table('chat_messages')
-            ->whereBetween('created_at', [$startDate, $endDate])
+        $query = DB::table('chat_messages')
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        
+        if ($tenantId !== null && Schema::hasColumn('chat_messages', 'tenant_id')) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $daily = $query
             ->selectRaw("DATE(created_at) as date, COUNT(DISTINCT {$sessionColumn}) as sessions, COUNT(*) as messages")
             ->groupBy(DB::raw('DATE(created_at)'))
             ->orderBy('date')

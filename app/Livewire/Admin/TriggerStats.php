@@ -9,6 +9,10 @@ use Carbon\Carbon;
 
 class TriggerStats extends Component
 {
+    // Embedded mode (in tenant dashboard)
+    public bool $embedded = false;
+    public ?int $tenantId = null;
+
     // Filters
     public $period = '7d';
     public $triggerType = '';
@@ -18,8 +22,15 @@ class TriggerStats extends Component
     public $dateFrom = '';
     public $dateTo = '';
 
-    public function mount()
+    public function mount(bool $embedded = false)
     {
+        $this->embedded = $embedded;
+        
+        // Set tenant from auth user when embedded
+        if ($this->embedded && auth()->check() && auth()->user()->tenant_id) {
+            $this->tenantId = auth()->user()->tenant_id;
+        }
+        
         $this->dateFrom = now()->subDays(7)->format('Y-m-d');
         $this->dateTo = now()->format('Y-m-d');
     }
@@ -28,8 +39,12 @@ class TriggerStats extends Component
     {
         $dateRange = $this->getDateRange();
         
-        // Get all rules for filter dropdown
-        $rules = ProactiveTriggerRule::orderBy('name')->get();
+        // Get all rules for filter dropdown (filtered by tenant if set)
+        $rulesQuery = ProactiveTriggerRule::orderBy('name');
+        if ($this->tenantId) {
+            $rulesQuery->where('tenant_id', $this->tenantId);
+        }
+        $rules = $rulesQuery->get();
         
         // Get trigger types
         $triggerTypes = [
@@ -52,7 +67,7 @@ class TriggerStats extends Component
         // Get top performing rules
         $topRules = $this->getTopRules($dateRange);
 
-        return view('livewire.admin.trigger-stats', [
+        $view = view('livewire.admin.trigger-stats', [
             'rules' => $rules,
             'triggerTypes' => $triggerTypes,
             'funnelData' => $funnelData,
@@ -60,7 +75,9 @@ class TriggerStats extends Component
             'trendData' => $trendData,
             'topRules' => $topRules,
             'dateRange' => $dateRange,
-        ])->layout('admin.layout');
+        ]);
+
+        return $this->embedded ? $view : $view->layout('admin.layout');
     }
 
     protected function getDateRange(): array
@@ -102,6 +119,11 @@ class TriggerStats extends Component
     protected function getFunnelData(array $dateRange): array
     {
         $query = ProactiveTriggerEvent::whereBetween('created_at', [$dateRange['from'], $dateRange['to']]);
+        
+        // Filter by tenant
+        if ($this->tenantId) {
+            $query->whereHas('rule', fn($q) => $q->where('tenant_id', $this->tenantId));
+        }
         
         if ($this->triggerType) {
             $query->whereHas('rule', fn($q) => $q->where('trigger_type', $this->triggerType));
@@ -162,6 +184,11 @@ class TriggerStats extends Component
     {
         $query = ProactiveTriggerRule::query();
         
+        // Filter by tenant
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
         if ($this->triggerType) {
             $query->where('trigger_type', $this->triggerType);
         }
@@ -207,6 +234,11 @@ class TriggerStats extends Component
             
             $query = ProactiveTriggerEvent::whereBetween('created_at', [$dayStart, $dayEnd]);
             
+            // Filter by tenant
+            if ($this->tenantId) {
+                $query->whereHas('rule', fn($q) => $q->where('tenant_id', $this->tenantId));
+            }
+            
             if ($this->triggerType) {
                 $query->whereHas('rule', fn($q) => $q->where('trigger_type', $this->triggerType));
             }
@@ -232,8 +264,14 @@ class TriggerStats extends Component
 
     protected function getTopRules(array $dateRange): \Illuminate\Support\Collection
     {
-        return ProactiveTriggerRule::where('is_enabled', true)
-            ->get()
+        $query = ProactiveTriggerRule::where('is_enabled', true);
+        
+        // Filter by tenant
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        return $query->get()
             ->map(function ($rule) use ($dateRange) {
                 $events = $rule->events()
                     ->whereBetween('created_at', [$dateRange['from'], $dateRange['to']])

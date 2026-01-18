@@ -5,6 +5,7 @@
             <h1 class="text-xl sm:text-2xl font-bold text-gray-900">📊 Статистика тригерів</h1>
             <p class="text-gray-600 mt-1 text-sm">Воронка конверсій та ефективність правил</p>
         </div>
+        @if(!$embedded)
         <a href="{{ route('admin.triggers') }}" 
            class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -13,6 +14,7 @@
             </svg>
             Налаштування
         </a>
+        @endif
     </div>
 
     {{-- Filters --}}

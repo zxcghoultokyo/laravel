@@ -31,7 +31,8 @@ class ChatsList extends Component
 
     public function markAsClosed($sessionId)
     {
-        $session = ChatSession::where('session_id', $sessionId)->first();
+        $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('session_id', $sessionId)->first();
         if ($session) {
             $session->update(['status' => 'closed']);
             $this->dispatch('session-updated');
@@ -40,7 +41,8 @@ class ChatsList extends Component
 
     public function flagSession($sessionId)
     {
-        $session = ChatSession::where('session_id', $sessionId)->first();
+        $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('session_id', $sessionId)->first();
         if ($session) {
             $session->update(['status' => 'flagged']);
             $this->dispatch('session-updated');
@@ -49,7 +51,9 @@ class ChatsList extends Component
 
     public function render()
     {
-        $query = ChatSession::query()->with('messages');
+        // Bypass TenantScope to allow admins to see all chats
+        $query = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->with('messages');
 
         // Search
         if ($this->search) {

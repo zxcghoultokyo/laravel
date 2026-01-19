@@ -46,7 +46,9 @@ class ChatDetail extends Component
         
         if ($messagesExist) {
             // Messages exist, find or create ChatSession
-            $this->session = ChatSession::where('id', $this->sessionId)->first();
+            // Bypass TenantScope to allow admins to see all sessions
+            $this->session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('id', $this->sessionId)->first();
             
             if (!$this->session) {
                 // Create session from messages
@@ -63,13 +65,16 @@ class ChatDetail extends Component
                 ]);
             }
             
-            // Load messages
-            $this->messages = ChatMessage::where('chat_session_id', $this->sessionId)
+            // Load messages - bypass TenantScope
+            $this->messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $this->sessionId)
                 ->orderBy('created_at')
                 ->get();
         } else {
             // Try to find by session_id string (UUID format)
-            $this->session = ChatSession::where('session_id', $this->sessionId)
+            // Bypass TenantScope to allow admins to see all sessions
+            $this->session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $this->sessionId)
                 ->with('messages')
                 ->first();
             
@@ -203,8 +208,9 @@ class ChatDetail extends Component
             return;
         }
 
-        // Save message to DB
-        $message = ChatMessage::create([
+        // Save message to DB - bypass TenantScope and set tenant_id from session
+        $message = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+            'tenant_id' => $this->session->tenant_id,
             'chat_session_id' => $this->session->id,
             'role' => 'operator',
             'content' => $this->operatorMessage,

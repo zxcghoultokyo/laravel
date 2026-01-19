@@ -721,7 +721,9 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $session = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+        // Bypass TenantScope to allow diagnostic access to all sessions
+        $session = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('session_id', $sessionId)->first();
         
         if (!$session) {
             return response()->json([
@@ -732,7 +734,9 @@ class DiagnosticController extends Controller
 
         $fullContent = $request->boolean('full');
 
-        $messages = \App\Models\ChatMessage::where('chat_session_id', $session->id)
+        // Bypass TenantScope for diagnostic access
+        $messages = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('chat_session_id', $session->id)
             ->orderBy('created_at', 'asc')
             ->get()
             ->map(function ($msg) use ($fullContent) {

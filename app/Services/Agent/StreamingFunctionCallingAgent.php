@@ -936,9 +936,10 @@ PROMPT;
     {
         $category = $args['category'] ?? null;
         $limit = min($args['limit'] ?? 3, 3); // Max 3 cards for display
-        $cacheKey = 'popular_products_v5:' . ($category ?? 'all') . ':' . $limit;
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'popular_products_v6:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
         
-        return Cache::remember($cacheKey, 300, function () use ($category, $limit) {
+        return Cache::remember($cacheKey, 300, function () use ($category, $limit, $tenantId) {
             $products = [];
 
             // Filter function to exclude rare/expensive items
@@ -967,13 +968,22 @@ PROMPT;
             };
             
             // Check if we have real sales data
-            $hasOrdersData = Product::where('orders_count', '>', 0)->exists();
+            $salesQuery = Product::where('orders_count', '>', 0);
+            if ($tenantId) {
+                $salesQuery->where('tenant_id', $tenantId);
+            }
+            $hasOrdersData = $salesQuery->exists();
             
             if ($hasOrdersData) {
                 // USE REAL SALES DATA - query products by orders_count
                 $query = Product::where('in_stock', true)
                     ->where('orders_count', '>', 0)
                     ->where('quantity', '>', 0);
+                
+                // Filter by tenant
+                if ($tenantId) {
+                    $query->where('tenant_id', $tenantId);
+                }
                 
                 if ($category) {
                     $query->where(function($q) use ($category) {

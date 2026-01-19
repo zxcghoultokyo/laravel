@@ -14,10 +14,28 @@ use Illuminate\Support\Facades\Cache;
 class CrossSellService
 {
     protected AiRouter $aiRouter;
+    protected ?int $tenantId = null;
     
     public function __construct(AiRouter $aiRouter)
     {
         $this->aiRouter = $aiRouter;
+    }
+    
+    /**
+     * Set tenant ID for filtering
+     */
+    public function setTenantId(?int $tenantId): self
+    {
+        $this->tenantId = $tenantId;
+        return $this;
+    }
+    
+    /**
+     * Get current tenant ID (from product or explicit setting)
+     */
+    protected function getTenantId(?Product $product = null): ?int
+    {
+        return $this->tenantId ?? $product?->tenant_id;
     }
     
     /**
@@ -45,13 +63,16 @@ class CrossSellService
     {
         $suggestions = collect();
         $seenIds = [$product->id]; // Exclude the source product itself
+        $seenArticles = [$product->article]; // Also track by article for deduplication
+        $tenantId = $this->getTenantId($product);
         
         // 1. First check direct product cross-sells (manual links)
-        $directSuggestions = $this->getDirectCrossSells($product);
+        $directSuggestions = $this->getDirectCrossSells($product, $tenantId);
         foreach ($directSuggestions as $suggestion) {
-            $id = $suggestion['product']->id ?? null;
-            if ($id && !in_array($id, $seenIds)) {
-                $seenIds[] = $id;
+            $p = $suggestion['product'] ?? null;
+            if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
+                $seenIds[] = $p->id;
+                $seenArticles[] = $p->article;
                 $suggestions->push($suggestion);
             }
         }
@@ -59,11 +80,12 @@ class CrossSellService
         // 2. If not enough, use category-based rules
         if ($suggestions->count() < $limit) {
             $categoryKey = $this->extractCategoryKey($product->category_path);
-            $categorySuggestions = $this->getCategoryBasedSuggestions($product, $categoryKey, $limit - $suggestions->count());
+            $categorySuggestions = $this->getCategoryBasedSuggestions($product, $categoryKey, $limit - $suggestions->count(), $tenantId);
             foreach ($categorySuggestions as $suggestion) {
-                $id = $suggestion['product']->id ?? null;
-                if ($id && !in_array($id, $seenIds)) {
-                    $seenIds[] = $id;
+                $p = $suggestion['product'] ?? null;
+                if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
+                    $seenIds[] = $p->id;
+                    $seenArticles[] = $p->article;
                     $suggestions->push($suggestion);
                 }
             }
@@ -71,11 +93,12 @@ class CrossSellService
         
         // 3. If still not enough, use AI-based suggestions (same ai_product_type)
         if ($suggestions->count() < $limit) {
-            $aiSuggestions = $this->getAiBasedSuggestions($product, $limit - $suggestions->count(), $seenIds);
+            $aiSuggestions = $this->getAiBasedSuggestions($product, $limit - $suggestions->count(), $seenIds, $tenantId);
             foreach ($aiSuggestions as $suggestion) {
-                $id = $suggestion['product']->id ?? null;
-                if ($id && !in_array($id, $seenIds)) {
-                    $seenIds[] = $id;
+                $p = $suggestion['product'] ?? null;
+                if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
+                    $seenIds[] = $p->id;
+                    $seenArticles[] = $p->article;
                     $suggestions->push($suggestion);
                 }
             }
@@ -87,13 +110,14 @@ class CrossSellService
     /**
      * Get direct cross-sells from database
      */
-    protected function getDirectCrossSells(Product $product): Collection
+    protected function getDirectCrossSells(Product $product, ?int $tenantId = null): Collection
     {
-        $crossSells = ProductCrossSell::where('product_id', $product->id)
+        $query = ProductCrossSell::where('product_id', $product->id)
             ->where('is_active', true)
             ->orderBy('priority', 'desc')
-            ->with('crossSellProduct')
-            ->get();
+            ->with('crossSellProduct');
+        
+        $crossSells = $query->get();
             
         return $crossSells->map(function ($cs) {
             return [
@@ -101,13 +125,19 @@ class CrossSellService
                 'reason' => $cs->reason,
                 'type' => $cs->type,
             ];
-        })->filter(fn($item) => $item['product'] && $item['product']->in_stock);
+        })->filter(function($item) use ($tenantId) {
+            $p = $item['product'] ?? null;
+            if (!$p || !$p->in_stock) return false;
+            // Filter by tenant if specified
+            if ($tenantId && $p->tenant_id && $p->tenant_id != $tenantId) return false;
+            return true;
+        });
     }
     
     /**
      * Get suggestions based on category rules - now uses DB categories + AI
      */
-    protected function getCategoryBasedSuggestions(Product $product, ?string $categoryKey, int $limit): Collection
+    protected function getCategoryBasedSuggestions(Product $product, ?string $categoryKey, int $limit, ?int $tenantId = null): Collection
     {
         // 1. Try DB rules first
         $dbRules = CrossSellRule::where('source_category', $categoryKey)
@@ -119,12 +149,13 @@ class CrossSellService
             return $this->findProductsByRules(
                 $dbRules->map(fn($r) => ['category' => $r->target_category, 'reason' => $r->reason])->toArray(),
                 $product,
-                $limit
+                $limit,
+                $tenantId
             );
         }
         
         // 2. Try AI to determine accessories dynamically
-        $aiSuggestions = $this->getAiAccessorySuggestions($product, $limit);
+        $aiSuggestions = $this->getAiAccessorySuggestions($product, $limit, $tenantId);
         if ($aiSuggestions->isNotEmpty()) {
             return $aiSuggestions;
         }
@@ -136,16 +167,16 @@ class CrossSellService
         }
         
         $rules = array_map(fn($cat) => ['category' => $cat, 'reason' => $cat], $fallbackCategories);
-        return $this->findProductsByRules($rules, $product, $limit);
+        return $this->findProductsByRules($rules, $product, $limit, $tenantId);
     }
     
     /**
      * Use AI to determine what accessories would be good for this product
      */
-    protected function getAiAccessorySuggestions(Product $product, int $limit): Collection
+    protected function getAiAccessorySuggestions(Product $product, int $limit, ?int $tenantId = null): Collection
     {
-        // Cache key based on category path
-        $cacheKey = 'cross_sell_ai_' . md5($product->category_path);
+        // Cache key based on category path and tenant
+        $cacheKey = 'cross_sell_ai_' . ($tenantId ?? 'all') . '_' . md5($product->category_path);
         
         $aiCategories = Cache::remember($cacheKey, 3600, function() use ($product) {
             return $this->askAiForAccessories($product);
@@ -155,7 +186,7 @@ class CrossSellService
             return collect();
         }
         
-        return $this->findProductsByAiCategories($aiCategories, $product, $limit);
+        return $this->findProductsByAiCategories($aiCategories, $product, $limit, $tenantId);
     }
     
     /**
@@ -201,7 +232,7 @@ class CrossSellService
     /**
      * Find products by AI-suggested categories
      */
-    protected function findProductsByAiCategories(array $aiCategories, Product $product, int $limit): Collection
+    protected function findProductsByAiCategories(array $aiCategories, Product $product, int $limit, ?int $tenantId = null): Collection
     {
         $suggestions = collect();
         
@@ -213,10 +244,16 @@ class CrossSellService
             
             if (empty($category)) continue;
             
-            $targetProducts = Product::where('in_stock', true)
+            $query = Product::where('in_stock', true)
                 ->where('id', '!=', $product->id)
-                ->where('category_path', 'LIKE', '%' . $category . '%')
-                ->orderByDesc('popularity')
+                ->where('category_path', 'LIKE', '%' . $category . '%');
+            
+            // Filter by tenant
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            $targetProducts = $query->orderByDesc('popularity')
                 ->limit(2)
                 ->get();
             
@@ -236,18 +273,24 @@ class CrossSellService
     /**
      * Find products by category rules
      */
-    protected function findProductsByRules(array $rules, Product $product, int $limit): Collection
+    protected function findProductsByRules(array $rules, Product $product, int $limit, ?int $tenantId = null): Collection
     {
         $suggestions = collect();
         
         foreach ($rules as $rule) {
             if ($suggestions->count() >= $limit) break;
             
-            $targetProducts = Product::where('in_stock', true)
+            $query = Product::where('in_stock', true)
                 ->where('id', '!=', $product->id)
                 ->where('category_path', '!=', $product->category_path)
-                ->where('category_path', 'LIKE', '%' . $rule['category'] . '%')
-                ->orderByDesc('popularity')
+                ->where('category_path', 'LIKE', '%' . $rule['category'] . '%');
+            
+            // Filter by tenant
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            $targetProducts = $query->orderByDesc('popularity')
                 ->limit(2)
                 ->get();
             
@@ -267,7 +310,7 @@ class CrossSellService
     /**
      * Get AI-based suggestions (complementary categories)
      */
-    protected function getAiBasedSuggestions(Product $product, int $limit, array $excludeIds = []): Collection
+    protected function getAiBasedSuggestions(Product $product, int $limit, array $excludeIds = [], ?int $tenantId = null): Collection
     {
         $aiIndex = $product->aiIndex;
         if (!$aiIndex) {
@@ -281,15 +324,21 @@ class CrossSellService
             return collect();
         }
         
-        $products = Product::whereHas('aiIndex', function($q) use ($complementaryTypes) {
+        $query = Product::whereHas('aiIndex', function($q) use ($complementaryTypes) {
             $q->whereIn('ai_product_type', $complementaryTypes);
         })
         ->where('in_stock', true)
         ->where('id', '!=', $product->id)
-        ->whereNotIn('id', $excludeIds)
-        ->orderByDesc('popularity')
-        ->limit($limit)
-        ->get();
+        ->whereNotIn('id', $excludeIds);
+        
+        // Filter by tenant
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $products = $query->orderByDesc('popularity')
+            ->limit($limit)
+            ->get();
         
         return $products->map(fn($p) => [
             'product' => $p,

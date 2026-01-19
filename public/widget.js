@@ -3758,6 +3758,14 @@
             return 'other';
         },
         
+        // Helper: truncate string to max length
+        truncate: function(str, maxLen) {
+            if (!str) return '';
+            str = str.trim();
+            if (str.length <= maxLen) return str;
+            return str.substring(0, maxLen) + '...';
+        },
+        
         // Detect current category name from page
         detectCurrentCategory: function() {
             // Try breadcrumbs first
@@ -3777,13 +3785,15 @@
                 }
             }
             
-            // Try page title/h1
-            const h1 = document.querySelector('h1');
-            if (h1) {
-                const text = h1.textContent.trim();
-                // Avoid using product names (usually longer)
-                if (text.length < 50) {
-                    return text;
+            // Try page title/h1 for category pages only
+            const pageType = this.detectPageType();
+            if (pageType === 'category') {
+                const h1 = document.querySelector('h1');
+                if (h1) {
+                    const text = h1.textContent.trim();
+                    if (text.length < 50) {
+                        return text;
+                    }
                 }
             }
             
@@ -3800,6 +3810,78 @@
             return null;
         },
         
+        // Detect current product name from product page
+        detectCurrentProduct: function() {
+            const pageType = this.detectPageType();
+            if (pageType !== 'product') return null;
+            
+            // Try product schema
+            const productSchema = document.querySelector('[itemtype*="Product"] [itemprop="name"]');
+            if (productSchema) {
+                return productSchema.textContent.trim();
+            }
+            
+            // Try h1 on product pages
+            const h1 = document.querySelector('h1');
+            if (h1) {
+                const text = h1.textContent.trim();
+                // Product names are usually 10-100 chars
+                if (text.length >= 5 && text.length <= 150) {
+                    return text;
+                }
+            }
+            
+            // Try Horoshop product title
+            const hsTitle = document.querySelector('.hs-product-title, .product-title, .product-name, [data-product-title]');
+            if (hsTitle) {
+                return hsTitle.textContent.trim();
+            }
+            
+            // Try og:title meta
+            const ogTitle = document.querySelector('meta[property="og:title"]');
+            if (ogTitle && ogTitle.content) {
+                // Clean common suffixes like " | Shop Name"
+                return ogTitle.content.split('|')[0].trim();
+            }
+            
+            return null;
+        },
+        
+        // Detect product price from page
+        detectProductPrice: function() {
+            // Try schema.org price
+            const priceSchema = document.querySelector('[itemprop="price"]');
+            if (priceSchema) {
+                const price = priceSchema.content || priceSchema.textContent;
+                return this.formatPrice(price);
+            }
+            
+            // Try common price selectors
+            const priceSelectors = [
+                '.product-price', '.price', '[data-price]',
+                '.hs-price', '.current-price', '.sale-price'
+            ];
+            for (const selector of priceSelectors) {
+                const el = document.querySelector(selector);
+                if (el) {
+                    const text = el.textContent.trim();
+                    const match = text.match(/[\d\s]+/);
+                    if (match) {
+                        return this.formatPrice(match[0]);
+                    }
+                }
+            }
+            return null;
+        },
+        
+        // Format price for display
+        formatPrice: function(price) {
+            if (!price) return null;
+            const num = parseInt(price.toString().replace(/\D/g, ''));
+            if (isNaN(num)) return null;
+            return num.toLocaleString('uk-UA') + ' ₴';
+        },
+        
         // Show proactive trigger popup
         showTrigger: function(rule, context = {}) {
             if (!this.canShowTrigger(rule.type)) {
@@ -3812,11 +3894,18 @@
             
             log('ProactiveTriggers: Showing trigger', rule.id, rule.type);
             
-            // Add current category to context if available
+            // Collect all available context
             const category = this.detectCurrentCategory();
-            if (category) {
-                context.category = category;
-            }
+            const product = this.detectCurrentProduct();
+            const price = this.detectProductPrice();
+            const pageType = this.detectPageType();
+            
+            if (category) context.category = category;
+            if (product) context.product = product;
+            if (price) context.price = price;
+            context.pageType = pageType;
+            
+            log('ProactiveTriggers: Context collected', { category, product, price, pageType });
             
             // Create trigger popup
             const popup = this.createTriggerPopup(rule, context);
@@ -3871,12 +3960,26 @@
             
             // Replace variables in message
             let message = rule.message || '';
-            if (context.category) {
-                message = message.replace(/\{\{category\}\}/g, context.category);
+            
+            // Replace all template variables with context
+            const replacements = {
+                '{{category}}': context.category || 'цю категорію',
+                '{{product}}': context.product || 'цей товар',
+                '{{price}}': context.price || '',
+                '{{page_type}}': context.pageType || ''
+            };
+            
+            for (const [key, value] of Object.entries(replacements)) {
+                message = message.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
             }
-            if (context.product) {
-                message = message.replace(/\{\{product\}\}/g, context.product);
+            
+            // Smart fallbacks - shorten long product names
+            if (context.product && context.product.length > 40) {
+                const shortName = context.product.substring(0, 40) + '...';
+                message = message.replace(context.product, shortName);
             }
+            
+            log('ProactiveTriggers: Final message:', message);
             
             popup.innerHTML = `
                 <div style="display: flex; align-items: flex-start; gap: 12px;">
@@ -3961,53 +4064,92 @@
                     window.openChat();
                 }
                 
-                // Build contextual message based on page type and category
-                const pageType = this.detectPageType();
-                const category = this.detectCurrentCategory();
+                // Build contextual message based on trigger type and context
+                const pageType = context.pageType || this.detectPageType();
+                const category = context.category || this.detectCurrentCategory();
+                const product = context.product || this.detectCurrentProduct();
                 let message = '';
                 
-                log('ProactiveTriggers: Building message for', { pageType, category, rule_type: rule.type });
+                log('ProactiveTriggers: Building message for', { pageType, category, product, rule_type: rule.type });
                 
-                // Priority 1: Category page - always ask for top products in that category
-                if (pageType === 'category' && category) {
-                    message = `Покажи топ товари в категорії "${category}"`;
-                    log('ProactiveTriggers: Using category context message:', message);
-                }
-                // Priority 2: Product page - include product info
-                else if (pageType === 'product') {
-                    const productTitle = document.querySelector('h1')?.textContent?.trim() || '';
-                    // Make sure it's a product name, not a category name
-                    // Product pages usually have longer titles
-                    if (productTitle && productTitle.length > 10 && productTitle.length < 100) {
-                        // Check if this looks like a category title (common patterns)
-                        const categoryPatterns = /^(тактич|військов|камуфляж|спорядження|одяг|взуття|рюкзак|підсумк|плитоносц|бронежилет|шолом)/i;
-                        if (!categoryPatterns.test(productTitle)) {
-                            message = `Допоможіть з товаром "${productTitle}"`;
-                        } else {
-                            // It's actually a category page, ask for top products
-                            message = `Покажи топ товари в категорії "${productTitle}"`;
+                // Build message based on trigger type
+                switch (rule.type) {
+                    case 'exit_intent':
+                        if (pageType === 'product' && product) {
+                            // User was leaving product page
+                            message = `Маю питання по товару "${this.truncate(product, 50)}"`;
+                        } else if (pageType === 'category' && category) {
+                            // User was leaving category - show bestsellers
+                            message = `Покажи топ товари в категорії "${category}"`;
                         }
-                    }
-                    log('ProactiveTriggers: Product page message:', message);
+                        break;
+                        
+                    case 'time_on_page':
+                        if (pageType === 'product' && product) {
+                            // Long time on product - help with sizing
+                            message = `Допоможіть підібрати розмір для "${this.truncate(product, 40)}"`;
+                        } else if (pageType === 'category' && category) {
+                            // Long time in category - show bestsellers
+                            message = `Покажи найпопулярніші товари в "${category}"`;
+                        }
+                        break;
+                        
+                    case 'pdp_no_variant':
+                        if (product) {
+                            message = `Допоможіть підібрати розмір для "${this.truncate(product, 40)}"`;
+                        } else {
+                            message = 'Допоможіть підібрати розмір для цього товару';
+                        }
+                        break;
+                        
+                    case 'returning_visitor':
+                        if (category) {
+                            message = `Покажи новинки в категорії "${category}"`;
+                        } else {
+                            message = 'Що нового з\'явилось?';
+                        }
+                        break;
+                        
+                    case 'utm_campaign':
+                        // UTM triggers - depend on source
+                        const utm = this.getUtmParams();
+                        if (utm.utm_source === 'tiktok') {
+                            message = 'Покажи популярні товари, як у TikTok';
+                        } else if (utm.utm_source === 'instagram') {
+                            message = 'Покажи хіти, які постять в Instagram';
+                        } else if (pageType === 'product' && product) {
+                            message = `Маю питання по "${this.truncate(product, 50)}"`;
+                        } else if (category) {
+                            message = `Покажи топ в "${category}"`;
+                        }
+                        break;
                 }
                 
-                // Fallback to rule's initial_message if no context-specific message
+                // Fallback to rule's initial_message
                 if (!message && rule.action_config?.initial_message) {
                     message = rule.action_config.initial_message;
-                    // Replace {{category}} placeholder if we have category
+                    // Replace placeholders
                     if (category) {
                         message = message.replace(/\{\{category\}\}/g, category);
+                    }
+                    if (product) {
+                        message = message.replace(/\{\{product\}\}/g, this.truncate(product, 50));
                     }
                     log('ProactiveTriggers: Using rule initial message:', message);
                 }
                 
-                // Final fallback - if we still have no message but have category, ask for top products
-                if (!message && category) {
-                    message = `Покажи топ товари в категорії "${category}"`;
-                    log('ProactiveTriggers: Using fallback category message:', message);
+                // Final fallback
+                if (!message) {
+                    if (category) {
+                        message = `Покажи топ товари в "${category}"`;
+                    } else if (product) {
+                        message = `Розкажи більше про "${this.truncate(product, 50)}"`;
+                    } else {
+                        message = 'Допоможіть обрати';
+                    }
                 }
                 
-                // If we have a message, send it
+                // Send message to chat
                 if (message) {
                     setTimeout(() => {
                         const input = document.getElementById('aintento-input');

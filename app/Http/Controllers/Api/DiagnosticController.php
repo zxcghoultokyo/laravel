@@ -2326,8 +2326,8 @@ class DiagnosticController extends Controller
             $tenantId = (int) $request->input('tenant_id', 2);
             $analyzeImages = $request->boolean('analyze_images', true);
 
-            // Get products without color
-            $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            // Get products without color - simplified query
+            $products = DB::table('products')
                 ->where('tenant_id', $tenantId)
                 ->where('in_stock', true)
                 ->where(function($q) {
@@ -2341,7 +2341,8 @@ class DiagnosticController extends Controller
             $results = [];
 
         foreach ($products as $product) {
-            $raw = $product->raw ?? [];
+            // DB::table returns stdClass, raw is JSON string
+            $raw = is_string($product->raw) ? json_decode($product->raw, true) : ($product->raw ?? []);
             
             // Get image URL
             $imageUrl = null;

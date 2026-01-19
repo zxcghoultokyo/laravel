@@ -25,8 +25,8 @@ Schedule::call(function () {
     }
 })
     ->dailyAt('03:00')
-    ->withoutOverlapping()
-    ->name('sync-all-tenants');
+    ->name('sync-all-tenants')
+    ->withoutOverlapping();
 
 // Sync brands after products sync (03:30)
 Schedule::command('brands:sync --async')

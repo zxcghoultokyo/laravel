@@ -47,6 +47,27 @@ History stored in DB, NOT in session/cache:
 
 Diagnostic endpoint: `GET /api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025`
 
+## ⚠️ Session Identifiers (ВАЖЛИВО!)
+
+**Є ДВА типи session ID — не плутай!**
+
+| Назва | Тип | Де використовується | Приклад |
+|-------|-----|---------------------|---------|
+| `session_id` | string | Публічний ID з widget, API params, analytics tables | `"session_1768827245332_z8lvumz8k"` |
+| `chat_session_id` | int | FK до `chat_sessions.id` в `chat_messages` | `42` |
+
+**Таблиці:**
+- `chat_sessions`: має і `id` (int PK) і `session_id` (string, unique)
+- `chat_messages`: використовує `chat_session_id` (FK до `chat_sessions.id`)
+- Legacy analytics (`chat_events`, `chat_conversions`, `chat_session_outcomes`): використовують `session_id` (string)
+
+**Helper:** [app/Services/Chat/SessionResolver.php](app/Services/Chat/SessionResolver.php)
+```php
+SessionResolver::getBySessionId($sessionId);        // string → ChatSession
+SessionResolver::resolveChatSessionId($sessionId);  // string → int (FK)
+SessionResolver::resolveSessionId($chatSessionId);  // int → string
+```
+
 ## Key Components
 
 **Agents (Primary)**:

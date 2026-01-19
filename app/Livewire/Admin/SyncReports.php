@@ -278,7 +278,7 @@ class SyncReports extends Component
             'products:build-ai-index' => SyncLog::TYPE_AI_ENRICHMENT,
             'meili:reindex-products' => SyncLog::TYPE_MEILISEARCH,
             'meili:reindex-products-sync' => SyncLog::TYPE_MEILISEARCH,
-            'brands:sync' => SyncLog::TYPE_CATEGORIES,
+            'brands:sync' => SyncLog::TYPE_BRANDS,
             'products:update-orders-count' => SyncLog::TYPE_STATS,
             'products:generate-embeddings' => SyncLog::TYPE_EMBEDDINGS,
             'colors:detect' => SyncLog::TYPE_COLOR_DETECTION,

@@ -150,9 +150,12 @@ class Analytics extends Component
         $query = DB::table('chat_session_outcomes')
             ->where('created_at', '>=', $startDate);
         
-        // Filter by tenant if set
+        // Filter by tenant using merchant_id (tenant slug)
         if ($this->tenantId) {
-            $query->where('tenant_id', $this->tenantId);
+            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
+            if ($merchantId && Schema::hasColumn('chat_session_outcomes', 'merchant_id')) {
+                $query->where('merchant_id', $merchantId);
+            }
         }
         
         return $query
@@ -172,9 +175,12 @@ class Analytics extends Component
                 ->where('event_type', 'product_click')
                 ->whereNotNull('product_id');
             
-            // Filter by tenant if set
+            // Filter by tenant using merchant_id (tenant slug) since chat_events uses merchant_id
             if ($this->tenantId) {
-                $query->where('tenant_id', $this->tenantId);
+                $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
+                if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                    $query->where('merchant_id', $merchantId);
+                }
             }
             
             $productClicks = $query
@@ -224,9 +230,12 @@ class Analytics extends Component
             ->where('event_type', 'product_shown')
             ->whereNotNull('product_id');
         
-        // Filter by tenant if set
+        // Filter by tenant using merchant_id (tenant slug)
         if ($this->tenantId) {
-            $query->where('tenant_id', $this->tenantId);
+            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
+            if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                $query->where('merchant_id', $merchantId);
+            }
         }
         
         $productViews = $query
@@ -270,9 +279,12 @@ class Analytics extends Component
         $query = DB::table('chat_events')
             ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
         
-        // Filter by tenant if set
+        // Filter by tenant using merchant_id (tenant slug)
         if ($this->tenantId) {
-            $query->where('tenant_id', $this->tenantId);
+            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
+            if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                $query->where('merchant_id', $merchantId);
+            }
         }
         
         $events = $query

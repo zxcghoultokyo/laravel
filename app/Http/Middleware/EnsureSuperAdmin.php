@@ -8,6 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Middleware to ensure user is Super Admin.
+ * Returns 404 for non-super-admins to hide admin routes existence.
  */
 class EnsureSuperAdmin
 {
@@ -17,11 +18,8 @@ class EnsureSuperAdmin
     public function handle(Request $request, Closure $next): Response
     {
         if (!$request->user() || !$request->user()->isSuperAdmin()) {
-            if ($request->expectsJson()) {
-                return response()->json(['error' => 'Forbidden'], 403);
-            }
-            
-            abort(403, 'Доступ заборонено. Потрібні права Super Admin.');
+            // Return 404 to hide admin route existence from regular users
+            abort(404);
         }
 
         return $next($request);

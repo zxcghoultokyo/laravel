@@ -21,13 +21,13 @@ use App\Livewire\Admin\TriggerStats;
 | Admin Web Routes
 |--------------------------------------------------------------------------
 |
-| Admin panel routes using Livewire components.
-| Super Admin has access to all routes.
-| Tenant owners/admins have access to their own tenant data.
+| Super Admin panel routes using Livewire components.
+| Only Super Admin (stovburtm@gmail.com) has access.
+| Regular tenant users should use /dashboard instead.
 |
 */
 
-Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'verified', 'super-admin'])->prefix('admin')->name('admin.')->group(function () {
     
     // Dashboard
     Route::get('/', Dashboard::class)->name('dashboard');
@@ -53,10 +53,8 @@ Route::middleware(['auth', 'verified'])->prefix('admin')->name('admin.')->group(
     // Exports
     Route::get('/exports', ExportsManager::class)->name('exports');
     
-    // Super Admin only routes
-    Route::middleware('super-admin')->group(function () {
-        Route::get('/tenants', TenantsManager::class)->name('tenants');
-        Route::get('/tenants/{tenant}', \App\Livewire\Admin\TenantDetails::class)->name('tenants.show');
-        Route::get('/sync-reports', SyncReports::class)->name('sync-reports');
-    });
+    // Super Admin only routes (tenants management)
+    Route::get('/tenants', TenantsManager::class)->name('tenants');
+    Route::get('/tenants/{tenant}', \App\Livewire\Admin\TenantDetails::class)->name('tenants.show');
+    Route::get('/sync-reports', SyncReports::class)->name('sync-reports');
 });

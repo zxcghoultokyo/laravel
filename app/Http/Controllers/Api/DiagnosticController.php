@@ -2320,6 +2320,13 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        // Super simple version to debug
+        return response()->json([
+            'status' => 'ok',
+            'step' => 'start',
+        ]);
+        }
+
         try {
             $searchQuery = $request->input('q', 'Level 7');
             $limit = min((int) $request->input('limit', 10), 20);

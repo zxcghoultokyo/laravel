@@ -39,13 +39,12 @@ class GenerateCategoryScenariosJob implements ShouldQueue
         $scenario = Scenario::query()->firstOrNew(['code' => $code]);
 
         $scenario->fill([
-            'name'          => $categoryPath,
-            'description'   => 'Автогенерований сценарій для категорії: ' . $categoryPath,
-            'handler_class' => \App\Services\Chat\Handlers\CategoryScenarioHandler::class, // приклад
+            'title'         => $categoryPath,
+            'type'          => 'category',
             'is_active'     => true,
             'config'        => [
                 'category_path' => $categoryPath,
-                // сюди можна докинути сконфігуровані фрази, теги, підказки для бота
+                'description'   => 'Автогенерований сценарій для категорії: ' . $categoryPath,
             ],
         ]);
 

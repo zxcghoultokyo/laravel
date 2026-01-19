@@ -1429,7 +1429,9 @@ PROMPT;
                     ]);
             }
 
-            ChatMessage::create([
+            // ChatMessage also has TenantScope - bypass it and set tenant_id explicitly
+            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+                'tenant_id' => $session->tenant_id,
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $content,
@@ -1480,7 +1482,9 @@ PROMPT;
                 ], array_slice($products, 0, 10)),
             ];
 
-            ChatMessage::create([
+            // ChatMessage also has TenantScope - bypass it and set tenant_id explicitly
+            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+                'tenant_id' => $session->tenant_id,
                 'chat_session_id' => $session->id,
                 'role' => 'assistant',
                 'content' => $content,
@@ -1516,7 +1520,9 @@ PROMPT;
                 ->first();
             if (!$session) return [];
 
-            $messages = ChatMessage::where('chat_session_id', $session->id)
+            // Also bypass TenantScope for ChatMessage query
+            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
                 ->orderBy('created_at', 'desc')
                 ->limit($limit)
                 ->get()

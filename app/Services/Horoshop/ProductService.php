@@ -256,10 +256,13 @@ class ProductService
         $product = Product::withoutGlobalScope(TenantScope::class)
             ->firstOrNew(['article' => $article]);
 
-        // Set default tenant_id for legacy sync (Contractor = 1)
-        // This ensures all products have a tenant_id for multi-tenant filtering
+        // Set default tenant_id for legacy sync
+        // Find first active tenant if creating new product without tenant
         if (!$product->exists && !$product->tenant_id) {
-            $product->tenant_id = 1;
+            $defaultTenant = \App\Models\Tenant::where('is_active', true)->orderBy('id')->first();
+            if ($defaultTenant) {
+                $product->tenant_id = $defaultTenant->id;
+            }
         }
 
         $brand = Arr::get($item, 'brand.value.ua')

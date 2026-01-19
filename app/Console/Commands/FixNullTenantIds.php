@@ -12,21 +12,42 @@ use Illuminate\Support\Facades\Log;
 class FixNullTenantIds extends Command
 {
     protected $signature = 'products:fix-tenant-ids 
-                            {--tenant= : Assign all NULL tenant products to this tenant ID (default: 1)}
+                            {--tenant= : Assign all NULL tenant products to this tenant ID (auto-detects if not specified)}
                             {--dry-run : Show what would be updated without making changes}';
 
     protected $description = 'Fix products with NULL tenant_id by assigning them to a default tenant';
 
     public function handle(): int
     {
-        $tenantId = (int) $this->option('tenant') ?: 1;
+        $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
         $dryRun = $this->option('dry-run');
 
-        // Verify tenant exists
-        $tenant = Tenant::find($tenantId);
-        if (!$tenant) {
-            $this->error("Tenant with ID {$tenantId} not found!");
-            return 1;
+        // If no tenant specified, find the first active one
+        if (!$tenantId) {
+            $tenant = Tenant::where('is_active', true)->orderBy('id')->first();
+            if (!$tenant) {
+                $this->error('No active tenants found! Please specify --tenant=ID');
+                return 1;
+            }
+            $tenantId = $tenant->id;
+            $this->info("Auto-detected tenant: {$tenant->name} (ID: {$tenantId})");
+        } else {
+            // Verify specified tenant exists
+            $tenant = Tenant::find($tenantId);
+            if (!$tenant) {
+                $this->error("Tenant with ID {$tenantId} not found!");
+                
+                // Show available tenants
+                $tenants = Tenant::all(['id', 'name', 'slug', 'is_active']);
+                if ($tenants->isNotEmpty()) {
+                    $this->info('Available tenants:');
+                    $this->table(
+                        ['ID', 'Name', 'Slug', 'Active'],
+                        $tenants->map(fn($t) => [$t->id, $t->name, $t->slug, $t->is_active ? 'Yes' : 'No'])
+                    );
+                }
+                return 1;
+            }
         }
 
         // Count products with NULL tenant_id

@@ -1165,9 +1165,15 @@ class ChatService
                 return null;
             }
             
+            // TenantScope will automatically filter by tenant_id from request context
             $product = Product::where('article', $article)->first();
             if (!$product) {
                 return null;
+            }
+            
+            // Pass tenant_id to cross-sell service for proper filtering
+            if ($product->tenant_id) {
+                $this->crossSellService->setTenantId($product->tenant_id);
             }
             
             // Get cross-sell suggestions

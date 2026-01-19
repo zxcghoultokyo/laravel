@@ -256,6 +256,12 @@ class ProductService
         $product = Product::withoutGlobalScope(TenantScope::class)
             ->firstOrNew(['article' => $article]);
 
+        // Set default tenant_id for legacy sync (Contractor = 1)
+        // This ensures all products have a tenant_id for multi-tenant filtering
+        if (!$product->exists && !$product->tenant_id) {
+            $product->tenant_id = 1;
+        }
+
         $brand = Arr::get($item, 'brand.value.ua')
             ?? Arr::get($item, 'brand.value.ru')
             ?? null;

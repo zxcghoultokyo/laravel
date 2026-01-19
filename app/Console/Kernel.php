@@ -20,14 +20,21 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\SearchEvaluate::class,
         \App\Console\Commands\SearchSeedEval::class,
         \App\Console\Commands\SyncBrandsCommand::class,
+        \App\Console\Commands\FixNullTenantIds::class,
     ];
 
     protected function schedule(Schedule $schedule): void
     {
-        // 1. Sync products from Horoshop (runs everywhere)
-        $schedule->job(new SyncHoroshopProductsJob())
+        // 1. Sync products from Horoshop for ALL active tenants
+        $schedule->call(function () {
+            $tenants = \App\Models\Tenant::where('is_active', true)->get();
+            foreach ($tenants as $tenant) {
+                SyncHoroshopProductsJob::dispatch($tenant->id);
+            }
+        })
             ->dailyAt('03:00')
-            ->withoutOverlapping();
+            ->withoutOverlapping()
+            ->name('sync-all-tenants');
 
         // 2. Sync brands after products sync (with 30min delay)
         $schedule->job(new SyncBrandsJob())

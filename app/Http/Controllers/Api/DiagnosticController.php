@@ -2253,4 +2253,248 @@ class DiagnosticController extends Controller
                 : 'Data has been migrated. Remember to reindex Meilisearch!',
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/update-product-color
+     * Update color for specific products
+     */
+    public function updateProductColor(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $articles = $request->input('articles', []);
+        $color = $request->input('color', '');
+        $dryRun = $request->boolean('dry_run', true);
+
+        if (empty($articles)) {
+            return response()->json(['error' => 'articles parameter required (array of article codes)'], 400);
+        }
+
+        if (empty($color)) {
+            return response()->json(['error' => 'color parameter required'], 400);
+        }
+
+        // Find products
+        $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->whereIn('article', $articles)
+            ->get(['id', 'article', 'title', 'color']);
+
+        if ($products->isEmpty()) {
+            return response()->json(['error' => 'No products found with given articles'], 404);
+        }
+
+        $results = $products->map(fn($p) => [
+            'id' => $p->id,
+            'article' => $p->article,
+            'title' => $p->title,
+            'old_color' => $p->color,
+            'new_color' => $color,
+        ])->toArray();
+
+        if (!$dryRun) {
+            \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->whereIn('article', $articles)
+                ->update(['color' => $color]);
+        }
+
+        return response()->json([
+            'dry_run' => $dryRun,
+            'color' => $color,
+            'updated_count' => count($results),
+            'products' => $results,
+            'note' => $dryRun 
+                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch after!' 
+                : 'Products updated! Run Meilisearch reindex to update search.',
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/test-color-picker
+     * Test color detection from product images
+     */
+    public function testColorPicker(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $query = $request->input('q', 'Level 7');
+        $limit = min((int) $request->input('limit', 10), 20);
+        $tenantId = $request->input('tenant_id', 2);
+
+        // Кольорова палітра для матчингу
+        $colorMap = [
+            'Сірий' => [[100, 100, 100], [180, 180, 180]],
+            'Чорний' => [[0, 0, 0], [60, 60, 60]],
+            'Олива' => [[70, 80, 40], [130, 150, 90]],
+            'Койот' => [[140, 110, 70], [200, 170, 120]],
+            'Мультикам' => [[100, 90, 60], [170, 150, 100]],
+            'Зелений' => [[30, 80, 30], [100, 180, 100]],
+            'Білий' => [[200, 200, 200], [255, 255, 255]],
+            'Синій' => [[30, 30, 100], [100, 100, 200]],
+            'Піксель' => [[80, 90, 70], [140, 150, 120]],
+        ];
+
+        $colorKeywords = [
+            'сірий' => 'Сірий', 'сіра' => 'Сірий', 'grey' => 'Сірий', 'gray' => 'Сірий',
+            'чорний' => 'Чорний', 'чорна' => 'Чорний', 'black' => 'Чорний',
+            'олива' => 'Олива', 'оливков' => 'Олива', 'olive' => 'Олива',
+            'койот' => 'Койот', 'coyote' => 'Койот',
+            'мультикам' => 'Мультикам', 'multicam' => 'Мультикам',
+            'піксел' => 'Піксель', 'pixel' => 'Піксель',
+            'зелен' => 'Зелений', 'green' => 'Зелений',
+            'білий' => 'Білий', 'біла' => 'Білий', 'white' => 'Білий',
+            'пісоч' => 'Пісочний', 'sand' => 'Пісочний', 'desert' => 'Пісочний',
+        ];
+
+        // Беремо товари без кольору
+        $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->where('in_stock', true)
+            ->where(function($q) {
+                $q->whereNull('color')->orWhere('color', '');
+            })
+            ->where('title', 'like', "%{$query}%")
+            ->limit($limit)
+            ->get();
+
+        $results = [];
+
+        foreach ($products as $product) {
+            $result = [
+                'id' => $product->id,
+                'article' => $product->article,
+                'title' => $product->title,
+                'current_color' => $product->color ?: null,
+                'from_description' => null,
+                'from_image' => null,
+                'image_rgb' => null,
+                'image_hex' => null,
+                'image_url' => null,
+                'recommended' => null,
+            ];
+
+            // 1. Шукаємо колір в описі
+            $description = $product->raw['description'] ?? '';
+            $descLower = mb_strtolower($description);
+            foreach ($colorKeywords as $keyword => $color) {
+                if (mb_strpos($descLower, $keyword) !== false) {
+                    $result['from_description'] = $color;
+                    break;
+                }
+            }
+
+            // 2. Отримуємо URL зображення
+            $raw = $product->raw ?? [];
+            $imageUrl = null;
+            if (!empty($raw['pictures'][0]['url'])) {
+                $imageUrl = $raw['pictures'][0]['url'];
+            } elseif (!empty($raw['images'][0]['url'])) {
+                $imageUrl = $raw['images'][0]['url'];
+            } elseif (!empty($raw['image'])) {
+                $imageUrl = $raw['image'];
+            } elseif (!empty($raw['main_image'])) {
+                $imageUrl = $raw['main_image'];
+            }
+
+            $result['image_url'] = $imageUrl;
+
+            // 3. Аналізуємо зображення
+            if ($imageUrl) {
+                try {
+                    $response = \Illuminate\Support\Facades\Http::timeout(10)->get($imageUrl);
+                    if ($response->successful()) {
+                        $image = @imagecreatefromstring($response->body());
+                        if ($image) {
+                            $width = imagesx($image);
+                            $height = imagesy($image);
+                            $newW = 50;
+                            $newH = 50;
+                            
+                            $resized = imagecreatetruecolor($newW, $newH);
+                            imagecopyresampled($resized, $image, 0, 0, 0, 0, $newW, $newH, $width, $height);
+                            
+                            $colors = [];
+                            for ($x = 0; $x < $newW; $x++) {
+                                for ($y = 0; $y < $newH; $y++) {
+                                    $rgb = imagecolorat($resized, $x, $y);
+                                    $r = ($rgb >> 16) & 0xFF;
+                                    $g = ($rgb >> 8) & 0xFF;
+                                    $b = $rgb & 0xFF;
+                                    
+                                    // Ігноруємо білий/чорний фон
+                                    if ($r > 240 && $g > 240 && $b > 240) continue;
+                                    if ($r < 20 && $g < 20 && $b < 20) continue;
+                                    
+                                    $key = (int)($r/20)*20 . '_' . (int)($g/20)*20 . '_' . (int)($b/20)*20;
+                                    if (!isset($colors[$key])) {
+                                        $colors[$key] = ['count' => 0, 'r' => 0, 'g' => 0, 'b' => 0];
+                                    }
+                                    $colors[$key]['count']++;
+                                    $colors[$key]['r'] += $r;
+                                    $colors[$key]['g'] += $g;
+                                    $colors[$key]['b'] += $b;
+                                }
+                            }
+                            
+                            imagedestroy($image);
+                            imagedestroy($resized);
+                            
+                            if (!empty($colors)) {
+                                uasort($colors, fn($a, $b) => $b['count'] - $a['count']);
+                                $dominant = array_values($colors)[0];
+                                $r = (int)($dominant['r'] / $dominant['count']);
+                                $g = (int)($dominant['g'] / $dominant['count']);
+                                $b = (int)($dominant['b'] / $dominant['count']);
+                                
+                                $result['image_rgb'] = [$r, $g, $b];
+                                $result['image_hex'] = sprintf("#%02x%02x%02x", $r, $g, $b);
+                                
+                                // Матчимо колір
+                                foreach ($colorMap as $name => $range) {
+                                    [$min, $max] = $range;
+                                    if ($r >= $min[0] && $r <= $max[0] &&
+                                        $g >= $min[1] && $g <= $max[1] &&
+                                        $b >= $min[2] && $b <= $max[2]) {
+                                        $result['from_image'] = $name;
+                                        break;
+                                    }
+                                }
+                                
+                                // Fallback визначення
+                                if (!$result['from_image']) {
+                                    if ($r > $g && $r > $b) $result['from_image'] = 'Коричневий/Бежевий';
+                                    elseif ($g > $r && $g > $b) $result['from_image'] = 'Зелений';
+                                    elseif ($b > $r && $b > $g) $result['from_image'] = 'Синій';
+                                    elseif (abs($r - $g) < 30 && abs($g - $b) < 30) {
+                                        $result['from_image'] = $r > 150 ? 'Світло-сірий' : 'Сірий';
+                                    } else {
+                                        $result['from_image'] = 'Невизначений';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    $result['error'] = $e->getMessage();
+                }
+            }
+
+            // 4. Рекомендований колір (пріоритет: характеристики > опис > фото)
+            $result['recommended'] = $product->color ?: $result['from_description'] ?: $result['from_image'];
+
+            $results[] = $result;
+        }
+
+        return response()->json([
+            'query' => $query,
+            'tenant_id' => $tenantId,
+            'products_found' => count($results),
+            'products' => $results,
+            'note' => 'Priority: color field > description > image analysis',
+        ]);
+    }
 }
+

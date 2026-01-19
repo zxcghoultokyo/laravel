@@ -39,6 +39,8 @@ class ChatDetail extends Component
 
     public function loadSession()
     {
+        $user = auth()->user();
+        
         // First, try to find messages by chat_session_id (most common case from dashboard)
         $messagesExist = DB::table('chat_messages')
             ->where('chat_session_id', $this->sessionId)
@@ -65,6 +67,11 @@ class ChatDetail extends Component
                 ]);
             }
             
+            // Security check: non-SuperAdmin can only view their tenant's sessions
+            if ($user && !$user->isSuperAdmin() && $this->session->tenant_id !== $user->tenant_id) {
+                abort(403, 'Доступ заборонено');
+            }
+            
             // Load messages - bypass TenantScope
             $this->messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('chat_session_id', $this->sessionId)
@@ -77,6 +84,11 @@ class ChatDetail extends Component
                 ->where('session_id', $this->sessionId)
                 ->with('messages')
                 ->first();
+            
+            // Security check: non-SuperAdmin can only view their tenant's sessions
+            if ($this->session && $user && !$user->isSuperAdmin() && $this->session->tenant_id !== $user->tenant_id) {
+                abort(403, 'Доступ заборонено');
+            }
             
             if ($this->session) {
                 $this->messages = $this->session->messages;

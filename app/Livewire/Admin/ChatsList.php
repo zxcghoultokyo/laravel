@@ -51,9 +51,16 @@ class ChatsList extends Component
 
     public function render()
     {
-        // Bypass TenantScope to allow admins to see all chats
+        $user = auth()->user();
+        
+        // Bypass TenantScope but filter by tenant_id for non-SuperAdmins
         $query = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->with('messages');
+
+        // Non-SuperAdmin users only see their tenant's chats
+        if ($user && !$user->isSuperAdmin()) {
+            $query->where('tenant_id', $user->tenant_id);
+        }
 
         // Search
         if ($this->search) {

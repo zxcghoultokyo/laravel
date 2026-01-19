@@ -90,8 +90,8 @@
         
         <!-- Contact -->
         <div class="mt-8 text-gray-500 text-sm">
-            <p>Проблема не зникає? Напишіть нам: 
-                <a href="mailto:support@aintento.com" class="text-orange-400 hover:text-orange-300">support@aintento.com</a>
+            <p>Проблема не зникає? Напишіть нам у Telegram: 
+                <a href="https://t.me/AIntento" target="_blank" class="text-orange-400 hover:text-orange-300">@AIntento</a>
             </p>
         </div>
         

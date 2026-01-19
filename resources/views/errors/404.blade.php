@@ -86,8 +86,15 @@
             </a>
         </div>
         
+        <!-- Contact -->
+        <div class="mt-8 text-gray-500 text-sm">
+            <p>Заблукали? Напишіть у Telegram: 
+                <a href="https://t.me/AIntento" target="_blank" class="text-blue-400 hover:text-blue-300">@AIntento</a>
+            </p>
+        </div>
+        
         <!-- Easter Egg -->
-        <div class="mt-8">
+        <div class="mt-4">
             <button onclick="this.innerHTML='🎉 Ви знайшли Easter Egg! Але сторінка все одно 404 😅'" 
                     class="text-gray-500 hover:text-gray-300 transition-colors text-sm cursor-pointer">
                 Натисни, якщо тобі сумно 😢

@@ -310,7 +310,7 @@ class Analytics extends Component
         return $query
             ->orderByDesc('created_at')
             ->limit(20)
-            ->get(['role as event_type', 'session_id', 'created_at'])
+            ->get(['role as event_type', 'chat_session_id as session_id', 'created_at'])
             ->map(function ($row) {
                 $row->event_type = $row->event_type === 'user' ? 'message' : 'assistant_reply';
                 return $row;

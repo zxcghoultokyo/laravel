@@ -75,8 +75,15 @@
             </a>
         </div>
         
+        <!-- Contact -->
+        <div class="mt-8 text-gray-500 text-sm">
+            <p>Потрібна допомога? Напишіть у Telegram: 
+                <a href="https://t.me/AIntento" target="_blank" class="text-red-400 hover:text-red-300">@AIntento</a>
+            </p>
+        </div>
+        
         <!-- Branding -->
-        <div class="mt-12 pulse-slow">
+        <div class="mt-4 pulse-slow">
             <p class="text-gray-500 text-sm">
                 Powered by <span class="text-red-400 font-semibold">Aintento AI</span> 🤖
             </p>

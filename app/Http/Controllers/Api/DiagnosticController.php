@@ -2334,6 +2334,7 @@ class DiagnosticController extends Controller
 
             // Get products without color - use DB facade (no TenantScope issues)
             $products = DB::table('products')
+                ->select(['id', 'article', 'title', 'color', 'images', 'raw'])
                 ->where('tenant_id', $tenantId)
                 ->where('in_stock', true)
                 ->where(function($builder) {

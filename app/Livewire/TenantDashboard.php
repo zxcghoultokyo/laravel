@@ -208,18 +208,24 @@ class TenantDashboard extends Component
             return;
         }
         
-        // Build query - orders table may not have merchant_id column yet
+        $tenant = $this->tenant;
+        
+        // Get tenant's session_ids from chat_sessions for filtering
+        $tenantSessionIds = DB::table('chat_sessions')
+            ->where('tenant_id', $tenant->id)
+            ->pluck('session_id')
+            ->toArray();
+        
+        if (empty($tenantSessionIds)) {
+            $this->checkoutOrders = [];
+            return;
+        }
+        
+        // Filter orders by session_id belonging to this tenant
         $query = DB::table('orders')
             ->where('created_at', '>=', $startDate)
-            ->where('had_chat', true);
-        
-        // Only filter by merchant_id if column exists
-        if (Schema::hasColumn('orders', 'merchant_id')) {
-            $query->where(function($q) use ($slug) {
-                $q->where('merchant_id', $slug)
-                  ->orWhereNull('merchant_id');
-            });
-        }
+            ->where('had_chat', true)
+            ->whereIn('session_id', $tenantSessionIds);
         
         $orders = $query->orderByDesc('ordered_at')->get();
         

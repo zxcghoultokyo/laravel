@@ -208,16 +208,20 @@ class TenantDashboard extends Component
             return;
         }
         
-        // Orders are linked via merchant_id (tenant slug)
-        $orders = DB::table('orders')
+        // Build query - orders table may not have merchant_id column yet
+        $query = DB::table('orders')
             ->where('created_at', '>=', $startDate)
-            ->where('had_chat', true)
-            ->where(function($q) use ($slug) {
+            ->where('had_chat', true);
+        
+        // Only filter by merchant_id if column exists
+        if (Schema::hasColumn('orders', 'merchant_id')) {
+            $query->where(function($q) use ($slug) {
                 $q->where('merchant_id', $slug)
-                  ->orWhereNull('merchant_id'); // fallback for old orders without merchant_id
-            })
-            ->orderByDesc('ordered_at')
-            ->get();
+                  ->orWhereNull('merchant_id');
+            });
+        }
+        
+        $orders = $query->orderByDesc('ordered_at')->get();
         
         $this->checkoutOrders = $orders->map(function ($order) {
             $raw = json_decode($order->raw ?? '{}', true);

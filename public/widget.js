@@ -3516,9 +3516,13 @@
             this.setupTimeOnPageDetector();
             this.setupActivityTracker();
             this.setupVariantSelectionDetector();
+            this.setupReturningVisitorDetector();
             
-            // Check UTM triggers on page load
-            setTimeout(() => this.checkUtmTriggers(), 1000);
+            // Check UTM triggers on page load (wait for rules to load)
+            setTimeout(() => this.checkUtmTriggers(), 2000);
+            
+            // Check returning visitor trigger
+            setTimeout(() => this.checkReturningVisitorTrigger(), 3000);
             
             log('ProactiveTriggers: Initialized');
         },
@@ -3645,7 +3649,12 @@
         },
         
         // Match UTM parameter (case insensitive, partial match)
+        // Empty pattern means "any value" - matches if param exists OR no requirement
         matchUtmParam: function(value, pattern) {
+            if (!pattern || pattern.trim() === '') {
+                // Empty pattern means no requirement for this param
+                return true;
+            }
             if (!value) return false;
             return value.toLowerCase().includes(pattern.toLowerCase());
         },
@@ -4259,6 +4268,94 @@
             log('ProactiveTriggers: Variant selection detector setup');
         },
         
+        // Returning visitor detector
+        setupReturningVisitorDetector: function() {
+            try {
+                // Save current visit info
+                const now = Date.now();
+                const visitInfo = {
+                    timestamp: now,
+                    page: window.location.pathname,
+                    category: this.detectCurrentCategory()
+                };
+                
+                // Get previous visits
+                const visitsKey = 'aintento_visits';
+                let visits = [];
+                try {
+                    visits = JSON.parse(localStorage.getItem(visitsKey) || '[]');
+                } catch(e) {}
+                
+                // Check if returning visitor (visited before)
+                this.state.isReturningVisitor = visits.length > 0;
+                this.state.lastVisit = visits.length > 0 ? visits[visits.length - 1] : null;
+                
+                if (this.state.isReturningVisitor && this.state.lastVisit) {
+                    const hoursSinceLastVisit = (now - this.state.lastVisit.timestamp) / (1000 * 60 * 60);
+                    this.state.hoursSinceLastVisit = hoursSinceLastVisit;
+                    log('ProactiveTriggers: Returning visitor detected, hours since last visit:', Math.round(hoursSinceLastVisit));
+                }
+                
+                // Add current visit (keep last 10)
+                visits.push(visitInfo);
+                if (visits.length > 10) visits = visits.slice(-10);
+                localStorage.setItem(visitsKey, JSON.stringify(visits));
+                
+            } catch(e) {
+                log('ProactiveTriggers: Error in returning visitor detector', e);
+            }
+        },
+        
+        // Detect current category from page
+        detectCurrentCategory: function() {
+            // Try breadcrumbs
+            const breadcrumbs = document.querySelectorAll('.breadcrumb a, .breadcrumbs a, [itemtype*="BreadcrumbList"] a');
+            if (breadcrumbs.length > 1) {
+                return breadcrumbs[breadcrumbs.length - 1].textContent.trim();
+            }
+            // Try h1
+            const h1 = document.querySelector('h1');
+            if (h1) return h1.textContent.trim();
+            // Try URL
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            return pathParts[0] || '';
+        },
+        
+        // Check returning visitor trigger
+        checkReturningVisitorTrigger: function() {
+            if (!this.state.isReturningVisitor || !this.state.lastVisit) {
+                log('ProactiveTriggers: Not a returning visitor');
+                return;
+            }
+            
+            // Find returning visitor rule
+            const rule = this.findMatchingRule('returning_visitor');
+            if (!rule) {
+                log('ProactiveTriggers: No returning visitor rule found');
+                return;
+            }
+            
+            // Check conditions
+            const minHours = rule.conditions?.min_hours_since_last_visit || 24;
+            if (this.state.hoursSinceLastVisit < minHours) {
+                log('ProactiveTriggers: Not enough time since last visit', this.state.hoursSinceLastVisit, '<', minHours);
+                return;
+            }
+            
+            if (this.canShowTrigger('returning_visitor')) {
+                const delay = (rule.conditions?.delay_seconds || 5) * 1000;
+                setTimeout(() => {
+                    if (this.canShowTrigger('returning_visitor')) {
+                        log('ProactiveTriggers: Showing returning visitor trigger');
+                        this.showTrigger(rule, {
+                            trigger_reason: 'returning_visitor',
+                            last_visit: this.state.lastVisit
+                        });
+                    }
+                }, delay);
+            }
+        },
+
         // Check UTM triggers
         checkUtmTriggers: function() {
             const utm = this.getUtmParams();

@@ -977,27 +977,76 @@ class ChatService
     }
 
     /**
+     * Get current tenant ID from request context.
+     * Similar to MeiliProductSearchTool::getCurrentTenantId()
+     */
+    protected function getCurrentTenantId(): ?int
+    {
+        // 1. Check app binding (set by ResolveTenantMiddleware)
+        if (app()->bound('current_tenant')) {
+            $tenant = app('current_tenant');
+            if ($tenant && $tenant->id) {
+                return (int) $tenant->id;
+            }
+        }
+        
+        // 2. Check authenticated user
+        if (auth()->check()) {
+            $user = auth()->user();
+            if ($user->role === 'super_admin') {
+                return null; // Super admin - no specific tenant
+            }
+            if ($user->tenant_id) {
+                return (int) $user->tenant_id;
+            }
+        }
+        
+        // 3. Check request context
+        if (request()->has('tenant_id')) {
+            return (int) request()->input('tenant_id');
+        }
+        
+        // 4. Check session
+        if (session()->has('tenant_id')) {
+            return (int) session()->get('tenant_id');
+        }
+        
+        // Default to main tenant (Contractor, id=2)
+        return 2;
+    }
+
+    /**
      * Логування повідомлення користувача до БД.
      */
     protected function logUserMessage(string $sessionId, string $content): void
     {
         try {
-            Log::info('logUserMessage called', ['session_id' => $sessionId]);
+            $tenantId = $this->getCurrentTenantId();
+            Log::info('logUserMessage called', ['session_id' => $sessionId, 'tenant_id' => $tenantId]);
             
             // Bypass TenantScope - sessions are identified by session_id, not tenant
+            // But we need to set tenant_id for proper filtering in admin
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->firstOrCreate(
                     ['session_id' => $sessionId],
                     [
+                        'tenant_id' => $tenantId,
                         'language' => 'uk',
                         'status' => 'open',
                         'meta' => [],
                     ]
                 );
+            
+            // Update tenant_id if session existed but had NULL tenant
+            if ($session->tenant_id === null && $tenantId !== null) {
+                $session->update(['tenant_id' => $tenantId]);
+            }
 
-            Log::info('Session created/found', ['session_id' => $sessionId, 'db_id' => $session->id]);
+            Log::info('Session created/found', ['session_id' => $sessionId, 'db_id' => $session->id, 'tenant_id' => $session->tenant_id]);
 
-            ChatMessage::create([
+            // Create message with tenant_id from session
+            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+                'tenant_id' => $session->tenant_id,
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $content,

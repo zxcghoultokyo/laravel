@@ -1433,11 +1433,14 @@ PROMPT;
                         'status' => 'open',
                         'meta' => [],
                     ]);
+            } elseif ($session->tenant_id === null && $tenantId !== null) {
+                // Update tenant_id if session existed but had NULL tenant
+                $session->update(['tenant_id' => $tenantId]);
             }
 
             // ChatMessage also has TenantScope - bypass it and set tenant_id explicitly
             ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
-                'tenant_id' => $session->tenant_id,
+                'tenant_id' => $session->tenant_id ?? $tenantId,
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $content,

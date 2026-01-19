@@ -755,9 +755,18 @@ class DiagnosticController extends Controller
                 ];
             });
 
+        // Get unique tenant_ids from messages for debugging
+        $messageTenantIds = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('chat_session_id', $session->id)
+            ->pluck('tenant_id')
+            ->unique()
+            ->values();
+
         return response()->json([
             'session_id' => $sessionId,
             'db_id' => $session->id,
+            'session_tenant_id' => $session->tenant_id,
+            'message_tenant_ids' => $messageTenantIds,
             'messages_count' => $messages->count(),
             'status' => $session->status,
             'created_at' => $session->created_at->format('Y-m-d H:i:s'),

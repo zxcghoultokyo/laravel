@@ -52,6 +52,16 @@ Schedule::command('meili:reindex-products')
     ->appendOutputTo(storage_path('logs/sync-meilisearch.log'));
 
 // ─────────────────────────────────────────────
+// 3.5. COLOR DETECTION (05:30) - after Meilisearch
+// ─────────────────────────────────────────────
+// Auto-detect colors for products without color attribute
+Schedule::command('colors:detect --limit=100')
+    ->dailyAt('05:30')
+    ->runInBackground()
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/sync-colors.log'));
+
+// ─────────────────────────────────────────────
 // 4. STATS UPDATE (06:00) - after orders sync
 // ─────────────────────────────────────────────
 // Update products orders count from order_items

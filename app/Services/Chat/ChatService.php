@@ -1058,11 +1058,26 @@ class ChatService
                 ], array_slice($products, 0, 10)), // Максимум 10 продуктів
             ];
 
-            ChatMessage::create([
+            // ChatMessage also has TenantScope via BelongsToTenant trait
+            // We need to bypass it and set tenant_id explicitly from session
+            Log::info('Creating assistant ChatMessage', [
+                'session_id' => $sessionId,
+                'session_db_id' => $session->id,
+                'session_tenant_id' => $session->tenant_id,
+                'text_preview' => substr($response['text'] ?? '', 0, 100),
+            ]);
+            
+            $chatMessage = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+                'tenant_id' => $session->tenant_id,
                 'chat_session_id' => $session->id,
                 'role' => 'assistant',
                 'content' => $response['text'] ?? '',
                 'meta' => $meta,
+            ]);
+            
+            Log::info('Assistant ChatMessage created', [
+                'message_id' => $chatMessage->id ?? 'null',
+                'created' => $chatMessage->wasRecentlyCreated ?? false,
             ]);
 
             Log::info('Assistant message logged', ['session_id' => $sessionId]);

@@ -2014,6 +2014,36 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/fix-null-tenants
+     * Fix chat sessions and messages with NULL tenant_id
+     */
+    public function fixNullTenants(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $defaultTenantId = $request->input('tenant_id', 2); // Default to Contractor (id=2)
+        
+        // Fix sessions with NULL tenant_id
+        $sessionsFixed = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->whereNull('tenant_id')
+            ->update(['tenant_id' => $defaultTenantId]);
+        
+        // Fix messages with NULL tenant_id
+        $messagesFixed = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->whereNull('tenant_id')
+            ->update(['tenant_id' => $defaultTenantId]);
+        
+        return response()->json([
+            'success' => true,
+            'sessions_fixed' => $sessionsFixed,
+            'messages_fixed' => $messagesFixed,
+            'tenant_id_used' => $defaultTenantId,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/tenants
      * List all tenants with stats
      */

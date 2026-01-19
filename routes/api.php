@@ -115,6 +115,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/clear-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearQueue']);
     Route::get('/test-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueue']);
     Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);
+    Route::post('/fix-null-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixNullTenants']);
     
     // Tenant management
     Route::get('/tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenants']);

@@ -167,11 +167,11 @@ class SyncReports extends Component
         $this->scheduleInfo = [
             [
                 'name' => '🛒 Horoshop Products',
-                'command' => 'horoshop:sync',
+                'command' => 'horoshop:sync (all tenants)',
                 'schedule' => 'Щодня о 03:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_HOROSHOP_PRODUCTS),
                 'next_run' => 'Завтра о 03:00',
-                'is_queue' => true, // Long running - dispatched to queue
+                'is_queue' => true, // Long running - dispatched to queue per tenant
             ],
             [
                 'name' => '📦 Orders',

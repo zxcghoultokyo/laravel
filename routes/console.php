@@ -17,12 +17,16 @@ Artisan::command('inspire', function () {
 // ─────────────────────────────────────────────
 // 1. HOROSHOP SYNC (03:00)
 // ─────────────────────────────────────────────
-// Sync products from Horoshop API
-Schedule::command('horoshop:sync-products')
+// Sync products from Horoshop API for ALL active tenants
+Schedule::call(function () {
+    $tenants = \App\Models\Tenant::where('status', 'active')->get();
+    foreach ($tenants as $tenant) {
+        \App\Jobs\SyncHoroshopProductsJob::dispatch($tenant->id);
+    }
+})
     ->dailyAt('03:00')
-    ->runInBackground()
     ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/sync-horoshop.log'));
+    ->name('sync-all-tenants');
 
 // Sync brands after products sync (03:30)
 Schedule::command('brands:sync --async')

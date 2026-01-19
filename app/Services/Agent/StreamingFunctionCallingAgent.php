@@ -333,7 +333,7 @@ class StreamingFunctionCallingAgent
                     'model' => $this->model,
                     'messages' => $messages,
                     'stream' => true,
-                    'temperature' => 0.3,
+                    'temperature' => 0.1,
                 ]);
 
             $body = $response->getBody();
@@ -471,7 +471,7 @@ class StreamingFunctionCallingAgent
                     'messages' => $messages,
                     'tools' => $this->getTools(),
                     'tool_choice' => 'auto',
-                    'temperature' => 0.3,
+                    'temperature' => 0.1,
                 ]);
 
             $data = $response->json();

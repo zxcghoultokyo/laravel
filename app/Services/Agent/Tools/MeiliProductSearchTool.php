@@ -1048,8 +1048,8 @@ class MeiliProductSearchTool
             return app('current_tenant_id');
         }
         
-        // Default to main tenant (Contractor) for backwards compatibility
-        // TODO: Remove this default when all clients are migrated
-        return 1;
+        // Default to main tenant (Contractor, id=2) for backwards compatibility
+        // tenant_id=1 no longer exists, default production is tenant_id=2
+        return 2;
     }
 }

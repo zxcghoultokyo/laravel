@@ -1083,7 +1083,13 @@ PROMPT;
         $article = $args['article'] ?? '';
         if (empty($article)) return ['error' => 'Article required'];
 
-        $product = Product::where('article', $article)->first();
+        // Apply tenant filter to avoid cross-tenant data leakage
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $query = Product::where('article', $article);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        $product = $query->first();
         if (!$product) return ['error' => 'Product not found'];
 
         // Extract images from product
@@ -1304,7 +1310,13 @@ PROMPT;
                 if (!$product && $article) {
                     Log::info('StreamingAgent: looking up product by article in DB', ['article' => $article]);
                     
-                    $dbProduct = \App\Models\Product::where('article', $article)->first();
+                    // Apply tenant filter to avoid cross-tenant data leakage
+                    $tenantId = $this->searchTool->getCurrentTenantId();
+                    $fallbackQuery = \App\Models\Product::where('article', $article);
+                    if ($tenantId) {
+                        $fallbackQuery->where('tenant_id', $tenantId);
+                    }
+                    $dbProduct = $fallbackQuery->first();
                     if ($dbProduct) {
                         Log::info('StreamingAgent: found product in DB', [
                             'article' => $article,

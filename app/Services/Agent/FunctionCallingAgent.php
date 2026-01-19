@@ -1430,7 +1430,13 @@ PROMPT;
             return ['error' => 'Article required'];
         }
 
-        $product = Product::where('article', $article)->first();
+        // Apply tenant filter to avoid cross-tenant data leakage
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $query = Product::where('article', $article);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        $product = $query->first();
         
         if (!$product) {
             return ['error' => 'Product not found'];
@@ -1592,6 +1598,7 @@ PROMPT;
     private function toolGetBrands(array $args): array
     {
         $category = $args['category'] ?? null;
+        $tenantId = $this->searchTool->getCurrentTenantId();
 
         $query = Brand::where('is_active', true)
             ->orderByDesc('product_count');
@@ -1602,13 +1609,18 @@ PROMPT;
 
         // Fallback
         if (empty($brands)) {
-            $brands = Product::whereNotNull('brand')
+            $fallbackQuery = Product::whereNotNull('brand')
                 ->select('brand')
                 ->groupBy('brand')
                 ->orderByRaw('COUNT(*) DESC')
-                ->limit(20)
-                ->pluck('brand')
-                ->toArray();
+                ->limit(20);
+            
+            // Apply tenant filter
+            if ($tenantId) {
+                $fallbackQuery->where('tenant_id', $tenantId);
+            }
+            
+            $brands = $fallbackQuery->pluck('brand')->toArray();
         }
 
         return ['brands' => $brands];

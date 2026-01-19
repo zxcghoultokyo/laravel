@@ -2358,14 +2358,27 @@ class DiagnosticController extends Controller
                 $rawString = $product->raw ?? '';
                 $raw = is_string($rawString) ? (json_decode($rawString, true) ?: []) : [];
                 
-                // Get image URL
+                // Get image URL - check multiple sources
                 $imageUrl = null;
-                if (isset($raw['pictures'][0]['url'])) {
-                    $imageUrl = $raw['pictures'][0]['url'];
-                } elseif (isset($raw['images'][0]['url'])) {
-                    $imageUrl = $raw['images'][0]['url'];
-                } elseif (isset($raw['image'])) {
-                    $imageUrl = $raw['image'];
+                
+                // First priority: images column (JSON array of URLs)
+                $imagesCol = $product->images ?? '';
+                if (is_string($imagesCol) && !empty($imagesCol)) {
+                    $imagesArr = json_decode($imagesCol, true);
+                    if (is_array($imagesArr) && !empty($imagesArr[0])) {
+                        $imageUrl = $imagesArr[0];
+                    }
+                }
+                
+                // Second priority: raw.pictures or raw.images
+                if (!$imageUrl) {
+                    if (isset($raw['pictures'][0]['url'])) {
+                        $imageUrl = $raw['pictures'][0]['url'];
+                    } elseif (isset($raw['images'][0]['url'])) {
+                        $imageUrl = $raw['images'][0]['url'];
+                    } elseif (isset($raw['image'])) {
+                        $imageUrl = $raw['image'];
+                    }
                 }
 
                 $descColor = null;

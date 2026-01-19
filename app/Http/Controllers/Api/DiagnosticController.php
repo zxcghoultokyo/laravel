@@ -39,14 +39,24 @@ class DiagnosticController extends Controller
         $priceService = app(\App\Services\Catalog\PriceStatsService::class);
         $priceStats = $priceService->getStats();
 
+        // Tenant statistics - bypass TenantScope to see all data
+        $tenantStats = DB::table('products')
+            ->select('tenant_id', DB::raw('COUNT(*) as count'))
+            ->groupBy('tenant_id')
+            ->get()
+            ->mapWithKeys(fn($row) => [
+                $row->tenant_id ?? 'NULL' => $row->count
+            ]);
+
         $stats = [
-            'total_products' => Product::count(),
-            'in_stock' => Product::where('in_stock', true)->count(),
-            'with_color' => Product::where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->count(),
-            'with_size' => Product::where('in_stock', true)->whereNotNull('size')->where('size', '!=', '')->count(),
-            'with_parent_article' => Product::where('in_stock', true)->whereNotNull('parent_article')->where('parent_article', '!=', '')->count(),
-            'unique_colors' => Product::where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->distinct()->pluck('color')->toArray(),
-            'categories_count' => Product::where('in_stock', true)->distinct('category_path')->count('category_path'),
+            'total_products' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count(),
+            'in_stock' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->count(),
+            'with_color' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->count(),
+            'with_size' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('size')->where('size', '!=', '')->count(),
+            'with_parent_article' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('parent_article')->where('parent_article', '!=', '')->count(),
+            'unique_colors' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->distinct()->pluck('color')->toArray(),
+            'categories_count' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->distinct('category_path')->count('category_path'),
+            'products_by_tenant' => $tenantStats,
             'price_stats' => [
                 'min' => $priceStats['min'],
                 'max' => $priceStats['max'],
@@ -108,14 +118,16 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
-        $products = Product::where('in_stock', true)
+        // Use withoutGlobalScope to see all products including those with NULL tenant_id
+        $products = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('in_stock', true)
             ->where(function ($q) use ($query) {
                 $q->where('title', 'like', "%{$query}%")
                   ->orWhere('search_index', 'like', "%{$query}%")
                   ->orWhere('category_path', 'like', "%{$query}%");
             })
             ->limit($limit)
-            ->get(['id', 'article', 'title', 'price', 'category_path', 'color', 'size', 'brand', 'in_stock']);
+            ->get(['id', 'article', 'title', 'price', 'category_path', 'color', 'size', 'brand', 'in_stock', 'tenant_id']);
 
         return response()->json([
             'query' => $query,

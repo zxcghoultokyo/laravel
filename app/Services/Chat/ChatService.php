@@ -734,7 +734,7 @@ class ChatService
         
         // Load session data for UTM and other context
         // Bypass TenantScope - sessions are identified by session_id, not tenant
-        $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+        $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('session_id', $sessionId)->first();
         
         if ($session && is_array($session->meta)) {
@@ -985,7 +985,7 @@ class ChatService
             Log::info('logUserMessage called', ['session_id' => $sessionId]);
             
             // Bypass TenantScope - sessions are identified by session_id, not tenant
-            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->firstOrCreate(
                     ['session_id' => $sessionId],
                     [
@@ -1029,7 +1029,7 @@ class ChatService
             Log::info('logAssistantMessage called', ['session_id' => $sessionId]);
             
             // Bypass TenantScope to find session regardless of tenant
-            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)
                 ->first();
             if (! $session) {
@@ -1090,7 +1090,7 @@ class ChatService
     {
         try {
             // Bypass TenantScope - sessions are identified by session_id, not tenant
-            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)->first();
             if (!$session) {
                 return [];

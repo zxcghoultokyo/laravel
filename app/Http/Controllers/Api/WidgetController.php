@@ -20,6 +20,9 @@ class WidgetController extends Controller
     
     /**
      * Resolve tenant from request token header.
+     * Token can be either:
+     * 1. api_token from WidgetSettings (recommended - secure random token)
+     * 2. tenant slug (legacy - for backwards compatibility)
      */
     private function resolveTenant(Request $request): ?Tenant
     {
@@ -28,7 +31,16 @@ class WidgetController extends Controller
             return null;
         }
         
-        // Token is tenant slug
+        // First, try to find by api_token in WidgetSettings (preferred method)
+        $widgetSettings = WidgetSettings::withoutGlobalScope(TenantScope::class)
+            ->where('api_token', $token)
+            ->first();
+        
+        if ($widgetSettings && $widgetSettings->tenant_id) {
+            return Tenant::find($widgetSettings->tenant_id);
+        }
+        
+        // Fallback: Token might be tenant slug (legacy)
         return Tenant::where('slug', $token)->first();
     }
     

@@ -51,7 +51,23 @@ class ResolveTenantMiddleware
     protected function resolveTenant(Request $request): ?Tenant
     {
         // 1. Widget token (most common for API calls)
+        // Token can be api_token from WidgetSettings or tenant slug
         if ($token = $request->header('X-Widget-Token')) {
+            // First try api_token in WidgetSettings (preferred - secure random token)
+            $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('api_token', $token)
+                ->first();
+            
+            if ($widgetSettings && $widgetSettings->tenant_id) {
+                $tenant = Tenant::where('id', $widgetSettings->tenant_id)
+                    ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                    ->first();
+                if ($tenant) {
+                    return $tenant;
+                }
+            }
+            
+            // Fallback: token might be tenant slug (legacy)
             return Tenant::where('slug', $token)
                          ->where('status', '!=', Tenant::STATUS_CANCELLED)
                          ->first();
@@ -72,27 +88,32 @@ class ResolveTenantMiddleware
         }
 
         // 4. Query parameter - token (alternative)
-        if ($slug = $request->query('token')) {
-            return Tenant::where('slug', $slug)
+        if ($token = $request->query('token')) {
+            // Try api_token first
+            $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('api_token', $token)
+                ->first();
+            
+            if ($widgetSettings && $widgetSettings->tenant_id) {
+                return Tenant::where('id', $widgetSettings->tenant_id)
+                    ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                    ->first();
+            }
+            
+            // Fallback to slug
+            return Tenant::where('slug', $token)
                          ->where('status', '!=', Tenant::STATUS_CANCELLED)
                          ->first();
         }
 
         // 5. Route parameter
-        if ($slug = $request->query('tenant')) {
-            return Tenant::where('slug', $slug)
-                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
-                         ->first();
-        }
-
-        // 3. Route parameter
         if ($slug = $request->route('tenant')) {
             return Tenant::where('slug', $slug)
                          ->where('status', '!=', Tenant::STATUS_CANCELLED)
                          ->first();
         }
 
-        // 4. Subdomain-based resolution
+        // 6. Subdomain-based resolution
         $host = $request->getHost();
         if (preg_match('/^([a-z0-9-]+)\.(ailure\.ai|app\.ailure\.ai)$/', $host, $matches)) {
             $slug = $matches[1];
@@ -103,7 +124,7 @@ class ResolveTenantMiddleware
             }
         }
 
-        // 5. Authenticated user's tenant
+        // 7. Authenticated user's tenant
         if ($user = $request->user()) {
             if ($user->tenant_id) {
                 return Tenant::find($user->tenant_id);

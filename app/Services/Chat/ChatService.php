@@ -733,7 +733,9 @@ class ChatService
         $context['language'] = $this->detectLanguage($message);
         
         // Load session data for UTM and other context
-        $session = ChatSession::where('session_id', $sessionId)->first();
+        // Bypass TenantScope - sessions are identified by session_id, not tenant
+        $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+            ->where('session_id', $sessionId)->first();
         
         if ($session && is_array($session->meta)) {
             // Get UTM campaign if stored
@@ -982,14 +984,16 @@ class ChatService
         try {
             Log::info('logUserMessage called', ['session_id' => $sessionId]);
             
-            $session = ChatSession::firstOrCreate(
-                ['session_id' => $sessionId],
-                [
-                    'language' => 'uk',
-                    'status' => 'open',
-                    'meta' => [],
-                ]
-            );
+            // Bypass TenantScope - sessions are identified by session_id, not tenant
+            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+                ->firstOrCreate(
+                    ['session_id' => $sessionId],
+                    [
+                        'language' => 'uk',
+                        'status' => 'open',
+                        'meta' => [],
+                    ]
+                );
 
             Log::info('Session created/found', ['session_id' => $sessionId, 'db_id' => $session->id]);
 
@@ -1024,7 +1028,10 @@ class ChatService
         try {
             Log::info('logAssistantMessage called', ['session_id' => $sessionId]);
             
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope to find session regardless of tenant
+            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
             if (! $session) {
                 Log::warning('Session not found for assistant message', ['session_id' => $sessionId]);
                 return;
@@ -1082,7 +1089,9 @@ class ChatService
     protected function loadConversationHistory(string $sessionId, int $limit = 10): array
     {
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope - sessions are identified by session_id, not tenant
+            $session = ChatSession::withoutGlobalScope(\App\Models\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)->first();
             if (!$session) {
                 return [];
             }

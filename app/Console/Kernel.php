@@ -27,7 +27,7 @@ class Kernel extends ConsoleKernel
     {
         // 1. Sync products from Horoshop for ALL active tenants
         $schedule->call(function () {
-            $tenants = \App\Models\Tenant::where('is_active', true)->get();
+            $tenants = \App\Models\Tenant::where('status', 'active')->get();
             foreach ($tenants as $tenant) {
                 SyncHoroshopProductsJob::dispatch($tenant->id);
             }

@@ -259,7 +259,7 @@ class ProductService
         // Set default tenant_id for legacy sync
         // Find first active tenant if creating new product without tenant
         if (!$product->exists && !$product->tenant_id) {
-            $defaultTenant = \App\Models\Tenant::where('is_active', true)->orderBy('id')->first();
+            $defaultTenant = \App\Models\Tenant::where('status', 'active')->orderBy('id')->first();
             if ($defaultTenant) {
                 $product->tenant_id = $defaultTenant->id;
             }

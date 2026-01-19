@@ -24,7 +24,7 @@ class FixNullTenantIds extends Command
 
         // If no tenant specified, find the first active one
         if (!$tenantId) {
-            $tenant = Tenant::where('is_active', true)->orderBy('id')->first();
+            $tenant = Tenant::where('status', 'active')->orderBy('id')->first();
             if (!$tenant) {
                 $this->error('No active tenants found! Please specify --tenant=ID');
                 return 1;
@@ -38,12 +38,12 @@ class FixNullTenantIds extends Command
                 $this->error("Tenant with ID {$tenantId} not found!");
                 
                 // Show available tenants
-                $tenants = Tenant::all(['id', 'name', 'slug', 'is_active']);
+                $tenants = Tenant::all(['id', 'name', 'slug', 'status']);
                 if ($tenants->isNotEmpty()) {
                     $this->info('Available tenants:');
                     $this->table(
-                        ['ID', 'Name', 'Slug', 'Active'],
-                        $tenants->map(fn($t) => [$t->id, $t->name, $t->slug, $t->is_active ? 'Yes' : 'No'])
+                        ['ID', 'Name', 'Slug', 'Status'],
+                        $tenants->map(fn($t) => [$t->id, $t->name, $t->slug, $t->status])
                     );
                 }
                 return 1;

@@ -2321,24 +2321,23 @@ class DiagnosticController extends Controller
         }
 
         try {
-            $query = $request->input('q', 'Level 7');
+            $searchQuery = $request->input('q', 'Level 7');
             $limit = min((int) $request->input('limit', 10), 20);
-            $tenantId = $request->input('tenant_id', 2);
+            $tenantId = (int) $request->input('tenant_id', 2);
             $analyzeImages = $request->boolean('analyze_images', true);
 
             // Get products without color
-            $searchQuery = $query; // Avoid variable collision
             $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('tenant_id', $tenantId)
                 ->where('in_stock', true)
                 ->where(function($q) {
                     $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
                 })
-                ->where('title', 'like', "%{$searchQuery}%")
+                ->where('title', 'like', '%' . $searchQuery . '%')
                 ->limit($limit)
                 ->get();
 
-            $colorService = app(\App\Services\Catalog\ColorDetectionService::class);
+            $colorService = new \App\Services\Catalog\ColorDetectionService();
             $results = [];
 
         foreach ($products as $product) {

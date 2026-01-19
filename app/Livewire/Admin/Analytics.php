@@ -300,17 +300,24 @@ class Analytics extends Component
     private function getRecentChatEventsFallback(): array
     {
         // Use chat_messages as fallback (uses tenant_id, not merchant_id)
-        $query = DB::table('chat_messages');
+        // Join with chat_sessions to get the public session_id string
+        $query = DB::table('chat_messages')
+            ->join('chat_sessions', 'chat_messages.chat_session_id', '=', 'chat_sessions.id')
+            ->select([
+                'chat_messages.role as event_type',
+                'chat_sessions.session_id as session_id',  // Use public session_id, not internal chat_session_id
+                'chat_messages.created_at'
+            ]);
         
         // Filter by tenant_id (new tables use integer ID)
         if ($this->tenantId) {
-            $query->where('tenant_id', $this->tenantId);
+            $query->where('chat_messages.tenant_id', $this->tenantId);
         }
         
         return $query
-            ->orderByDesc('created_at')
+            ->orderByDesc('chat_messages.created_at')
             ->limit(20)
-            ->get(['role as event_type', 'chat_session_id as session_id', 'created_at'])
+            ->get()
             ->map(function ($row) {
                 $row->event_type = $row->event_type === 'user' ? 'message' : 'assistant_reply';
                 return $row;

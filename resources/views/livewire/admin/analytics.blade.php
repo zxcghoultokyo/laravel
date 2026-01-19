@@ -89,49 +89,76 @@
             </div>
         </div>
 
-        <!-- Conversion Stats -->
+        <!-- Conversion Funnel -->
         <div class="bg-white rounded-lg shadow p-4 mb-6">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-sm font-semibold text-gray-500">💰 Конверсії</h3>
-                <span class="text-xs text-gray-400" title="Для трекінгу конверсій потрібна інтеграція на сайті магазину">ℹ️ Потребує інтеграції</span>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-sm font-semibold text-gray-500">🔄 Воронка конверсії</h3>
+                @php
+                    $firstStage = $funnel[0]['count'] ?? 0;
+                    $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
+                    $overallConversion = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
+                @endphp
+                @if($firstStage > 0)
+                    <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                        {{ $overallConversion }}% загальна конверсія
+                    </span>
+                @endif
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-2xl">🛒</span>
-                        <span class="text-sm text-green-700">Add to Cart</span>
-                    </div>
-                    <div class="text-3xl font-bold text-green-700">{{ $stats['add_to_cart'] ?? 0 }}</div>
-                    @if(($stats['add_to_cart'] ?? 0) == 0)
-                    <p class="text-xs text-green-600 mt-1">Потрібен JS callback</p>
-                    @endif
+            
+            @if(!empty($funnel))
+                <div class="space-y-3">
+                    @foreach($funnel as $index => $stage)
+                        <div class="group">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xl">{{ $stage['icon'] }}</span>
+                                    <span class="text-sm font-medium text-gray-700">{{ $stage['label'] }}</span>
+                                    <span class="text-xs text-gray-400 hidden group-hover:inline">{{ $stage['hint'] }}</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg font-bold text-gray-900">{{ number_format($stage['count']) }}</span>
+                                    @if($index > 0 && $stage['rate'] > 0)
+                                        <span class="text-xs px-2 py-0.5 rounded-full font-medium {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                            {{ $stage['rate'] }}%
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                            <!-- Progress bar -->
+                            @php
+                                $maxCount = $funnel[0]['count'] ?? 1;
+                                $width = $maxCount > 0 ? ($stage['count'] / $maxCount) * 100 : 0;
+                            @endphp
+                            <div class="h-6 bg-gray-100 rounded overflow-hidden relative">
+                                <div class="h-full rounded transition-all duration-500 {{ $index === count($funnel) - 1 ? 'bg-green-500' : 'bg-blue-500' }}" 
+                                     style="width: {{ $width }}%"></div>
+                                @if($stage['dropoff'] > 0 && $index > 0)
+                                    <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                                        -{{ $stage['dropoff'] }}%
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+                        @if(!$loop->last)
+                            <div class="flex justify-center">
+                                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        @endif
+                    @endforeach
                 </div>
-                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-2xl">💰</span>
-                        <span class="text-sm text-blue-700">Покупок</span>
+                
+                @if(($funnel[0]['count'] ?? 0) == 0)
+                    <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                        ℹ️ Дані з'являться коли відвідувачі почнуть взаємодіяти з віджетом
                     </div>
-                    <div class="text-3xl font-bold text-blue-700">{{ $stats['purchases'] ?? 0 }}</div>
-                    @if(($stats['purchases'] ?? 0) == 0)
-                    <p class="text-xs text-blue-600 mt-1">Потрібен webhook</p>
-                    @endif
+                @endif
+            @else
+                <div class="text-center py-8 text-gray-400">
+                    <p>Немає даних за вибраний період</p>
                 </div>
-                <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-2xl">💵</span>
-                        <span class="text-sm text-purple-700">Виручка</span>
-                    </div>
-                    <div class="text-3xl font-bold text-purple-700">{{ number_format($stats['revenue'] ?? 0, 0, '.', ' ') }} ₴</div>
-                </div>
-                <div class="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-2xl">📊</span>
-                        <span class="text-sm text-amber-700">CTR товарів</span>
-                    </div>
-                    <div class="text-3xl font-bold text-amber-700">{{ $stats['ctr'] ?? 0 }}%</div>
-                    <p class="text-xs text-amber-600 mt-1">кліків / показів</p>
-                </div>
-            </div>
+            @endif
         </div>
 
         <!-- AI Index Quality Score -->

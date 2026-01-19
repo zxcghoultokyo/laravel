@@ -21,6 +21,9 @@ class Analytics extends Component
     public bool $tablesExist = false;
     public ?string $lastUpdated = null;
     
+    // Funnel data
+    public array $funnel = [];
+    
     // AI Index Quality
     public array $aiQuality = [];
     
@@ -80,6 +83,9 @@ class Analytics extends Component
         
         // Top viewed products (for ranking)
         $this->topViewedProducts = $this->getTopViewedProducts($startDate);
+        
+        // Funnel data
+        $this->loadFunnel($startDate);
         
         // Recent chat events only
         $this->recentChatEvents = $this->getRecentChatEvents();
@@ -169,6 +175,53 @@ class Analytics extends Component
             ->orderByDesc('count')
             ->get()
             ->toArray();
+    }
+    
+    private function loadFunnel($startDate): void
+    {
+        $stages = [
+            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Відкрили сторінку з віджетом'],
+            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Натиснули на іконку чату'],
+            'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
+            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
+            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар у кошик'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+        ];
+        
+        $this->funnel = [];
+        $prevCount = 0;
+        
+        foreach ($stages as $eventType => $stage) {
+            try {
+                $query = DB::table('chat_events')
+                    ->where('event_type', $eventType)
+                    ->where('created_at', '>=', $startDate);
+                
+                // Filter by merchant_id for tenant isolation
+                if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                    $query->where('merchant_id', $this->merchantId);
+                }
+                
+                $count = $query->distinct('session_id')->count('session_id');
+            } catch (\Throwable $e) {
+                $count = 0;
+            }
+            
+            $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
+            $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
+            
+            $this->funnel[] = [
+                'stage' => $eventType,
+                'label' => $stage['label'],
+                'icon' => $stage['icon'],
+                'hint' => $stage['hint'],
+                'count' => $count,
+                'rate' => $rate,
+                'dropoff' => $dropoff,
+            ];
+            
+            $prevCount = $count ?: $prevCount;
+        }
     }
 
     private function getTopProducts($startDate): array

@@ -977,42 +977,20 @@ class ChatService
     }
 
     /**
-     * Get current tenant ID from request context.
-     * Similar to MeiliProductSearchTool::getCurrentTenantId()
+     * Get current tenant ID from TenantContext.
+     * Uses centralized TenantContext service for consistency.
      */
     protected function getCurrentTenantId(): ?int
     {
-        // 1. Check app binding (set by ResolveTenantMiddleware)
-        if (app()->bound('current_tenant')) {
-            $tenant = app('current_tenant');
-            if ($tenant && $tenant->id) {
-                return (int) $tenant->id;
-            }
+        $context = app(\App\Services\Tenant\TenantContext::class);
+        
+        // Super admin without specific tenant context
+        if ($context->isSuperAdmin() && !$context->hasTenant()) {
+            return null;
         }
         
-        // 2. Check authenticated user
-        if (auth()->check()) {
-            $user = auth()->user();
-            if ($user->role === 'super_admin') {
-                return null; // Super admin - no specific tenant
-            }
-            if ($user->tenant_id) {
-                return (int) $user->tenant_id;
-            }
-        }
-        
-        // 3. Check request context
-        if (request()->has('tenant_id')) {
-            return (int) request()->input('tenant_id');
-        }
-        
-        // 4. Check session
-        if (session()->has('tenant_id')) {
-            return (int) session()->get('tenant_id');
-        }
-        
-        // Default to main tenant (Contractor, id=2)
-        return 2;
+        // Default to main tenant (Contractor, id=2) for widget calls
+        return $context->getTenantId() ?? 2;
     }
 
     /**

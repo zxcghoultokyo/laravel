@@ -15,11 +15,17 @@ use App\Services\Ai\AiRecommender;
 use App\Services\FaqService;
 use App\Services\Support\FaqContentIngestService;
 use App\Services\Store\StoreContextService;
+use App\Services\Tenant\TenantContext;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // TenantContext - Single source of truth for current tenant
+        $this->app->singleton(TenantContext::class, function ($app) {
+            return new TenantContext();
+        });
+        
         // StoreContextService - provides dynamic store context for AI prompts
         $this->app->singleton(StoreContextService::class, function ($app) {
             return new StoreContextService();

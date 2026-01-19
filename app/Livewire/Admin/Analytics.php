@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use App\Services\Ai\EnrichmentQualityService;
 use App\Services\Analytics\ABTestingService;
 use App\Services\Metrics\ChatStatsService;
+use App\Services\Tenant\TenantContext;
 
 class Analytics extends Component
 {
@@ -30,14 +31,19 @@ class Analytics extends Component
     // Embedded mode for tenant dashboard
     public bool $embedded = false;
     
-    // Tenant ID for filtering (when embedded)
+    // Tenant context
     public ?int $tenantId = null;
+    public ?string $merchantId = null;
 
     public function mount()
     {
-        // If embedded, get tenant from authenticated user
+        // Use TenantContext for consistent tenant resolution
+        $context = app(TenantContext::class);
+        
         if ($this->embedded) {
-            $this->tenantId = auth()->user()?->tenant_id;
+            // Embedded mode - use user's tenant
+            $this->tenantId = $context->getTenantId();
+            $this->merchantId = $context->getMerchantId();
         }
         
         $this->checkTables();
@@ -150,12 +156,9 @@ class Analytics extends Component
         $query = DB::table('chat_session_outcomes')
             ->where('created_at', '>=', $startDate);
         
-        // Filter by tenant using merchant_id (tenant slug)
-        if ($this->tenantId) {
-            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
-            if ($merchantId && Schema::hasColumn('chat_session_outcomes', 'merchant_id')) {
-                $query->where('merchant_id', $merchantId);
-            }
+        // Filter by merchant_id (tenant slug) for legacy analytics tables
+        if ($this->merchantId && Schema::hasColumn('chat_session_outcomes', 'merchant_id')) {
+            $query->where('merchant_id', $this->merchantId);
         }
         
         return $query
@@ -175,12 +178,9 @@ class Analytics extends Component
                 ->where('event_type', 'product_click')
                 ->whereNotNull('product_id');
             
-            // Filter by tenant using merchant_id (tenant slug) since chat_events uses merchant_id
-            if ($this->tenantId) {
-                $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
-                if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                    $query->where('merchant_id', $merchantId);
-                }
+            // Filter by merchant_id (tenant slug) for legacy analytics tables
+            if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                $query->where('merchant_id', $this->merchantId);
             }
             
             $productClicks = $query
@@ -199,7 +199,7 @@ class Analytics extends Component
             $productsQuery = DB::table('products')
                 ->whereIn('id', $productIds);
             
-            // Filter products by tenant too
+            // Filter products by tenant_id (new tables use integer ID)
             if ($this->tenantId) {
                 $productsQuery->where('tenant_id', $this->tenantId);
             }
@@ -230,12 +230,9 @@ class Analytics extends Component
             ->where('event_type', 'product_shown')
             ->whereNotNull('product_id');
         
-        // Filter by tenant using merchant_id (tenant slug)
-        if ($this->tenantId) {
-            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
-            if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                $query->where('merchant_id', $merchantId);
-            }
+        // Filter by merchant_id (tenant slug) for legacy analytics tables
+        if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+            $query->where('merchant_id', $this->merchantId);
         }
         
         $productViews = $query
@@ -253,7 +250,7 @@ class Analytics extends Component
         $productsQuery = DB::table('products')
             ->whereIn('id', $productIds);
         
-        // Filter products by tenant too
+        // Filter products by tenant_id (new tables use integer ID)
         if ($this->tenantId) {
             $productsQuery->where('tenant_id', $this->tenantId);
         }
@@ -279,12 +276,9 @@ class Analytics extends Component
         $query = DB::table('chat_events')
             ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
         
-        // Filter by tenant using merchant_id (tenant slug)
-        if ($this->tenantId) {
-            $merchantId = DB::table('tenants')->where('id', $this->tenantId)->value('slug');
-            if ($merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                $query->where('merchant_id', $merchantId);
-            }
+        // Filter by merchant_id (tenant slug) for legacy analytics tables
+        if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+            $query->where('merchant_id', $this->merchantId);
         }
         
         $events = $query
@@ -303,10 +297,10 @@ class Analytics extends Component
     
     private function getRecentChatEventsFallback(): array
     {
-        // Use chat_messages as fallback
+        // Use chat_messages as fallback (uses tenant_id, not merchant_id)
         $query = DB::table('chat_messages');
         
-        // Filter by tenant if set
+        // Filter by tenant_id (new tables use integer ID)
         if ($this->tenantId) {
             $query->where('tenant_id', $this->tenantId);
         }

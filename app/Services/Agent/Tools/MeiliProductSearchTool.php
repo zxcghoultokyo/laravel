@@ -1014,50 +1014,31 @@ class MeiliProductSearchTool
     }
     
     /**
-     * Get current tenant ID from various sources.
+     * Get current tenant ID from TenantContext.
      * Returns null for super admin or when no tenant context (shows all products).
      */
     public function getCurrentTenantId(): ?int
     {
-        // 1. Check authenticated user
-        if (auth()->check()) {
-            $user = auth()->user();
-            
-            // Super admin sees all data
-            if ($user->role === 'super_admin') {
-                return null;
-            }
-            
-            if ($user->tenant_id) {
-                return (int) $user->tenant_id;
-            }
+        $context = app(\App\Services\Tenant\TenantContext::class);
+        
+        // Super admin without specific tenant context sees all
+        if ($context->isSuperAdmin() && !$context->hasTenant()) {
+            return null;
         }
         
-        // 2. Check request context (widget/API calls pass tenant_id)
-        if (request()->has('tenant_id')) {
-            return (int) request()->input('tenant_id');
-        }
+        $tenantId = $context->getTenantId();
         
-        // 3. Check session
-        if (session()->has('tenant_id')) {
-            return (int) session()->get('tenant_id');
-        }
-        
-        // 4. Check app binding (set by ResolveTenantMiddleware for API calls)
-        if (app()->bound('current_tenant')) {
-            $tenant = app('current_tenant');
-            if ($tenant && $tenant->id) {
-                return (int) $tenant->id;
-            }
-        }
-        
-        // 5. Check app binding (for background jobs)
-        if (app()->bound('current_tenant_id')) {
-            return app('current_tenant_id');
-        }
-        
-        // Default to main tenant (Contractor, id=2) for backwards compatibility
-        // tenant_id=1 no longer exists, default production is tenant_id=2
-        return 2;
+        // Default to main tenant (Contractor, id=2) for widget calls without context
+        // This ensures backwards compatibility for old widget installations
+        return $tenantId ?? 2;
+    }
+    
+    /**
+     * Get current merchant_id (tenant slug) for legacy analytics tables.
+     */
+    public function getCurrentMerchantId(): ?string
+    {
+        $context = app(\App\Services\Tenant\TenantContext::class);
+        return $context->getMerchantId();
     }
 }

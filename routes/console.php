@@ -24,9 +24,16 @@ Schedule::command('horoshop:sync-products')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/sync-horoshop.log'));
 
-// Sync orders from Horoshop (once daily is enough)
-Schedule::command('orders:sync --days=1')
+// Sync brands after products sync (03:30)
+Schedule::command('brands:sync --async')
     ->dailyAt('03:30')
+    ->runInBackground()
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/sync-brands.log'));
+
+// Sync orders from Horoshop (twice daily: morning + evening)
+Schedule::command('orders:sync --days=3 --update-counts')
+    ->twiceDaily(8, 20)
     ->runInBackground()
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/sync-orders.log'));

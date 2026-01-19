@@ -217,7 +217,7 @@ class SyncReports extends Component
                 'name' => '🏷️ Brands',
                 'command' => 'brands:sync',
                 'schedule' => 'Щодня о 03:30',
-                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_CATEGORIES),
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_BRANDS),
                 'next_run' => 'Завтра о 03:30',
                 'is_queue' => false,
             ],

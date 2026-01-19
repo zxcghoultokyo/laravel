@@ -1043,7 +1043,15 @@ class MeiliProductSearchTool
             return (int) session()->get('tenant_id');
         }
         
-        // 4. Check app binding (for background jobs)
+        // 4. Check app binding (set by ResolveTenantMiddleware for API calls)
+        if (app()->bound('current_tenant')) {
+            $tenant = app('current_tenant');
+            if ($tenant && $tenant->id) {
+                return (int) $tenant->id;
+            }
+        }
+        
+        // 5. Check app binding (for background jobs)
         if (app()->bound('current_tenant_id')) {
             return app('current_tenant_id');
         }

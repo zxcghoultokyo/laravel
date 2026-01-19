@@ -147,8 +147,15 @@ class Analytics extends Component
             return [];
         }
 
-        return DB::table('chat_session_outcomes')
-            ->where('created_at', '>=', $startDate)
+        $query = DB::table('chat_session_outcomes')
+            ->where('created_at', '>=', $startDate);
+        
+        // Filter by tenant if set
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        return $query
             ->selectRaw('outcome, outcome_category, COUNT(*) as count')
             ->groupBy('outcome', 'outcome_category')
             ->orderByDesc('count')
@@ -160,10 +167,17 @@ class Analytics extends Component
     {
         // Try chat_events first
         try {
-            $productClicks = DB::table('chat_events')
+            $query = DB::table('chat_events')
                 ->where('created_at', '>=', $startDate)
                 ->where('event_type', 'product_click')
-                ->whereNotNull('product_id')
+                ->whereNotNull('product_id');
+            
+            // Filter by tenant if set
+            if ($this->tenantId) {
+                $query->where('tenant_id', $this->tenantId);
+            }
+            
+            $productClicks = $query
                 ->selectRaw('product_id, COUNT(*) as clicks')
                 ->groupBy('product_id')
                 ->orderByDesc('clicks')
@@ -176,8 +190,15 @@ class Analytics extends Component
 
             // Get product titles
             $productIds = $productClicks->pluck('product_id')->toArray();
-            $products = DB::table('products')
-                ->whereIn('id', $productIds)
+            $productsQuery = DB::table('products')
+                ->whereIn('id', $productIds);
+            
+            // Filter products by tenant too
+            if ($this->tenantId) {
+                $productsQuery->where('tenant_id', $this->tenantId);
+            }
+            
+            $products = $productsQuery
                 ->get(['id', 'title', 'price', 'article'])
                 ->keyBy('id');
 
@@ -198,10 +219,17 @@ class Analytics extends Component
     
     private function getTopViewedProducts($startDate): array
     {
-        $productViews = DB::table('chat_events')
+        $query = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->where('event_type', 'product_shown')
-            ->whereNotNull('product_id')
+            ->whereNotNull('product_id');
+        
+        // Filter by tenant if set
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        $productViews = $query
             ->selectRaw('product_id, COUNT(*) as views')
             ->groupBy('product_id')
             ->orderByDesc('views')
@@ -213,8 +241,15 @@ class Analytics extends Component
         }
 
         $productIds = $productViews->pluck('product_id')->toArray();
-        $products = DB::table('products')
-            ->whereIn('id', $productIds)
+        $productsQuery = DB::table('products')
+            ->whereIn('id', $productIds);
+        
+        // Filter products by tenant too
+        if ($this->tenantId) {
+            $productsQuery->where('tenant_id', $this->tenantId);
+        }
+        
+        $products = $productsQuery
             ->get(['id', 'title', 'price', 'article'])
             ->keyBy('id');
 
@@ -232,8 +267,15 @@ class Analytics extends Component
     
     private function getRecentChatEvents(): array
     {
-        $events = DB::table('chat_events')
-            ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click'])
+        $query = DB::table('chat_events')
+            ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
+        
+        // Filter by tenant if set
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        $events = $query
             ->orderByDesc('created_at')
             ->limit(20)
             ->get(['event_type', 'session_id', 'created_at', 'message_type'])
@@ -250,7 +292,14 @@ class Analytics extends Component
     private function getRecentChatEventsFallback(): array
     {
         // Use chat_messages as fallback
-        return DB::table('chat_messages')
+        $query = DB::table('chat_messages');
+        
+        // Filter by tenant if set
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        return $query
             ->orderByDesc('created_at')
             ->limit(20)
             ->get(['role as event_type', 'session_id', 'created_at'])

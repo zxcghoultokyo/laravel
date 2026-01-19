@@ -61,6 +61,7 @@ class WidgetSettings extends Component
 
     public function mount()
     {
+        // Get tenant-specific settings (TenantScope automatically filters by current tenant)
         $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
 
         if ($settings) {

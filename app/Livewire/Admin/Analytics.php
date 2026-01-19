@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Schema;
 use App\Services\Ai\EnrichmentQualityService;
 use App\Services\Analytics\ABTestingService;
 use App\Services\Metrics\ChatStatsService;
-use App\Services\Tenant\TenantContext;
 
 class Analytics extends Component
 {
@@ -37,13 +36,16 @@ class Analytics extends Component
 
     public function mount()
     {
-        // Use TenantContext for consistent tenant resolution
-        $context = app(TenantContext::class);
-        
+        // For embedded mode, get tenant directly from authenticated user
+        // This is more reliable than TenantContext for Livewire components
         if ($this->embedded) {
-            // Embedded mode - use user's tenant
-            $this->tenantId = $context->getTenantId();
-            $this->merchantId = $context->getMerchantId();
+            $user = auth()->user();
+            if ($user && $user->tenant_id) {
+                $this->tenantId = $user->tenant_id;
+                // Get merchant_id (slug) from tenant
+                $tenant = $user->tenant;
+                $this->merchantId = $tenant?->slug;
+            }
         }
         
         $this->checkTables();

@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Auth;
  * - auth()->user()->tenant_id
  * - app('current_tenant')
  * 
+ * Note: For Livewire components, prefer getting tenant directly from auth()->user()
+ * as the singleton may hold stale data between requests.
+ * 
  * Usage:
  *   $context = app(TenantContext::class);
  *   $tenantId = $context->getTenantId();      // int|null
@@ -25,6 +28,7 @@ class TenantContext
     private ?Tenant $tenant = null;
     private ?int $tenantId = null;
     private bool $resolved = false;
+    private ?string $lastRequestId = null;
 
     /**
      * Get current tenant ID (integer).
@@ -32,7 +36,7 @@ class TenantContext
      */
     public function getTenantId(): ?int
     {
-        $this->resolve();
+        $this->resolveIfNeeded();
         return $this->tenantId;
     }
 
@@ -41,7 +45,7 @@ class TenantContext
      */
     public function getTenant(): ?Tenant
     {
-        $this->resolve();
+        $this->resolveIfNeeded();
         return $this->tenant;
     }
 
@@ -51,7 +55,7 @@ class TenantContext
      */
     public function getMerchantId(): ?string
     {
-        $this->resolve();
+        $this->resolveIfNeeded();
         return $this->tenant?->slug;
     }
 
@@ -60,7 +64,7 @@ class TenantContext
      */
     public function hasTenant(): bool
     {
-        $this->resolve();
+        $this->resolveIfNeeded();
         return $this->tenant !== null;
     }
 
@@ -108,11 +112,34 @@ class TenantContext
         $this->tenant = null;
         $this->tenantId = null;
         $this->resolved = false;
+        $this->lastRequestId = null;
         return $this;
     }
 
     /**
-     * Resolve tenant from various sources (lazy, cached).
+     * Check if we need to re-resolve (new request).
+     */
+    private function resolveIfNeeded(): void
+    {
+        // Get current request ID to detect new requests
+        $currentRequestId = null;
+        try {
+            $currentRequestId = request()->fingerprint() ?? spl_object_id(request());
+        } catch (\Throwable $e) {
+            // In console or testing, just use resolved flag
+        }
+        
+        // If this is a new request, clear the cache
+        if ($currentRequestId !== null && $this->lastRequestId !== $currentRequestId) {
+            $this->resolved = false;
+            $this->lastRequestId = $currentRequestId;
+        }
+        
+        $this->resolve();
+    }
+
+    /**
+     * Resolve tenant from various sources (lazy, cached per request).
      */
     private function resolve(): void
     {
@@ -121,7 +148,6 @@ class TenantContext
         }
 
         $this->resolved = true;
-        $tenant = null;
 
         // Priority 1: App binding from ResolveTenantMiddleware (API/widget calls)
         if (app()->bound('current_tenant')) {

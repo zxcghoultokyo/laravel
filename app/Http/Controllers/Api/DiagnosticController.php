@@ -2321,37 +2321,59 @@ class DiagnosticController extends Controller
         }
 
         try {
+            $debug = [];
+            $debug['step'] = 'init';
+            
             $searchQuery = $request->input('q', 'Level 7');
             $limit = min((int) $request->input('limit', 10), 20);
             $tenantId = (int) $request->input('tenant_id', 2);
             $analyzeImages = $request->boolean('analyze_images', true);
+            
+            $debug['step'] = 'query_prepared';
+            $debug['params'] = compact('searchQuery', 'limit', 'tenantId', 'analyzeImages');
 
             // Get products without color - use DB facade (no TenantScope issues)
             $products = DB::table('products')
                 ->where('tenant_id', $tenantId)
                 ->where('in_stock', true)
-                ->where(function($q) {
-                    $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
+                ->where(function($builder) {
+                    $builder->whereNull('color')
+                        ->orWhere('color', '')
+                        ->orWhere('color', 'null');
                 })
                 ->where('title', 'like', '%' . $searchQuery . '%')
                 ->limit($limit)
                 ->get();
+            
+            $debug['step'] = 'products_fetched';
+            $debug['products_count'] = count($products);
 
             $colorService = new \App\Services\Catalog\ColorDetectionService();
+            $debug['step'] = 'service_created';
+            
             $results = [];
 
             foreach ($products as $product) {
                 // DB::table returns stdClass, raw is JSON string
-                $raw = is_string($product->raw) ? json_decode($product->raw, true) : [];
+                $rawString = $product->raw ?? '';
+                $raw = is_string($rawString) ? (json_decode($rawString, true) ?: []) : [];
                 
                 // Get image URL
                 $imageUrl = null;
-                if (!empty($raw['pictures'][0]['url'])) {
+                if (isset($raw['pictures'][0]['url'])) {
                     $imageUrl = $raw['pictures'][0]['url'];
-                } elseif (!empty($raw['images'][0]['url'])) {
+                } elseif (isset($raw['images'][0]['url'])) {
                     $imageUrl = $raw['images'][0]['url'];
-                } elseif (!empty($raw['image'])) {
+                } elseif (isset($raw['image'])) {
                     $imageUrl = $raw['image'];
+                }
+
+                $descColor = null;
+                try {
+                    $descText = $raw['description'] ?? '';
+                    $descColor = $colorService->extractColorFromText($descText);
+                } catch (\Throwable $th) {
+                    $descColor = 'ERROR: ' . $th->getMessage();
                 }
 
                 $result = [
@@ -2359,7 +2381,7 @@ class DiagnosticController extends Controller
                     'article' => $product->article,
                     'title' => $product->title,
                     'current_color' => $product->color ?: null,
-                    'from_description' => $colorService->extractColorFromText($raw['description'] ?? ''),
+                    'from_description' => $descColor,
                     'from_image' => null,
                     'image_url' => $imageUrl,
                     'palette' => null,
@@ -2372,14 +2394,15 @@ class DiagnosticController extends Controller
                     try {
                         $result['from_image'] = $colorService->analyzeImage($imageUrl);
                         $result['palette'] = $colorService->getColorPalette($imageUrl, 3);
-                    } catch (\Exception $e) {
-                        $result['error'] = $e->getMessage();
+                    } catch (\Throwable $imgErr) {
+                        $result['error'] = $imgErr->getMessage();
                     }
                 }
 
                 // Determine recommended color and source
-                if (!empty($product->color) && $product->color !== 'null') {
-                    $result['recommended'] = $product->color;
+                $currentColor = $product->color ?? '';
+                if ($currentColor !== '' && $currentColor !== 'null') {
+                    $result['recommended'] = $currentColor;
                     $result['source'] = 'field';
                 } elseif ($result['from_description']) {
                     $result['recommended'] = $result['from_description'];
@@ -2391,6 +2414,8 @@ class DiagnosticController extends Controller
 
                 $results[] = $result;
             }
+            
+            $debug['step'] = 'loop_completed';
 
             return response()->json([
                 'query' => $searchQuery,
@@ -2398,12 +2423,15 @@ class DiagnosticController extends Controller
                 'products_found' => count($results),
                 'analyze_images' => $analyzeImages,
                 'products' => $results,
+                'debug' => $debug,
                 'note' => 'Uses ColorThief library. Priority: color field > description > image analysis',
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json([
                 'error' => $e->getMessage(),
-                'trace' => config('app.debug') ? $e->getTraceAsString() : null,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
             ], 500);
         }
     }

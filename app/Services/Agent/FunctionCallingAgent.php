@@ -1251,6 +1251,14 @@ PROMPT;
             $ids = array_column($results, 'id');
             $tenantId = $this->searchTool->getCurrentTenantId();
             $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
+            
+            Log::info('toolSearchProducts: getCards result', [
+                'ids' => $ids,
+                'tenant_id' => $tenantId,
+                'cards_count' => count($cards),
+                'first_card_images' => isset($cards[0]) ? ($cards[0]['images'] ?? 'NO_IMAGES_KEY') : 'NO_CARDS',
+            ]);
+            
             if (!empty($cards)) {
                 $results = $cards;
             }
@@ -1274,7 +1282,8 @@ PROMPT;
         $tenantId = $this->searchTool->getCurrentTenantId();
 
         // Cache key based on tenant, category and limit
-        $cacheKey = 'popular_products_v6:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
+        // v7: invalidate after adding images support
+        $cacheKey = 'popular_products_v7:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
         
         // Cache popular products for 5 minutes
         return Cache::remember($cacheKey, 300, function () use ($category, $limit, $tenantId) {

@@ -937,7 +937,8 @@ PROMPT;
         $category = $args['category'] ?? null;
         $limit = min($args['limit'] ?? 3, 3); // Max 3 cards for display
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'popular_products_v6:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
+        // v7: invalidate after adding images support
+        $cacheKey = 'popular_products_v7:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
         
         return Cache::remember($cacheKey, 300, function () use ($category, $limit, $tenantId) {
             $products = [];

@@ -69,6 +69,14 @@ class SyncReports extends Component
             $totalCategories = Category::count();
         }
 
+        // Color stats (products with/without color)
+        $withColor = Product::where('in_stock', true)
+            ->whereNotNull('color')
+            ->where('color', '!=', '')
+            ->where('color', '!=', 'null')
+            ->count();
+        $withoutColor = $inStock - $withColor;
+
         // Meilisearch stats
         $meiliStats = $this->getMeiliStats();
 
@@ -80,6 +88,11 @@ class SyncReports extends Component
                 'in_stock_percent' => $totalProducts > 0 ? round(($inStock / $totalProducts) * 100, 1) : 0,
                 'new_today' => $newToday,
                 'updated_today' => $updatedToday,
+            ],
+            'colors' => [
+                'with_color' => $withColor,
+                'without_color' => $withoutColor,
+                'coverage_percent' => $inStock > 0 ? round(($withColor / $inStock) * 100, 1) : 0,
             ],
             'ai_index' => [
                 'with_ai' => $withAiIndex,
@@ -216,6 +229,15 @@ class SyncReports extends Component
                 'next_run' => '-',
                 'is_queue' => true, // Long running - dispatched to queue
             ],
+            [
+                'name' => '🎨 Визначення кольорів',
+                'command' => 'colors:detect --limit=100',
+                'schedule' => 'Щодня о 05:30',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_COLOR_DETECTION),
+                'next_run' => 'Завтра о 05:30',
+                'is_queue' => true, // Uses ColorThief for image analysis
+                'description' => 'Автоматично визначає кольори товарів з фото та опису',
+            ],
         ];
     }
 
@@ -259,6 +281,7 @@ class SyncReports extends Component
             'brands:sync' => SyncLog::TYPE_CATEGORIES,
             'products:update-orders-count' => SyncLog::TYPE_STATS,
             'products:generate-embeddings' => SyncLog::TYPE_EMBEDDINGS,
+            'colors:detect' => SyncLog::TYPE_COLOR_DETECTION,
         ];
         
         $cmdName = explode(' ', $command)[0];
@@ -274,6 +297,7 @@ class SyncReports extends Component
             'horoshop:sync',
             'products:build-ai-index',
             'products:generate-embeddings',
+            'colors:detect',
         ];
         
         $cmdName = explode(' ', $command)[0];
@@ -405,6 +429,7 @@ class SyncReports extends Component
             'horoshop:sync' => ['class' => \App\Jobs\SyncHoroshopProductsJob::class, 'args' => [200]], // limit=200
             'products:build-ai-index' => ['class' => \App\Jobs\AnalyzeProductsWithAiJob::class, 'args' => [50]], // batchSize=50
             'products:generate-embeddings' => ['class' => \App\Jobs\GenerateProductEmbeddingsJob::class, 'args' => [50, 100]], // batchSize=50, limit=100
+            'colors:detect' => ['class' => \App\Jobs\DetectProductColorsJob::class, 'args' => [100, null, true, false]], // batchSize=100, allTenants, analyzeImages, notDryRun
         ];
         
         $jobConfig = $jobMap[$cmdName] ?? null;

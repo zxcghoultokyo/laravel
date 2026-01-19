@@ -54,6 +54,31 @@
             </div>
         </div>
 
+        {{-- Colors --}}
+        <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-pink-500">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-sm text-gray-500 font-medium">🎨 Кольори</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-1">{{ number_format($stats['colors']['with_color'] ?? 0) }}</p>
+                </div>
+                <span class="text-2xl">🖌️</span>
+            </div>
+            <div class="mt-4">
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="text-gray-600">Покриття</span>
+                    <span class="font-medium {{ ($stats['colors']['coverage_percent'] ?? 0) >= 80 ? 'text-green-600' : 'text-yellow-600' }}">
+                        {{ $stats['colors']['coverage_percent'] ?? 0 }}%
+                    </span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-pink-500 h-2 rounded-full" style="width: {{ $stats['colors']['coverage_percent'] ?? 0 }}%"></div>
+                </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-gray-100 text-xs">
+                <span class="text-gray-500">Без кольору: {{ number_format($stats['colors']['without_color'] ?? 0) }}</span>
+            </div>
+        </div>
+
         {{-- AI Index --}}
         <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
             <div class="flex justify-between items-start">

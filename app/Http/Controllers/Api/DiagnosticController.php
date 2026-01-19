@@ -2505,8 +2505,9 @@ class DiagnosticController extends Controller
         $dryRun = $request->boolean('dry_run', true);
         $skipImages = $request->boolean('skip_images', false);
 
-        // Get products without color
-        $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+        // Get products without color - use DB facade to bypass TenantScope
+        $products = DB::table('products')
+            ->select(['id', 'article', 'title', 'color', 'images', 'raw'])
             ->where('tenant_id', $tenantId)
             ->where('in_stock', true)
             ->where(function($q) {
@@ -2523,23 +2524,34 @@ class DiagnosticController extends Controller
         ];
 
         foreach ($products as $product) {
-            $raw = $product->raw ?? [];
+            // Parse raw JSON (DB::table returns string)
+            $rawString = $product->raw ?? '';
+            $raw = is_string($rawString) ? (json_decode($rawString, true) ?: []) : [];
             
-            // Get image URL (only if not skipping)
+            // Get image URL from images column first, then raw
             $imageUrl = null;
             if (!$skipImages) {
-                if (!empty($raw['pictures'][0]['url'])) {
-                    $imageUrl = $raw['pictures'][0]['url'];
-                } elseif (!empty($raw['images'][0]['url'])) {
-                    $imageUrl = $raw['images'][0]['url'];
-                } elseif (!empty($raw['image'])) {
-                    $imageUrl = $raw['image'];
+                $imagesCol = $product->images ?? '';
+                if (is_string($imagesCol) && !empty($imagesCol)) {
+                    $imagesArr = json_decode($imagesCol, true);
+                    if (is_array($imagesArr) && !empty($imagesArr[0])) {
+                        $imageUrl = $imagesArr[0];
+                    }
                 }
+                if (!$imageUrl) {
+                    $imageUrl = $raw['pictures'][0]['url'] ?? $raw['images'][0]['url'] ?? $raw['image'] ?? null;
+                }
+            }
+
+            // Get description (handle array case)
+            $description = $raw['description'] ?? '';
+            if (is_array($description)) {
+                $description = implode(' ', array_filter($description, 'is_string'));
             }
 
             $detectedColor = $colorService->detectColor(
                 null, // Force detection even if color exists
-                $raw['description'] ?? null,
+                is_string($description) ? $description : null,
                 $raw['properties'] ?? $raw['attributes'] ?? null,
                 $imageUrl
             );
@@ -2553,8 +2565,9 @@ class DiagnosticController extends Controller
                 ];
 
                 if (!$dryRun) {
-                    $product->color = $detectedColor;
-                    $product->save();
+                    DB::table('products')
+                        ->where('id', $product->id)
+                        ->update(['color' => $detectedColor]);
                     $results['updated']++;
                 }
             } else {

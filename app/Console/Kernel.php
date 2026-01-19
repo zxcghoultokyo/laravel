@@ -9,6 +9,7 @@ use App\Jobs\IncrementalProductSyncJob;
 use App\Jobs\SyncBrandsJob;
 use App\Jobs\AnalyzeProductsWithAiJob;
 use App\Jobs\IndexProductsToMeiliJob;
+use App\Jobs\DetectProductColorsJob;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -51,6 +52,13 @@ class Kernel extends ConsoleKernel
         $schedule->job(new IndexProductsToMeiliJob())
             ->dailyAt('05:00')
             ->withoutOverlapping();
+
+        // 4.5. Auto-detect colors for products without color (low resource usage)
+        // Runs after Meilisearch reindex, processes 100 products per run
+        $schedule->job(new DetectProductColorsJob(100, null, true, false))
+            ->dailyAt('05:30')
+            ->withoutOverlapping()
+            ->name('detect-product-colors');
 
         // 5. Incremental sync every 4 hours (faster updates for price/stock changes)
         $schedule->job(new IncrementalProductSyncJob(true, true))

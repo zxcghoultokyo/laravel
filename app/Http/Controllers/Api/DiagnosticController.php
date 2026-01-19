@@ -2320,11 +2320,92 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        // Super simple version to debug
-        return response()->json([
-            'status' => 'ok',
-            'step' => 'start',
-        ]);
+        try {
+            $searchQuery = $request->input('q', 'Level 7');
+            $limit = min((int) $request->input('limit', 10), 20);
+            $tenantId = (int) $request->input('tenant_id', 2);
+            $analyzeImages = $request->boolean('analyze_images', true);
+
+            // Get products without color - use DB facade (no TenantScope issues)
+            $products = DB::table('products')
+                ->where('tenant_id', $tenantId)
+                ->where('in_stock', true)
+                ->where(function($q) {
+                    $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
+                })
+                ->where('title', 'like', '%' . $searchQuery . '%')
+                ->limit($limit)
+                ->get();
+
+            $colorService = new \App\Services\Catalog\ColorDetectionService();
+            $results = [];
+
+            foreach ($products as $product) {
+                // DB::table returns stdClass, raw is JSON string
+                $raw = is_string($product->raw) ? json_decode($product->raw, true) : [];
+                
+                // Get image URL
+                $imageUrl = null;
+                if (!empty($raw['pictures'][0]['url'])) {
+                    $imageUrl = $raw['pictures'][0]['url'];
+                } elseif (!empty($raw['images'][0]['url'])) {
+                    $imageUrl = $raw['images'][0]['url'];
+                } elseif (!empty($raw['image'])) {
+                    $imageUrl = $raw['image'];
+                }
+
+                $result = [
+                    'id' => $product->id,
+                    'article' => $product->article,
+                    'title' => $product->title,
+                    'current_color' => $product->color ?: null,
+                    'from_description' => $colorService->extractColorFromText($raw['description'] ?? ''),
+                    'from_image' => null,
+                    'image_url' => $imageUrl,
+                    'palette' => null,
+                    'recommended' => null,
+                    'source' => null,
+                ];
+
+                // Analyze image if requested
+                if ($analyzeImages && $imageUrl) {
+                    try {
+                        $result['from_image'] = $colorService->analyzeImage($imageUrl);
+                        $result['palette'] = $colorService->getColorPalette($imageUrl, 3);
+                    } catch (\Exception $e) {
+                        $result['error'] = $e->getMessage();
+                    }
+                }
+
+                // Determine recommended color and source
+                if (!empty($product->color) && $product->color !== 'null') {
+                    $result['recommended'] = $product->color;
+                    $result['source'] = 'field';
+                } elseif ($result['from_description']) {
+                    $result['recommended'] = $result['from_description'];
+                    $result['source'] = 'description';
+                } elseif ($result['from_image']) {
+                    $result['recommended'] = $result['from_image'];
+                    $result['source'] = 'image';
+                }
+
+                $results[] = $result;
+            }
+
+            return response()->json([
+                'query' => $searchQuery,
+                'tenant_id' => $tenantId,
+                'products_found' => count($results),
+                'analyze_images' => $analyzeImages,
+                'products' => $results,
+                'note' => 'Uses ColorThief library. Priority: color field > description > image analysis',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null,
+            ], 500);
+        }
     }
 
     /**

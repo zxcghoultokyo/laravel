@@ -2312,7 +2312,7 @@ class DiagnosticController extends Controller
 
     /**
      * GET /api/diagnostic/test-color-picker
-     * Test color detection from product images
+     * Test color detection from product images using ColorThief
      */
     public function testColorPicker(Request $request): JsonResponse
     {
@@ -2323,71 +2323,26 @@ class DiagnosticController extends Controller
         $query = $request->input('q', 'Level 7');
         $limit = min((int) $request->input('limit', 10), 20);
         $tenantId = $request->input('tenant_id', 2);
+        $analyzeImages = $request->boolean('analyze_images', true);
 
-        // Кольорова палітра для матчингу
-        $colorMap = [
-            'Сірий' => [[100, 100, 100], [180, 180, 180]],
-            'Чорний' => [[0, 0, 0], [60, 60, 60]],
-            'Олива' => [[70, 80, 40], [130, 150, 90]],
-            'Койот' => [[140, 110, 70], [200, 170, 120]],
-            'Мультикам' => [[100, 90, 60], [170, 150, 100]],
-            'Зелений' => [[30, 80, 30], [100, 180, 100]],
-            'Білий' => [[200, 200, 200], [255, 255, 255]],
-            'Синій' => [[30, 30, 100], [100, 100, 200]],
-            'Піксель' => [[80, 90, 70], [140, 150, 120]],
-        ];
-
-        $colorKeywords = [
-            'сірий' => 'Сірий', 'сіра' => 'Сірий', 'grey' => 'Сірий', 'gray' => 'Сірий',
-            'чорний' => 'Чорний', 'чорна' => 'Чорний', 'black' => 'Чорний',
-            'олива' => 'Олива', 'оливков' => 'Олива', 'olive' => 'Олива',
-            'койот' => 'Койот', 'coyote' => 'Койот',
-            'мультикам' => 'Мультикам', 'multicam' => 'Мультикам',
-            'піксел' => 'Піксель', 'pixel' => 'Піксель',
-            'зелен' => 'Зелений', 'green' => 'Зелений',
-            'білий' => 'Білий', 'біла' => 'Білий', 'white' => 'Білий',
-            'пісоч' => 'Пісочний', 'sand' => 'Пісочний', 'desert' => 'Пісочний',
-        ];
-
-        // Беремо товари без кольору
+        // Get products without color
         $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('tenant_id', $tenantId)
             ->where('in_stock', true)
             ->where(function($q) {
-                $q->whereNull('color')->orWhere('color', '');
+                $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
             })
             ->where('title', 'like', "%{$query}%")
             ->limit($limit)
             ->get();
 
+        $colorService = app(\App\Services\Catalog\ColorDetectionService::class);
         $results = [];
 
         foreach ($products as $product) {
-            $result = [
-                'id' => $product->id,
-                'article' => $product->article,
-                'title' => $product->title,
-                'current_color' => $product->color ?: null,
-                'from_description' => null,
-                'from_image' => null,
-                'image_rgb' => null,
-                'image_hex' => null,
-                'image_url' => null,
-                'recommended' => null,
-            ];
-
-            // 1. Шукаємо колір в описі
-            $description = $product->raw['description'] ?? '';
-            $descLower = mb_strtolower($description);
-            foreach ($colorKeywords as $keyword => $color) {
-                if (mb_strpos($descLower, $keyword) !== false) {
-                    $result['from_description'] = $color;
-                    break;
-                }
-            }
-
-            // 2. Отримуємо URL зображення
             $raw = $product->raw ?? [];
+            
+            // Get image URL
             $imageUrl = null;
             if (!empty($raw['pictures'][0]['url'])) {
                 $imageUrl = $raw['pictures'][0]['url'];
@@ -2395,95 +2350,42 @@ class DiagnosticController extends Controller
                 $imageUrl = $raw['images'][0]['url'];
             } elseif (!empty($raw['image'])) {
                 $imageUrl = $raw['image'];
-            } elseif (!empty($raw['main_image'])) {
-                $imageUrl = $raw['main_image'];
             }
 
-            $result['image_url'] = $imageUrl;
+            $result = [
+                'id' => $product->id,
+                'article' => $product->article,
+                'title' => $product->title,
+                'current_color' => $product->color ?: null,
+                'from_description' => $colorService->extractColorFromText($raw['description'] ?? ''),
+                'from_image' => null,
+                'image_url' => $imageUrl,
+                'palette' => null,
+                'recommended' => null,
+                'source' => null,
+            ];
 
-            // 3. Аналізуємо зображення
-            if ($imageUrl) {
+            // Analyze image if requested
+            if ($analyzeImages && $imageUrl) {
                 try {
-                    $response = \Illuminate\Support\Facades\Http::timeout(10)->get($imageUrl);
-                    if ($response->successful()) {
-                        $image = @imagecreatefromstring($response->body());
-                        if ($image) {
-                            $width = imagesx($image);
-                            $height = imagesy($image);
-                            $newW = 50;
-                            $newH = 50;
-                            
-                            $resized = imagecreatetruecolor($newW, $newH);
-                            imagecopyresampled($resized, $image, 0, 0, 0, 0, $newW, $newH, $width, $height);
-                            
-                            $colors = [];
-                            for ($x = 0; $x < $newW; $x++) {
-                                for ($y = 0; $y < $newH; $y++) {
-                                    $rgb = imagecolorat($resized, $x, $y);
-                                    $r = ($rgb >> 16) & 0xFF;
-                                    $g = ($rgb >> 8) & 0xFF;
-                                    $b = $rgb & 0xFF;
-                                    
-                                    // Ігноруємо білий/чорний фон
-                                    if ($r > 240 && $g > 240 && $b > 240) continue;
-                                    if ($r < 20 && $g < 20 && $b < 20) continue;
-                                    
-                                    $key = (int)($r/20)*20 . '_' . (int)($g/20)*20 . '_' . (int)($b/20)*20;
-                                    if (!isset($colors[$key])) {
-                                        $colors[$key] = ['count' => 0, 'r' => 0, 'g' => 0, 'b' => 0];
-                                    }
-                                    $colors[$key]['count']++;
-                                    $colors[$key]['r'] += $r;
-                                    $colors[$key]['g'] += $g;
-                                    $colors[$key]['b'] += $b;
-                                }
-                            }
-                            
-                            imagedestroy($image);
-                            imagedestroy($resized);
-                            
-                            if (!empty($colors)) {
-                                uasort($colors, fn($a, $b) => $b['count'] - $a['count']);
-                                $dominant = array_values($colors)[0];
-                                $r = (int)($dominant['r'] / $dominant['count']);
-                                $g = (int)($dominant['g'] / $dominant['count']);
-                                $b = (int)($dominant['b'] / $dominant['count']);
-                                
-                                $result['image_rgb'] = [$r, $g, $b];
-                                $result['image_hex'] = sprintf("#%02x%02x%02x", $r, $g, $b);
-                                
-                                // Матчимо колір
-                                foreach ($colorMap as $name => $range) {
-                                    [$min, $max] = $range;
-                                    if ($r >= $min[0] && $r <= $max[0] &&
-                                        $g >= $min[1] && $g <= $max[1] &&
-                                        $b >= $min[2] && $b <= $max[2]) {
-                                        $result['from_image'] = $name;
-                                        break;
-                                    }
-                                }
-                                
-                                // Fallback визначення
-                                if (!$result['from_image']) {
-                                    if ($r > $g && $r > $b) $result['from_image'] = 'Коричневий/Бежевий';
-                                    elseif ($g > $r && $g > $b) $result['from_image'] = 'Зелений';
-                                    elseif ($b > $r && $b > $g) $result['from_image'] = 'Синій';
-                                    elseif (abs($r - $g) < 30 && abs($g - $b) < 30) {
-                                        $result['from_image'] = $r > 150 ? 'Світло-сірий' : 'Сірий';
-                                    } else {
-                                        $result['from_image'] = 'Невизначений';
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    $result['from_image'] = $colorService->analyzeImage($imageUrl);
+                    $result['palette'] = $colorService->getColorPalette($imageUrl, 3);
                 } catch (\Exception $e) {
                     $result['error'] = $e->getMessage();
                 }
             }
 
-            // 4. Рекомендований колір (пріоритет: характеристики > опис > фото)
-            $result['recommended'] = $product->color ?: $result['from_description'] ?: $result['from_image'];
+            // Determine recommended color and source
+            if (!empty($product->color) && $product->color !== 'null') {
+                $result['recommended'] = $product->color;
+                $result['source'] = 'field';
+            } elseif ($result['from_description']) {
+                $result['recommended'] = $result['from_description'];
+                $result['source'] = 'description';
+            } elseif ($result['from_image']) {
+                $result['recommended'] = $result['from_image'];
+                $result['source'] = 'image';
+            }
 
             $results[] = $result;
         }
@@ -2492,9 +2394,137 @@ class DiagnosticController extends Controller
             'query' => $query,
             'tenant_id' => $tenantId,
             'products_found' => count($results),
+            'analyze_images' => $analyzeImages,
             'products' => $results,
-            'note' => 'Priority: color field > description > image analysis',
+            'note' => 'Uses ColorThief library. Priority: color field > description > image analysis',
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/color-palette
+     * Get color palette from a specific image URL
+     */
+    public function colorPalette(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $imageUrl = $request->input('url');
+        $count = min((int) $request->input('count', 5), 10);
+
+        if (empty($imageUrl)) {
+            return response()->json(['error' => 'url parameter required'], 400);
+        }
+
+        $colorService = app(\App\Services\Catalog\ColorDetectionService::class);
+        
+        try {
+            $palette = $colorService->getColorPalette($imageUrl, $count);
+            $dominant = $colorService->analyzeImage($imageUrl);
+
+            return response()->json([
+                'url' => $imageUrl,
+                'dominant_color' => $dominant,
+                'palette' => $palette,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'url' => $imageUrl,
+            ], 500);
+        }
+    }
+
+    /**
+     * POST /api/diagnostic/auto-detect-colors
+     * Automatically detect and optionally update colors for products without color
+     */
+    public function autoDetectColors(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id', 2);
+        $limit = min((int) $request->input('limit', 50), 200);
+        $dryRun = $request->boolean('dry_run', true);
+        $skipImages = $request->boolean('skip_images', false);
+
+        // Get products without color
+        $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->where('in_stock', true)
+            ->where(function($q) {
+                $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
+            })
+            ->limit($limit)
+            ->get();
+
+        $colorService = app(\App\Services\Catalog\ColorDetectionService::class);
+        $results = [
+            'detected' => [],
+            'not_detected' => [],
+            'updated' => 0,
+        ];
+
+        foreach ($products as $product) {
+            $raw = $product->raw ?? [];
+            
+            // Get image URL (only if not skipping)
+            $imageUrl = null;
+            if (!$skipImages) {
+                if (!empty($raw['pictures'][0]['url'])) {
+                    $imageUrl = $raw['pictures'][0]['url'];
+                } elseif (!empty($raw['images'][0]['url'])) {
+                    $imageUrl = $raw['images'][0]['url'];
+                } elseif (!empty($raw['image'])) {
+                    $imageUrl = $raw['image'];
+                }
+            }
+
+            $detectedColor = $colorService->detectColor(
+                null, // Force detection even if color exists
+                $raw['description'] ?? null,
+                $raw['properties'] ?? $raw['attributes'] ?? null,
+                $imageUrl
+            );
+
+            if ($detectedColor) {
+                $results['detected'][] = [
+                    'id' => $product->id,
+                    'article' => $product->article,
+                    'title' => mb_substr($product->title, 0, 50),
+                    'detected_color' => $detectedColor,
+                ];
+
+                if (!$dryRun) {
+                    $product->color = $detectedColor;
+                    $product->save();
+                    $results['updated']++;
+                }
+            } else {
+                $results['not_detected'][] = [
+                    'id' => $product->id,
+                    'article' => $product->article,
+                    'title' => mb_substr($product->title, 0, 50),
+                ];
+            }
+        }
+
+        return response()->json([
+            'tenant_id' => $tenantId,
+            'dry_run' => $dryRun,
+            'skip_images' => $skipImages,
+            'total_processed' => count($products),
+            'detected_count' => count($results['detected']),
+            'not_detected_count' => count($results['not_detected']),
+            'updated_count' => $results['updated'],
+            'detected' => $results['detected'],
+            'not_detected' => array_slice($results['not_detected'], 0, 20), // Limit output
+            'note' => $dryRun 
+                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch!' 
+                : 'Colors updated! Run Meilisearch reindex.',
         ]);
     }
 }
-

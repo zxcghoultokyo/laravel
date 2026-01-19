@@ -118,6 +118,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/fix-null-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixNullTenants']);
     Route::post('/update-product-color', [\App\Http\Controllers\Api\DiagnosticController::class, 'updateProductColor']);
     Route::get('/test-color-picker', [\App\Http\Controllers\Api\DiagnosticController::class, 'testColorPicker']);
+    Route::get('/color-palette', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorPalette']);
+    Route::post('/auto-detect-colors', [\App\Http\Controllers\Api\DiagnosticController::class, 'autoDetectColors']);
     
     // Tenant management
     Route::get('/tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenants']);

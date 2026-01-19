@@ -832,28 +832,36 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $settings = \App\Models\WidgetSettings::first();
-        if (!$settings) {
+        // Get all widget settings for all tenants
+        $allSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->get();
+        
+        if ($allSettings->isEmpty()) {
             return response()->json(['error' => 'No WidgetSettings found'], 404);
         }
 
+        $settingsList = $allSettings->map(function ($settings) {
+            $tenant = $settings->tenant_id 
+                ? \App\Models\Tenant::find($settings->tenant_id) 
+                : null;
+            
+            return [
+                'id' => $settings->id,
+                'tenant_id' => $settings->tenant_id,
+                'tenant_name' => $tenant?->name,
+                'tenant_slug' => $tenant?->slug,
+                'api_token' => $settings->api_token,
+                'api_token_preview' => $settings->api_token 
+                    ? substr($settings->api_token, 0, 8) . '...' . substr($settings->api_token, -8) 
+                    : null,
+                'store_name' => $settings->store_name,
+                'domain' => $settings->domain,
+                'enabled' => $settings->enabled,
+            ];
+        });
+
         return response()->json([
-            'store_name' => $settings->store_name,
-            'store_description' => $settings->store_description,
-            'shop_phone' => $settings->shop_phone,
-            'store_hours' => $settings->store_hours,
-            'faq_urls' => [
-                'payment_delivery' => $settings->faq_payment_delivery_url,
-                'returns' => $settings->faq_returns_url,
-                'contacts' => $settings->faq_contacts_url,
-                'about' => $settings->faq_about_url,
-            ],
-            'faq_texts' => [
-                'payment_delivery' => $settings->faq_payment_delivery_text,
-                'returns' => $settings->faq_returns_text,
-                'contacts' => $settings->faq_contacts_text,
-                'about' => $settings->faq_about_text,
-            ],
+            'count' => $settingsList->count(),
+            'settings' => $settingsList,
         ]);
     }
     

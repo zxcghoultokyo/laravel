@@ -127,12 +127,29 @@ class DiagnosticController extends Controller
                   ->orWhere('category_path', 'like', "%{$query}%");
             })
             ->limit($limit)
-            ->get(['id', 'article', 'title', 'price', 'category_path', 'color', 'size', 'brand', 'in_stock', 'tenant_id']);
+            ->get(['id', 'article', 'title', 'price', 'category_path', 'color', 'size', 'brand', 'in_stock', 'tenant_id', 'images', 'raw']);
 
         return response()->json([
             'query' => $query,
             'count' => $products->count(),
-            'products' => $products,
+            'products' => $products->map(function ($p) {
+                return [
+                    'id' => $p->id,
+                    'article' => $p->article,
+                    'title' => $p->title,
+                    'price' => $p->price,
+                    'category_path' => $p->category_path,
+                    'color' => $p->color,
+                    'size' => $p->size,
+                    'brand' => $p->brand,
+                    'in_stock' => $p->in_stock,
+                    'tenant_id' => $p->tenant_id,
+                    'images' => $p->images,
+                    'raw_pictures' => $p->raw['pictures'] ?? null,
+                    'raw_images' => $p->raw['images'] ?? null,
+                    'raw_image' => $p->raw['image'] ?? null,
+                ];
+            }),
         ]);
     }
 
@@ -172,6 +189,11 @@ class DiagnosticController extends Controller
                 'in_stock' => $product->in_stock,
                 'category_path' => $product->category_path,
                 'brand' => $product->brand,
+                'tenant_id' => $product->tenant_id,
+                'images' => $product->images,
+                'raw_pictures' => $product->raw['pictures'] ?? null,
+                'raw_images' => $product->raw['images'] ?? null,
+                'raw_image' => $product->raw['image'] ?? null,
             ],
         ]);
     }

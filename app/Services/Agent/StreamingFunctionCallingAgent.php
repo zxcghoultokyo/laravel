@@ -1408,14 +1408,25 @@ PROMPT;
         if (!$sessionId) return;
         
         try {
-            $session = ChatSession::firstOrCreate(
-                ['session_id' => $sessionId],
-                [
-                    'language' => 'uk',
-                    'status' => 'open',
-                    'meta' => [],
-                ]
-            );
+            // Get tenant ID from search tool (set via request)
+            $tenantId = $this->searchTool->getCurrentTenantId();
+            
+            // Bypass TenantScope to find existing session regardless of tenant
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
+            
+            if (!$session) {
+                // Create new session with tenant_id
+                $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->create([
+                        'session_id' => $sessionId,
+                        'tenant_id' => $tenantId,
+                        'language' => 'uk',
+                        'status' => 'open',
+                        'meta' => [],
+                    ]);
+            }
 
             ChatMessage::create([
                 'chat_session_id' => $session->id,
@@ -1430,7 +1441,10 @@ PROMPT;
                 'last_message_at' => now(),
             ]);
             
-            Log::info('StreamingAgent: user message logged', ['session_id' => $sessionId]);
+            Log::info('StreamingAgent: user message logged', [
+                'session_id' => $sessionId,
+                'tenant_id' => $tenantId,
+            ]);
         } catch (\Exception $e) {
             Log::error('StreamingAgent: failed to log user message', [
                 'session_id' => $sessionId,
@@ -1447,7 +1461,10 @@ PROMPT;
         if (!$sessionId) return;
         
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope to find session regardless of tenant
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
             if (!$session) return;
 
             $meta = [
@@ -1492,7 +1509,10 @@ PROMPT;
         if (!$sessionId) return [];
         
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope to find session regardless of tenant
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
             if (!$session) return [];
 
             $messages = ChatMessage::where('chat_session_id', $session->id)

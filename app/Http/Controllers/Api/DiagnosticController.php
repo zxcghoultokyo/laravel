@@ -2371,7 +2371,11 @@ class DiagnosticController extends Controller
                 $descColor = null;
                 try {
                     $descText = $raw['description'] ?? '';
-                    $descColor = $colorService->extractColorFromText($descText);
+                    // Handle case when description is array
+                    if (is_array($descText)) {
+                        $descText = implode(' ', array_filter($descText, 'is_string'));
+                    }
+                    $descColor = is_string($descText) ? $colorService->extractColorFromText($descText) : null;
                 } catch (\Throwable $th) {
                     $descColor = 'ERROR: ' . $th->getMessage();
                 }

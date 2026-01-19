@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\SyncLog;
 use App\Services\Horoshop\HoroshopClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -85,6 +86,19 @@ class SyncOrdersCommand extends Command
             $this->info("  Statuses: " . implode(', ', $statuses));
         }
         $this->info("=================================================");
+
+        // Create SyncLog entry
+        $syncLog = SyncLog::create([
+            'sync_type' => SyncLog::TYPE_ORDERS,
+            'status' => SyncLog::STATUS_RUNNING,
+            'started_at' => now(),
+            'meta' => [
+                'from' => $from,
+                'to' => $to,
+                'limit' => $limit,
+                'statuses' => $statuses,
+            ],
+        ]);
 
         $totalSynced = 0;
         $totalItems = 0;
@@ -185,6 +199,19 @@ class SyncOrdersCommand extends Command
             $this->warn("[WARN] {$errors} errors encountered");
         }
         $this->info("=================================================");
+
+        // Update SyncLog
+        $syncLog->update([
+            'status' => SyncLog::STATUS_COMPLETED,
+            'completed_at' => now(),
+            'items_synced' => $totalSynced,
+            'meta' => array_merge($syncLog->meta ?? [], [
+                'total_orders' => $totalSynced,
+                'total_items' => $totalItems,
+                'errors' => $errors,
+                'elapsed_seconds' => $elapsed,
+            ]),
+        ]);
 
         // Update orders_count in products
         if ($this->option('update-counts')) {

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\SyncLog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -28,6 +29,20 @@ class UpdateProductOrdersCountCommand extends Command
         $this->info("  Include gifts: " . ($includeGifts ? 'yes' : 'no'));
         $this->info("  Dry run: " . ($dryRun ? 'yes' : 'no'));
         $this->info("=================================================");
+
+        // Create SyncLog entry (only if not dry-run)
+        $syncLog = null;
+        if (!$dryRun) {
+            $syncLog = SyncLog::create([
+                'sync_type' => SyncLog::TYPE_STATS,
+                'status' => SyncLog::STATUS_RUNNING,
+                'started_at' => now(),
+                'meta' => [
+                    'statuses' => $statuses,
+                    'include_gifts' => $includeGifts,
+                ],
+            ]);
+        }
 
         // Build query for counting orders per article
         $query = DB::table('order_items')
@@ -108,6 +123,20 @@ class UpdateProductOrdersCountCommand extends Command
         $withOrders = Product::where('orders_count', '>', 0)->count();
         $this->info("  Products with orders_count > 0: {$withOrders}");
         $this->info("=================================================");
+
+        // Update SyncLog
+        if ($syncLog) {
+            $syncLog->update([
+                'status' => SyncLog::STATUS_COMPLETED,
+                'completed_at' => now(),
+                'items_synced' => $updated,
+                'meta' => array_merge($syncLog->meta ?? [], [
+                    'updated' => $updated,
+                    'not_found' => $notFound,
+                    'with_orders' => $withOrders,
+                ]),
+            ]);
+        }
 
         return self::SUCCESS;
     }

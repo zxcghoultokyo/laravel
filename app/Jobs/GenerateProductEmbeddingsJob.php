@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Models\ProductAiIndex;
+use App\Models\SyncLog;
 use App\Services\Ai\EmbeddingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -47,6 +48,17 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
         Log::info('[EmbeddingsJob] Starting batch embedding generation', [
             'batch_size' => $this->batchSize,
             'limit' => $this->limit,
+        ]);
+
+        // Create SyncLog entry
+        $syncLog = SyncLog::create([
+            'sync_type' => SyncLog::TYPE_EMBEDDINGS,
+            'status' => SyncLog::STATUS_RUNNING,
+            'started_at' => now(),
+            'meta' => [
+                'batch_size' => $this->batchSize,
+                'limit' => $this->limit,
+            ],
         ]);
 
         // Get products with AI index but no embedding
@@ -134,6 +146,20 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
             'success' => $success,
             'failed' => $failed,
             'elapsed_seconds' => $elapsed,
+        ]);
+
+        // Update SyncLog
+        $syncLog->update([
+            'status' => SyncLog::STATUS_COMPLETED,
+            'completed_at' => now(),
+            'items_synced' => $success,
+            'meta' => array_merge($syncLog->meta ?? [], [
+                'total' => $total,
+                'processed' => $processed,
+                'success' => $success,
+                'failed' => $failed,
+                'elapsed_seconds' => $elapsed,
+            ]),
         ]);
     }
 

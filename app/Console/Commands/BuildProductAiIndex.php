@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\SyncLog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Product;
@@ -121,6 +122,19 @@ class BuildProductAiIndex extends Command
         $this->info("  Batch size: {$batchSize} | Timeout: {$timeout}s | No-AI: " . ($noAi ? 'yes' : 'no'));
         $this->info("=================================================");
 
+        // Create SyncLog entry
+        $syncLog = SyncLog::create([
+            'sync_type' => SyncLog::TYPE_AI_ENRICHMENT,
+            'status' => SyncLog::STATUS_RUNNING,
+            'started_at' => now(),
+            'meta' => [
+                'total' => $total,
+                'limit' => $limit,
+                'batch_size' => $batchSize,
+                'no_ai' => $noAi,
+            ],
+        ]);
+
         $processed = 0;
         $errors = 0;
         $lastId = $lastProcessedId;
@@ -199,6 +213,19 @@ class BuildProductAiIndex extends Command
         }
         $this->info("[LAST ID] {$lastId}");
         $this->info("=================================================");
+
+        // Update SyncLog
+        $syncLog->update([
+            'status' => SyncLog::STATUS_COMPLETED,
+            'completed_at' => now(),
+            'items_synced' => $processed,
+            'meta' => array_merge($syncLog->meta ?? [], [
+                'processed' => $processed,
+                'errors' => $errors,
+                'last_id' => $lastId,
+                'elapsed_seconds' => $elapsed,
+            ]),
+        ]);
 
         return self::SUCCESS;
     }

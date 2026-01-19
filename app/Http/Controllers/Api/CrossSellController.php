@@ -27,6 +27,7 @@ class CrossSellController extends Controller
     {
         $productId = $request->get('product_id');
         $article = $request->get('article');
+        $tenantId = $request->get('tenant_id');
         
         if (!$productId && !$article) {
             return response()->json([
@@ -35,12 +36,24 @@ class CrossSellController extends Controller
             ], 400);
         }
 
+        // Set tenant_id for filtering
+        if ($tenantId) {
+            $this->crossSellService->setTenantId((int) $tenantId);
+        }
+
         // Find product
         $product = null;
+        $query = Product::query();
+        
+        // Apply tenant filter
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
         if ($productId) {
-            $product = Product::find($productId);
+            $product = $query->where('id', $productId)->first();
         } elseif ($article) {
-            $product = Product::where('article', $article)->first();
+            $product = $query->where('article', $article)->first();
         }
 
         if (!$product) {
@@ -50,8 +63,8 @@ class CrossSellController extends Controller
             ], 404);
         }
 
-        // Cache key based on product
-        $cacheKey = 'cross_sell:' . $product->id;
+        // Cache key based on product and tenant
+        $cacheKey = 'cross_sell:' . $product->id . ':t' . ($tenantId ?? 'all');
         
         // Try cache first (cross-sell is expensive)
         $crossSell = Cache::remember($cacheKey, 300, function () use ($product) {

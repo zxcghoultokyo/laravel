@@ -48,6 +48,7 @@ class WidgetController extends Controller
         Log::info('WidgetSettings fetched', ['settings' => $settings, 'tenant_id' => $tenant?->id]);
         
         $data = $settings ? [
+            'tenant_id' => $tenant?->id,
             'merchant_id' => $tenant?->slug ?? 'default',
             'enabled' => $settings->enabled,
             'primary_color' => $settings->primary_color,
@@ -77,6 +78,7 @@ class WidgetController extends Controller
             'store_hours' => $settings->store_hours,
             'store_about' => $settings->faq_about_text,
         ] : [
+            'tenant_id' => 1, // Default tenant
             'merchant_id' => 'default',
             'enabled' => true,
             'primary_color' => '#2563eb',

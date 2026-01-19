@@ -131,8 +131,9 @@
         // Glow color - use custom if set, otherwise primary color
         window.aintentoGlowColor = settings.glow_color || settings.primary_color;
 
-        // Store settings globally
+        // Store settings globally (including tenant_id for API calls)
         window.aintentoSettings = settings;
+        window.aintentoTenantId = settings.tenant_id || null;
 
         // Inject CSS (only once)
         injectStyles(settings);
@@ -579,6 +580,7 @@
             session_id: sessionId || '',
             client_id: clientId,
             merchant_id: merchantId,
+            tenant_id: window.aintentoTenantId,
             order_total: data.order_total || null,
             items_count: data.items_count || null,
             product_ids: data.products_from_chat || [],
@@ -1279,7 +1281,11 @@
                 messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
             }, 100);
             
-            const streamUrl = BASE_URL + '/api/chat/stream?message=' + encodeURIComponent(message) + '&session_id=' + encodeURIComponent(state.sessionId);
+            // Build stream URL with tenant_id for proper data isolation
+            let streamUrl = BASE_URL + '/api/chat/stream?message=' + encodeURIComponent(message) + '&session_id=' + encodeURIComponent(state.sessionId);
+            if (window.aintentoTenantId) {
+                streamUrl += '&tenant_id=' + encodeURIComponent(window.aintentoTenantId);
+            }
             
             log('Starting SSE stream:', streamUrl);
             
@@ -1645,8 +1651,13 @@
             log('Starting operator message polling');
             
             function pollOperator() {
-                const pollUrl = BASE_URL + '/api/chat/poll/' + encodeURIComponent(state.sessionId) + 
+                let pollUrl = BASE_URL + '/api/chat/poll/' + encodeURIComponent(state.sessionId) + 
                     '?last_message_id=' + state.lastOperatorMessageId;
+                
+                // Add tenant_id for multi-tenant isolation
+                if (window.aintentoTenantId) {
+                    pollUrl += '&tenant_id=' + encodeURIComponent(window.aintentoTenantId);
+                }
                 
                 fetch(pollUrl)
                     .then(res => res.json())
@@ -1702,7 +1713,8 @@
                 },
                 body: JSON.stringify({
                     message: message,
-                    session_id: state.sessionId
+                    session_id: state.sessionId,
+                    tenant_id: window.aintentoTenantId
                 })
             })
             .then(res => res.json())
@@ -1767,7 +1779,12 @@
         
         // Fetch cross-sell suggestions asynchronously
         function fetchCrossSellAsync(messagesContainer, productId, settings, sessionId) {
-            const crossSellUrl = BASE_URL + '/api/cross-sell?product_id=' + productId;
+            let crossSellUrl = BASE_URL + '/api/cross-sell?product_id=' + productId;
+            
+            // Add tenant_id for multi-tenant isolation
+            if (window.aintentoTenantId) {
+                crossSellUrl += '&tenant_id=' + encodeURIComponent(window.aintentoTenantId);
+            }
             
             fetch(crossSellUrl, {
                 headers: {
@@ -3096,6 +3113,11 @@
             if (context[key]) params.append(key, context[key]);
         });
         
+        // Add tenant_id for multi-tenant isolation
+        if (window.aintentoTenantId) {
+            params.append('tenant_id', window.aintentoTenantId);
+        }
+        
         const greetingUrl = BASE_URL + '/api/widget/greeting?' + params.toString();
         
         log('Fetching dynamic greeting:', greetingUrl);
@@ -3376,6 +3398,7 @@
             session_id: localStorage.getItem('aintento_session_id') || '',
             client_id: getOrCreateClientId(),
             merchant_id: getMerchantId(),
+            tenant_id: window.aintentoTenantId,
             event_type: eventType,
             event_source: 'widget',
             device_type: detectDeviceType(),
@@ -3533,7 +3556,11 @@
         
         // Fetch rules from server
         fetchRules: function() {
-            fetch(BASE_URL + '/api/triggers/rules')
+            let url = BASE_URL + '/api/triggers/rules';
+            if (window.aintentoTenantId) {
+                url += '?tenant_id=' + encodeURIComponent(window.aintentoTenantId);
+            }
+            fetch(url)
                 .then(res => res.json())
                 .then(data => {
                     this.rules = data.rules || [];
@@ -4010,6 +4037,7 @@
                 body: JSON.stringify({
                     rule_id: ruleId,
                     session_id: sessionId,
+                    tenant_id: window.aintentoTenantId,
                     event_type: eventType,
                     context: {
                         ...context,

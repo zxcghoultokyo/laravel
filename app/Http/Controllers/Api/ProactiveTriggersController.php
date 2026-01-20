@@ -13,14 +13,27 @@ class ProactiveTriggersController extends Controller
 {
     /**
      * Get active trigger rules for widget.
-     * Cached for 5 minutes.
+     * Cached for 5 minutes per tenant.
      */
     public function getRules(Request $request)
     {
-        $rules = Cache::remember('proactive_triggers_rules', 300, function () {
-            return ProactiveTriggerRule::enabled()
-                ->byPriority()
-                ->get()
+        $tenantId = $request->query('tenant_id');
+        $cacheKey = $tenantId 
+            ? "proactive_triggers_rules_tenant_{$tenantId}" 
+            : 'proactive_triggers_rules_global';
+
+        $rules = Cache::remember($cacheKey, 300, function () use ($tenantId) {
+            $query = ProactiveTriggerRule::enabled()->byPriority();
+            
+            // If tenant_id specified, get only that tenant's rules
+            // If no tenant_id, return rules where tenant_id is NULL (global rules for demo/testing)
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            } else {
+                $query->whereNull('tenant_id');
+            }
+            
+            return $query->get()
                 ->map(fn($rule) => $rule->toWidgetFormat())
                 ->values()
                 ->all();

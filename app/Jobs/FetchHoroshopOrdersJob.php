@@ -359,7 +359,6 @@ class FetchHoroshopOrdersJob implements ShouldQueue
                     'source' => 'fetch_horoshop_orders_job',
                 ]),
                 'created_at' => $order->ordered_at ?? now(),
-                'updated_at' => now(),
             ]);
             
             Log::info('FetchHoroshopOrdersJob: Recorded checkout_success event', [

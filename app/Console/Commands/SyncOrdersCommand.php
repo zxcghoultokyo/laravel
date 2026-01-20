@@ -337,7 +337,6 @@ class SyncOrdersCommand extends Command
                     'source' => 'sync_orders',
                 ]),
                 'created_at' => $order->ordered_at ?? now(),
-                'updated_at' => now(),
             ]);
         }
     }

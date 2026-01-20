@@ -1002,7 +1002,6 @@ class DiagnosticController extends Controller
                             'source' => 'backfill',
                         ]),
                         'created_at' => $order->ordered_at ?? $order->created_at,
-                        'updated_at' => now(),
                     ]);
                 }
                 $stats['events_created']++;

@@ -2772,6 +2772,7 @@ class DiagnosticController extends Controller
                 }
 
                 \App\Models\ChatMessage::create([
+                    'tenant_id' => $tenantId,
                     'chat_session_id' => $chatSession->id,
                     'role' => $isUser ? 'user' : 'assistant',
                     'content' => $content,
@@ -2924,6 +2925,56 @@ class DiagnosticController extends Controller
             'merchant_id' => $merchantId,
             'results' => $results,
             'note' => "Created {$results['sessions_created']} test sessions with {$results['messages_created']} messages, {$results['events_created']} events, and {$results['conversions_created']} conversions for the last {$numDays} days.",
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/fix-messages-tenant
+     * Fix chat_messages that are missing tenant_id by inheriting from their session
+     */
+    public function fixMessagesTenant(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+
+        // Get sessions with their tenant_id
+        $query = DB::table('chat_sessions')
+            ->select('id', 'tenant_id', 'session_id');
+        
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $sessions = $query->get();
+        
+        $fixed = 0;
+        $skipped = 0;
+        
+        foreach ($sessions as $session) {
+            if (!$session->tenant_id) {
+                $skipped++;
+                continue;
+            }
+            
+            // Update messages that don't have tenant_id
+            $updated = DB::table('chat_messages')
+                ->where('chat_session_id', $session->id)
+                ->whereNull('tenant_id')
+                ->update(['tenant_id' => $session->tenant_id]);
+            
+            $fixed += $updated;
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'tenant_id' => $tenantId,
+            'sessions_checked' => $sessions->count(),
+            'messages_fixed' => $fixed,
+            'sessions_skipped' => $skipped,
+            'note' => "Fixed {$fixed} messages by inheriting tenant_id from their sessions.",
         ]);
     }
 }

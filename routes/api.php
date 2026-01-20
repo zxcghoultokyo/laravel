@@ -127,6 +127,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/migrate-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'migrateDataToTenant']);
     Route::post('/seed-triggers', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTriggers']);
     Route::post('/seed-test-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTestData']);
+    Route::post('/fix-messages-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixMessagesTenant']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

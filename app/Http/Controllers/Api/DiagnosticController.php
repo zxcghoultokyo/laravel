@@ -2594,4 +2594,63 @@ class DiagnosticController extends Controller
                 : 'Colors updated! Run Meilisearch reindex.',
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/seed-triggers
+     * Seed default proactive triggers for a tenant
+     */
+    public function seedTriggers(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+        $force = $request->boolean('force', false);
+
+        if (!$tenantId) {
+            return response()->json(['error' => 'tenant_id is required'], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => "Tenant {$tenantId} not found"], 404);
+        }
+
+        $service = app(\App\Services\Tenant\DefaultTriggerService::class);
+        $existingCount = \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)->count();
+
+        if ($existingCount > 0 && !$force) {
+            return response()->json([
+                'status' => 'skipped',
+                'message' => "Tenant {$tenantId} already has {$existingCount} triggers. Use force=true to recreate.",
+                'existing_count' => $existingCount,
+            ]);
+        }
+
+        if ($force && $existingCount > 0) {
+            \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)->delete();
+        }
+
+        $service->createDefaultTriggers($tenant);
+        
+        $triggers = \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)
+            ->orderBy('priority')
+            ->get(['id', 'name', 'trigger_type', 'is_enabled', 'message']);
+
+        return response()->json([
+            'status' => 'success',
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'deleted' => $force ? $existingCount : 0,
+            'created' => $triggers->count(),
+            'triggers' => $triggers->map(fn($t) => [
+                'id' => $t->id,
+                'name' => $t->name,
+                'type' => $t->trigger_type,
+                'enabled' => $t->is_enabled,
+                'message_preview' => mb_substr(str_replace("\n", " ", $t->message), 0, 60) . '...',
+            ]),
+        ]);
+    }
 }

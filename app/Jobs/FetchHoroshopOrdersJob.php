@@ -164,6 +164,11 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             // Create new order
             $order = Order::create($orderPayload);
             Log::info('FetchHoroshopOrdersJob: Created order', ['order_id' => $orderId, 'had_chat' => $hadChat]);
+            
+            // Record checkout_success event for new orders (for funnel consistency)
+            if ($sessionId && ($data['stat_status'] ?? 1) != 5) {
+                $this->recordCheckoutSuccessEvent($order, $sessionId, $hadChat, $productsFromChat);
+            }
         }
 
         // Process order items
@@ -312,5 +317,56 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             ->toArray();
 
         return count(array_intersect($articles, $shownArticles));
+    }
+
+    /**
+     * Record checkout_success event in chat_events for funnel tracking
+     */
+    protected function recordCheckoutSuccessEvent(Order $order, string $sessionId, bool $hadChat, int $productsFromChat): void
+    {
+        // Determine merchant_id from session
+        $merchantId = null;
+        $chatSession = DB::table('chat_sessions')
+            ->where('session_id', $sessionId)
+            ->first();
+        
+        if ($chatSession) {
+            $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
+            $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
+        }
+
+        // Check if checkout_success event already exists for this order
+        $existingEvent = DB::table('chat_events')
+            ->where('event_type', 'checkout_success')
+            ->where('session_id', $sessionId)
+            ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+            ->exists();
+
+        if (!$existingEvent) {
+            DB::table('chat_events')->insert([
+                'session_id' => $sessionId,
+                'merchant_id' => $merchantId,
+                'event_type' => 'checkout_success',
+                'product_id' => null,
+                'product_article' => null,
+                'product_price' => $order->total_sum,
+                'metadata' => json_encode([
+                    'order_id' => $order->order_id,
+                    'total_sum' => $order->total_sum,
+                    'items_count' => $order->total_quantity,
+                    'had_chat' => $hadChat,
+                    'products_from_chat' => $productsFromChat,
+                    'source' => 'fetch_horoshop_orders_job',
+                ]),
+                'created_at' => $order->ordered_at ?? now(),
+                'updated_at' => now(),
+            ]);
+            
+            Log::info('FetchHoroshopOrdersJob: Recorded checkout_success event', [
+                'order_id' => $order->order_id,
+                'session_id' => $sessionId,
+                'merchant_id' => $merchantId,
+            ]);
+        }
     }
 }

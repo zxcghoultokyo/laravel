@@ -31,13 +31,18 @@
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $conversionsActiveTab === 'funnel' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
             🔄 Воронка
         </button>
+        @php
+            // Get counts from funnel data for consistency
+            $cartFunnelCount = collect($conversionsData)->firstWhere('stage', 'add_to_cart')['count'] ?? count($cartEvents);
+            $checkoutFunnelCount = collect($conversionsData)->firstWhere('stage', 'checkout_success')['count'] ?? count($checkoutOrders);
+        @endphp
         <button wire:click="setConversionsTab('cart')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $conversionsActiveTab === 'cart' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
-            🛒 Кошик ({{ count($cartEvents) }})
+            🛒 Кошик ({{ $cartFunnelCount }})
         </button>
         <button wire:click="setConversionsTab('orders')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $conversionsActiveTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
-            ✅ Замовлення ({{ count($checkoutOrders) }})
+            ✅ Замовлення ({{ $checkoutFunnelCount }})
         </button>
     </div>
 
@@ -137,10 +142,13 @@
 
     <!-- Cart Tab -->
     @if($conversionsActiveTab === 'cart')
+        @php
+            $cartFunnelCountForStats = collect($conversionsData)->firstWhere('stage', 'add_to_cart')['count'] ?? 0;
+        @endphp
         <div class="grid grid-cols-4 gap-4 mb-6">
             <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-3xl font-bold text-gray-700">{{ count($cartEvents) }}</div>
-                <div class="text-sm text-gray-500">Всього add to cart</div>
+                <div class="text-3xl font-bold text-gray-700">{{ $cartFunnelCountForStats }}</div>
+                <div class="text-sm text-gray-500">Унікальних сесій</div>
             </div>
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">
                 <div class="text-3xl font-bold text-green-700">{{ count($chatAttributedConversions) }}</div>
@@ -418,10 +426,16 @@
 
     <!-- Orders Tab -->
     @if($conversionsActiveTab === 'orders')
+        @php
+            $checkoutFunnelCountForStats = collect($conversionsData)->firstWhere('stage', 'checkout_success')['count'] ?? 0;
+        @endphp
         <div class="grid grid-cols-3 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">
-                <div class="text-3xl font-bold text-green-700">{{ count($checkoutOrders) }}</div>
-                <div class="text-sm text-green-600">Замовлень з чату</div>
+                <div class="text-3xl font-bold text-green-700">{{ $checkoutFunnelCountForStats }}</div>
+                <div class="text-sm text-green-600">Сесій з замовленнями (воронка)</div>
+                @if($checkoutFunnelCountForStats != count($checkoutOrders))
+                    <div class="text-xs text-gray-400 mt-1">Записів в orders: {{ count($checkoutOrders) }}</div>
+                @endif
             </div>
             <div class="bg-white rounded-lg shadow p-4">
                 @php

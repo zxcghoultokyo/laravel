@@ -288,7 +288,58 @@ class SyncOrdersCommand extends Command
             ]);
         }
 
+        // Record checkout_success event in chat_events for funnel consistency
+        // Only if we have a session_id and order is new (not cancelled)
+        if ($chatData['session_id'] && ($raw['stat_status'] ?? 1) != 5) {
+            $this->recordCheckoutSuccessEvent($order, $chatData, $raw);
+        }
+
         return $order;
+    }
+
+    /**
+     * Record checkout_success event in chat_events for funnel tracking
+     */
+    protected function recordCheckoutSuccessEvent(Order $order, array $chatData, array $raw): void
+    {
+        // Determine merchant_id from session
+        $merchantId = null;
+        $chatSession = DB::table('chat_sessions')
+            ->where('session_id', $chatData['session_id'])
+            ->first();
+        
+        if ($chatSession) {
+            $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
+            $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
+        }
+
+        // Check if checkout_success event already exists for this order
+        $existingEvent = DB::table('chat_events')
+            ->where('event_type', 'checkout_success')
+            ->where('session_id', $chatData['session_id'])
+            ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+            ->exists();
+
+        if (!$existingEvent) {
+            DB::table('chat_events')->insert([
+                'session_id' => $chatData['session_id'],
+                'merchant_id' => $merchantId,
+                'event_type' => 'checkout_success',
+                'product_id' => null,
+                'product_article' => null,
+                'product_price' => $order->total_sum,
+                'metadata' => json_encode([
+                    'order_id' => $order->order_id,
+                    'total_sum' => $order->total_sum,
+                    'items_count' => $order->total_quantity,
+                    'had_chat' => $chatData['had_chat'],
+                    'products_from_chat' => $chatData['products_from_chat'],
+                    'source' => 'sync_orders',
+                ]),
+                'created_at' => $order->ordered_at ?? now(),
+                'updated_at' => now(),
+            ]);
+        }
     }
 
     protected function getStatusLabel(int $code): string

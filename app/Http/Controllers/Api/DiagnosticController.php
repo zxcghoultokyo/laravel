@@ -1704,6 +1704,154 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/funnel-debug
+     * Debug funnel data for a specific tenant
+     */
+    public function funnelDebug(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id');
+        $days = (int) $request->query('days', 7);
+        $startDate = now()->subDays($days)->startOfDay();
+        $endDate = now()->endOfDay();
+
+        // Get tenant info
+        $tenant = null;
+        $slug = null;
+        $apiToken = null;
+        
+        if ($tenantId) {
+            $tenant = \App\Models\Tenant::find($tenantId);
+            if ($tenant) {
+                $slug = $tenant->slug;
+                $apiToken = $tenant->widgetSettings?->api_token;
+            }
+        }
+
+        // Check merchant_id distribution in chat_events
+        $merchantDistribution = DB::table('chat_events')
+            ->select('merchant_id', DB::raw('COUNT(*) as count'))
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->groupBy('merchant_id')
+            ->orderByDesc('count')
+            ->get();
+
+        // Funnel data without merchant filter (ALL data)
+        $funnelAll = [];
+        $eventTypes = ['page_view', 'chat_opened', 'message', 'product_click', 'add_to_cart', 'checkout_success'];
+        foreach ($eventTypes as $type) {
+            $count = DB::table('chat_events')
+                ->where('event_type', $type)
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->distinct('session_id')
+                ->count('session_id');
+            $funnelAll[$type] = $count;
+        }
+
+        // Funnel data WITH merchant filter (for this tenant)
+        $funnelFiltered = [];
+        if ($slug || $apiToken) {
+            foreach ($eventTypes as $type) {
+                $query = DB::table('chat_events')
+                    ->where('event_type', $type)
+                    ->whereBetween('created_at', [$startDate, $endDate]);
+                
+                $query->where(function($q) use ($slug, $apiToken) {
+                    $q->where('merchant_id', $slug);
+                    if ($apiToken) {
+                        $q->orWhere('merchant_id', $apiToken);
+                    }
+                });
+                
+                $funnelFiltered[$type] = $query->distinct('session_id')->count('session_id');
+            }
+        }
+
+        // Orders table check
+        $ordersCount = 0;
+        $ordersWithChat = 0;
+        if (\Schema::hasTable('orders')) {
+            if ($tenantId) {
+                $tenantSessionIds = DB::table('chat_sessions')
+                    ->where('tenant_id', $tenantId)
+                    ->pluck('session_id')
+                    ->toArray();
+                
+                if (!empty($tenantSessionIds)) {
+                    $ordersCount = DB::table('orders')
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->where('created_at', '>=', $startDate)
+                        ->count();
+                    $ordersWithChat = DB::table('orders')
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->where('had_chat', true)
+                        ->where('created_at', '>=', $startDate)
+                        ->count();
+                }
+            } else {
+                $ordersCount = DB::table('orders')
+                    ->where('created_at', '>=', $startDate)
+                    ->count();
+                $ordersWithChat = DB::table('orders')
+                    ->where('had_chat', true)
+                    ->where('created_at', '>=', $startDate)
+                    ->count();
+            }
+        }
+
+        // Chat sessions count
+        $chatSessionsCount = DB::table('chat_sessions')
+            ->where('created_at', '>=', $startDate)
+            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
+            ->count();
+
+        // Proactive trigger events
+        $triggerStats = [];
+        if ($tenantId) {
+            $triggerStats = DB::table('proactive_trigger_events as pte')
+                ->join('proactive_trigger_rules as ptr', 'pte.rule_id', '=', 'ptr.id')
+                ->where('ptr.tenant_id', $tenantId)
+                ->where('pte.created_at', '>=', $startDate)
+                ->select('pte.event_type', DB::raw('COUNT(*) as count'))
+                ->groupBy('pte.event_type')
+                ->get()
+                ->pluck('count', 'event_type')
+                ->toArray();
+        }
+
+        return response()->json([
+            'tenant' => [
+                'id' => $tenantId,
+                'name' => $tenant?->name,
+                'slug' => $slug,
+                'api_token' => $apiToken ? substr($apiToken, 0, 10) . '...' : null,
+            ],
+            'period' => [
+                'days' => $days,
+                'start' => $startDate->format('Y-m-d H:i:s'),
+                'end' => $endDate->format('Y-m-d H:i:s'),
+            ],
+            'merchant_distribution' => $merchantDistribution,
+            'funnel_all_tenants' => $funnelAll,
+            'funnel_this_tenant' => $funnelFiltered,
+            'orders' => [
+                'total' => $ordersCount,
+                'with_chat' => $ordersWithChat,
+            ],
+            'chat_sessions' => $chatSessionsCount,
+            'trigger_events' => $triggerStats,
+            'notes' => [
+                'funnel_source' => 'chat_events table, filtered by merchant_id',
+                'orders_source' => 'orders table, filtered by session_id belonging to tenant',
+                'mismatch_reason' => 'Воронка рахує checkout_success з chat_events, а Замовлення беруться з orders table',
+            ],
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/trigger-events
      * List recent trigger events for debugging
      */

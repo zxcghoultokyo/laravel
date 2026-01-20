@@ -955,7 +955,8 @@ class DiagnosticController extends Controller
 
         foreach ($orders as $order) {
             // Skip cancelled orders (stat_status = 5)
-            if (($order->raw['stat_status'] ?? $order->status_code) == 5) {
+            $rawData = is_array($order->raw) ? $order->raw : json_decode($order->raw ?? '{}', true);
+            if (($rawData['stat_status'] ?? $order->status_code) == 5) {
                 $stats['skipped_cancelled']++;
                 continue;
             }

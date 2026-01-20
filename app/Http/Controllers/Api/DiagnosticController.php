@@ -2653,4 +2653,277 @@ class DiagnosticController extends Controller
             ]),
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/seed-test-data
+     * Seed test chat sessions, events, and conversions for a tenant
+     */
+    public function seedTestData(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+        $numSessions = $request->input('sessions', 5);
+        $numDays = $request->input('days', 7);
+
+        if (!$tenantId) {
+            return response()->json(['error' => 'tenant_id is required'], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => "Tenant {$tenantId} not found"], 404);
+        }
+
+        // Get tenant's products for realistic data
+        $products = \App\Models\Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('in_stock', true)
+            ->inRandomOrder()
+            ->limit(20)
+            ->get(['id', 'article', 'title', 'price', 'category_path']);
+
+        if ($products->isEmpty()) {
+            return response()->json(['error' => "Tenant {$tenantId} has no products"], 400);
+        }
+
+        $merchantId = $tenant->slug;
+        $results = [
+            'sessions_created' => 0,
+            'messages_created' => 0,
+            'events_created' => 0,
+            'conversions_created' => 0,
+        ];
+
+        // Sample user queries in Ukrainian
+        $userQueries = [
+            'Привіт! Шукаю бронежилет',
+            'Які розміри є в наявності?',
+            'Чи є такий у кольорі мультикам?',
+            'Скільки коштує доставка?',
+            'Покажіть тактичні рукавички',
+            'Чи є знижка на підсумки?',
+            'Потрібен ремінь тактичний',
+            'А є швидка доставка до Києва?',
+            'Хочу замовити декілька позицій',
+            'Який розмір мені підійде при зрості 180?',
+        ];
+
+        $assistantResponses = [
+            'Вітаю! 👋 Раді бачити! Ось що маємо:',
+            'Так, цей товар є в наявності! Ось розміри:',
+            'Звісно! Ось варіанти в мультикамі:',
+            'Доставка Новою Поштою 1-2 дні по Україні.',
+            'Ось найкращі тактичні рукавички:',
+            'Так! Зараз діє акція -15% на підсумки!',
+            'Рекомендую ось ці моделі:',
+            'Так, є експрес-доставка! За 1 день.',
+            'Чудово! Допоможу оформити замовлення.',
+            'При зрості 180 рекомендую розмір M або L.',
+        ];
+
+        for ($i = 0; $i < $numSessions; $i++) {
+            $createdAt = now()->subDays(rand(0, $numDays))->subHours(rand(0, 23))->subMinutes(rand(0, 59));
+            $sessionId = 'test_session_' . uniqid();
+            $clientId = 'test_client_' . rand(1000, 9999);
+            
+            // Random UTM params
+            $utmSources = ['google', 'facebook', 'instagram', null];
+            $utmMediums = ['cpc', 'organic', 'social', null];
+            $utmCampaigns = ['summer_sale', 'new_arrivals', 'tactical_gear', null];
+            
+            $utmSource = $utmSources[array_rand($utmSources)];
+            $utmMedium = $utmMediums[array_rand($utmMediums)];
+            $utmCampaign = $utmCampaigns[array_rand($utmCampaigns)];
+
+            // Create chat session
+            $chatSession = \App\Models\ChatSession::create([
+                'tenant_id' => $tenantId,
+                'session_id' => $sessionId,
+                'last_intent' => 'product_search',
+                'messages_count' => rand(3, 8),
+                'language' => 'uk',
+                'status' => rand(0, 4) > 0 ? 'closed' : 'open',
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt->copy()->addMinutes(rand(5, 30)),
+                'last_message_at' => $createdAt->copy()->addMinutes(rand(5, 30)),
+            ]);
+            $results['sessions_created']++;
+
+            // Create messages
+            $numMessages = rand(3, 6);
+            $messageTime = $createdAt->copy();
+            $shownProducts = $products->random(min(3, $products->count()));
+            
+            for ($m = 0; $m < $numMessages; $m++) {
+                $isUser = $m % 2 === 0;
+                $messageTime->addSeconds(rand(10, 120));
+                
+                if ($isUser) {
+                    $content = $userQueries[array_rand($userQueries)];
+                } else {
+                    $content = $assistantResponses[array_rand($assistantResponses)];
+                    // Add product references
+                    if (rand(0, 1) && $shownProducts->isNotEmpty()) {
+                        $content .= "\n\n[Показані товари: " . $shownProducts->take(3)->pluck('article')->implode(', ') . "]";
+                    }
+                }
+
+                \App\Models\ChatMessage::create([
+                    'chat_session_id' => $chatSession->id,
+                    'role' => $isUser ? 'user' : 'assistant',
+                    'content' => $content,
+                    'meta' => $isUser ? null : ['products_shown' => $shownProducts->take(3)->pluck('article')->toArray()],
+                    'created_at' => $messageTime,
+                    'updated_at' => $messageTime,
+                ]);
+                $results['messages_created']++;
+            }
+
+            // Create chat events
+            $eventTime = $createdAt->copy();
+
+            // 1. Page view
+            DB::table('chat_events')->insert([
+                'session_id' => $sessionId,
+                'merchant_id' => $merchantId,
+                'event_type' => 'page_view',
+                'event_source' => 'widget',
+                'client_id' => $clientId,
+                'device_type' => ['mobile', 'desktop'][rand(0, 1)],
+                'page_url' => 'https://' . $tenant->domain . '/product/' . $shownProducts->first()->article,
+                'utm_source' => $utmSource,
+                'utm_medium' => $utmMedium,
+                'utm_campaign' => $utmCampaign,
+                'created_at' => $eventTime,
+            ]);
+            $results['events_created']++;
+            $eventTime->addSeconds(rand(5, 30));
+
+            // 2. Chat opened
+            DB::table('chat_events')->insert([
+                'session_id' => $sessionId,
+                'merchant_id' => $merchantId,
+                'event_type' => 'chat_opened',
+                'event_source' => 'widget',
+                'client_id' => $clientId,
+                'device_type' => ['mobile', 'desktop'][rand(0, 1)],
+                'created_at' => $eventTime,
+            ]);
+            $results['events_created']++;
+            $eventTime->addSeconds(rand(10, 60));
+
+            // 3. Message event
+            DB::table('chat_events')->insert([
+                'session_id' => $sessionId,
+                'merchant_id' => $merchantId,
+                'event_type' => 'message',
+                'event_source' => 'widget',
+                'message_type' => 'user',
+                'message_text' => $userQueries[array_rand($userQueries)],
+                'client_id' => $clientId,
+                'created_at' => $eventTime,
+            ]);
+            $results['events_created']++;
+            $eventTime->addSeconds(rand(30, 180));
+
+            // 4. Product clicks (60% chance)
+            if (rand(0, 100) < 60) {
+                $clickedProduct = $shownProducts->random();
+                DB::table('chat_events')->insert([
+                    'session_id' => $sessionId,
+                    'merchant_id' => $merchantId,
+                    'event_type' => 'product_click',
+                    'event_source' => 'widget',
+                    'product_id' => $clickedProduct->id,
+                    'product_article' => $clickedProduct->article,
+                    'product_price' => $clickedProduct->price,
+                    'client_id' => $clientId,
+                    'metadata' => json_encode([
+                        'product_title' => $clickedProduct->title,
+                        'category' => $clickedProduct->category_path,
+                    ]),
+                    'created_at' => $eventTime,
+                ]);
+                $results['events_created']++;
+                $eventTime->addSeconds(rand(60, 300));
+
+                // 5. Add to cart (40% of clicks)
+                if (rand(0, 100) < 40) {
+                    DB::table('chat_events')->insert([
+                        'session_id' => $sessionId,
+                        'merchant_id' => $merchantId,
+                        'event_type' => 'add_to_cart',
+                        'event_source' => 'widget',
+                        'product_id' => $clickedProduct->id,
+                        'product_article' => $clickedProduct->article,
+                        'product_price' => $clickedProduct->price,
+                        'client_id' => $clientId,
+                        'metadata' => json_encode([
+                            'product_title' => $clickedProduct->title,
+                            'had_chat_conversation' => true,
+                            'product_from_chat' => true,
+                        ]),
+                        'created_at' => $eventTime,
+                    ]);
+                    $results['events_created']++;
+                    $eventTime->addMinutes(rand(5, 60));
+
+                    // 6. Checkout success (30% of add_to_cart)
+                    if (rand(0, 100) < 30) {
+                        DB::table('chat_events')->insert([
+                            'session_id' => $sessionId,
+                            'merchant_id' => $merchantId,
+                            'event_type' => 'checkout_success',
+                            'event_source' => 'webhook',
+                            'product_id' => $clickedProduct->id,
+                            'product_article' => $clickedProduct->article,
+                            'product_price' => $clickedProduct->price,
+                            'client_id' => $clientId,
+                            'metadata' => json_encode([
+                                'order_id' => 'ORD-' . strtoupper(substr(md5(uniqid()), 0, 8)),
+                                'order_total' => $clickedProduct->price,
+                                'items_count' => 1,
+                                'product_from_chat' => true,
+                            ]),
+                            'created_at' => $eventTime,
+                        ]);
+                        $results['events_created']++;
+
+                        // Create conversion record
+                        DB::table('chat_conversions')->insert([
+                            'session_id' => $sessionId,
+                            'merchant_id' => $merchantId,
+                            'client_id' => $clientId,
+                            'conversion_type' => 'purchase',
+                            'conversion_status' => 'confirmed',
+                            'order_id' => 'ORD-' . strtoupper(substr(md5(uniqid()), 0, 8)),
+                            'order_total' => $clickedProduct->price,
+                            'items_count' => 1,
+                            'product_ids' => json_encode([$clickedProduct->id]),
+                            'product_from_chat' => true,
+                            'chat_attributed_value' => $clickedProduct->price,
+                            'chat_timestamp' => $createdAt,
+                            'conversion_timestamp' => $eventTime,
+                            'minutes_to_conversion' => $createdAt->diffInMinutes($eventTime),
+                            'created_at' => $eventTime,
+                            'updated_at' => $eventTime,
+                        ]);
+                        $results['conversions_created']++;
+                    }
+                }
+            }
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'merchant_id' => $merchantId,
+            'results' => $results,
+            'note' => "Created {$results['sessions_created']} test sessions with {$results['messages_created']} messages, {$results['events_created']} events, and {$results['conversions_created']} conversions for the last {$numDays} days.",
+        ]);
+    }
 }

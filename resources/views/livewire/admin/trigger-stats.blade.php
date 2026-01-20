@@ -332,9 +332,13 @@
                 <div class="p-4 {{ !$rule['is_enabled'] ? 'opacity-50' : '' }}">
                     <div class="flex items-start justify-between mb-2">
                         <div class="flex-1 min-w-0">
-                            <a href="{{ route('admin.triggers') }}?edit={{ $rule['id'] }}" class="text-blue-600 hover:text-blue-800 font-medium text-sm truncate block">
-                                {{ $rule['name'] }}
-                            </a>
+                            @if($embedded)
+                                <span class="text-gray-900 font-medium text-sm truncate block">{{ $rule['name'] }}</span>
+                            @else
+                                <a href="{{ route('admin.triggers') }}?edit={{ $rule['id'] }}" class="text-blue-600 hover:text-blue-800 font-medium text-sm truncate block">
+                                    {{ $rule['name'] }}
+                                </a>
+                            @endif
                             <div class="text-xs text-gray-500">
                                 {{ $triggerTypes[$rule['type']] ?? $rule['type'] }}
                             </div>
@@ -392,9 +396,13 @@
                     @forelse($rulesStats as $rule)
                         <tr class="hover:bg-gray-50 {{ !$rule['is_enabled'] ? 'opacity-50' : '' }}">
                             <td class="px-4 py-3 whitespace-nowrap">
-                                <a href="{{ route('admin.triggers') }}?edit={{ $rule['id'] }}" class="text-blue-600 hover:text-blue-800 font-medium">
-                                    {{ $rule['name'] }}
-                                </a>
+                                @if($embedded)
+                                    <span class="text-gray-900 font-medium">{{ $rule['name'] }}</span>
+                                @else
+                                    <a href="{{ route('admin.triggers') }}?edit={{ $rule['id'] }}" class="text-blue-600 hover:text-blue-800 font-medium">
+                                        {{ $rule['name'] }}
+                                    </a>
+                                @endif
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                                 {{ $triggerTypes[$rule['type']] ?? $rule['type'] }}

@@ -68,15 +68,26 @@ class ProactiveTriggersManager extends Component
     ];
 
     public bool $embedded = false;
+    public ?int $tenantId = null;
 
-    public function mount()
+    public function mount(bool $embedded = false)
     {
-        // Initialize empty conditions
+        $this->embedded = $embedded;
+        
+        // Set tenant from auth user when embedded
+        if ($this->embedded && auth()->check() && auth()->user()->tenant_id) {
+            $this->tenantId = auth()->user()->tenant_id;
+        }
     }
 
     public function render()
     {
         $query = ProactiveTriggerRule::query();
+
+        // Filter by tenant in embedded mode
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
 
         if ($this->filterType) {
             $query->where('trigger_type', $this->filterType);
@@ -235,6 +246,11 @@ class ProactiveTriggersManager extends Component
             'max_per_day' => $this->max_per_day,
             'cooldown_minutes' => $this->cooldown_minutes,
         ];
+
+        // Add tenant_id when in embedded mode
+        if ($this->tenantId) {
+            $data['tenant_id'] = $this->tenantId;
+        }
 
         if ($this->editMode && $this->rule_id) {
             $rule = ProactiveTriggerRule::findOrFail($this->rule_id);

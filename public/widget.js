@@ -3637,9 +3637,13 @@
                 }
                 
                 // For page-based rules, check page type
-                if (rule.conditions.page_types) {
-                    const pageType = this.detectPageType();
-                    if (!rule.conditions.page_types.includes(pageType)) {
+                // Support both page_type (string) and page_types (array)
+                const pageTypeCondition = rule.conditions.page_types || 
+                    (rule.conditions.page_type ? [rule.conditions.page_type] : null);
+                
+                if (pageTypeCondition) {
+                    const pageType = context.pageType || this.detectPageType();
+                    if (!pageTypeCondition.includes(pageType)) {
                         return false;
                     }
                 }
@@ -4320,35 +4324,57 @@
                 const idleTime = (Date.now() - this.state.lastActivity) / 1000;
                 const pageType = this.detectPageType();
                 
-                // Product page: 45 seconds + 15 seconds idle
-                if (pageType === 'product' && timeOnPage >= 45 && idleTime >= 15) {
+                // Product page: use rule's min_seconds and idle_seconds (defaults: 45s, 15s idle)
+                if (pageType === 'product') {
                     const rule = this.findMatchingRule('time_on_page', { pageType: 'product' });
-                    if (rule && this.canShowTrigger('time_on_page')) {
-                        this.showTrigger(rule, {
-                            trigger_reason: 'time_on_product_page',
-                            time_on_page: Math.floor(timeOnPage),
-                            idle_time: Math.floor(idleTime)
-                        });
+                    if (rule) {
+                        const minSeconds = rule.conditions?.min_seconds || 45;
+                        const idleSeconds = rule.conditions?.idle_seconds || 15;
+                        
+                        if (timeOnPage >= minSeconds && idleTime >= idleSeconds) {
+                            if (this.canShowTrigger('time_on_page')) {
+                                log('ProactiveTriggers: Time on product page trigger!', { timeOnPage, idleTime, minSeconds, idleSeconds });
+                                this.showTrigger(rule, {
+                                    trigger_reason: 'time_on_product_page',
+                                    time_on_page: Math.floor(timeOnPage),
+                                    idle_time: Math.floor(idleTime)
+                                });
+                            }
+                        }
                     }
                 }
                 
-                // Category page: 60 seconds + 3 products viewed
-                if (pageType === 'category' && timeOnPage >= 60 && this.state.productsViewed.length >= 3) {
+                // Category page: use rule's min_seconds, min_products_viewed is optional (default: 1)
+                if (pageType === 'category') {
                     const rule = this.findMatchingRule('time_on_page', { pageType: 'category' });
-                    if (rule && this.canShowTrigger('time_on_page')) {
-                        this.showTrigger(rule, {
-                            trigger_reason: 'browsing_category',
-                            products_viewed: this.state.productsViewed.length
-                        });
+                    if (rule) {
+                        const minSeconds = rule.conditions?.min_seconds || 60;
+                        const minProducts = rule.conditions?.min_products_viewed || 1; // Lowered default
+                        
+                        if (timeOnPage >= minSeconds && this.state.productsViewed.length >= minProducts) {
+                            if (this.canShowTrigger('time_on_page')) {
+                                log('ProactiveTriggers: Time on category page trigger!', { timeOnPage, productsViewed: this.state.productsViewed.length });
+                                this.showTrigger(rule, {
+                                    trigger_reason: 'browsing_category',
+                                    products_viewed: this.state.productsViewed.length
+                                });
+                            }
+                        }
                     }
                 }
                 
                 // PDP no variant: 30 seconds without selection
                 if (pageType === 'product' && timeOnPage >= 30 && !this.state.variantSelected) {
-                    const hasVariants = document.querySelector('[data-variant], .variant-select, .size-select, .hs-variants');
+                    // Expanded variant selectors
+                    const hasVariants = document.querySelector(
+                        '[data-variant], .variant-select, .size-select, .hs-variants, ' +
+                        '.product-variants, [data-size], [data-color], .sizes-list, .colors-list, ' +
+                        'select[name*="size"], select[name*="variant"], .option-selector'
+                    );
                     if (hasVariants) {
                         const rule = this.findMatchingRule('pdp_no_variant');
                         if (rule && this.canShowTrigger('pdp_no_variant')) {
+                            log('ProactiveTriggers: PDP no variant trigger!');
                             this.showTrigger(rule, {
                                 trigger_reason: 'no_variant_selected',
                                 time_without_selection: Math.floor(timeOnPage)
@@ -4477,10 +4503,10 @@
                 return;
             }
             
-            // Check conditions
-            const minHours = rule.conditions?.min_hours_since_last_visit || 24;
+            // Check conditions - default to 1 hour (instead of 24)
+            const minHours = rule.conditions?.min_hours_since_last_visit || 1;
             if (this.state.hoursSinceLastVisit < minHours) {
-                log('ProactiveTriggers: Not enough time since last visit', this.state.hoursSinceLastVisit, '<', minHours);
+                log('ProactiveTriggers: Not enough time since last visit', this.state.hoursSinceLastVisit, 'hours <', minHours, 'hours');
                 return;
             }
             

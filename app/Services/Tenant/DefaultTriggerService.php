@@ -112,8 +112,8 @@ class DefaultTriggerService
                 'priority' => 25,
                 'conditions' => [
                     'page_types' => ['category'],
-                    'min_seconds' => 60,
-                    'min_products_viewed' => 3,
+                    'min_seconds' => 45, // Reduced from 60
+                    'min_products_viewed' => 1, // Reduced from 3 - easier to trigger
                 ],
                 'message' => "⭐ Бачу, шукаєте в «{{category}}»\n\nПокажу бестселери, які замовляють найчастіше?",
                 'button_text' => 'Показати ТОП',
@@ -168,7 +168,7 @@ class DefaultTriggerService
                 'priority' => 50,
                 'conditions' => [
                     'same_category' => true,
-                    'min_hours_since_last_visit' => 24,
+                    'min_hours_since_last_visit' => 1, // 1 hour - easier to test
                 ],
                 'message' => "👋 З поверненням!\n\nПокажу що нового з'явилось з вашого минулого візиту?",
                 'button_text' => 'Показати новинки',

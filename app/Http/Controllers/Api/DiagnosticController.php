@@ -925,6 +925,96 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * POST /api/diagnostic/backfill-checkout-events
+     * Create checkout_success events for existing orders that don't have them
+     */
+    public function backfillCheckoutEvents(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $dryRun = $request->boolean('dry_run', false);
+        $stats = [
+            'total_orders' => 0,
+            'orders_with_session' => 0,
+            'already_has_event' => 0,
+            'events_created' => 0,
+            'skipped_cancelled' => 0,
+        ];
+
+        // Get orders with session_id (can be linked to chat)
+        $orders = \App\Models\Order::whereNotNull('session_id')
+            ->where('session_id', '!=', '')
+            ->get();
+
+        $stats['total_orders'] = \App\Models\Order::count();
+        $stats['orders_with_session'] = $orders->count();
+
+        foreach ($orders as $order) {
+            // Skip cancelled orders (stat_status = 5)
+            if (($order->raw['stat_status'] ?? $order->status_code) == 5) {
+                $stats['skipped_cancelled']++;
+                continue;
+            }
+
+            // Check if checkout_success event already exists
+            $existingEvent = DB::table('chat_events')
+                ->where('event_type', 'checkout_success')
+                ->where('session_id', $order->session_id)
+                ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+                ->exists();
+
+            if ($existingEvent) {
+                $stats['already_has_event']++;
+                continue;
+            }
+
+            // Determine merchant_id from session
+            $merchantId = null;
+            $chatSession = DB::table('chat_sessions')
+                ->where('session_id', $order->session_id)
+                ->first();
+            
+            if ($chatSession) {
+                $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
+                $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
+            }
+
+            if (!$dryRun) {
+                DB::table('chat_events')->insert([
+                    'session_id' => $order->session_id,
+                    'merchant_id' => $merchantId,
+                    'event_type' => 'checkout_success',
+                    'product_id' => null,
+                    'product_article' => null,
+                    'product_price' => $order->total_sum,
+                    'metadata' => json_encode([
+                        'order_id' => $order->order_id,
+                        'total_sum' => $order->total_sum,
+                        'items_count' => $order->total_quantity,
+                        'had_chat' => $order->had_chat,
+                        'products_from_chat' => $order->products_from_chat,
+                        'source' => 'backfill',
+                    ]),
+                    'created_at' => $order->ordered_at ?? $order->created_at,
+                    'updated_at' => now(),
+                ]);
+            }
+            $stats['events_created']++;
+        }
+
+        return response()->json([
+            'success' => true,
+            'dry_run' => $dryRun,
+            'stats' => $stats,
+            'message' => $dryRun 
+                ? "Dry run complete. Would create {$stats['events_created']} events."
+                : "Backfill complete. Created {$stats['events_created']} checkout_success events.",
+        ]);
+    }
     
     /**
      * GET /api/diagnostic/orders-stats

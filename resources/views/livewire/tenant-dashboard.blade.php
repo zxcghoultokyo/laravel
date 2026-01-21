@@ -107,13 +107,6 @@
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Віджет
                 </button>
-                <button wire:click="setTab('greetings')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
-                            {{ $activeTab === 'greetings' 
-                                ? 'border-blue-500 text-blue-600' 
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
-                    Привітання
-                </button>
                 <button wire:click="setTab('prompts')"
                         class="px-6 py-3 text-sm font-medium border-b-2 transition
                             {{ $activeTab === 'prompts' 
@@ -200,16 +193,6 @@
                                     </svg>
                                 </div>
                                 <span>Кастомні промпти</span>
-                            </button>
-
-                            <button wire:click="setTab('greetings')" 
-                                    class="w-full flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition text-left">
-                                <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
-                                    <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
-                                    </svg>
-                                </div>
-                                <span>Привітання</span>
                             </button>
 
                             <a href="{{ route('billing.index') }}" 
@@ -537,13 +520,6 @@
                             Змінити план
                         </a>
                     </div>
-                </div>
-            @endif
-
-            <!-- Greetings Tab -->
-            @if($activeTab === 'greetings')
-                <div>
-                    @livewire('admin.greetings-manager', ['embedded' => true])
                 </div>
             @endif
 

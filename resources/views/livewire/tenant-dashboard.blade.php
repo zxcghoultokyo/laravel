@@ -391,25 +391,45 @@
             <!-- Widget Tab -->
             @if($activeTab === 'widget')
                 <div>
-                    <!-- Embed Code Section -->
+                    <!-- Widget Settings - Embedded (без дублювання коду вставки) -->
                     <div class="mb-8">
-                        <h3 class="font-semibold text-lg mb-4">📋 Код віджета</h3>
-                        <p class="text-gray-600 mb-4">
-                            Додайте цей код перед закриваючим тегом <code class="bg-gray-100 px-1 rounded">&lt;/body&gt;</code> на вашому сайті.
-                        </p>
+                        @livewire('admin.widget-settings', ['embedded' => true, 'hideEmbedCode' => true])
+                    </div>
+
+                    <!-- Embed Code Section - В КІНЦІ -->
+                    <div class="border-t border-gray-200 pt-8 mt-8">
+                        <h3 class="font-semibold text-lg mb-4">📋 Код для встановлення на сайт</h3>
                         
+                        <!-- Instructions -->
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                            <h4 class="font-medium text-blue-800 mb-3">📖 Інструкція з встановлення</h4>
+                            <div class="text-blue-700 space-y-2 text-sm">
+                                <p><strong>Для Horoshop:</strong></p>
+                                <ol class="list-decimal list-inside ml-2 space-y-1">
+                                    <li>Увійдіть в адмін-панель вашого магазину</li>
+                                    <li>Перейдіть в <strong>Налаштування → Загальні налаштування</strong></li>
+                                    <li>Знайдіть секцію <strong>«Скрипти»</strong> внизу сторінки</li>
+                                    <li>Вставте код у поле <strong>«Скрипти перед &lt;/body&gt;»</strong></li>
+                                    <li>Натисніть <strong>«Зберегти»</strong></li>
+                                </ol>
+                                <p class="mt-3"><strong>Для інших платформ:</strong></p>
+                                <p class="ml-2">Додайте код перед закриваючим тегом <code class="bg-blue-100 px-1 rounded">&lt;/body&gt;</code> на всіх сторінках сайту.</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Code Block -->
                         <div class="relative max-w-2xl">
                             <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">{{ $embedCode }}</pre>
                             <button wire:click="copyEmbedCode"
-                                    class="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded">
-                                Копіювати
+                                    class="absolute top-2 right-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition">
+                                📋 Копіювати
                             </button>
                         </div>
+                        
+                        <p class="text-gray-500 text-sm mt-3">
+                            💡 Після встановлення коду віджет з'явиться на вашому сайті протягом кількох хвилин.
+                        </p>
                     </div>
-
-                    <!-- Widget Settings - Embedded (без дублювання коду вставки) -->
-                    <div class="border-t border-gray-200 pt-6">
-                        @livewire('admin.widget-settings', ['embedded' => true, 'hideEmbedCode' => true])
                 </div>
             @endif
 

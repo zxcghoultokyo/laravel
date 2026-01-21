@@ -146,9 +146,11 @@
             // Only count chat-attributed carts (where user had chat interaction before adding to cart)
             $chatCarts = collect($chatAttributedConversions);
             $uniqueBuyers = $chatCarts->pluck('session_id')->unique()->count();
-            $totalItems = $chatCarts->sum(fn($c) => $c['items_count'] ?? 1);
+            // Each cart event = 1 item (add_to_cart fires per product)
+            $totalItems = $chatCarts->count();
             $avgItemsPerBuyer = $uniqueBuyers > 0 ? round($totalItems / $uniqueBuyers, 1) : 0;
-            $totalCartSum = $chatCarts->sum(fn($c) => $c['total'] ?? 0);
+            // Sum product prices (field is product_price, not total)
+            $totalCartSum = $chatCarts->sum(fn($c) => (float)($c['product_price'] ?? 0));
         @endphp
         <div class="grid grid-cols-4 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">

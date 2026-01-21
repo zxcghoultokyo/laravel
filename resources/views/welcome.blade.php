@@ -18,7 +18,7 @@
         <meta property="og:url" content="https://aimbot.laravel.cloud/">
         <meta property="og:title" content="AIntento — AI Асистент для e-commerce">
         <meta property="og:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації. Збільшує конверсію на 15-30%.">
-        <meta property="og:image" content="https://aimbot.laravel.cloud/images/og-image.svg">
+        <meta property="og:image" content="https://aimbot.laravel.cloud/images/og-image.png">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
         <meta property="og:locale" content="uk_UA">
@@ -29,11 +29,11 @@
         <meta name="twitter:url" content="https://aimbot.laravel.cloud/">
         <meta name="twitter:title" content="AIntento — AI Асистент для e-commerce">
         <meta name="twitter:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації.">
-        <meta name="twitter:image" content="https://aimbot.laravel.cloud/images/og-image.svg">
+        <meta name="twitter:image" content="https://aimbot.laravel.cloud/images/og-image.png">
 
         <!-- Favicon -->
         <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
-        <link rel="apple-touch-icon" href="/images/apple-touch-icon.svg">
+        <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
 
         <!-- Schema.org JSON-LD -->
         <script type="application/ld+json">

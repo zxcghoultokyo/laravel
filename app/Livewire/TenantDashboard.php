@@ -114,21 +114,24 @@ class TenantDashboard extends Component
         $startDate = now()->subDays($this->conversionsDays)->startOfDay();
         $endDate = now()->endOfDay();
         
-        // Get merchant identifiers
-        $apiToken = $tenant->widgetSettings?->api_token;
+        // Get ALL merchant identifiers (slug + all api_tokens)
         $slug = $tenant->slug;
+        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenant->id)
+            ->pluck('api_token')
+            ->filter()
+            ->toArray();
         
         // Load funnel with tenant filter
-        $this->conversionsData = $this->loadConversionsFunnel($startDate, $endDate, $slug, $apiToken);
+        $this->conversionsData = $this->loadConversionsFunnel($startDate, $endDate, $slug, $apiTokens);
         
         // Load add_to_cart events
-        $this->loadCartEventsForTenant($startDate, $slug, $apiToken);
+        $this->loadCartEventsForTenant($startDate, $slug, $apiTokens);
         
         // Load checkout/orders
         $this->loadCheckoutOrdersForTenant($startDate, $slug);
     }
     
-    private function loadConversionsFunnel($startDate, $endDate, $slug, $apiToken): array
+    private function loadConversionsFunnel($startDate, $endDate, $slug, array $apiTokens): array
     {
         $stages = [
             'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Відкрили сторінку з віджетом'],
@@ -173,12 +176,10 @@ class TenantDashboard extends Component
                         ->where('event_type', $eventType)
                         ->whereBetween('created_at', [$startDate, $endDate]);
                     
-                    // Filter by merchant_id
-                    $query->where(function($q) use ($slug, $apiToken) {
-                        $q->where('merchant_id', $slug);
-                        if ($apiToken) {
-                            $q->orWhere('merchant_id', $apiToken);
-                        }
+                    // Filter by merchant_id (slug or any api_token)
+                    $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
+                    $query->where(function($q) use ($merchantIds) {
+                        $q->whereIn('merchant_id', $merchantIds);
                     });
                     
                     // For add_to_cart: only count chat-attributed (had_chat or from_chat)
@@ -219,19 +220,15 @@ class TenantDashboard extends Component
         return $funnel;
     }
     
-    private function loadCartEventsForTenant($startDate, $slug, $apiToken)
+    private function loadCartEventsForTenant($startDate, $slug, array $apiTokens)
     {
         $query = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->where('event_type', 'add_to_cart');
         
-        // Filter by merchant_id
-        $query->where(function($q) use ($slug, $apiToken) {
-            $q->where('merchant_id', $slug);
-            if ($apiToken) {
-                $q->orWhere('merchant_id', $apiToken);
-            }
-        });
+        // Filter by merchant_id (slug or any api_token)
+        $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
+        $query->whereIn('merchant_id', $merchantIds);
         
         $events = $query->orderByDesc('created_at')->get();
         

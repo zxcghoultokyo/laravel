@@ -73,6 +73,63 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/cart-events
+     * Get add_to_cart events with metadata for debugging
+     */
+    public function cartEvents(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $merchantId = $request->query('merchant_id', 'ataka-fsp');
+        $limit = min((int) $request->query('limit', 50), 100);
+
+        $events = DB::table('chat_events')
+            ->where('event_type', 'add_to_cart')
+            ->where(function($q) use ($merchantId) {
+                $q->where('merchant_id', $merchantId)
+                  ->orWhere('merchant_id', 'like', '%' . $merchantId . '%');
+            })
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get();
+
+        $parsed = $events->map(function($e) {
+            $meta = json_decode($e->metadata ?? '{}', true);
+            return [
+                'id' => $e->id,
+                'session_id' => $e->session_id,
+                'product_article' => $e->product_article,
+                'product_price' => $e->product_price,
+                'had_chat' => $meta['had_chat_conversation'] ?? false,
+                'from_chat' => $meta['product_from_chat'] ?? false,
+                'created_at' => $e->created_at,
+            ];
+        });
+
+        // Summary stats
+        $total = $parsed->count();
+        $withHadChat = $parsed->filter(fn($e) => $e['had_chat'])->count();
+        $withFromChat = $parsed->filter(fn($e) => $e['from_chat'])->count();
+        $chatAttributed = $parsed->filter(fn($e) => $e['had_chat'] || $e['from_chat'])->count();
+        $uniqueSessions = $parsed->pluck('session_id')->unique()->count();
+        $chatAttributedSessions = $parsed->filter(fn($e) => $e['had_chat'] || $e['from_chat'])->pluck('session_id')->unique()->count();
+
+        return response()->json([
+            'summary' => [
+                'total_events' => $total,
+                'with_had_chat' => $withHadChat,
+                'with_from_chat' => $withFromChat,
+                'chat_attributed' => $chatAttributed,
+                'unique_sessions' => $uniqueSessions,
+                'chat_attributed_sessions' => $chatAttributedSessions,
+            ],
+            'events' => $parsed,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/categories
      * Get all unique categories with product counts
      */

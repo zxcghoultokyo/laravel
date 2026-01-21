@@ -130,6 +130,7 @@
                 <div class="text-center py-12 text-gray-400">
                     <span class="text-4xl">📊</span>
                     <p class="mt-2">Ще немає даних воронки</p>
+                    <p class="text-xs mt-2 text-gray-300">Debug: funnel has {{ count($funnel) }} items, days={{ $days }}</p>
                 </div>
             @endif
         </div>

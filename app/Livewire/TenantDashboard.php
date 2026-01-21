@@ -685,10 +685,19 @@ class TenantDashboard extends Component
         $tenant = $this->tenant;
         $startDate = now()->subDays(30);
         
-        // Get merchant identifiers for filtering
-        // Old widget used token as merchant_id, new uses slug
-        $apiToken = $tenant->widgetSettings?->api_token;
+        // Get ALL merchant identifiers for filtering
+        // Tenant can have multiple widget settings with different api_tokens
         $slug = $tenant->slug;
+        
+        // Get all api_tokens from all widget settings for this tenant
+        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenant->id)
+            ->pluck('api_token')
+            ->filter()
+            ->toArray();
+        
+        // All possible merchant_ids: slug + all tokens
+        $merchantIds = array_merge([$slug], $apiTokens);
+        $merchantIds = array_unique(array_filter($merchantIds));
         
         // Define funnel stages
         $stages = [
@@ -705,21 +714,18 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // Count events - filter by merchant_id (slug OR token for backwards compatibility)
-                $query = DB::table('chat_events')
+                // Count events - filter by ANY of the merchant identifiers
+                $count = DB::table('chat_events')
                     ->where('event_type', $eventType)
-                    ->where('created_at', '>=', $startDate);
-                
-                // Filter by merchant_id - check both slug and token for backward compatibility
-                $query->where(function($q) use ($slug, $apiToken) {
-                    $q->where('merchant_id', $slug);
-                    if ($apiToken) {
-                        $q->orWhere('merchant_id', $apiToken);
-                    }
-                });
-                
-                $count = $query->distinct('session_id')->count('session_id');
+                    ->where('created_at', '>=', $startDate)
+                    ->whereIn('merchant_id', $merchantIds)
+                    ->distinct('session_id')
+                    ->count('session_id');
             } catch (\Throwable $e) {
+                \Log::error('TenantDashboard loadFunnelData error', [
+                    'stage' => $eventType,
+                    'error' => $e->getMessage()
+                ]);
                 $count = 0;
             }
             

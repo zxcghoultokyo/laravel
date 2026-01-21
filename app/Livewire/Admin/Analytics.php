@@ -35,7 +35,7 @@ class Analytics extends Component
     
     // Tenant context
     public ?int $tenantId = null;
-    public ?string $merchantId = null;
+    public array $merchantIds = [];  // All merchant identifiers (slug + all api_tokens)
 
     public function mount()
     {
@@ -45,9 +45,17 @@ class Analytics extends Component
             $user = auth()->user();
             if ($user && $user->tenant_id) {
                 $this->tenantId = $user->tenant_id;
-                // Get merchant_id (slug) from tenant
+                // Get ALL merchant identifiers: slug + all api_tokens
                 $tenant = $user->tenant;
-                $this->merchantId = $tenant?->slug;
+                if ($tenant) {
+                    $this->merchantIds = [$tenant->slug];
+                    // Add all api_tokens from widget settings
+                    $tokens = \App\Models\WidgetSettings::where('tenant_id', $tenant->id)
+                        ->pluck('api_token')
+                        ->filter()
+                        ->toArray();
+                    $this->merchantIds = array_unique(array_merge($this->merchantIds, $tokens));
+                }
             }
         }
         
@@ -164,9 +172,9 @@ class Analytics extends Component
         $query = DB::table('chat_session_outcomes')
             ->where('created_at', '>=', $startDate);
         
-        // Filter by merchant_id (tenant slug) for legacy analytics tables
-        if ($this->merchantId && Schema::hasColumn('chat_session_outcomes', 'merchant_id')) {
-            $query->where('merchant_id', $this->merchantId);
+        // Filter by merchant_ids (tenant slug + all api_tokens) for legacy analytics tables
+        if (!empty($this->merchantIds) && Schema::hasColumn('chat_session_outcomes', 'merchant_id')) {
+            $query->whereIn('merchant_id', $this->merchantIds);
         }
         
         return $query
@@ -222,9 +230,9 @@ class Analytics extends Component
                         ->where('event_type', $eventType)
                         ->where('created_at', '>=', $startDate);
                     
-                    // Filter by merchant_id for tenant isolation
-                    if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                        $query->where('merchant_id', $this->merchantId);
+                    // Filter by merchant_ids for tenant isolation (includes slug + all api_tokens)
+                    if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
+                        $query->whereIn('merchant_id', $this->merchantIds);
                     }
                     
                     $count = $query->distinct('session_id')->count('session_id');
@@ -264,9 +272,9 @@ class Analytics extends Component
                 ->where('event_type', 'product_click')
                 ->whereNotNull('product_id');
             
-            // Filter by merchant_id (tenant slug) for legacy analytics tables
-            if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                $query->where('merchant_id', $this->merchantId);
+            // Filter by merchant_ids (tenant slug + all api_tokens)
+            if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
+                $query->whereIn('merchant_id', $this->merchantIds);
             }
             
             $productClicks = $query
@@ -316,9 +324,9 @@ class Analytics extends Component
             ->where('event_type', 'product_shown')
             ->whereNotNull('product_id');
         
-        // Filter by merchant_id (tenant slug) for legacy analytics tables
-        if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-            $query->where('merchant_id', $this->merchantId);
+        // Filter by merchant_ids (tenant slug + all api_tokens)
+        if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
+            $query->whereIn('merchant_id', $this->merchantIds);
         }
         
         $productViews = $query
@@ -362,9 +370,9 @@ class Analytics extends Component
         $query = DB::table('chat_events')
             ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
         
-        // Filter by merchant_id (tenant slug) for legacy analytics tables
-        if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-            $query->where('merchant_id', $this->merchantId);
+        // Filter by merchant_ids (tenant slug + all api_tokens)
+        if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
+            $query->whereIn('merchant_id', $this->merchantIds);
         }
         
         $events = $query

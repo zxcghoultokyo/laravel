@@ -877,6 +877,51 @@ class DiagnosticController extends Controller
             'settings' => $settingsList,
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/clear-tone-cache
+     * Clear ToneService cache for a tenant
+     */
+    public function clearToneCache(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+        $cleared = [];
+
+        // Clear specific tenant cache
+        if ($tenantId) {
+            $key = 'widget_settings_tone:' . $tenantId;
+            \Illuminate\Support\Facades\Cache::forget($key);
+            $cleared[] = $key;
+        }
+
+        // Always clear global cache
+        $globalKey = 'widget_settings_tone:global';
+        \Illuminate\Support\Facades\Cache::forget($globalKey);
+        $cleared[] = $globalKey;
+
+        // Get fresh settings to verify
+        $settings = null;
+        if ($tenantId) {
+            $settings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('tenant_id', $tenantId)
+                ->first();
+        }
+
+        return response()->json([
+            'success' => true,
+            'cleared_keys' => $cleared,
+            'tenant_id' => $tenantId,
+            'settings' => $settings ? [
+                'id' => $settings->id,
+                'tone' => $settings->tone,
+                'brand_rules' => $settings->brand_rules,
+            ] : null,
+        ]);
+    }
     
     /**
      * POST /api/diagnostic/sync-orders

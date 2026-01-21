@@ -91,6 +91,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/sync-faq', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncFaq']);
     Route::get('/widget-settings', [\App\Http\Controllers\Api\DiagnosticController::class, 'widgetSettings']);
     Route::post('/sync-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncOrders']);
+    Route::post('/clear-tone-cache', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearToneCache']);
     Route::post('/backfill-checkout-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'backfillCheckoutEvents']);
     Route::get('/orders-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'ordersStats']);
     Route::get('/ai-index-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiIndexStats']);

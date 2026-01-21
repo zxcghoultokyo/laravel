@@ -20,8 +20,6 @@ class ToneService
      * Tone definitions with Ukrainian descriptions and prompt modifiers.
      */
     private const TONES = [
-     */
-    private const TONES = [
         'official' => [
             'name' => 'Офіційний',
             'description' => 'Ввічливий, формальний стиль',

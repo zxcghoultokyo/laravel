@@ -69,7 +69,7 @@ Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(fu
 });
 
 // Widget embed route (public, no auth required)
-Route::get('/widget/{slug}.js', [\App\Http\Controllers\TenantWidgetController::class, 'serveWidget'])
+Route::get('/widget/{slug}.js', [\App\Http\Controllers\Api\TenantWidgetController::class, 'serveWidget'])
     ->name('widget.serve');
 
 require __DIR__.'/auth.php';

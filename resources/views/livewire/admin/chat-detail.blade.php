@@ -564,18 +564,52 @@
         
         // Listen for clipboard copy events
         Livewire.on('clipboard-copy', ({ text }) => {
-            navigator.clipboard.writeText(text).then(() => {
-                // Show brief notification
-                const notification = document.createElement('div');
-                notification.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-                notification.textContent = '✓ Звіт скопійовано';
-                document.body.appendChild(notification);
-                setTimeout(() => notification.remove(), 2000);
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                alert('Не вдалося скопіювати: ' + err);
-            });
+            // Try modern clipboard API first
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showCopyNotification('✓ Звіт скопійовано');
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopy(text);
+                });
+            } else {
+                fallbackCopy(text);
+            }
         });
+        
+        function showCopyNotification(message) {
+            const notification = document.createElement('div');
+            notification.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 2000);
+        }
+        
+        function fallbackCopy(text) {
+            // Fallback using textarea
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            textarea.style.top = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showCopyNotification('✓ Звіт скопійовано');
+                } else {
+                    alert('Не вдалося скопіювати. Текст:\n\n' + text.substring(0, 500) + '...');
+                }
+            } catch (err) {
+                console.error('execCommand failed:', err);
+                alert('Не вдалося скопіювати. Текст:\n\n' + text.substring(0, 500) + '...');
+            }
+            
+            document.body.removeChild(textarea);
+        }
     });
     
     // Scroll after Livewire updates

@@ -887,7 +887,7 @@ PROMPT;
         $cacheKey = 'product_type_synonyms:' . md5($productType);
 
         return Cache::remember($cacheKey, 3600, function () use ($productType) {
-            $synonyms = ProductSynonym::where('canonical', $productType)
+            $synonyms = ProductSynonym::where('product_type', $productType)
                 ->orWhere('synonym', $productType)
                 ->pluck('synonym')
                 ->toArray();

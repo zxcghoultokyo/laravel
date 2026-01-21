@@ -36,6 +36,7 @@
         <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
 
         <!-- Schema.org JSON-LD -->
+        @verbatim
         <script type="application/ld+json">
         {
             "@context": "https://schema.org",
@@ -62,6 +63,7 @@
             }
         }
         </script>
+        @endverbatim
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

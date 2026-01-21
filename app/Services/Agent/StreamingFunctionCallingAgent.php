@@ -312,7 +312,14 @@ class StreamingFunctionCallingAgent
             }
         }
         
-        // Log assistant message to DB
+        // Log assistant message to DB with debug info
+        Log::info('StreamingAgent: about to log message', [
+            'session_id' => $sessionId,
+            'intent' => $responseIntent,
+            'products_count' => count($responseProducts),
+            'product_titles' => array_map(fn($p) => $p['title'] ?? 'no-title', array_slice($responseProducts, 0, 3)),
+            'text_preview' => mb_substr($responseText, 0, 100),
+        ]);
         $this->logAssistantMessage($sessionId, $responseText, $responseProducts, $responseIntent);
         
         yield ['type' => 'done', 'data' => ['session_id' => $sessionId]];

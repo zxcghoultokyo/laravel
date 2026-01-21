@@ -99,6 +99,7 @@ class DiagnosticController extends Controller
             $meta = json_decode($e->metadata ?? '{}', true);
             return [
                 'id' => $e->id,
+                'merchant_id' => $e->merchant_id,
                 'session_id' => $e->session_id,
                 'product_article' => $e->product_article,
                 'product_price' => $e->product_price,
@@ -107,6 +108,9 @@ class DiagnosticController extends Controller
                 'created_at' => $e->created_at,
             ];
         });
+
+        // Group by merchant_id for summary
+        $byMerchant = $events->groupBy('merchant_id')->map->count();
 
         // Summary stats
         $total = $parsed->count();
@@ -124,6 +128,7 @@ class DiagnosticController extends Controller
                 'chat_attributed' => $chatAttributed,
                 'unique_sessions' => $uniqueSessions,
                 'chat_attributed_sessions' => $chatAttributedSessions,
+                'by_merchant' => $byMerchant,
             ],
             'events' => $parsed,
         ]);

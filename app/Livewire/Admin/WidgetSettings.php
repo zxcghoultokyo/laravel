@@ -222,6 +222,8 @@ class WidgetSettings extends Component
 
         // Clear caches so changes take effect immediately (per-tenant)
         Cache::forget('widget_settings_faq');
+        Cache::forget('widget_settings_faq:' . $tenantId);
+        Cache::forget('widget_settings_faq:global');
         Cache::forget('widget_settings_tone');
         Cache::forget('widget_settings_tone:' . $tenantId);
         Cache::forget('widget_settings_tone:global');

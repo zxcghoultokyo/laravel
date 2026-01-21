@@ -22,11 +22,20 @@ class DashboardMetricsService
     }
     
     /**
+     * Get current tenant ID for cache key prefixing.
+     */
+    private function getTenantCachePrefix(): string
+    {
+        $tenantId = auth()->user()?->tenant_id ?? 'global';
+        return "t{$tenantId}:";
+    }
+    
+    /**
      * Get KPI cards data with trends.
      */
     public function getKPIs(string $period = '7d'): array
     {
-        $cacheKey = "dashboard_kpis:{$period}";
+        $cacheKey = $this->getTenantCachePrefix() . "dashboard_kpis:{$period}";
         
         return Cache::remember($cacheKey, 60, function () use ($period) {
             [$startDate, $endDate, $prevStartDate, $prevEndDate] = $this->getPeriodDates($period);
@@ -91,7 +100,7 @@ class DashboardMetricsService
      */
     public function getChartData(string $period = '7d'): array
     {
-        $cacheKey = "dashboard_chart:{$period}";
+        $cacheKey = $this->getTenantCachePrefix() . "dashboard_chart:{$period}";
         
         return Cache::remember($cacheKey, 120, function () use ($period) {
             [$startDate, $endDate] = $this->getPeriodDates($period);
@@ -134,7 +143,7 @@ class DashboardMetricsService
      */
     public function getTopProducts(int $limit = 5, string $period = '7d'): array
     {
-        $cacheKey = "dashboard_top_products:{$period}:{$limit}";
+        $cacheKey = $this->getTenantCachePrefix() . "dashboard_top_products:{$period}:{$limit}";
         
         return Cache::remember($cacheKey, 300, function () use ($limit, $period) {
             [$startDate, $endDate] = $this->getPeriodDates($period);
@@ -203,7 +212,7 @@ class DashboardMetricsService
      */
     public function getRecentChats(int $limit = 10): array
     {
-        return Cache::remember("dashboard_recent_chats:{$limit}", 60, function () use ($limit) {
+        return Cache::remember($this->getTenantCachePrefix() . "dashboard_recent_chats:{$limit}", 60, function () use ($limit) {
             $chats = $this->chatStats->getRecentChats($limit);
             
             // Enrich with outcome data if available
@@ -346,7 +355,7 @@ class DashboardMetricsService
      */
     public function getFunnelData(string $period = '7d'): array
     {
-        $cacheKey = "dashboard_funnel:{$period}";
+        $cacheKey = $this->getTenantCachePrefix() . "dashboard_funnel:{$period}";
         
         return Cache::remember($cacheKey, 120, function () use ($period) {
             [$startDate, $endDate] = $this->getPeriodDates($period);

@@ -117,7 +117,8 @@ class MetricsService
      */
     public function getDashboardMetrics(): array
     {
-        return Cache::remember('dashboard_metrics', 60, function () {
+        $tenantId = auth()->user()?->tenant_id ?? 'global';
+        return Cache::remember("dashboard_metrics:t{$tenantId}", 60, function () {
             $today = now()->toDateString();
             $todayStats = DB::table('chat_daily_stats')
                 ->where('date', $today)

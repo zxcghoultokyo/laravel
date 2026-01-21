@@ -445,8 +445,14 @@ RULES;
      */
     private function getShopPhone(): string
     {
-        $settings = Cache::remember('widget_settings_faq', 300, function () {
-            return WidgetSettings::first();
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
+            if ($tenantId) {
+                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenantId)->first();
+            }
+            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
         return $settings?->shop_phone ?? '+380 63 631 9919';
     }
@@ -674,8 +680,14 @@ PROMPT;
      */
     private function loadFaqInfo(): string
     {
-        $settings = Cache::remember('widget_settings_faq', 300, function () {
-            return WidgetSettings::first();
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
+            if ($tenantId) {
+                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenantId)->first();
+            }
+            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
 
         if (!$settings) {

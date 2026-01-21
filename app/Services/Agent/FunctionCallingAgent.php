@@ -36,12 +36,7 @@ class FunctionCallingAgent extends BaseAgent
         $tenantId = $this->searchTool->getCurrentTenantId();
         $this->toneService->setTenantId($tenantId);
 
-        Log::info('FunctionCallingAgent: processing', [
-            'message' => $message, 
-            'session_id' => $sessionId,
-            'tenant_id' => $tenantId,
-            'brand_rules_count' => count($this->toneService->getStoreBrandRules()),
-        ]);
+        Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId, 'tenant_id' => $tenantId]);
 
         // Load shown product IDs to exclude from subsequent searches
         $this->shownProductIds = $this->extractShownProductIds($sessionId);

@@ -186,7 +186,6 @@ class TenantContext
         // Priority 3: Request parameter (for API calls)
         if (request()->has('tenant_id')) {
             $tenantId = (int) request()->input('tenant_id');
-            \Illuminate\Support\Facades\Log::debug('TenantContext: found tenant_id in request', ['tenant_id' => $tenantId]);
             $this->tenant = Tenant::find($tenantId);
             $this->tenantId = $this->tenant?->id;
             return;

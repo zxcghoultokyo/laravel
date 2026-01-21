@@ -47,8 +47,9 @@
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-lg font-semibold text-gray-900">Воронка конверсії</h3>
                 @php
-                    $firstStage = $funnel[0]['count'] ?? 0;
-                    $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
+                    $funnelCount = count($funnel);
+                    $firstStage = $funnelCount > 0 ? ($funnel[0]['count'] ?? 0) : 0;
+                    $lastStage = $funnelCount > 0 ? ($funnel[$funnelCount - 1]['count'] ?? 0) : 0;
                     $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
                 @endphp
                 @if($overallRate > 0)
@@ -129,8 +130,8 @@
             @else
                 <div class="text-center py-12 text-gray-400">
                     <span class="text-4xl">📊</span>
-                    <p class="mt-2">Ще немає даних воронки</p>
-                    <p class="text-xs mt-2 text-gray-300">Debug: funnel has {{ count($funnel) }} items, days={{ $days }}</p>
+                    <p class="mt-2">Ще немає даних воронки за обраний період</p>
+                    <p class="text-xs mt-2">Переконайтесь що віджет встановлено на сайті та користувачі взаємодіють з ним</p>
                 </div>
             @endif
         </div>

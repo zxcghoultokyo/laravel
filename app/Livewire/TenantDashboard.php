@@ -643,6 +643,27 @@ class TenantDashboard extends Component
         // Check if tenant_id column exists
         $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
         
+        // Pre-calculate checkout_success from orders table (more reliable than chat_events)
+        $checkoutCountFromOrders = 0;
+        if (Schema::hasTable('orders')) {
+            try {
+                $tenantSessionIds = DB::table('chat_sessions')
+                    ->where('tenant_id', $tenantId)
+                    ->pluck('session_id')
+                    ->toArray();
+                
+                if (!empty($tenantSessionIds)) {
+                    $checkoutCountFromOrders = DB::table('orders')
+                        ->where('created_at', '>=', $startDate)
+                        ->where('had_chat', true)
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->count();
+                }
+            } catch (\Throwable $e) {
+                // Ignore - will fall back to chat_events
+            }
+        }
+        
         // Define funnel stages
         $stages = [
             'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Унікальні сесії на сайті'],
@@ -658,35 +679,45 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                $query = DB::table('chat_events')
-                    ->where('event_type', $eventType)
-                    ->where('created_at', '>=', $startDate);
-                
-                // Filter by tenant_id (new records) OR merchant_id (old records)
-                if ($hasTenantIdColumn) {
-                    $query->where(function($q) use ($tenantId, $merchantIds) {
-                        $q->where('tenant_id', $tenantId);
-                        if (!empty($merchantIds)) {
-                            $q->orWhere(function($q2) use ($merchantIds) {
-                                $q2->whereNull('tenant_id')
-                                   ->whereIn('merchant_id', $merchantIds);
-                            });
-                        }
-                    });
+                // For checkout_success, prefer orders table count (more reliable)
+                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                    $count = $checkoutCountFromOrders;
                 } else {
-                    // Fallback: only merchant_id
-                    $query->whereIn('merchant_id', $merchantIds);
+                    $query = DB::table('chat_events')
+                        ->where('event_type', $eventType)
+                        ->where('created_at', '>=', $startDate);
+                    
+                    // Filter by tenant_id (new records) OR merchant_id (old records)
+                    if ($hasTenantIdColumn) {
+                        $query->where(function($q) use ($tenantId, $merchantIds) {
+                            $q->where('tenant_id', $tenantId);
+                            if (!empty($merchantIds)) {
+                                $q->orWhere(function($q2) use ($merchantIds) {
+                                    $q2->whereNull('tenant_id')
+                                       ->whereIn('merchant_id', $merchantIds);
+                                });
+                            }
+                        });
+                    } else {
+                        // Fallback: only merchant_id
+                        $query->whereIn('merchant_id', $merchantIds);
+                    }
+                    
+                    // For add_to_cart: only count chat-attributed (had_chat or from_chat)
+                    if ($eventType === 'add_to_cart') {
+                        $query->where(function($q) {
+                            $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
+                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
+                        });
+                    }
+                    
+                    $count = $query->distinct('session_id')->count('session_id');
+                    
+                    // For checkout_success, also check orders if chat_events is 0
+                    if ($eventType === 'checkout_success') {
+                        $count = max($count, $checkoutCountFromOrders);
+                    }
                 }
-                
-                // For add_to_cart: only count chat-attributed (had_chat or from_chat)
-                if ($eventType === 'add_to_cart') {
-                    $query->where(function($q) {
-                        $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
-                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
-                    });
-                }
-                
-                $count = $query->distinct('session_id')->count('session_id');
             } catch (\Throwable $e) {
                 \Log::error('TenantDashboard loadFunnelData error', [
                     'stage' => $eventType,

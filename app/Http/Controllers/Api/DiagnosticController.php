@@ -911,6 +911,14 @@ class DiagnosticController extends Controller
                 ->first();
         }
 
+        // Test ToneService output
+        $toneService = app(\App\Services\Ai\ToneService::class);
+        if ($tenantId) {
+            $toneService->setTenantId((int)$tenantId);
+        }
+        $fullPromptSection = $toneService->getFullPromptSection();
+        $brandRulesPrompt = $toneService->getBrandRulesPrompt();
+
         return response()->json([
             'success' => true,
             'cleared_keys' => $cleared,
@@ -920,6 +928,10 @@ class DiagnosticController extends Controller
                 'tone' => $settings->tone,
                 'brand_rules' => $settings->brand_rules,
             ] : null,
+            'tone_service_output' => [
+                'full_prompt_section' => mb_substr($fullPromptSection, 0, 500),
+                'brand_rules_prompt' => $brandRulesPrompt,
+            ],
         ]);
     }
     

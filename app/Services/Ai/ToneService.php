@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\WidgetSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Service for managing AI response tone and brand rules.
@@ -112,6 +113,13 @@ RULES;
     {
         $tonePrompt = $this->getTonePrompt($tone);
         $brandRulesPrompt = $this->getBrandRulesPrompt($brandRules);
+
+        Log::debug('ToneService.getFullPromptSection', [
+            'tenant_id' => $this->tenantId,
+            'tone' => $tone ?? $this->getStoreTone(),
+            'brand_rules_count' => count($brandRules ?? $this->getStoreBrandRules()),
+            'brand_rules_prompt_length' => strlen($brandRulesPrompt),
+        ]);
 
         return $tonePrompt . $brandRulesPrompt;
     }

@@ -96,6 +96,12 @@ class WidgetSettings extends Model
                 $model->welcome_message = 'Вітаю! 👋 Я AILure Асистент. Напишіть, що шукаєте.';
             }
         });
+        
+        // Clear tone/brand_rules cache when settings updated
+        static::saved(function ($model) {
+            \Illuminate\Support\Facades\Cache::forget('widget_settings_tone:' . $model->tenant_id);
+            \Illuminate\Support\Facades\Cache::forget('widget_settings_tone:global');
+        });
     }
 
     /**

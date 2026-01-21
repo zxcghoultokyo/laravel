@@ -32,17 +32,17 @@
             🔄 Воронка
         </button>
         @php
-            // Get counts from funnel data for consistency
-            $cartFunnelCount = collect($conversionsData)->firstWhere('stage', 'add_to_cart')['count'] ?? count($cartEvents);
-            $checkoutFunnelCount = collect($conversionsData)->firstWhere('stage', 'checkout_success')['count'] ?? count($checkoutOrders);
+            // Tab counts: show only chat-attributed conversions (not all events)
+            $chatCartCount = count($chatAttributedConversions);
+            $chatOrderCount = count($checkoutOrders);
         @endphp
         <button wire:click="setConversionsTab('cart')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $conversionsActiveTab === 'cart' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
-            🛒 Кошик ({{ $cartFunnelCount }})
+            🛒 Кошик ({{ $chatCartCount }})
         </button>
         <button wire:click="setConversionsTab('orders')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $conversionsActiveTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
-            ✅ Замовлення ({{ $checkoutFunnelCount }})
+            ✅ Замовлення ({{ $chatOrderCount }})
         </button>
     </div>
 
@@ -149,8 +149,12 @@
             // Each cart event = 1 item (add_to_cart fires per product)
             $totalItems = $chatCarts->count();
             $avgItemsPerBuyer = $uniqueBuyers > 0 ? round($totalItems / $uniqueBuyers, 1) : 0;
-            // Sum product prices (field is product_price, not total)
-            $totalCartSum = $chatCarts->sum(fn($c) => (float)($c['product_price'] ?? 0));
+            // Sum product prices - handle string/null values
+            $totalCartSum = $chatCarts->reduce(function($sum, $c) {
+                $price = $c['product_price'] ?? null;
+                if ($price === null) return $sum;
+                return $sum + (float) str_replace([' ', ','], ['', '.'], (string)$price);
+            }, 0);
         @endphp
         <div class="grid grid-cols-4 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">

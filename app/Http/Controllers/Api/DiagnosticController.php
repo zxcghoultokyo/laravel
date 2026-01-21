@@ -2389,11 +2389,14 @@ class DiagnosticController extends Controller
             ],
             'widget_settings' => $widgetSettings ? [
                 'id' => $widgetSettings->id,
+                'api_token' => $widgetSettings->api_token ? substr($widgetSettings->api_token, 0, 8) . '...' : null,
                 'domain' => $widgetSettings->domain,
                 'bot_name' => $widgetSettings->bot_name,
                 'store_name' => $widgetSettings->store_name,
                 'enabled' => $widgetSettings->enabled,
                 'horoshop_domain' => $widgetSettings->horoshop_domain,
+                'primary_color' => $widgetSettings->primary_color,
+                'welcome_message' => $widgetSettings->welcome_message ? substr($widgetSettings->welcome_message, 0, 50) . '...' : null,
             ] : null,
             'stats' => [
                 'products' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)

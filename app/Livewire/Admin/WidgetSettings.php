@@ -103,35 +103,36 @@ class WidgetSettings extends Component
 
     public function save()
     {
-        $this->validate([
-            'primary_color' => 'required|string',
-            'text_color' => 'required|string',
-            'position' => 'required|in:left,right',
-            'start_state' => 'required|in:open,closed',
-            'border_radius' => 'required|integer|min:0|max:50',
-            'welcome_message' => 'required|string|max:500',
-            'input_placeholder' => 'required|string|max:200',
-            'bot_name' => 'nullable|string|max:100',
-            'bot_avatar_url' => 'nullable|url|max:500',
-            'glow_color' => 'nullable|string|max:20',
-            'bot_status_text' => 'nullable|string|max:100',
-            'font_family' => 'nullable|string|max:100',
-            'tone' => 'nullable|in:official,spartan,friendly',
-            'brand_rules' => 'nullable|array|max:5',
-            'brand_rules.*' => 'nullable|string|max:200',
-            'shop_phone' => 'required|string|max:50',
-            'callback_form_url' => 'required|url|max:255',
-            'nova_poshta_tracking_url' => 'required|url|max:255',
-            'horoshop_domain' => 'nullable|url|max:255',
-            'faq_payment_delivery_url' => 'nullable|url|max:255',
-            'faq_returns_url' => 'nullable|url|max:255',
-            'faq_contacts_url' => 'nullable|url|max:255',
-            'faq_about_url' => 'nullable|url|max:255',
-            'faq_payment_delivery_text' => 'nullable|string|max:2000',
-            'faq_returns_text' => 'nullable|string|max:2000',
-            'faq_contacts_text' => 'nullable|string|max:2000',
-            'faq_about_text' => 'nullable|string|max:2000',
-        ]);
+        try {
+            $this->validate([
+                'primary_color' => 'required|string',
+                'text_color' => 'required|string',
+                'position' => 'required|in:left,right',
+                'start_state' => 'required|in:open,closed',
+                'border_radius' => 'required|integer|min:0|max:50',
+                'welcome_message' => 'required|string|max:500',
+                'input_placeholder' => 'required|string|max:200',
+                'bot_name' => 'nullable|string|max:100',
+                'bot_avatar_url' => 'nullable|url|max:500',
+                'glow_color' => 'nullable|string|max:20',
+                'bot_status_text' => 'nullable|string|max:100',
+                'font_family' => 'nullable|string|max:100',
+                'tone' => 'nullable|in:official,spartan,friendly',
+                'brand_rules' => 'nullable|array|max:5',
+                'brand_rules.*' => 'nullable|string|max:200',
+                'shop_phone' => 'required|string|max:50',
+                'callback_form_url' => 'nullable|url|max:255',
+                'nova_poshta_tracking_url' => 'nullable|url|max:255',
+                'horoshop_domain' => 'nullable|url|max:255',
+                'faq_payment_delivery_url' => 'nullable|url|max:255',
+                'faq_returns_url' => 'nullable|url|max:255',
+                'faq_contacts_url' => 'nullable|url|max:255',
+                'faq_about_url' => 'nullable|url|max:255',
+                'faq_payment_delivery_text' => 'nullable|string|max:2000',
+                'faq_returns_text' => 'nullable|string|max:2000',
+                'faq_contacts_text' => 'nullable|string|max:2000',
+                'faq_about_text' => 'nullable|string|max:2000',
+            ]);
 
         // Get current tenant ID from auth context
         $tenantId = auth()->user()?->tenant_id;
@@ -227,6 +228,19 @@ class WidgetSettings extends Component
         $this->dispatch('notify', 'Налаштування збережено!');
         
         session()->flash('message', 'Налаштування збережено!');
+        
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Show validation errors
+            $errors = collect($e->errors())->flatten()->implode(', ');
+            $this->dispatch('notify', 'Помилка валідації: ' . $errors);
+            throw $e;
+        } catch (\Exception $e) {
+            \Log::error('Widget settings save error', [
+                'error' => $e->getMessage(),
+                'tenant_id' => auth()->user()?->tenant_id,
+            ]);
+            $this->dispatch('notify', 'Помилка збереження: ' . $e->getMessage());
+        }
     }
 
     public function updatedBotAvatarUpload()

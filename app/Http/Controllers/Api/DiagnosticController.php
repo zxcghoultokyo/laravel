@@ -934,6 +934,42 @@ class DiagnosticController extends Controller
             ],
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/tenant-context
+     * Debug TenantContext resolution
+     */
+    public function tenantContext(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $context = app(\App\Services\Tenant\TenantContext::class);
+        $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
+        
+        return response()->json([
+            'request' => [
+                'has_tenant_id' => $request->has('tenant_id'),
+                'tenant_id' => $request->input('tenant_id'),
+                'has_tenant' => $request->has('tenant'),
+                'tenant' => $request->input('tenant'),
+                'all_input' => $request->all(),
+            ],
+            'tenant_context' => [
+                'tenant_id' => $context->getTenantId(),
+                'merchant_id' => $context->getMerchantId(),
+                'has_tenant' => $context->hasTenant(),
+            ],
+            'search_tool' => [
+                'current_tenant_id' => $searchTool->getCurrentTenantId(),
+            ],
+            'app_bound' => [
+                'current_tenant' => app()->bound('current_tenant'),
+                'current_tenant_id' => app()->bound('current_tenant') ? app('current_tenant')?->id : null,
+            ],
+        ]);
+    }
     
     /**
      * POST /api/diagnostic/sync-orders

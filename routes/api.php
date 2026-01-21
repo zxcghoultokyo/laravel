@@ -73,6 +73,7 @@ Route::get('/debug/products', [DebugProductsController::class, 'index']);
 // Diagnostic API (key protected)
 Route::prefix('diagnostic')->group(function () {
     Route::get('/db-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'dbStats']);
+    Route::get('/tenant-context', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantContext']);
     Route::get('/categories', [\App\Http\Controllers\Api\DiagnosticController::class, 'categories']);
     Route::get('/search-db', [\App\Http\Controllers\Api\DiagnosticController::class, 'searchDb']);
     Route::get('/product-by-article', [\App\Http\Controllers\Api\DiagnosticController::class, 'productByArticle']);

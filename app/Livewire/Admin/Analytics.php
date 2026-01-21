@@ -63,6 +63,26 @@ class Analytics extends Component
         // Always try to load stats - ChatStatsService handles missing tables
         $this->loadStats();
     }
+    
+    /**
+     * Called on every request - ensures data is always loaded
+     */
+    public function boot()
+    {
+        if (empty($this->stats) || empty($this->funnel)) {
+            $this->loadStats();
+        }
+    }
+    
+    /**
+     * Called after Livewire hydration (navigation, etc.)
+     */
+    public function hydrate()
+    {
+        if (empty($this->stats) || empty($this->dailyChart)) {
+            $this->loadStats();
+        }
+    }
 
     public function checkTables()
     {

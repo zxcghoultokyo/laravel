@@ -24,6 +24,30 @@ class ConversionAnalytics extends Component
         $this->loadData();
     }
     
+    /**
+     * Called on every request (both mount and subsequent requests)
+     * Ensures data is always loaded
+     */
+    public function boot()
+    {
+        // Always load data on boot to ensure fresh state
+        if (empty($this->funnel)) {
+            $this->loadData();
+        }
+    }
+    
+    /**
+     * Called when component is hydrated (after navigation, tab switch, etc.)
+     * This ensures data is loaded even when component is restored from cache
+     */
+    public function hydrate()
+    {
+        // If funnel is empty after hydration, reload data
+        if (empty($this->funnel)) {
+            $this->loadData();
+        }
+    }
+    
     public function updatedDays()
     {
         $this->loadData();

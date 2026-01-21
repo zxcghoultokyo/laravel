@@ -56,6 +56,30 @@ class TenantDashboard extends Component
         $this->loadFunnelData();
     }
     
+    /**
+     * Called on every request - ensures data is always loaded
+     */
+    public function boot()
+    {
+        if (empty($this->stats) || empty($this->chartData) || empty($this->funnelData)) {
+            $this->loadStats();
+            $this->loadChartData();
+            $this->loadFunnelData();
+        }
+    }
+    
+    /**
+     * Called after Livewire hydration (navigation, tab switch, etc.)
+     */
+    public function hydrate()
+    {
+        if (empty($this->chartData) || empty($this->funnelData)) {
+            $this->loadStats();
+            $this->loadChartData();
+            $this->loadFunnelData();
+        }
+    }
+    
     // ==== CONVERSIONS TAB METHODS ====
     
     public function setConversionsTab(string $tab)

@@ -188,21 +188,52 @@ class Analytics extends Component
             'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
         ];
         
+        // Pre-calculate checkout_success from orders table (more reliable)
+        $checkoutCountFromOrders = 0;
+        if (Schema::hasTable('orders') && $this->tenantId) {
+            try {
+                $tenantSessionIds = DB::table('chat_sessions')
+                    ->where('tenant_id', $this->tenantId)
+                    ->pluck('session_id')
+                    ->toArray();
+                
+                if (!empty($tenantSessionIds)) {
+                    $checkoutCountFromOrders = DB::table('orders')
+                        ->where('created_at', '>=', $startDate)
+                        ->where('had_chat', true)
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->count();
+                }
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
+        
         $this->funnel = [];
         $prevCount = 0;
         
         foreach ($stages as $eventType => $stage) {
             try {
-                $query = DB::table('chat_events')
-                    ->where('event_type', $eventType)
-                    ->where('created_at', '>=', $startDate);
-                
-                // Filter by merchant_id for tenant isolation
-                if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
-                    $query->where('merchant_id', $this->merchantId);
+                // For checkout_success, prefer orders table count
+                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                    $count = $checkoutCountFromOrders;
+                } else {
+                    $query = DB::table('chat_events')
+                        ->where('event_type', $eventType)
+                        ->where('created_at', '>=', $startDate);
+                    
+                    // Filter by merchant_id for tenant isolation
+                    if ($this->merchantId && Schema::hasColumn('chat_events', 'merchant_id')) {
+                        $query->where('merchant_id', $this->merchantId);
+                    }
+                    
+                    $count = $query->distinct('session_id')->count('session_id');
+                    
+                    // For checkout_success, also check orders table
+                    if ($eventType === 'checkout_success') {
+                        $count = max($count, $checkoutCountFromOrders);
+                    }
                 }
-                
-                $count = $query->distinct('session_id')->count('session_id');
             } catch (\Throwable $e) {
                 $count = 0;
             }

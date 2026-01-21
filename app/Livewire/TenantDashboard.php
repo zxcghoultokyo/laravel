@@ -629,7 +629,7 @@ class TenantDashboard extends Component
     public function loadFunnelData()
     {
         $tenant = $this->tenant;
-        $startDate = now()->subDays(30);
+        $startDate = now()->subDays($this->conversionsDays)->startOfDay();
         $tenantId = $tenant->id;
         
         // Get ALL merchant identifiers for fallback filtering (old records)

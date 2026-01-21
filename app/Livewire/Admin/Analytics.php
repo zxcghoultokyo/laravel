@@ -270,6 +270,14 @@ class Analytics extends Component
                         $query->whereIn('merchant_id', $this->merchantIds);
                     }
                     
+                    // For add_to_cart: only count chat-attributed (had_chat or from_chat)
+                    if ($eventType === 'add_to_cart') {
+                        $query->where(function($q) {
+                            $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
+                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
+                        });
+                    }
+                    
                     $count = $query->distinct('session_id')->count('session_id');
                     
                     // For checkout_success, also check orders table

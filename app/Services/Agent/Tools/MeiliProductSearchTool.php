@@ -838,6 +838,43 @@ class MeiliProductSearchTool
         $q = trim($query);
         $l = mb_strtolower($q);
         
+        // 0. ENGLISH → UKRAINIAN translation for common tactical terms
+        // This enables English queries to find Ukrainian products
+        $enToUk = [
+            'plate carrier' => 'плитоноска',
+            'plate carriers' => 'плитоноска',
+            'tactical vest' => 'плитоноска тактичний жилет',
+            'body armor' => 'бронежилет',
+            'boots' => 'черевики',
+            'tactical boots' => 'черевики тактичні',
+            'helmet' => 'шолом',
+            'gloves' => 'рукавички',
+            'tactical gloves' => 'рукавички тактичні',
+            'backpack' => 'рюкзак',
+            'pouch' => 'підсумок',
+            'tourniquet' => 'турнікет',
+            'first aid' => 'аптечка',
+            'ifak' => 'аптечка IFAK',
+            'belt' => 'пояс',
+            'pants' => 'штани',
+            'jacket' => 'куртка',
+            'shirt' => 'сорочка',
+            't-shirt' => 'футболка',
+            'cap' => 'кепка',
+            'magazine' => 'магазин',
+            'holster' => 'кобура',
+            'sling' => 'ремінь',
+            'knee pads' => 'наколінники',
+            'elbow pads' => 'налокітники',
+        ];
+        
+        foreach ($enToUk as $en => $uk) {
+            if (str_contains($l, $en)) {
+                $q = str_ireplace($en, $uk, $q);
+                $l = mb_strtolower($q);
+            }
+        }
+        
         // 1. NORMALIZE query - replace user terms with standard terms (NOT expand!)
         // Meilisearch uses AND logic, so adding synonyms breaks search
         

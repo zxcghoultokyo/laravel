@@ -435,28 +435,8 @@
 
             <!-- Analytics Tab -->
             @if($activeTab === 'analytics')
-                <div>
-                    {{-- Quick Stats --}}
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6">
-                            <div class="text-4xl font-bold text-blue-700">{{ number_format($stats['messages_30d']) }}</div>
-                            <div class="text-blue-600 mt-1">Повідомлень за 30 днів</div>
-                        </div>
-                        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-6">
-                            <div class="text-4xl font-bold text-green-700">{{ number_format($stats['sessions_30d']) }}</div>
-                            <div class="text-green-600 mt-1">Сесій за 30 днів</div>
-                        </div>
-                        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6">
-                            <div class="text-4xl font-bold text-purple-700">
-                                {{ $stats['sessions_30d'] > 0 ? round($stats['messages_30d'] / $stats['sessions_30d'], 1) : 0 }}
-                            </div>
-                            <div class="text-purple-600 mt-1">Повідомлень на сесію</div>
-                        </div>
-                    </div>
-
-                    {{-- Embedded Analytics Component --}}
-                    @livewire('admin.analytics', ['embedded' => true])
-                </div>
+                {{-- Embedded Analytics Component (has its own stats, funnel, charts) --}}
+                @livewire('admin.analytics', ['embedded' => true])
             @endif
 
             <!-- Conversions Tab -->

@@ -52,9 +52,10 @@
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-lg font-semibold text-gray-900">Воронка конверсії</h3>
                 @php
-                    $firstStage = $conversionsData[0]['count'] ?? 0;
-                    $lastStage = count($conversionsData) > 0 ? ($conversionsData[count($conversionsData) - 1]['count'] ?? 0) : 0;
-                    $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
+                    $stages = $funnelData['stages'] ?? [];
+                    $firstStage = $stages[0]['count'] ?? 0;
+                    $lastStage = count($stages) > 0 ? ($stages[count($stages) - 1]['count'] ?? 0) : 0;
+                    $overallRate = $funnelData['overall_rate'] ?? 0;
                 @endphp
                 @if($overallRate > 0)
                     <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
@@ -63,10 +64,10 @@
                 @endif
             </div>
             
-            @if(!empty($conversionsData))
+            @if(!empty($funnelData['stages']))
                 <div class="space-y-4">
-                    @php $maxCount = max(array_column($conversionsData, 'count')) ?: 1; @endphp
-                    @foreach($conversionsData as $index => $stage)
+                    @php $maxCount = max(array_column($funnelData['stages'], 'count')) ?: 1; @endphp
+                    @foreach($funnelData['stages'] as $index => $stage)
                         <div class="group">
                             <div class="flex items-center justify-between mb-2">
                                 <div class="flex items-center gap-3">
@@ -89,7 +90,7 @@
                             </div>
                             <!-- Progress bar -->
                             <div class="h-8 bg-gray-100 rounded-lg overflow-hidden relative">
-                                <div class="h-full rounded-lg transition-all duration-500 {{ $index === count($conversionsData) - 1 ? 'bg-green-500' : 'bg-blue-500' }}"
+                                <div class="h-full rounded-lg transition-all duration-500 {{ $index === count($funnelData['stages']) - 1 ? 'bg-green-500' : 'bg-blue-500' }}"
                                      style="width: {{ ($stage['count'] / $maxCount) * 100 }}%">
                                 </div>
                                 @if($index > 0 && $stage['dropoff'] > 0)
@@ -99,7 +100,7 @@
                                 @endif
                             </div>
                         </div>
-                        @if($index < count($conversionsData) - 1)
+                        @if($index < count($funnelData['stages']) - 1)
                             <div class="flex justify-center py-1">
                                 <svg class="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -430,7 +431,7 @@
     <!-- Orders Tab -->
     @if($conversionsActiveTab === 'orders')
         @php
-            $checkoutFunnelCountForStats = collect($conversionsData)->firstWhere('stage', 'checkout_success')['count'] ?? 0;
+            $checkoutFunnelCountForStats = collect($funnelData['stages'] ?? [])->firstWhere('stage', 'checkout_success')['count'] ?? 0;
         @endphp
         <div class="grid grid-cols-3 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">

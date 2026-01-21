@@ -39,7 +39,7 @@ class TenantDashboard extends Component
     // Conversions tab data
     public int $conversionsDays = 7;
     public string $conversionsActiveTab = 'funnel';
-    public array $conversionsData = [];
+    // REMOVED: $conversionsData - use $funnelData instead (one source of truth)
     public array $cartEvents = [];
     public array $chatAttributedConversions = [];
     public array $checkoutOrders = [];
@@ -74,7 +74,7 @@ class TenantDashboard extends Component
         }
         
         // Ensure conversions data on conversions tab
-        if ($this->activeTab === 'conversions' && empty($this->conversionsData)) {
+        if ($this->activeTab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
     }
@@ -91,7 +91,7 @@ class TenantDashboard extends Component
         }
         
         // Ensure conversions data on conversions tab
-        if ($this->activeTab === 'conversions' && empty($this->conversionsData)) {
+        if ($this->activeTab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
     }
@@ -105,6 +105,8 @@ class TenantDashboard extends Component
     
     public function updatedConversionsDays()
     {
+        // Reload funnel with new days filter
+        $this->loadFunnelData();
         $this->loadConversionsData();
     }
     
@@ -112,123 +114,22 @@ class TenantDashboard extends Component
     {
         $tenant = $this->tenant;
         $startDate = now()->subDays($this->conversionsDays)->startOfDay();
-        $endDate = now()->endOfDay();
         
-        // Get ALL merchant identifiers (slug + all api_tokens)
-        $slug = $tenant->slug;
-        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenant->id)
-            ->pluck('api_token')
-            ->filter()
-            ->toArray();
-        
-        // Load funnel with tenant filter
-        $this->conversionsData = $this->loadConversionsFunnel($startDate, $endDate, $slug, $apiTokens);
-        
-        // Load add_to_cart events
-        $this->loadCartEventsForTenant($startDate, $slug, $apiTokens);
-        
-        // Load checkout/orders
-        $this->loadCheckoutOrdersForTenant($startDate, $slug);
+        // Load cart events and orders (funnel is already in $funnelData)
+        $this->loadCartEventsForTenant($startDate);
+        $this->loadCheckoutOrdersForTenant($startDate);
     }
     
-    private function loadConversionsFunnel($startDate, $endDate, $slug, array $apiTokens): array
-    {
-        $stages = [
-            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Відкрили сторінку з віджетом'],
-            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Натиснули на іконку чату'],
-            'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
-            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
-            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар у кошик'],
-            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
-        ];
-        
-        // Pre-calculate checkout_success count from orders table (more reliable source)
-        $checkoutCountFromOrders = 0;
-        if (Schema::hasTable('orders')) {
-            try {
-                $tenantSessionIds = DB::table('chat_sessions')
-                    ->where('tenant_id', $this->tenant->id)
-                    ->pluck('session_id')
-                    ->toArray();
-                
-                if (!empty($tenantSessionIds)) {
-                    $checkoutCountFromOrders = DB::table('orders')
-                        ->where('created_at', '>=', $startDate)
-                        ->where('had_chat', true)
-                        ->whereIn('session_id', $tenantSessionIds)
-                        ->count();
-                }
-            } catch (\Throwable $e) {
-                // Ignore
-            }
-        }
-        
-        $funnel = [];
-        $prevCount = 0;
-        
-        foreach ($stages as $eventType => $stage) {
-            try {
-                // For checkout_success, prefer orders table count (it's the source of truth)
-                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
-                    $count = $checkoutCountFromOrders;
-                } else {
-                    $query = DB::table('chat_events')
-                        ->where('event_type', $eventType)
-                        ->whereBetween('created_at', [$startDate, $endDate]);
-                    
-                    // Filter by merchant_id (slug or any api_token)
-                    $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
-                    $query->where(function($q) use ($merchantIds) {
-                        $q->whereIn('merchant_id', $merchantIds);
-                    });
-                    
-                    // For add_to_cart: only count chat-attributed (had_chat or from_chat)
-                    if ($eventType === 'add_to_cart') {
-                        $query->where(function($q) {
-                            $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
-                        });
-                    }
-                    
-                    $count = $query->distinct('session_id')->count('session_id');
-                    
-                    // For checkout_success, also add orders that might not be in chat_events
-                    if ($eventType === 'checkout_success') {
-                        $count = max($count, $checkoutCountFromOrders);
-                    }
-                }
-            } catch (\Throwable $e) {
-                $count = 0;
-            }
-            
-            $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
-            $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
-            
-            $funnel[] = [
-                'stage' => $eventType,
-                'label' => $stage['label'],
-                'icon' => $stage['icon'],
-                'hint' => $stage['hint'],
-                'count' => $count,
-                'rate' => $rate,
-                'dropoff' => $dropoff,
-            ];
-            
-            $prevCount = $count ?: $prevCount;
-        }
-        
-        return $funnel;
-    }
+    // REMOVED loadConversionsFunnel - use loadFunnelData() instead (single source of truth)
     
-    private function loadCartEventsForTenant($startDate, $slug, array $apiTokens)
+    private function loadCartEventsForTenant($startDate)
     {
+        $tenantId = $this->tenant->id;
+        
         $query = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
-            ->where('event_type', 'add_to_cart');
-        
-        // Filter by merchant_id (slug or any api_token)
-        $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
-        $query->whereIn('merchant_id', $merchantIds);
+            ->where('event_type', 'add_to_cart')
+            ->where('tenant_id', $tenantId);
         
         $events = $query->orderByDesc('created_at')->get();
         
@@ -238,7 +139,7 @@ class TenantDashboard extends Component
         if (!empty($articles)) {
             $products = DB::table('products')
                 ->whereIn('article', $articles)
-                ->where('tenant_id', $this->tenant->id)
+                ->where('tenant_id', $tenantId)
                 ->select('article', 'title', 'raw')
                 ->get();
             foreach ($products as $p) {
@@ -277,18 +178,18 @@ class TenantDashboard extends Component
         $this->chatAttributedConversions = array_filter($this->cartEvents, fn($c) => $c['had_chat'] || $c['from_chat']);
     }
     
-    private function loadCheckoutOrdersForTenant($startDate, $slug)
+    private function loadCheckoutOrdersForTenant($startDate)
     {
         if (!Schema::hasTable('orders')) {
             $this->checkoutOrders = [];
             return;
         }
         
-        $tenant = $this->tenant;
+        $tenantId = $this->tenant->id;
         
         // Get tenant's session_ids from chat_sessions for filtering
         $tenantSessionIds = DB::table('chat_sessions')
-            ->where('tenant_id', $tenant->id)
+            ->where('tenant_id', $tenantId)
             ->pluck('session_id')
             ->toArray();
         
@@ -826,7 +727,7 @@ class TenantDashboard extends Component
         $this->resetPage();
         
         // Load conversions data when switching to conversions tab
-        if ($tab === 'conversions' && empty($this->conversionsData)) {
+        if ($tab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
     }

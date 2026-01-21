@@ -62,9 +62,11 @@ class WidgetSettings extends Component
     public function mount()
     {
         // Get tenant-specific settings (TenantScope automatically filters by current tenant)
-        $settings = WidgetSettingsModel::where('domain', $this->domain)->first();
+        // Simply get first record for current tenant - no need to filter by domain
+        $settings = WidgetSettingsModel::first();
 
         if ($settings) {
+            $this->domain = $settings->domain ?? 'default';
             $this->fill($settings->only([
                 'primary_color', 'text_color', 'position', 'start_state',
                 'border_radius', 'welcome_message', 'input_placeholder',
@@ -131,9 +133,16 @@ class WidgetSettings extends Component
             'faq_about_text' => 'nullable|string|max:2000',
         ]);
 
-        $settings = WidgetSettingsModel::updateOrCreate(
-            ['domain' => $this->domain],
-            [
+        // Get current tenant ID from auth context
+        $tenantId = auth()->user()?->tenant_id;
+        
+        // Find existing settings for this tenant or create new
+        $settings = WidgetSettingsModel::first();
+        
+        if ($settings) {
+            // Update existing record
+            $settings->update([
+                'domain' => $this->domain,
                 'primary_color' => $this->primary_color,
                 'text_color' => $this->text_color,
                 'position' => $this->position,
@@ -167,8 +176,48 @@ class WidgetSettings extends Component
                 'faq_contacts_text' => $this->faq_contacts_text,
                 'faq_about_url' => $this->faq_about_url,
                 'faq_about_text' => $this->faq_about_text,
-            ]
-        );
+            ]);
+        } else {
+            // Create new record for tenant
+            $settings = WidgetSettingsModel::create([
+                'tenant_id' => $tenantId,
+                'domain' => $this->domain,
+                'primary_color' => $this->primary_color,
+                'text_color' => $this->text_color,
+                'position' => $this->position,
+                'start_state' => $this->start_state,
+                'border_radius' => $this->border_radius,
+                'welcome_message' => $this->welcome_message,
+                'input_placeholder' => $this->input_placeholder,
+                'consent_notice' => $this->consent_notice,
+                'enabled' => $this->enabled,
+                'bot_name' => $this->bot_name ?: 'AIntento',
+                'bot_avatar_url' => $this->bot_avatar_url ?: null,
+                'bot_avatar_base64' => $this->bot_avatar_base64 ?: null,
+                'glow_color' => $this->glow_color ?: null,
+                'bot_status_text' => $this->bot_status_text ?: 'Завжди онлайн',
+                'font_family' => $this->font_family ?: null,
+                'show_shadow' => $this->show_shadow,
+                'tone' => $this->tone ?: 'official',
+                'brand_rules' => array_filter($this->brand_rules ?? [], fn($r) => !empty(trim($r))),
+                'shop_phone' => $this->shop_phone,
+                'callback_form_url' => $this->callback_form_url,
+                'nova_poshta_tracking_url' => $this->nova_poshta_tracking_url,
+                'enable_delivery_tracking' => $this->enable_delivery_tracking,
+                'enable_faq_from_horoshop' => $this->enable_faq_from_horoshop,
+                'horoshop_domain' => $this->horoshop_domain,
+                'enable_faq_custom_content' => $this->enable_faq_custom_content,
+                'faq_payment_delivery_url' => $this->faq_payment_delivery_url,
+                'faq_payment_delivery_text' => $this->faq_payment_delivery_text,
+                'faq_returns_url' => $this->faq_returns_url,
+                'faq_returns_text' => $this->faq_returns_text,
+                'faq_contacts_url' => $this->faq_contacts_url,
+                'faq_contacts_text' => $this->faq_contacts_text,
+                'faq_about_url' => $this->faq_about_url,
+                'faq_about_text' => $this->faq_about_text,
+                'api_token' => \Illuminate\Support\Str::random(32), // Generate token for new settings
+            ]);
+        }
 
         // Clear caches so changes take effect immediately
         Cache::forget('widget_settings_faq');

@@ -36,17 +36,30 @@ class ConversionAnalytics extends Component
     
     public function loadData()
     {
-        $startDate = now()->subDays($this->days)->startOfDay();
-        $endDate = now()->endOfDay();
-        
-        // Load funnel data
-        $this->loadFunnel($startDate, $endDate);
-        
-        // Load add_to_cart events
-        $this->loadAddToCartEvents($startDate);
-        
-        // Load checkout events
-        $this->loadCheckoutEvents($startDate);
+        try {
+            $startDate = now()->subDays($this->days)->startOfDay();
+            $endDate = now()->endOfDay();
+            
+            // Load funnel data
+            $this->loadFunnel($startDate, $endDate);
+            
+            // Load add_to_cart events
+            $this->loadAddToCartEvents($startDate);
+            
+            // Load checkout events
+            $this->loadCheckoutEvents($startDate);
+            
+            \Log::info('ConversionAnalytics loaded', [
+                'funnel_count' => count($this->funnel),
+                'conversions_count' => count($this->conversions),
+                'checkouts_count' => count($this->checkouts),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('ConversionAnalytics loadData failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
     }
     
     private function loadFunnel($startDate, $endDate)
@@ -60,6 +73,13 @@ class ConversionAnalytics extends Component
             'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
         ];
         
+        // Check if table exists
+        if (!Schema::hasTable('chat_events')) {
+            \Log::warning('ConversionAnalytics: chat_events table does not exist');
+            $this->funnel = [];
+            return;
+        }
+        
         $this->funnel = [];
         $prevCount = 0;
         
@@ -71,6 +91,10 @@ class ConversionAnalytics extends Component
                     ->distinct('session_id')
                     ->count('session_id');
             } catch (\Throwable $e) {
+                \Log::error('ConversionAnalytics funnel query error', [
+                    'stage' => $eventType,
+                    'error' => $e->getMessage()
+                ]);
                 $count = 0;
             }
             

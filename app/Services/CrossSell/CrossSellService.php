@@ -64,15 +64,33 @@ class CrossSellService
         $suggestions = collect();
         $seenIds = [$product->id]; // Exclude the source product itself
         $seenArticles = [$product->article]; // Also track by article for deduplication
+        $seenParentArticles = [$product->parent_article ?? $product->article]; // Track parent_article to avoid size variants
         $tenantId = $this->getTenantId($product);
+        
+        // Helper to check if product is duplicate (by id, article, or parent_article)
+        $isDuplicate = function($p) use (&$seenIds, &$seenArticles, &$seenParentArticles) {
+            if (!$p) return true;
+            if (in_array($p->id, $seenIds)) return true;
+            if (in_array($p->article, $seenArticles)) return true;
+            // Check parent_article to avoid showing same product in different sizes
+            $parentArt = $p->parent_article ?? $p->article;
+            if (in_array($parentArt, $seenParentArticles)) return true;
+            return false;
+        };
+        
+        // Helper to mark product as seen
+        $markSeen = function($p) use (&$seenIds, &$seenArticles, &$seenParentArticles) {
+            $seenIds[] = $p->id;
+            $seenArticles[] = $p->article;
+            $seenParentArticles[] = $p->parent_article ?? $p->article;
+        };
         
         // 1. First check direct product cross-sells (manual links)
         $directSuggestions = $this->getDirectCrossSells($product, $tenantId);
         foreach ($directSuggestions as $suggestion) {
             $p = $suggestion['product'] ?? null;
-            if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
-                $seenIds[] = $p->id;
-                $seenArticles[] = $p->article;
+            if (!$isDuplicate($p)) {
+                $markSeen($p);
                 $suggestions->push($suggestion);
             }
         }
@@ -83,9 +101,8 @@ class CrossSellService
             $categorySuggestions = $this->getCategoryBasedSuggestions($product, $categoryKey, $limit - $suggestions->count(), $tenantId);
             foreach ($categorySuggestions as $suggestion) {
                 $p = $suggestion['product'] ?? null;
-                if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
-                    $seenIds[] = $p->id;
-                    $seenArticles[] = $p->article;
+                if (!$isDuplicate($p)) {
+                    $markSeen($p);
                     $suggestions->push($suggestion);
                 }
             }
@@ -96,9 +113,8 @@ class CrossSellService
             $aiSuggestions = $this->getAiBasedSuggestions($product, $limit - $suggestions->count(), $seenIds, $tenantId);
             foreach ($aiSuggestions as $suggestion) {
                 $p = $suggestion['product'] ?? null;
-                if ($p && !in_array($p->id, $seenIds) && !in_array($p->article, $seenArticles)) {
-                    $seenIds[] = $p->id;
-                    $seenArticles[] = $p->article;
+                if (!$isDuplicate($p)) {
+                    $markSeen($p);
                     $suggestions->push($suggestion);
                 }
             }

@@ -2658,6 +2658,13 @@
     function addCrossSell(messagesContainer, crossSell, settings, sessionId) {
         if (!crossSell || !crossSell.suggestions?.length) return;
         
+        // Check if cross-sell already exists in DOM - prevent duplicates
+        const existingCrossSell = messagesContainer.querySelector('.aintento-cross-sell');
+        if (existingCrossSell) {
+            log('Cross-sell already exists, skipping duplicate');
+            return;
+        }
+        
         const s = settings || window.aintentoSettings || { primary_color: '#2563eb' };
         
         // Save cross-sell to localStorage for persistence

@@ -107,7 +107,7 @@ class WidgetSettings extends Component
             $this->validate([
                 'primary_color' => 'required|string',
                 'text_color' => 'required|string',
-                'position' => 'required|in:left,right',
+                'position' => 'required|in:left,right,bottom-left,bottom-right',
                 'start_state' => 'required|in:open,closed',
                 'border_radius' => 'required|integer|min:0|max:50',
                 'welcome_message' => 'required|string|max:500',

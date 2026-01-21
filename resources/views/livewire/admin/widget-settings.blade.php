@@ -1,6 +1,7 @@
 <div x-data="{ 
     showToast: false, 
     toastMessage: '',
+    toastIsError: false,
     hasUnsavedChanges: false,
     originalData: {},
     initTracker() {
@@ -24,7 +25,7 @@
     }
 }" 
      x-init="initTracker()"
-     x-on:notify.window="showToast = true; toastMessage = $event.detail; setTimeout(() => showToast = false, 3000); hasUnsavedChanges = false; initTracker()">
+     x-on:notify.window="showToast = true; toastMessage = $event.detail; toastIsError = $event.detail.includes('Помилка'); if (!toastIsError) { hasUnsavedChanges = false; initTracker(); } setTimeout(() => showToast = false, 4000)">
     
     <!-- Toast Notification -->
     <div x-show="showToast" 
@@ -32,9 +33,13 @@
          x-transition:enter-start="opacity-0 translate-y-2"
          x-transition:enter-end="opacity-100 translate-y-0"
          x-transition:leave="transition ease-in duration-200"
-         class="fixed bottom-4 right-4 z-50 px-6 py-3 bg-green-600 text-white rounded-lg shadow-lg flex items-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+         :class="toastIsError ? 'bg-red-600' : 'bg-green-600'"
+         class="fixed bottom-4 right-4 z-50 px-6 py-3 text-white rounded-lg shadow-lg flex items-center gap-2">
+        <svg x-show="!toastIsError" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <svg x-show="toastIsError" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
         <span x-text="toastMessage"></span>
     </div>

@@ -223,6 +223,9 @@ class WidgetSettings extends Component
         Cache::forget('widget_settings_faq');
         Cache::forget('widget_settings_tone');
         
+        // Dispatch notify event for Alpine.js to reset unsaved changes indicator
+        $this->dispatch('notify', 'Налаштування збережено!');
+        
         session()->flash('message', 'Налаштування збережено!');
     }
 

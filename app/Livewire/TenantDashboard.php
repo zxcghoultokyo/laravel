@@ -645,12 +645,12 @@ class TenantDashboard extends Component
         
         // Define funnel stages
         $stages = [
-            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️'],
-            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬'],
-            'message' => ['label' => 'Написали', 'icon' => '✍️'],
-            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆'],
-            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒'],
-            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅'],
+            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Унікальні сесії на сайті'],
+            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Клікнули на віджет'],
+            'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
+            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
+            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар в кошик (з чату)'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
         ];
         
         $funnel = [];
@@ -702,6 +702,7 @@ class TenantDashboard extends Component
                 'stage' => $eventType,
                 'label' => $stage['label'],
                 'icon' => $stage['icon'],
+                'hint' => $stage['hint'],
                 'count' => $count,
                 'rate' => $rate,
                 'dropoff' => $dropoff,

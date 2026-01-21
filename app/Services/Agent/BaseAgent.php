@@ -175,6 +175,13 @@ RULES;
     protected function getDefaultSystemPrompt(): string
     {
         $faqInfo = $this->loadFaqInfo();
+        
+        // Set tenant for ToneService to load correct brand rules
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        if ($tenantId) {
+            $this->toneService->setTenantId($tenantId);
+        }
+        
         $toneSection = $this->toneService->getFullPromptSection();
         $priceContext = $this->loadPriceContext();
 

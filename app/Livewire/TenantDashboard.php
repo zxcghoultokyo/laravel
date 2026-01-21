@@ -55,6 +55,11 @@ class TenantDashboard extends Component
         $this->loadStats();
         $this->loadChartData();
         $this->loadFunnelData();
+        
+        // Load conversions data if on conversions tab
+        if ($this->activeTab === 'conversions') {
+            $this->loadConversionsData();
+        }
     }
     
     /**
@@ -67,6 +72,11 @@ class TenantDashboard extends Component
             $this->loadChartData();
             $this->loadFunnelData();
         }
+        
+        // Ensure conversions data on conversions tab
+        if ($this->activeTab === 'conversions' && empty($this->conversionsData)) {
+            $this->loadConversionsData();
+        }
     }
     
     /**
@@ -78,6 +88,11 @@ class TenantDashboard extends Component
             $this->loadStats();
             $this->loadChartData();
             $this->loadFunnelData();
+        }
+        
+        // Ensure conversions data on conversions tab
+        if ($this->activeTab === 'conversions' && empty($this->conversionsData)) {
+            $this->loadConversionsData();
         }
     }
     

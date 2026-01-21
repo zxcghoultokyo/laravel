@@ -870,6 +870,38 @@ PROMPT;
                     ],
                 ],
             ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_available_sizes',
+                    'description' => 'Дізнатися які розміри є в наявності для товару. ОБОВ\'ЯЗКОВО використовуй при питаннях про розміри, наявність конкретного розміру, підбір розміру.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'article' => ['type' => 'string', 'description' => 'Артикул або ID товару'],
+                        ],
+                        'required' => ['article'],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'recommend_size',
+                    'description' => 'Підібрати розмір за замірами клієнта. Використовуй коли клієнт називає свої параметри (зріст, вагу, обхват).',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'article' => ['type' => 'string', 'description' => 'Артикул або ID товару'],
+                            'height' => ['type' => 'integer', 'description' => 'Зріст в см'],
+                            'weight' => ['type' => 'integer', 'description' => 'Вага в кг'],
+                            'chest' => ['type' => 'integer', 'description' => 'Обхват грудей в см'],
+                            'waist' => ['type' => 'integer', 'description' => 'Обхват талії в см'],
+                        ],
+                        'required' => ['article'],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -883,6 +915,8 @@ PROMPT;
             'get_popular_products' => $this->toolGetPopularProducts($args),
             'get_product_details' => $this->toolGetProductDetails($args),
             'get_order_status' => $this->toolGetOrderStatus($args),
+            'get_available_sizes' => $this->toolGetAvailableSizes($args),
+            'recommend_size' => $this->toolRecommendSize($args),
             default => ['error' => 'Unknown tool'],
         };
     }
@@ -1217,6 +1251,41 @@ PROMPT;
         } catch (\Throwable $e) {
             return ['error' => 'Не вдалось знайти замовлення'];
         }
+    }
+
+    /**
+     * Get available sizes for a product.
+     */
+    private function toolGetAvailableSizes(array $args): array
+    {
+        $article = $args['article'] ?? '';
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        
+        Log::info('toolGetAvailableSizes (streaming): fetching sizes', ['article' => $article, 'tenant_id' => $tenantId]);
+        
+        $sizeTool = app(\App\Services\Agent\Tools\GetAvailableSizesTool::class);
+        return $sizeTool->getSizes($article, $tenantId);
+    }
+
+    /**
+     * Recommend size based on customer measurements.
+     */
+    private function toolRecommendSize(array $args): array
+    {
+        $article = $args['article'] ?? '';
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        
+        $measurements = [
+            'height' => $args['height'] ?? null,
+            'weight' => $args['weight'] ?? null,
+            'chest' => $args['chest'] ?? null,
+            'waist' => $args['waist'] ?? null,
+        ];
+        
+        Log::info('toolRecommendSize (streaming): recommending', ['article' => $article, 'measurements' => $measurements]);
+        
+        $sizeTool = app(\App\Services\Agent\Tools\GetAvailableSizesTool::class);
+        return $sizeTool->recommendSize($article, $measurements, $tenantId);
     }
 
     /**

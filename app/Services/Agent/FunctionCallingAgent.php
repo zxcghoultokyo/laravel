@@ -608,10 +608,27 @@ _context (ОБОВ'ЯЗКОВО!):
 - Приклад: "дай посилання на плитоноску" → get_product_details(article="se6-4lj-2i9")
 
 РОЗМІРИ ТА ПАРАМЕТРИ КЛІЄНТА - КРИТИЧНО:
-- БЕЗ ТАБЛИЦІ РОЗМІРІВ у картці товару — НЕ ДАВАЙ конкретних рекомендацій типу "XL буде замала"!
-- Якщо не маєш даних розмірної сітки → чесно скажи і запропонуй get_product_details або контакт з оператором
-- Якщо клієнт дає НЕРЕАЛІСТИЧНІ параметри (обхват грудей 135 см при 85 кг) → ПЕРЕПИТАЙ, можливо помилка заміру!
-- НІКОЛИ не вигадуй розміри! Бери дані ТІЛЬКИ з картки товару або не давай рекомендацій
+- При БУДЬ-ЯКОМУ питанні про розмір → СПОЧАТКУ get_available_sizes(article) щоб дізнатися РЕАЛЬНІ наявні розміри!
+- НІКОЛИ не кажи "L/L є в наявності" без перевірки через get_available_sizes!
+- Коли клієнт дає заміри (зріст, вагу, обхват) → використовуй recommend_size(article, height, weight, chest, waist)!
+- recommend_size знає офіційну розмірну сітку ECWCS для військового одягу USA Army!
+- ECWCS розміри: Перша літера (S/M/L/XL) = ширина/повнота, Друга (XS/S/R/L) = зріст!
+- Приклад: L/R = Large по ширині (груди/талія), Regular по зросту (165-175 см)
+- БЕЗ перевірки get_available_sizes → НЕ ДАВАЙ конкретних рекомендацій типу "XL буде замала"!
+- Якщо recommend_size показує warning — попередь клієнта!
+
+ПОСЛІДОВНІСТЬ ПРИ ПІДБОРІ РОЗМІРУ:
+1. Клієнт питає "який розмір мені підійде?" → запитай зріст, вагу, обхват грудей/талії
+2. Клієнт дав параметри → recommend_size(article, height, weight, chest, waist)
+3. Покажи результат + всі доступні розміри з get_available_sizes
+4. Якщо рекомендований розмір відсутній → запропонуй найближчий доступний!
+
+ВАЖЛИВО ПРО АМЕРИКАНСЬКИЙ КРІЙ (ECWCS, US Army):
+- Американські розміри "великомірять" — зазвичай можна брати на розмір менше ніж українські!
+- Якщо клієнт носить український L — американський M або M/L може підійти
+- При великій вазі (110+ кг) звертай увагу на талію — вона визначає комфорт!
+- Talія > 100 см → радь XL або навіть XXL по ширині
+- Якщо клієнт "вже міряв" і каже що підійшло — ДОВІРЯЙ ЙОМУ, не сперечайся!
 
 ВАЛЮТИ ТА БЮДЖЕТ:
 - 1 EUR ≈ 42-44 грн (курс 2026)
@@ -837,6 +854,56 @@ PROMPT;
                                 'description' => 'Категорія для фільтрації брендів',
                             ],
                         ],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'get_available_sizes',
+                    'description' => 'Дізнатися які розміри є в наявності для товару. ОБОВ\'ЯЗКОВО використовуй при питаннях про розміри, наявність конкретного розміру, підбір розміру. Повертає всі доступні розміри + розмірну сітку для військового одягу.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'article' => [
+                                'type' => 'string',
+                                'description' => 'Артикул або ID товару',
+                            ],
+                        ],
+                        'required' => ['article'],
+                    ],
+                ],
+            ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'recommend_size',
+                    'description' => 'Підібрати розмір за замірами клієнта. Використовуй коли клієнт називає свої параметри (зріст, вагу, обхват грудей/талії). Повертає рекомендований розмір з пояснення.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'article' => [
+                                'type' => 'string',
+                                'description' => 'Артикул або ID товару',
+                            ],
+                            'height' => [
+                                'type' => 'integer',
+                                'description' => 'Зріст в сантиметрах',
+                            ],
+                            'weight' => [
+                                'type' => 'integer',
+                                'description' => 'Вага в кілограмах',
+                            ],
+                            'chest' => [
+                                'type' => 'integer',
+                                'description' => 'Обхват грудей в сантиметрах',
+                            ],
+                            'waist' => [
+                                'type' => 'integer',
+                                'description' => 'Обхват талії (по пупку) в сантиметрах',
+                            ],
+                        ],
+                        'required' => ['article'],
                     ],
                 ],
             ],
@@ -1160,6 +1227,8 @@ PROMPT;
             'get_order_status' => $this->toolGetOrderStatus($args),
             'get_categories' => $this->toolGetCategories(),
             'get_brands' => $this->toolGetBrands($args),
+            'get_available_sizes' => $this->toolGetAvailableSizes($args),
+            'recommend_size' => $this->toolRecommendSize($args),
             default => ['error' => 'Unknown tool'],
         };
     }
@@ -1658,6 +1727,59 @@ PROMPT;
         }
 
         return ['brands' => $brands];
+    }
+
+    /**
+     * Tool: Get available sizes for a product
+     */
+    private function toolGetAvailableSizes(array $args): array
+    {
+        $article = $args['article'] ?? '';
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        
+        Log::info('toolGetAvailableSizes: fetching sizes', ['article' => $article, 'tenant_id' => $tenantId]);
+        
+        $sizeTool = app(\App\Services\Agent\Tools\GetAvailableSizesTool::class);
+        $result = $sizeTool->getSizes($article, $tenantId);
+        
+        Log::info('toolGetAvailableSizes: result', [
+            'found' => $result['found'] ?? false,
+            'sizes_count' => count($result['available_sizes'] ?? []),
+        ]);
+        
+        return $result;
+    }
+
+    /**
+     * Tool: Recommend size based on customer measurements
+     */
+    private function toolRecommendSize(array $args): array
+    {
+        $article = $args['article'] ?? '';
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        
+        $measurements = [
+            'height' => $args['height'] ?? null,
+            'weight' => $args['weight'] ?? null,
+            'chest' => $args['chest'] ?? null,
+            'waist' => $args['waist'] ?? null,
+        ];
+        
+        Log::info('toolRecommendSize: recommending', [
+            'article' => $article, 
+            'measurements' => $measurements,
+            'tenant_id' => $tenantId,
+        ]);
+        
+        $sizeTool = app(\App\Services\Agent\Tools\GetAvailableSizesTool::class);
+        $result = $sizeTool->recommendSize($article, $measurements, $tenantId);
+        
+        Log::info('toolRecommendSize: result', [
+            'found' => $result['found'] ?? false,
+            'recommendation' => $result['recommendation'] ?? null,
+        ]);
+        
+        return $result;
     }
 
     /**

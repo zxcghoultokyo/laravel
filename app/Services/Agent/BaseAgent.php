@@ -1069,39 +1069,125 @@ PROMPT;
 
         $contextParts = [];
         $productCategories = [];
+        $shownProducts = [];
         $sizes = [];
         $colors = [];
+        $brands = [];
+        $priceRange = [];
+        $userQuestions = [];
 
         foreach ($history as $msg) {
             $content = $msg['content'] ?? '';
+            $role = $msg['role'] ?? '';
 
-            // Extract product categories from [Показані товари: ...]
+            // Collect last 3 user questions for context
+            if ($role === 'user' && mb_strlen($content) > 3) {
+                $userQuestions[] = mb_substr($content, 0, 100);
+            }
+
+            // Extract shown products from [Показані товари: ...]
             if (preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
                 $products = $matches[1];
-                if (preg_match('/(плитоноск|шолом|берц|рюкзак|підсумок|куртк|штан|футболк)/ui', $products, $catMatch)) {
-                    $productCategories[] = $catMatch[1];
+                $shownProducts[] = $products;
+                
+                // Extract categories from product names
+                $categoryPatterns = [
+                    'плитоноск' => 'плитоноски',
+                    'шолом|каск' => 'шоломи',
+                    'берц|черевик' => 'берці',
+                    'рюкзак' => 'рюкзаки',
+                    'підсумок|підсумк' => 'підсумки',
+                    'куртк' => 'куртки',
+                    'штан' => 'штани',
+                    'футболк' => 'футболки',
+                    'жилет|розвантаж' => 'жилети',
+                    'бронеплас' => 'бронеплати',
+                    'рукавиц|рукавич|перчатк' => 'рукавиці',
+                    'окуляр' => 'окуляри',
+                    'наколін|налокіт' => 'захист',
+                    'ремен|ремін|пояс' => 'ремені',
+                ];
+                foreach ($categoryPatterns as $pattern => $category) {
+                    if (preg_match("/($pattern)/ui", $products)) {
+                        $productCategories[] = $category;
+                    }
                 }
             }
 
-            // Extract sizes
-            if (preg_match('/\b(XS|S|M|L|XL|XXL|XXXL|[3-5]\d)\b/i', $content, $sizeMatch)) {
-                $sizes[] = strtoupper($sizeMatch[1]);
+            // Extract sizes (including numeric for shoes)
+            if (preg_match_all('/\b(XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|[3-4]\d)\b/i', $content, $sizeMatches)) {
+                foreach ($sizeMatches[1] as $size) {
+                    $sizes[] = strtoupper($size);
+                }
             }
 
-            // Extract colors
-            if (preg_match('/(чорн|олив|мультикам|койот|піксель|хакі)/ui', $content, $colorMatch)) {
-                $colors[] = $colorMatch[1];
+            // Extract colors (expanded list)
+            $colorPatterns = [
+                'чорн' => 'чорний',
+                'олив' => 'олива',
+                'мультикам|multicam' => 'мультикам',
+                'койот|coyote' => 'койот',
+                'піксель' => 'піксель',
+                'хакі|khaki' => 'хакі',
+                'ranger green|рейнджер грін' => 'Ranger Green',
+                'коричнев' => 'коричневий',
+                'сір|grey|gray' => 'сірий',
+                'біл|white' => 'білий',
+                'зелен|green' => 'зелений',
+                'синій|синя|blue' => 'синій',
+                'атакс|a-tacs' => 'A-TACS',
+            ];
+            foreach ($colorPatterns as $pattern => $color) {
+                if (preg_match("/($pattern)/ui", $content)) {
+                    $colors[] = $color;
+                }
+            }
+
+            // Extract brands
+            $brandPatterns = ['M-TAC', 'Helikon', 'Pentagon', 'Velmet', '5.11', 'UF PRO', 'Condor', 'Direct Action', 
+                'Crye', 'Ops-Core', 'Emerson', 'Wartech', 'Архангел', 'P1G', 'A-TAC', 'HRT'];
+            foreach ($brandPatterns as $brand) {
+                if (stripos($content, $brand) !== false) {
+                    $brands[] = $brand;
+                }
+            }
+
+            // Extract price preferences
+            if (preg_match('/(бюджетн|недорог|дешев)/ui', $content)) {
+                $priceRange[] = 'бюджетний';
+            }
+            if (preg_match('/(преміум|дорог|якісн|топов)/ui', $content)) {
+                $priceRange[] = 'преміум';
+            }
+            if (preg_match('/до\s*(\d+)\s*(грн|₴)/ui', $content, $priceMatch)) {
+                $priceRange[] = 'до ' . $priceMatch[1] . ' грн';
             }
         }
 
+        // Build rich context
         if (!empty($productCategories)) {
-            $contextParts[] = 'шукає: ' . implode(', ', array_unique($productCategories));
+            $contextParts[] = 'Шукає: ' . implode(', ', array_unique($productCategories));
+        }
+        if (!empty($shownProducts)) {
+            // Only last 2 shown product sets
+            $recentShown = array_slice(array_unique($shownProducts), -2);
+            $contextParts[] = 'Вже показано: ' . implode(' | ', $recentShown);
+        }
+        if (!empty($brands)) {
+            $contextParts[] = 'Бренди: ' . implode(', ', array_unique($brands));
         }
         if (!empty($sizes)) {
-            $contextParts[] = 'розміри: ' . implode(', ', array_unique($sizes));
+            $contextParts[] = 'Розміри: ' . implode(', ', array_unique($sizes));
         }
         if (!empty($colors)) {
-            $contextParts[] = 'кольори: ' . implode(', ', array_unique($colors));
+            $contextParts[] = 'Кольори: ' . implode(', ', array_unique($colors));
+        }
+        if (!empty($priceRange)) {
+            $contextParts[] = 'Ціна: ' . implode(', ', array_unique($priceRange));
+        }
+        if (!empty($userQuestions)) {
+            $recentQuestions = array_slice($userQuestions, -3);
+            $contextParts[] = 'Останні питання: ' . implode(' → ', $recentQuestions);
         }
 
         return implode('; ', $contextParts);

@@ -3696,19 +3696,23 @@
                 // Horoshop specific
                 document.querySelector('.hs-product-page') ||
                 document.querySelector('.j-product-container') ||
-                // Product page typically has add-to-cart button AND variant selectors
-                (document.querySelector('[data-add-to-cart], .add-to-cart, .buy-button') && 
-                 document.querySelector('[data-variant], .variant-select, .size-select, .hs-variants'));
+                document.querySelector('.hs-product-main') ||
+                document.querySelector('.product-main') ||
+                // Product page typically has add-to-cart button
+                document.querySelector('[data-add-to-cart], .add-to-cart, .buy-button, .hs-buy-btn');
             
-            // Product page URL patterns
+            // Product page URL patterns - Horoshop uses /slug-123 or /category/slug-123
             const isProductUrl = 
                 url.includes('/product/') ||
                 url.includes('/tovar/') ||
                 url.includes('/p/') ||
-                // Pattern: category/product-slug-123 where 123 is product ID
-                /\/[a-z-]+\/[a-z0-9-]+-\d+\/?$/.test(url);
+                // Horoshop pattern: /slug-123 or /category/slug-123 where 123 is product ID
+                /\/[a-z0-9-]+-\d+\/?$/i.test(url) ||
+                // Also match /{slug}/{product-name}-{id}
+                /\/[a-z0-9-]+\/[a-z0-9-]+-\d+\/?$/i.test(url);
             
-            if (hasProductSelectors && isProductUrl) {
+            // If we have strong product indicators (selectors), trust them even without perfect URL match
+            if (hasProductSelectors && (isProductUrl || document.querySelector('.hs-product-page, .j-product-container'))) {
                 return 'product';
             }
             

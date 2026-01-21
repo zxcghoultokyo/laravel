@@ -23,15 +23,19 @@ class ProactiveTriggersController extends Controller
             : 'proactive_triggers_rules_global';
 
         $rules = Cache::remember($cacheKey, 300, function () use ($tenantId) {
-            $query = ProactiveTriggerRule::enabled()->byPriority();
+            // Check if tenant_id column exists in the table
+            $hasTenantColumn = \Schema::hasColumn('proactive_trigger_rules', 'tenant_id');
             
-            // If tenant_id specified, get only that tenant's rules
-            // If no tenant_id, return rules where tenant_id is NULL (global rules for demo/testing)
-            if ($tenantId) {
+            // Disable TenantScope for API access - we filter manually
+            $query = ProactiveTriggerRule::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->enabled()
+                ->byPriority();
+            
+            if ($hasTenantColumn && $tenantId) {
+                // Filter by specific tenant
                 $query->where('tenant_id', $tenantId);
-            } else {
-                $query->whereNull('tenant_id');
             }
+            // If no tenant_id specified or column doesn't exist - return all enabled rules
             
             return $query->get()
                 ->map(fn($rule) => $rule->toWidgetFormat())

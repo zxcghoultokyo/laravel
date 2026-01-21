@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f0fdf4"/>
+      <stop offset="100%" style="stop-color:#dcfce7"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Decorative circles -->
+  <circle cx="100" cy="100" r="200" fill="#10b981" opacity="0.1"/>
+  <circle cx="1100" cy="530" r="250" fill="#10b981" opacity="0.1"/>
+  
+  <!-- Robot emoji -->
+  <text x="600" y="200" font-size="120" text-anchor="middle">🤖</text>
+  
+  <!-- Logo text -->
+  <text x="600" y="320" font-family="system-ui, sans-serif" font-size="72" font-weight="700" fill="#10b981" text-anchor="middle">AIntento</text>
+  
+  <!-- Tagline -->
+  <text x="600" y="400" font-family="system-ui, sans-serif" font-size="36" fill="#0f172a" text-anchor="middle">AI Асистент для e-commerce</text>
+  
+  <!-- Benefits -->
+  <text x="600" y="480" font-family="system-ui, sans-serif" font-size="24" fill="#64748b" text-anchor="middle">Підбір товарів • Консультації 24/7 • Аналітика продажів</text>
+  
+  <!-- CTA -->
+  <rect x="450" y="520" width="300" height="60" rx="30" fill="#10b981"/>
+  <text x="600" y="560" font-family="system-ui, sans-serif" font-size="22" fill="white" text-anchor="middle" font-weight="600">+15-30% конверсії</text>
+</svg>

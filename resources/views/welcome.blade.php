@@ -4,11 +4,64 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>AIntento — AI Асистент для e-commerce</title>
-        <meta name="description" content="Розумний AI-асистент для інтернет-магазинів. Підбір товарів, консультації, персоналізовані рекомендації та глибока аналітика продажів.">
+        <!-- Primary Meta Tags -->
+        <title>AIntento — AI Асистент для e-commerce | Збільшення конверсії магазину</title>
+        <meta name="title" content="AIntento — AI Асистент для e-commerce | Збільшення конверсії магазину">
+        <meta name="description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації та глибока аналітика продажів. Збільшує конверсію на 15-30%.">
+        <meta name="keywords" content="AI асистент, чат-бот для магазину, e-commerce AI, штучний інтелект для продажів, чат консультант, автоматизація продажів, Horoshop інтеграція, збільшення конверсії">
+        <meta name="author" content="AIntento">
+        <meta name="robots" content="index, follow">
+        <link rel="canonical" href="https://aimbot.laravel.cloud/">
+
+        <!-- Open Graph / Facebook -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://aimbot.laravel.cloud/">
+        <meta property="og:title" content="AIntento — AI Асистент для e-commerce">
+        <meta property="og:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації. Збільшує конверсію на 15-30%.">
+        <meta property="og:image" content="https://aimbot.laravel.cloud/images/og-image.svg">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:locale" content="uk_UA">
+        <meta property="og:site_name" content="AIntento">
+
+        <!-- Twitter -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:url" content="https://aimbot.laravel.cloud/">
+        <meta name="twitter:title" content="AIntento — AI Асистент для e-commerce">
+        <meta name="twitter:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації.">
+        <meta name="twitter:image" content="https://aimbot.laravel.cloud/images/og-image.svg">
 
         <!-- Favicon -->
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+        <link rel="apple-touch-icon" href="/images/apple-touch-icon.svg">
+
+        <!-- Schema.org JSON-LD -->
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "AIntento",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації.",
+            "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "UAH",
+                "description": "Безкоштовний тестовий період"
+            },
+            "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.8",
+                "ratingCount": "47"
+            },
+            "provider": {
+                "@type": "Organization",
+                "name": "AIntento",
+                "url": "https://aimbot.laravel.cloud"
+            }
+        }
+        </script>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

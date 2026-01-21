@@ -48,6 +48,17 @@
                     </button>
                 @endif
                 
+                <!-- Copy Report Button -->
+                <button 
+                    wire:click="copyReport"
+                    class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                    title="Копіювати звіт"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                </button>
+                
                 <!-- Mobile Info Button -->
                 <button 
                     @click="showSidebar = true" 
@@ -550,6 +561,21 @@
         if (container) {
             container.scrollTop = container.scrollHeight;
         }
+        
+        // Listen for clipboard copy events
+        Livewire.on('clipboard-copy', ({ text }) => {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show brief notification
+                const notification = document.createElement('div');
+                notification.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                notification.textContent = '✓ Звіт скопійовано';
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Не вдалося скопіювати: ' + err);
+            });
+        });
     });
     
     // Scroll after Livewire updates

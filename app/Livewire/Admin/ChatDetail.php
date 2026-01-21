@@ -273,6 +273,56 @@ class ChatDetail extends Component
 
         $this->dispatch('clipboard-copy', text: $summary);
     }
+    
+    /**
+     * Copy full chat report for debugging purposes.
+     * Formats all messages with timestamps, intents, and product info.
+     */
+    public function copyReport()
+    {
+        $report = "=== CHAT REPORT ===\n";
+        $report .= "session_id: {$this->session->session_id}\n";
+        $report .= "tenant_id: " . ($this->session->tenant_id ?? 'null') . "\n";
+        $report .= "created_at: {$this->session->created_at}\n";
+        $report .= "messages_count: {$this->session->messages_count}\n";
+        $report .= "last_intent: " . ($this->session->last_intent ?? 'none') . "\n";
+        $report .= "\n=== MESSAGES ===\n\n";
+        
+        foreach ($this->messages as $msg) {
+            $time = $msg->created_at ? $msg->created_at->format('H:i') : '??:??';
+            $role = strtoupper($msg->role);
+            
+            if ($msg->role === 'user') {
+                $report .= "👤 Клієнт\n{$time}\n{$msg->content}\n\n";
+            } else {
+                $report .= "🤖 AI\n{$time}\n{$msg->content}\n";
+                
+                // Add intent if available
+                $meta = $msg->meta ?? [];
+                if (!empty($meta['intent'])) {
+                    $report .= "{$meta['intent']}\n";
+                }
+                
+                // Add shown products
+                $products = $meta['products'] ?? [];
+                if (!empty($products)) {
+                    $report .= "· " . count($products) . " товарів\n";
+                    foreach ($products as $p) {
+                        $title = $p['title'] ?? 'Без назви';
+                        $article = $p['article'] ?? '';
+                        $report .= "📦 {$title}" . ($article ? " (арт. {$article})" : "") . "\n";
+                    }
+                }
+                
+                $report .= "\n";
+            }
+        }
+        
+        $report .= "=== END REPORT ===\n";
+        $report .= $this->session->session_id . "\n";
+        
+        $this->dispatch('clipboard-copy', text: $report);
+    }
 
     public function render()
     {

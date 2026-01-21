@@ -47,6 +47,9 @@ class StreamingFunctionCallingAgent
     
     // Context for prompt preset matching
     private array $currentContext = [];
+    
+    // Track shown product IDs to exclude from subsequent searches
+    private array $shownProductIds = [];
 
     public function __construct(
         MeiliProductSearchTool $searchTool,
@@ -100,10 +103,14 @@ class StreamingFunctionCallingAgent
         $history = $this->loadConversationHistory($sessionId);
         $conversationContext = $this->extractConversationContext($history);
         
+        // Load shown product IDs to exclude from subsequent searches
+        $this->shownProductIds = $this->extractShownProductIds($sessionId);
+        
         Log::info('StreamingAgent: loaded history', [
             'session_id' => $sessionId,
             'history_count' => count($history),
             'context' => $conversationContext,
+            'shown_product_ids' => count($this->shownProductIds),
         ]);
 
         // Build conversation with history
@@ -174,6 +181,22 @@ class StreamingFunctionCallingAgent
                 ]);
                 
                 $result = $this->executeTool($functionName, $args);
+                
+                // For popular products, filter out already shown products after cache retrieval
+                if ($functionName === 'get_popular_products' && !empty($result['products']) && !empty($this->shownProductIds)) {
+                    $beforeCount = count($result['products']);
+                    $result['products'] = array_filter(
+                        $result['products'], 
+                        fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds)
+                    );
+                    $result['products'] = array_values($result['products']);
+                    $result['count'] = count($result['products']);
+                    
+                    Log::info('StreamingAgent: filtered popular products', [
+                        'before' => $beforeCount,
+                        'after' => count($result['products']),
+                    ]);
+                }
                 
                 // Collect products from various tools
                 if (in_array($functionName, ['search_products', 'get_popular_products']) && !empty($result['products'])) {
@@ -956,11 +979,17 @@ PROMPT;
             $filters['sort_by'] = $sortBy;
         }
 
-        Log::info('toolSearchProducts (streaming): args', ['args' => $args, 'sort_by' => $sortBy]);
+        Log::info('toolSearchProducts (streaming): args', [
+            'args' => $args, 
+            'sort_by' => $sortBy,
+            'exclude_shown_count' => count($this->shownProductIds),
+        ]);
 
-        $results = $this->searchTool->search($query, $filters, $limit * 3);
+        // Request more results to have room after filtering shown products
+        $requestLimit = $limit * 3 + count($this->shownProductIds);
+        $results = $this->searchTool->search($query, $filters, $requestLimit);
 
-        // Filter by exclude
+        // Filter by exclude text
         if (!empty($args['exclude']) && !empty($results)) {
             $exclude = mb_strtolower($args['exclude']);
             $results = array_filter($results, fn($p) => !str_contains(mb_strtolower($p['title'] ?? ''), $exclude));
@@ -990,6 +1019,19 @@ PROMPT;
                 return str_contains($searchText, $color);
             });
             $results = array_values($results);
+        }
+        
+        // CRITICAL: Exclude already shown products from this session
+        if (!empty($this->shownProductIds) && !empty($results)) {
+            $beforeCount = count($results);
+            $results = array_filter($results, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
+            $results = array_values($results);
+            
+            Log::info('toolSearchProducts: excluded shown products', [
+                'before' => $beforeCount,
+                'after' => count($results),
+                'excluded_ids' => $this->shownProductIds,
+            ]);
         }
 
         $results = array_slice($results, 0, $limit);
@@ -1780,5 +1822,45 @@ PROMPT;
         if (empty($context)) return null;
         
         return implode('; ', $context);
+    }
+    
+    /**
+     * Extract shown product IDs from session history (from DB meta).
+     * Used to exclude already shown products in follow-up searches.
+     */
+    private function extractShownProductIds(?string $sessionId): array
+    {
+        if (!$sessionId) return [];
+        
+        try {
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
+            if (!$session) return [];
+
+            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
+                ->where('role', 'assistant')
+                ->whereNotNull('meta')
+                ->orderBy('created_at', 'desc')
+                ->limit(20)
+                ->get();
+
+            $shownIds = [];
+            foreach ($messages as $msg) {
+                $meta = $msg->meta ?? [];
+                $products = $meta['products'] ?? [];
+                foreach ($products as $p) {
+                    if (!empty($p['id'])) {
+                        $shownIds[] = (int) $p['id'];
+                    }
+                }
+            }
+            
+            return array_unique($shownIds);
+        } catch (\Exception $e) {
+            Log::error('StreamingAgent: failed to extract shown ids', ['error' => $e->getMessage()]);
+            return [];
+        }
     }
 }

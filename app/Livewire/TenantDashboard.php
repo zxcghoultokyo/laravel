@@ -99,24 +99,55 @@ class TenantDashboard extends Component
             'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
         ];
         
+        // Pre-calculate checkout_success count from orders table (more reliable source)
+        $checkoutCountFromOrders = 0;
+        if (Schema::hasTable('orders')) {
+            try {
+                $tenantSessionIds = DB::table('chat_sessions')
+                    ->where('tenant_id', $this->tenant->id)
+                    ->pluck('session_id')
+                    ->toArray();
+                
+                if (!empty($tenantSessionIds)) {
+                    $checkoutCountFromOrders = DB::table('orders')
+                        ->where('created_at', '>=', $startDate)
+                        ->where('had_chat', true)
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->count();
+                }
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
+        
         $funnel = [];
         $prevCount = 0;
         
         foreach ($stages as $eventType => $stage) {
             try {
-                $query = DB::table('chat_events')
-                    ->where('event_type', $eventType)
-                    ->whereBetween('created_at', [$startDate, $endDate]);
-                
-                // Filter by merchant_id
-                $query->where(function($q) use ($slug, $apiToken) {
-                    $q->where('merchant_id', $slug);
-                    if ($apiToken) {
-                        $q->orWhere('merchant_id', $apiToken);
+                // For checkout_success, prefer orders table count (it's the source of truth)
+                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                    $count = $checkoutCountFromOrders;
+                } else {
+                    $query = DB::table('chat_events')
+                        ->where('event_type', $eventType)
+                        ->whereBetween('created_at', [$startDate, $endDate]);
+                    
+                    // Filter by merchant_id
+                    $query->where(function($q) use ($slug, $apiToken) {
+                        $q->where('merchant_id', $slug);
+                        if ($apiToken) {
+                            $q->orWhere('merchant_id', $apiToken);
+                        }
+                    });
+                    
+                    $count = $query->distinct('session_id')->count('session_id');
+                    
+                    // For checkout_success, also add orders that might not be in chat_events
+                    if ($eventType === 'checkout_success') {
+                        $count = max($count, $checkoutCountFromOrders);
                     }
-                });
-                
-                $count = $query->distinct('session_id')->count('session_id');
+                }
             } catch (\Throwable $e) {
                 $count = 0;
             }

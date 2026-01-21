@@ -26,6 +26,14 @@ use App\Models\WidgetSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @deprecated Use FunctionCallingAgent or StreamingFunctionCallingAgent instead.
+ * This class is kept for backward compatibility with test files and artisan commands.
+ * 
+ * Primary chat flow now uses:
+ * - StreamingFunctionCallingAgent for SSE streaming (widget)
+ * - FunctionCallingAgent for non-streaming API calls
+ */
 class AgentOrchestrator
 {
     private BrandDetectionService $brandDetectionService;

@@ -67,7 +67,7 @@ class ChatStatsService
             'sessions' => $sessions,
             'messages' => $messages,
             'user_messages' => $userMessages,
-            'unique_users' => $messagesStats['unique_sessions'], // session_id as proxy for user
+            'unique_users' => $sessions, // Same as sessions (1 session = 1 user visit)
             'avg_messages' => $avgMessages,
             
             // Product engagement

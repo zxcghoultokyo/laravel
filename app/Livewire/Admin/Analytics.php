@@ -35,7 +35,7 @@ class Analytics extends Component
     
     // Tenant context
     public ?int $tenantId = null;
-    public array $merchantIds = [];  // All merchant identifiers (slug + all api_tokens)
+    public array $merchantIds = [];  // Fallback: all merchant identifiers (slug + all api_tokens)
 
     public function mount()
     {
@@ -45,7 +45,7 @@ class Analytics extends Component
             $user = auth()->user();
             if ($user && $user->tenant_id) {
                 $this->tenantId = $user->tenant_id;
-                // Get ALL merchant identifiers: slug + all api_tokens
+                // Also load merchant_ids as fallback for old records without tenant_id
                 $tenant = $user->tenant;
                 if ($tenant) {
                     $this->merchantIds = [$tenant->slug];
@@ -196,6 +196,9 @@ class Analytics extends Component
             'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
         ];
         
+        // Check if tenant_id column exists (new schema)
+        $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
+        
         // Pre-calculate checkout_success from orders table (more reliable)
         $checkoutCountFromOrders = 0;
         if (Schema::hasTable('orders') && $this->tenantId) {
@@ -230,8 +233,20 @@ class Analytics extends Component
                         ->where('event_type', $eventType)
                         ->where('created_at', '>=', $startDate);
                     
-                    // Filter by merchant_ids for tenant isolation (includes slug + all api_tokens)
-                    if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
+                    // Filter by tenant_id (preferred) or merchant_ids (fallback for old records)
+                    if ($this->tenantId && $hasTenantIdColumn) {
+                        // Use tenant_id for new records + merchant_ids for old records
+                        $query->where(function($q) {
+                            $q->where('tenant_id', $this->tenantId);
+                            if (!empty($this->merchantIds)) {
+                                $q->orWhere(function($q2) {
+                                    $q2->whereNull('tenant_id')
+                                       ->whereIn('merchant_id', $this->merchantIds);
+                                });
+                            }
+                        });
+                    } elseif (!empty($this->merchantIds)) {
+                        // Fallback to merchant_ids only
                         $query->whereIn('merchant_id', $this->merchantIds);
                     }
                     

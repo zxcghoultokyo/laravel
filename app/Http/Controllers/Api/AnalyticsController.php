@@ -51,6 +51,11 @@ class AnalyticsController extends Controller
 
         try {
             $rows = [];
+            
+            // Pre-resolve tenant_id from merchant_id for all events
+            // merchant_id can be either tenant slug or api_token
+            $tenantCache = [];
+            
             foreach ($events as $event) {
                 // Validate required fields
                 if (empty($event['event_type']) || empty($event['session_id'])) {
@@ -96,10 +101,37 @@ class AnalyticsController extends Controller
                 if (!empty($event['product_title'])) {
                     $metadata['product_title'] = $event['product_title'];
                 }
+                
+                // Resolve tenant_id from merchant_id (slug) or tenant_id from event
+                $merchantId = $event['merchant_id'] ?? '';
+                $tenantId = $event['tenant_id'] ?? null;
+                
+                if (!$tenantId && $merchantId) {
+                    // Check cache first
+                    if (!isset($tenantCache[$merchantId])) {
+                        // Try to find tenant by slug first
+                        $tenant = DB::table('tenants')->where('slug', $merchantId)->first();
+                        if (!$tenant) {
+                            // Try to find by api_token in widget_settings
+                            $widgetSettings = DB::table('widget_settings')
+                                ->where('api_token', $merchantId)
+                                ->first();
+                            if ($widgetSettings) {
+                                $tenantId = $widgetSettings->tenant_id;
+                            }
+                        } else {
+                            $tenantId = $tenant->id;
+                        }
+                        $tenantCache[$merchantId] = $tenantId;
+                    } else {
+                        $tenantId = $tenantCache[$merchantId];
+                    }
+                }
 
                 $rows[] = [
                     'session_id' => substr($event['session_id'] ?? '', 0, 64),
-                    'merchant_id' => substr($event['merchant_id'] ?? '', 0, 64),
+                    'merchant_id' => substr($merchantId, 0, 64),
+                    'tenant_id' => $tenantId,
                     'event_type' => substr($event['event_type'] ?? '', 0, 50),
                     'event_source' => substr($event['event_source'] ?? 'widget', 0, 30),
                     'product_id' => $event['product_id'] ?? null,

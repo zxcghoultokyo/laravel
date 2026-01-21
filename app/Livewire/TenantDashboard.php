@@ -684,20 +684,18 @@ class TenantDashboard extends Component
     {
         $tenant = $this->tenant;
         $startDate = now()->subDays(30);
+        $tenantId = $tenant->id;
         
-        // Get ALL merchant identifiers for filtering
-        // Tenant can have multiple widget settings with different api_tokens
+        // Get ALL merchant identifiers for fallback filtering (old records)
         $slug = $tenant->slug;
-        
-        // Get all api_tokens from all widget settings for this tenant
-        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenant->id)
+        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenantId)
             ->pluck('api_token')
             ->filter()
             ->toArray();
+        $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
         
-        // All possible merchant_ids: slug + all tokens
-        $merchantIds = array_merge([$slug], $apiTokens);
-        $merchantIds = array_unique(array_filter($merchantIds));
+        // Check if tenant_id column exists
+        $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
         
         // Define funnel stages
         $stages = [
@@ -714,13 +712,27 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // Count events - filter by ANY of the merchant identifiers
-                $count = DB::table('chat_events')
+                $query = DB::table('chat_events')
                     ->where('event_type', $eventType)
-                    ->where('created_at', '>=', $startDate)
-                    ->whereIn('merchant_id', $merchantIds)
-                    ->distinct('session_id')
-                    ->count('session_id');
+                    ->where('created_at', '>=', $startDate);
+                
+                // Filter by tenant_id (new records) OR merchant_id (old records)
+                if ($hasTenantIdColumn) {
+                    $query->where(function($q) use ($tenantId, $merchantIds) {
+                        $q->where('tenant_id', $tenantId);
+                        if (!empty($merchantIds)) {
+                            $q->orWhere(function($q2) use ($merchantIds) {
+                                $q2->whereNull('tenant_id')
+                                   ->whereIn('merchant_id', $merchantIds);
+                            });
+                        }
+                    });
+                } else {
+                    // Fallback: only merchant_id
+                    $query->whereIn('merchant_id', $merchantIds);
+                }
+                
+                $count = $query->distinct('session_id')->count('session_id');
             } catch (\Throwable $e) {
                 \Log::error('TenantDashboard loadFunnelData error', [
                     'stage' => $eventType,

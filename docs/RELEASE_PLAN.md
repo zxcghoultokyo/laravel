@@ -17,7 +17,7 @@
 | Admin Tenant API | ✅ | `app/Http/Controllers/Api/Admin/TenantController.php` |
 | Laravel Breeze Auth | ✅ | Custom registration with tenant |
 | Onboarding Wizard | ✅ | `app/Http/Controllers/OnboardingController.php` (5 steps) |
-| Tenant Dashboard | ✅ | `app/Http/Controllers/TenantDashboardController.php` |
+| Tenant Dashboard | ✅ | `app/Http/Controllers/Tenant DashboardController.php` |
 
 ### ✅ Phase 2: Monetization - ЗАВЕРШЕНО!
 

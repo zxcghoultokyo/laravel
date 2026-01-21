@@ -53,10 +53,17 @@ class SyncHoroshopProductsJob implements ShouldQueue
         
         $cacheKey = "sync_running_{$this->tenantId}";
         
-        // Check if cancelled
-        if (!Cache::get($cacheKey)) {
+        // Check if cancelled (only if flag was set - for manual runs with cancel button)
+        // For scheduled runs, flag might not be set, so we proceed anyway
+        $wasManuallyStarted = Cache::has($cacheKey);
+        if ($wasManuallyStarted && !Cache::get($cacheKey)) {
             Log::info('SyncHoroshopProductsJob: Sync was cancelled', ['tenant_id' => $this->tenantId]);
             return;
+        }
+        
+        // Set flag for scheduled runs (so cancel button works if someone clicks it)
+        if (!$wasManuallyStarted) {
+            Cache::put($cacheKey, true, now()->addMinutes(30));
         }
         
         $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, "Tenant sync: {$tenant->name}");

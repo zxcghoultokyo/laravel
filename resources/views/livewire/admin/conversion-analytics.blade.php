@@ -32,7 +32,7 @@
         </button>
         <button wire:click="setTab('cart')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $activeTab === 'cart' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
-            🛒 Кошик ({{ count($conversions) }})
+            🛒 Кошик ({{ count($chatAttributedConversions) }})
         </button>
         <button wire:click="setTab('orders')" 
                 class="px-4 py-2 rounded-md text-sm font-medium transition {{ $activeTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-600 hover:text-gray-900' }}">
@@ -138,30 +138,29 @@
         
     @elseif($activeTab === 'cart')
         <!-- Cart (Add to Cart) Tab -->
+        @php
+            $cartFromChat = count($chatAttributedConversions);
+            $uniqueCartSessions = collect($chatAttributedConversions)->pluck('session_id')->unique()->count();
+            $avgCartPerSession = $uniqueCartSessions > 0 ? round($cartFromChat / $uniqueCartSessions, 1) : 0;
+            // Сума вартості товарів доданих в кошик через чат
+            $cartValue = collect($chatAttributedConversions)->sum('product_price');
+        @endphp
         <div class="grid grid-cols-4 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="text-3xl font-bold text-gray-700">{{ count($conversions) }}</div>
-                <div class="text-sm text-gray-500">Всього add to cart</div>
-            </div>
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">
-                <div class="text-3xl font-bold text-green-700">{{ count($chatAttributedConversions) }}</div>
-                <div class="text-sm text-green-600">Після чату</div>
+                <div class="text-3xl font-bold text-green-700">{{ $cartFromChat }}</div>
+                <div class="text-sm text-green-600">🛒 Кошиків з чату</div>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
-                @php
-                    $conversionRate = count($conversions) > 0 
-                        ? round(count($chatAttributedConversions) / count($conversions) * 100, 1) 
-                        : 0;
-                @endphp
-                <div class="text-3xl font-bold text-blue-600">{{ $conversionRate }}%</div>
-                <div class="text-sm text-gray-500">Атрибуція чату</div>
+                <div class="text-3xl font-bold text-purple-600">{{ $uniqueCartSessions }}</div>
+                <div class="text-sm text-gray-500">👤 Унікальних покупців</div>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
-                @php
-                    $uniqueSessions = collect($chatAttributedConversions)->pluck('session_id')->unique()->count();
-                @endphp
-                <div class="text-3xl font-bold text-purple-600">{{ $uniqueSessions }}</div>
-                <div class="text-sm text-gray-500">Сесій з конверсією</div>
+                <div class="text-3xl font-bold text-blue-600">{{ $avgCartPerSession }}</div>
+                <div class="text-sm text-gray-500">📊 Товарів на покупця</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="text-3xl font-bold text-amber-600">{{ number_format($cartValue, 0, ',', ' ') }} ₴</div>
+                <div class="text-sm text-gray-500">💰 Сума кошиків</div>
             </div>
         </div>
 

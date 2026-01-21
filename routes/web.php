@@ -6,6 +6,12 @@ use App\Http\Controllers\ProfileController;
 use App\Livewire\TenantDashboard;
 use Illuminate\Support\Facades\Route;
 
+// Google Search Console verification
+Route::get('/google3a1c663d9af9f4c5.html', function () {
+    return response('google-site-verification: google3a1c663d9af9f4c5.html', 200)
+        ->header('Content-Type', 'text/html');
+});
+
 Route::get('/', function () {
     return view('welcome');
 });

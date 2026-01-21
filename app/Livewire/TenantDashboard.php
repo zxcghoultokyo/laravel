@@ -711,7 +711,12 @@ class TenantDashboard extends Component
                         });
                     }
                     
-                    $count = $query->distinct('session_id')->count('session_id');
+                    // For add_to_cart: count items (not distinct sessions) to match cart tab
+                    if ($eventType === 'add_to_cart') {
+                        $count = $query->count();
+                    } else {
+                        $count = $query->distinct('session_id')->count('session_id');
+                    }
                     
                     // For checkout_success, also check orders if chat_events is 0
                     if ($eventType === 'checkout_success') {

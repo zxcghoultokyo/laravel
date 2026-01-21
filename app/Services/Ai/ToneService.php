@@ -12,7 +12,14 @@ use Illuminate\Support\Facades\Cache;
 class ToneService
 {
     /**
+     * Current tenant ID for per-tenant settings.
+     */
+    private ?int $tenantId = null;
+
+    /**
      * Tone definitions with Ukrainian descriptions and prompt modifiers.
+     */
+    private const TONES = [
      */
     private const TONES = [
         'official' => [
@@ -144,6 +151,15 @@ RULES;
     }
 
     /**
+     * Set current tenant ID for settings lookup.
+     */
+    public function setTenantId(?int $tenantId): self
+    {
+        $this->tenantId = $tenantId;
+        return $this;
+    }
+
+    /**
      * Get current store tone from settings.
      */
     public function getStoreTone(): string
@@ -162,12 +178,23 @@ RULES;
     }
 
     /**
-     * Get cached widget settings.
+     * Get cached widget settings for current tenant.
      */
     private function getSettings(): ?WidgetSettings
     {
-        return Cache::remember('widget_settings_tone', 300, function () {
-            return WidgetSettings::first();
+        // Cache per tenant to avoid cross-tenant data leakage
+        $cacheKey = 'widget_settings_tone:' . ($this->tenantId ?? 'global');
+        
+        return Cache::remember($cacheKey, 300, function () {
+            if ($this->tenantId) {
+                // Bypass global scope and filter by tenant explicitly
+                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $this->tenantId)
+                    ->first();
+            }
+            
+            // Fallback to first available (legacy behavior)
+            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
     }
 }

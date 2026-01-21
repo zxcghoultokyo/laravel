@@ -65,6 +65,10 @@ class FunctionCallingAgent
     {
         $sessionId = $context['session_id'] ?? null;
         
+        // Set tenant context for tone service
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $this->toneService->setTenantId($tenantId);
+        
         Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId]);
 
         // Build conversation history

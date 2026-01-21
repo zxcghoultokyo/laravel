@@ -85,6 +85,10 @@ class StreamingFunctionCallingAgent
      */
     public function stream(string $message, ?string $sessionId = null): Generator
     {
+        // Set tenant context for tone service
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $this->toneService->setTenantId($tenantId);
+        
         // Log user message to DB
         $this->logUserMessage($sessionId, $message);
         

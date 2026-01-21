@@ -9,6 +9,7 @@ use App\Models\Tenant;
 use App\Scopes\TenantScope;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Livewire\Attributes\On;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -805,6 +806,16 @@ class TenantDashboard extends Component
     public function selectChat(string $sessionId)
     {
         $this->selectedChatId = $sessionId;
+    }
+    
+    /**
+     * Handle openChat event from embedded Analytics component
+     */
+    #[On('openChat')]
+    public function openChatFromEvent(string $sessionId)
+    {
+        $this->activeTab = 'chats';
+        $this->selectChat($sessionId);
     }
     
     public function closeChat()

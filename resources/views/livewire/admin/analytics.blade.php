@@ -432,10 +432,18 @@
                                 <span class="text-xs text-gray-400 w-16">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</span>
                                 <span>{{ $eventIcon }}</span>
                                 <span class="text-gray-600">{{ $event->event_type }}</span>
-                                <a href="{{ route('admin.chats.show', $event->session_id) }}" 
-                                   class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
-                                    {{ substr($event->session_id, -12) }}
-                                </a>
+                                @if($embedded)
+                                    {{-- In embedded mode, link to dashboard with chat params --}}
+                                    <a href="{{ url('/dashboard') }}?activeTab=chats&selectedChatId={{ $event->session_id }}"
+                                       class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                        {{ substr($event->session_id, -12) }}
+                                    </a>
+                                @else
+                                    <a href="{{ route('admin.chats.show', $event->session_id) }}" 
+                                       class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                        {{ substr($event->session_id, -12) }}
+                                    </a>
+                                @endif
                             </div>
                         @endforeach
                     </div>

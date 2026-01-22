@@ -35,8 +35,63 @@ class SyncHoroshopProductsJob implements ShouldQueue
             return;
         }
         
-        // Global sync (legacy mode)
-        $this->syncGlobal($productService);
+        // Global sync: iterate over all tenants with Horoshop credentials
+        $this->syncAllTenants($productService);
+    }
+
+    /**
+     * Sync products for all tenants with Horoshop platform.
+     */
+    protected function syncAllTenants(ProductService $productService): void
+    {
+        $tenants = Tenant::whereNotNull('platform_credentials')
+            ->where('platform', 'horoshop')
+            ->get();
+        
+        if ($tenants->isEmpty()) {
+            Log::warning('SyncHoroshopProductsJob: No tenants with Horoshop credentials found');
+            return;
+        }
+        
+        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, "All tenants sync ({$tenants->count()} tenants)");
+        $results = [];
+        $errors = [];
+        
+        foreach ($tenants as $tenant) {
+            try {
+                // Check if tenant has valid credentials
+                $creds = $tenant->platform_credentials;
+                if (empty($creds['domain']) || empty($creds['login'])) {
+                    Log::warning('SyncHoroshopProductsJob: Tenant has incomplete credentials', ['tenant_id' => $tenant->id]);
+                    continue;
+                }
+                
+                $result = $productService->syncFromHoroshopForTenant($tenant, $this->limit);
+                $results[$tenant->id] = $result;
+                
+                // Update tenant last_sync_at
+                $tenant->update(['last_sync_at' => now()]);
+                
+                Log::info('SyncHoroshopProductsJob completed for tenant', [
+                    'tenant_id' => $tenant->id,
+                    'tenant_name' => $tenant->name,
+                    'result' => $result,
+                ]);
+            } catch (\Throwable $e) {
+                $errors[$tenant->id] = $e->getMessage();
+                Log::error('SyncHoroshopProductsJob failed for tenant', [
+                    'tenant_id' => $tenant->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        
+        $syncLog->complete([
+            'tenants_processed' => count($results),
+            'tenants_failed' => count($errors),
+            'results' => $results,
+            'errors' => $errors,
+        ]);
     }
 
     /**
@@ -96,28 +151,4 @@ class SyncHoroshopProductsJob implements ShouldQueue
             // Clear running flag
             Cache::forget($cacheKey);
         }
-    }
-
-    /**
-     * Global sync (legacy mode for main tenant).
-     */
-    protected function syncGlobal(ProductService $productService): void
-    {
-        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, "Full sync (limit: {$this->limit})");
-        
-        try {
-            $result = $productService->syncFromHoroshop($this->limit);
-            
-            $syncLog->complete([
-                'limit' => $this->limit,
-                'result' => $result,
-            ]);
-            
-            Log::info('SyncHoroshopProductsJob completed', ['limit' => $this->limit, 'result' => $result]);
-        } catch (\Throwable $e) {
-            $syncLog->fail($e->getMessage());
-            Log::error('SyncHoroshopProductsJob failed', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-}
+    }}

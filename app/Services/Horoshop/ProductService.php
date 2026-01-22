@@ -101,11 +101,14 @@ class ProductService
         $created = 0;
         $updated = 0;
         $total = 0;
+        
+        // Set running flag for cancel functionality
+        $cacheKey = "sync_running_{$tenant->id}";
+        \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addHour());
 
         do {
-            // Check if cancelled
-            $cacheKey = "sync_running_{$tenant->id}";
-            if (!\Illuminate\Support\Facades\Cache::get($cacheKey)) {
+            // Check if cancelled (only if explicitly set to false)
+            if (\Illuminate\Support\Facades\Cache::get($cacheKey) === false) {
                 Log::info('Sync cancelled for tenant', ['tenant_id' => $tenant->id]);
                 break;
             }

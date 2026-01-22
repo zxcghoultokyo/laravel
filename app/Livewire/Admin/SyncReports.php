@@ -481,7 +481,7 @@ class SyncReports extends Component
         
         // Map commands to job classes with optional constructor arguments
         $jobMap = [
-            'horoshop:sync' => ['class' => \App\Jobs\SyncHoroshopProductsJob::class, 'args' => [200]], // limit=200
+            'horoshop:sync' => ['class' => \App\Jobs\SyncHoroshopProductsJob::class, 'args' => [null, 200], 'all_tenants' => true], // tenantId=null, limit=200, sync all
             'products:build-ai-index' => ['class' => \App\Jobs\AnalyzeProductsWithAiJob::class, 'args' => [50]], // batchSize=50
             'products:generate-embeddings' => ['class' => \App\Jobs\GenerateProductEmbeddingsJob::class, 'args' => [50, 100]], // batchSize=50, limit=100
             'colors:detect' => ['class' => \App\Jobs\DetectProductColorsJob::class, 'args' => [100, null, true, false]], // batchSize=100, allTenants, analyzeImages, notDryRun
@@ -496,16 +496,45 @@ class SyncReports extends Component
         
         $jobClass = $jobConfig['class'];
         $args = $jobConfig['args'] ?? [];
+        $allTenants = $jobConfig['all_tenants'] ?? false;
         
         try {
-            // Create job instance with arguments if any
-            $job = empty($args) ? new $jobClass() : new $jobClass(...$args);
-            
-            // Dispatch to queue
-            dispatch($job)->onQueue('default');
-            
-            session()->flash('message', "🚀 Команду '{$command}' запущено у фоновому режимі. Перевірте статус через 1-2 хвилини.");
-            \Log::info("SyncReports dispatched to queue", ['command' => $command, 'job' => $jobClass]);
+            // For commands that should run for all tenants, dispatch multiple jobs
+            if ($allTenants) {
+                $tenants = \App\Models\Tenant::whereNotNull('platform_credentials')
+                    ->where('platform', 'horoshop')
+                    ->get();
+                
+                $dispatched = 0;
+                foreach ($tenants as $tenant) {
+                    // Check if tenant has valid credentials
+                    $creds = $tenant->platform_credentials;
+                    if (empty($creds['domain']) || empty($creds['login'])) {
+                        continue;
+                    }
+                    
+                    $job = new $jobClass($tenant->id, $args[1] ?? 200);
+                    dispatch($job)->onQueue('default');
+                    $dispatched++;
+                }
+                
+                if ($dispatched > 0) {
+                    session()->flash('message', "🚀 Запущено синхронізацію для {$dispatched} магазинів. Перевірте статус через 1-5 хвилин.");
+                } else {
+                    session()->flash('error', "⚠️ Немає магазинів з налаштованими Horoshop credentials.");
+                }
+                
+                \Log::info("SyncReports dispatched to queue for all tenants", ['command' => $command, 'tenants' => $dispatched]);
+            } else {
+                // Create job instance with arguments if any
+                $job = empty($args) ? new $jobClass() : new $jobClass(...$args);
+                
+                // Dispatch to queue
+                dispatch($job)->onQueue('default');
+                
+                session()->flash('message', "🚀 Команду '{$command}' запущено у фоновому режимі. Перевірте статус через 1-2 хвилини.");
+                \Log::info("SyncReports dispatched to queue", ['command' => $command, 'job' => $jobClass]);
+            }
         } catch (\Exception $e) {
             session()->flash('error', "❌ Помилка запуску: {$e->getMessage()}");
             \Log::error("SyncReports dispatch error", ['command' => $command, 'error' => $e->getMessage()]);

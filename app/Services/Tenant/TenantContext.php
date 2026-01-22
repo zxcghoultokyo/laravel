@@ -193,6 +193,8 @@ class TenantContext
 
         // Priority 4: X-Widget-Token header (for API/widget calls)
         if ($token = request()->header('X-Widget-Token')) {
+            \Log::info('TenantContext: trying X-Widget-Token', ['token' => $token]);
+            
             // Try api_token in WidgetSettings first
             $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('api_token', $token)
@@ -201,12 +203,14 @@ class TenantContext
             if ($widgetSettings && $widgetSettings->tenant_id) {
                 $this->tenant = Tenant::find($widgetSettings->tenant_id);
                 $this->tenantId = $this->tenant?->id;
+                \Log::info('TenantContext: found via WidgetSettings', ['tenant_id' => $this->tenantId]);
                 return;
             }
             
             // Fallback: token is tenant slug
             $this->tenant = Tenant::where('slug', $token)->first();
             $this->tenantId = $this->tenant?->id;
+            \Log::info('TenantContext: found via slug', ['slug' => $token, 'tenant_id' => $this->tenantId]);
             if ($this->tenant) {
                 return;
             }

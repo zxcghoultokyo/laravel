@@ -33,22 +33,31 @@ class IncrementalProductSyncJob implements ShouldQueue
 
     protected bool $triggerEnrichment;
     protected bool $triggerMeiliReindex;
+    protected ?int $tenantId;
 
     public function __construct(
         bool $triggerEnrichment = true,
-        bool $triggerMeiliReindex = true
+        bool $triggerMeiliReindex = true,
+        ?int $tenantId = null
     ) {
         $this->triggerEnrichment = $triggerEnrichment;
         $this->triggerMeiliReindex = $triggerMeiliReindex;
+        $this->tenantId = $tenantId;
     }
 
     public function handle(ProductService $productService): void
     {
+        // If tenant specified, use tenant-specific sync
+        if ($this->tenantId) {
+            $this->handleTenantSync($productService);
+            return;
+        }
+        
         $startTime = microtime(true);
-        Log::info('[IncrementalSync] Starting incremental product sync');
+        Log::info('[IncrementalSync] Starting incremental product sync (legacy global)');
         
         // Start sync log
-        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, 'Incremental sync');
+        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, 'Incremental sync (legacy)');
 
         try {
             // Отримуємо всі товари з Horoshop
@@ -178,6 +187,59 @@ class IncrementalProductSyncJob implements ShouldQueue
             Log::error('[IncrementalSync] Fatal error', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+            ]);
+            $syncLog->fail($e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Tenant-specific sync using SyncHoroshopProductsJob logic.
+     */
+    protected function handleTenantSync(ProductService $productService): void
+    {
+        $tenant = \App\Models\Tenant::find($this->tenantId);
+        
+        if (!$tenant) {
+            Log::error('[IncrementalSync] Tenant not found', ['tenant_id' => $this->tenantId]);
+            return;
+        }
+        
+        $startTime = microtime(true);
+        Log::info('[IncrementalSync] Starting tenant sync', ['tenant_id' => $this->tenantId]);
+        
+        $syncLog = SyncLog::start(SyncLog::TYPE_HOROSHOP_PRODUCTS, "Tenant sync: {$tenant->name}");
+        
+        try {
+            $result = $productService->syncFromHoroshopForTenant($tenant, 200);
+            $tenant->update(['last_sync_at' => now()]);
+            
+            $elapsed = round(microtime(true) - $startTime, 2);
+            
+            $syncLog->complete([
+                'tenant_id' => $this->tenantId,
+                'tenant_name' => $tenant->name,
+                'result' => $result,
+            ], [
+                'elapsed_seconds' => $elapsed,
+            ]);
+            
+            Log::info('[IncrementalSync] Tenant sync completed', [
+                'tenant_id' => $this->tenantId,
+                'result' => $result,
+                'elapsed_seconds' => $elapsed,
+            ]);
+            
+            // Trigger Meili reindex for tenant if products changed
+            if ($this->triggerMeiliReindex && ($result['created'] ?? 0) + ($result['updated'] ?? 0) > 0) {
+                IndexProductsToMeiliJob::dispatch($this->tenantId)
+                    ->delay(now()->addMinutes(1));
+            }
+            
+        } catch (\Throwable $e) {
+            Log::error('[IncrementalSync] Tenant sync failed', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
             ]);
             $syncLog->fail($e->getMessage());
             throw $e;

@@ -775,7 +775,48 @@ class DiagnosticController extends Controller
         }
 
         $useQueue = $request->query('queue', '1') !== '0';
+        $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
         
+        // For tenant-specific sync, use SyncHoroshopProductsJob
+        if ($tenantId) {
+            $tenant = \App\Models\Tenant::find($tenantId);
+            if (!$tenant) {
+                return response()->json(['error' => 'Tenant not found'], 404);
+            }
+            
+            if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
+                return response()->json(['error' => 'Tenant has no Horoshop credentials'], 400);
+            }
+            
+            if ($useQueue) {
+                \App\Jobs\SyncHoroshopProductsJob::dispatch($tenantId)->onQueue('default');
+                return response()->json([
+                    'status' => 'dispatched',
+                    'message' => "SyncHoroshopProductsJob dispatched for tenant {$tenantId}",
+                    'tenant_id' => $tenantId,
+                ]);
+            }
+            
+            // Sync synchronously
+            try {
+                $productService = app(\App\Services\Horoshop\ProductService::class);
+                $result = $productService->syncFromHoroshopForTenant($tenant, 200);
+                $tenant->update(['last_sync_at' => now()]);
+                
+                return response()->json([
+                    'status' => 'completed',
+                    'tenant_id' => $tenantId,
+                    'result' => $result,
+                ]);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+        }
+        
+        // Legacy global sync (for backwards compatibility)
         if ($useQueue) {
             // Dispatch to queue
             \App\Jobs\IncrementalProductSyncJob::dispatch()
@@ -808,6 +849,63 @@ class DiagnosticController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * DELETE /api/diagnostic/tenant-products/{tenantId}
+     * Delete all products for a tenant (for reset/cleanup)
+     */
+    public function deleteTenantProducts(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        $dryRun = $request->boolean('dry_run', true);
+        
+        // Count products
+        $productCount = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->count();
+        
+        if ($dryRun) {
+            return response()->json([
+                'dry_run' => true,
+                'tenant_id' => $tenantId,
+                'tenant_name' => $tenant->name,
+                'products_to_delete' => $productCount,
+                'note' => 'Set dry_run=false to actually delete products',
+            ]);
+        }
+        
+        // Delete AI index first (foreign key)
+        $aiDeleted = DB::table('product_ai_index')
+            ->whereIn('product_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('products')->where('tenant_id', $tenantId);
+            })
+            ->delete();
+        
+        // Delete products
+        $deleted = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->delete();
+        
+        // Reset last_sync_at
+        $tenant->update(['last_sync_at' => null]);
+        
+        return response()->json([
+            'dry_run' => false,
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'products_deleted' => $deleted,
+            'ai_index_deleted' => $aiDeleted,
+            'note' => 'Products deleted. You can now run sync to import fresh data.',
+        ]);
     }
 
     /**

@@ -387,7 +387,18 @@ class Tenant extends Model
             ];
         }
         
-        // TRIAL PLAN checks
+        // ACTIVE TRIAL - check FIRST regardless of plan!
+        // This handles cases where plan is set to "pro" but trial is still active
+        if ($this->trial_ends_at && $this->trial_ends_at->isFuture()) {
+            return [
+                'allowed' => true,
+                'reason' => null,
+                'message' => null,
+                'details' => null,
+            ];
+        }
+        
+        // TRIAL PLAN without active trial
         if ($this->plan === self::PLAN_TRIAL) {
             // Trial expired
             if ($this->trial_ends_at && $this->trial_ends_at->isPast()) {
@@ -400,27 +411,17 @@ class Tenant extends Model
             }
             
             // No trial set
-            if (!$this->trial_ends_at) {
-                return [
-                    'allowed' => false,
-                    'reason' => 'no_subscription',
-                    'message' => 'Потрібна підписка',
-                    'details' => 'Оберіть тарифний план для активації віджету',
-                ];
-            }
-            
-            // Trial active
             return [
-                'allowed' => true,
-                'reason' => null,
-                'message' => null,
-                'details' => null,
+                'allowed' => false,
+                'reason' => 'no_subscription',
+                'message' => 'Потрібна підписка',
+                'details' => 'Оберіть тарифний план для активації віджету',
             ];
         }
         
         // PAID PLANS (starter/pro/enterprise) - require plan_expires_at
         if (in_array($this->plan, [self::PLAN_STARTER, self::PLAN_PRO, self::PLAN_ENTERPRISE])) {
-            // No expiration date = not paid
+            // No expiration date = not paid (and no active trial - checked above)
             if (!$this->plan_expires_at) {
                 return [
                     'allowed' => false,

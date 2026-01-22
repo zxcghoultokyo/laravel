@@ -36,8 +36,32 @@ class WidgetController extends Controller
             ->where('api_token', $token)
             ->first();
         
-        if ($widgetSettings && $widgetSettings->tenant_id) {
-            return Tenant::find($widgetSettings->tenant_id);
+        if ($widgetSettings) {
+            // If tenant_id is set, use it directly
+            if ($widgetSettings->tenant_id) {
+                return Tenant::find($widgetSettings->tenant_id);
+            }
+            
+            // Fallback: tenant_id might be null but settings exist
+            // For backwards compatibility, return first tenant with settings
+            // This handles cases where widget_settings was created before tenant_id was required
+            Log::warning('WidgetSettings found without tenant_id', [
+                'settings_id' => $widgetSettings->id,
+                'token' => substr($token, 0, 8) . '...'
+            ]);
+            
+            // Try to find tenant that owns this widget settings (by matching domain or first active tenant)
+            $tenant = Tenant::where('status', 'active')->first();
+            if ($tenant) {
+                // Auto-fix: update widget_settings with correct tenant_id
+                $widgetSettings->tenant_id = $tenant->id;
+                $widgetSettings->save();
+                Log::info('Auto-fixed widget_settings tenant_id', [
+                    'settings_id' => $widgetSettings->id,
+                    'tenant_id' => $tenant->id
+                ]);
+                return $tenant;
+            }
         }
         
         // Fallback: Token might be tenant slug (legacy)

@@ -326,27 +326,52 @@ class Tenant extends Model
     // ==================== HELPERS ====================
 
     /**
-     * Check if tenant is on trial.
+     * Check if tenant has active trial (regardless of plan value).
+     * Trial is active if trial_ends_at exists and is in future.
      */
     public function isOnTrial(): bool
     {
-        return $this->plan === self::PLAN_TRIAL && 
-               $this->trial_ends_at && 
-               $this->trial_ends_at->isFuture();
+        return $this->trial_ends_at && $this->trial_ends_at->isFuture();
     }
 
     /**
      * Check if trial has expired.
+     * Trial expired if trial_ends_at exists and is in past, AND no active paid subscription.
      */
     public function isTrialExpired(): bool
     {
-        return $this->plan === self::PLAN_TRIAL && 
-               $this->trial_ends_at && 
-               $this->trial_ends_at->isPast();
+        // No trial set at all
+        if (!$this->trial_ends_at) {
+            return false;
+        }
+        
+        // Trial still active
+        if ($this->trial_ends_at->isFuture()) {
+            return false;
+        }
+        
+        // Trial ended - check if has active paid subscription
+        if ($this->hasActiveSubscription()) {
+            return false; // Has paid subscription, so not "expired" in blocking sense
+        }
+        
+        return true; // Trial ended and no paid subscription
     }
 
     /**
-     * Check if tenant is active.
+     * Check if tenant has active paid subscription.
+     */
+    public function hasActiveSubscription(): bool
+    {
+        if (!in_array($this->plan, [self::PLAN_STARTER, self::PLAN_PRO, self::PLAN_ENTERPRISE])) {
+            return false;
+        }
+        
+        return $this->plan_expires_at && $this->plan_expires_at->isFuture();
+    }
+
+    /**
+     * Check if tenant is active (can access admin panel).
      */
     public function isActive(): bool
     {
@@ -354,11 +379,8 @@ class Tenant extends Model
             return false;
         }
 
-        if ($this->isTrialExpired()) {
-            return false;
-        }
-
-        return true;
+        // Active if on trial OR has paid subscription
+        return $this->isOnTrial() || $this->hasActiveSubscription();
     }
 
     /**

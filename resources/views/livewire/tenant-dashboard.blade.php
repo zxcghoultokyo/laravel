@@ -8,7 +8,11 @@
                 <p class="text-gray-500">{{ $tenant->domain ?? $tenant->slug }}</p>
             </div>
             <div class="flex items-center gap-2">
-                @if($stats['is_trial'])
+                @if($stats['is_trial_expired'])
+                    <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium animate-pulse">
+                        ⚠️ Тріал закінчився
+                    </span>
+                @elseif($stats['is_trial'])
                     <span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
                         🎁 Trial Pro: {{ $stats['days_left'] }} днів
                     </span>
@@ -28,8 +32,34 @@
         </div>
     @endif
 
+    <!-- Trial Expired Banner -->
+    @if($stats['is_trial_expired'])
+        <div class="mb-6 p-4 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300 rounded-xl shadow-lg">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-start gap-3">
+                    <span class="text-3xl">⚠️</span>
+                    <div>
+                        <h3 class="font-bold text-red-800 text-lg">Тріал період закінчився!</h3>
+                        <p class="text-red-700 text-sm mt-1">
+                            Ваш безкоштовний період закінчився. <strong>Віджет на сайті не працює.</strong>
+                            Оберіть тарифний план для відновлення роботи.
+                        </p>
+                        <p class="text-red-600 text-xs mt-2">
+                            Поточний план: <strong>{{ $stats['plan_label'] }}</strong>
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ route('billing.index') }}" 
+                   class="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition shadow-lg animate-pulse">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+                    </svg>
+                    Оплатити зараз
+                </a>
+            </div>
+        </div>
+    @elseif($stats['is_trial'])
     <!-- Trial Banner -->
-    @if($stats['is_trial'])
         <div class="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex items-start gap-3">

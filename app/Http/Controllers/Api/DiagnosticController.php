@@ -106,6 +106,19 @@ class DiagnosticController extends Controller
 
         $totalProducts = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count();
 
+        // Presence breakdown - count products by presence value
+        $presenceBreakdown = DB::table('products')
+            ->whereNull('deleted_at')
+            ->select('presence', DB::raw('COUNT(*) as count'), DB::raw('SUM(CASE WHEN in_stock = 1 THEN 1 ELSE 0 END) as in_stock_count'))
+            ->groupBy('presence')
+            ->get()
+            ->mapWithKeys(fn($row) => [
+                $row->presence ?? 'NULL' => [
+                    'total' => $row->count,
+                    'in_stock' => $row->in_stock_count,
+                ]
+            ]);
+
         $stats = [
             'total_products' => $totalProducts,
             'in_stock' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->count(),
@@ -134,6 +147,7 @@ class DiagnosticController extends Controller
                 'mid_max' => $priceStats['mid_max'],
                 'premium_min' => $priceStats['premium_min'],
             ],
+            'presence_breakdown' => $presenceBreakdown,
         ];
 
         return response()->json($stats);

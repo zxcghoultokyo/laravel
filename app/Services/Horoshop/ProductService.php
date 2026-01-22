@@ -472,23 +472,11 @@ class ProductService
 
         $presenceValue = mb_strtolower((string) $presenceValue);
 
-        // Фрази, що означають "в наявності" (деякі магазини не ведуть quantity)
-        $inStockPhrases = [
-            'в наявності',
-            'в наличии',
-            'є в наявності',
-            'есть в наличии',
-        ];
-
-        // Якщо presence каже "в наявності" — товар доступний (незалежно від quantity)
-        foreach ($inStockPhrases as $phrase) {
-            if (str_contains($presenceValue, $phrase)) {
-                return true;
-            }
-        }
-
-        // Фрази, що означають "немає в наявності"
+        // ВАЖЛИВО: Спочатку перевіряємо негативні фрази!
+        // Бо "Немає в наявності" містить і "немає" і "в наявності"
         $outOfStockPhrases = [
+            'немає в наявності',  // Точний match першим
+            'нет в наличии',
             'немає',
             'нема',
             'нет в',
@@ -501,6 +489,21 @@ class ProductService
         foreach ($outOfStockPhrases as $phrase) {
             if (str_contains($presenceValue, $phrase)) {
                 return false;
+            }
+        }
+
+        // Фрази, що означають "в наявності" (деякі магазини не ведуть quantity)
+        $inStockPhrases = [
+            'в наявності',
+            'в наличии',
+            'є в наявності',
+            'есть в наличии',
+        ];
+
+        // Якщо presence каже "в наявності" — товар доступний (незалежно від quantity)
+        foreach ($inStockPhrases as $phrase) {
+            if (str_contains($presenceValue, $phrase)) {
+                return true;
             }
         }
 

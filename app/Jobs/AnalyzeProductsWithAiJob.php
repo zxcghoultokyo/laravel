@@ -143,13 +143,23 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
                 'analyzed' => $analyzed,
                 'errors' => $errors,
                 'batch_size' => $this->batchSize,
+                'tenant_id' => $this->tenantId,
             ]);
         }
 
-        // Dispatch next batch
+        // Dispatch next batch if more products exist
         if ($products->count() === $this->batchSize) {
-            self::dispatch($this->batchSize, $this->offset + $this->batchSize, $this->forceReanalyze)
-                ->delay(now()->addSeconds(2));
+            Log::info('AnalyzeProductsWithAiJob: dispatching next batch', [
+                'tenant_id' => $this->tenantId,
+                'next_offset' => $this->offset + $this->batchSize,
+            ]);
+            
+            self::dispatch(
+                batchSize: $this->batchSize,
+                offset: $this->offset + $this->batchSize,
+                forceReanalyze: $this->forceReanalyze,
+                tenantId: $this->tenantId  // CRITICAL: pass tenant_id to next batch
+            )->delay(now()->addSeconds(2));
         }
     }
 

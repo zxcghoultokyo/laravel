@@ -2370,10 +2370,16 @@ class DiagnosticController extends Controller
             'slug' => $tenant->slug,
             'status' => $tenant->status,
             'plan' => $tenant->plan,
+            // Trial info
             'trial_ends_at' => $tenant->trial_ends_at?->toIso8601String(),
             'trial_ends_at_human' => $tenant->trial_ends_at?->diffForHumans(),
             'is_on_trial' => $tenant->isOnTrial(),
             'is_trial_expired' => $tenant->isTrialExpired(),
+            // Paid subscription info
+            'plan_expires_at' => $tenant->plan_expires_at?->toIso8601String(),
+            'plan_expires_at_human' => $tenant->plan_expires_at?->diffForHumans(),
+            'is_subscription_expiring_soon' => $tenant->isSubscriptionExpiringSoon(),
+            // General status
             'is_active' => $tenant->isActive(),
             'can_use_widget' => $widgetAccess,
             'messages_limit' => $tenant->messages_limit,

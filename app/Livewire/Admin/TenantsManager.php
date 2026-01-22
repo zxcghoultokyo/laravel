@@ -65,11 +65,15 @@ class TenantsManager extends Component
             'slug' => $tenant->slug,
             'domain' => $tenant->domain,
             'status' => $tenant->status,
-            'plan' => $tenant->plan ?? 'trial',  // Read from tenant, not subscription
+            'plan' => $tenant->plan ?? 'trial',
             'messages_limit' => $tenant->messages_limit,
             'products_limit' => $tenant->products_limit,
+            // Trial settings
             'trial_ends_at' => $tenant->trial_ends_at?->format('Y-m-d\TH:i'),
             'has_trial' => (bool) $tenant->trial_ends_at,
+            // Paid plan settings
+            'plan_expires_at' => $tenant->plan_expires_at?->format('Y-m-d\TH:i'),
+            'has_paid_subscription' => (bool) $tenant->plan_expires_at,
         ];
     }
 
@@ -83,14 +87,21 @@ class TenantsManager extends Component
             'editForm.messages_limit' => 'nullable|integer|min:0|max:2147483647',
             'editForm.products_limit' => 'nullable|integer|min:0|max:2147483647',
             'editForm.trial_ends_at' => 'nullable|date',
+            'editForm.plan_expires_at' => 'nullable|date',
         ]);
 
         $tenant = Tenant::findOrFail($this->editingTenantId);
         
-        // Parse trial_ends_at
+        // Parse trial_ends_at (for trial plan)
         $trialEndsAt = null;
         if (!empty($this->editForm['has_trial']) && !empty($this->editForm['trial_ends_at'])) {
             $trialEndsAt = \Carbon\Carbon::parse($this->editForm['trial_ends_at']);
+        }
+        
+        // Parse plan_expires_at (for paid plans)
+        $planExpiresAt = null;
+        if (!empty($this->editForm['has_paid_subscription']) && !empty($this->editForm['plan_expires_at'])) {
+            $planExpiresAt = \Carbon\Carbon::parse($this->editForm['plan_expires_at']);
         }
         
         $tenant->update([
@@ -98,10 +109,11 @@ class TenantsManager extends Component
             'slug' => $this->editForm['slug'],
             'domain' => $this->editForm['domain'],
             'status' => $this->editForm['status'],
-            'plan' => $this->editForm['plan'],  // Save plan to tenant
+            'plan' => $this->editForm['plan'],
             'messages_limit' => $this->editForm['messages_limit'],
             'products_limit' => $this->editForm['products_limit'],
             'trial_ends_at' => $trialEndsAt,
+            'plan_expires_at' => $planExpiresAt,
         ]);
         
         // Force refresh to verify
@@ -112,6 +124,7 @@ class TenantsManager extends Component
             'plan_saved' => $tenant->plan,
             'status' => $tenant->status,
             'trial_ends_at' => $tenant->trial_ends_at,
+            'plan_expires_at' => $tenant->plan_expires_at,
         ]);
 
         // Also update subscription plan if exists (for consistency)

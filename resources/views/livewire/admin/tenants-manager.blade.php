@@ -332,6 +332,38 @@
                             </div>
                         @endif
                     </div>
+                    
+                    <!-- Paid subscription settings -->
+                    <div class="border-t border-gray-200 pt-4 mt-4">
+                        <h3 class="font-medium text-gray-900 mb-3">💳 Платна підписка</h3>
+                        <p class="text-xs text-gray-500 mb-3">Для планів Starter/Pro/Enterprise. Встановіть дату після отримання оплати.</p>
+                        <div class="flex items-center gap-3 mb-3">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" wire:model.live="editForm.has_paid_subscription" class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                                <span class="text-sm text-gray-700">Оплата підтверджена</span>
+                            </label>
+                        </div>
+                        @if($editForm['has_paid_subscription'] ?? false)
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Підписка діє до</label>
+                                <input type="datetime-local" wire:model="editForm.plan_expires_at" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500">
+                                <div class="flex gap-2 mt-2">
+                                    <button type="button" wire:click="$set('editForm.plan_expires_at', '{{ now()->addMonth()->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                                        +1 міс
+                                    </button>
+                                    <button type="button" wire:click="$set('editForm.plan_expires_at', '{{ now()->addMonths(3)->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                                        +3 міс
+                                    </button>
+                                    <button type="button" wire:click="$set('editForm.plan_expires_at', '{{ now()->addMonths(6)->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                                        +6 міс
+                                    </button>
+                                    <button type="button" wire:click="$set('editForm.plan_expires_at', '{{ now()->addYear()->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200">
+                                        +1 рік
+                                    </button>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
                 </div>
                 <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
                     <button wire:click="cancelEdit" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">

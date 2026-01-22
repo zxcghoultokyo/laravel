@@ -128,6 +128,76 @@
                 </div>
             @endif
 
+            <!-- Paid plan not activated (starter/pro/enterprise but no plan_expires_at) -->
+            @if(in_array($tenant->plan, ['starter', 'pro', 'enterprise']) && !$tenant->plan_expires_at)
+                <div class="mb-6 p-4 bg-red-50 border border-red-300 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">💳</span>
+                            <div>
+                                <h3 class="font-bold text-red-900">Підписка не оплачена</h3>
+                                <p class="text-red-700 text-sm mt-1">
+                                    Ваш план {{ ucfirst($tenant->plan) }} не активований. Оплатіть підписку для активації віджету.
+                                </p>
+                                <p class="text-red-600 text-xs mt-2 font-medium">
+                                    ⚠️ Віджет на вашому сайті зараз не відображається для відвідувачів.
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('billing.index') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-sm">
+                            Оплатити →
+                        </a>
+                    </div>
+                </div>
+            @endif
+
+            <!-- Paid subscription expired -->
+            @if(in_array($tenant->plan, ['starter', 'pro', 'enterprise']) && $tenant->plan_expires_at && $tenant->plan_expires_at->isPast())
+                <div class="mb-6 p-4 bg-red-50 border border-red-300 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">⏰</span>
+                            <div>
+                                <h3 class="font-bold text-red-900">Підписка закінчилась</h3>
+                                <p class="text-red-700 text-sm mt-1">
+                                    Ваша підписка {{ ucfirst($tenant->plan) }} закінчилась {{ $tenant->plan_expires_at->format('d.m.Y') }}.
+                                </p>
+                                <p class="text-red-600 text-xs mt-2 font-medium">
+                                    ⚠️ Віджет на вашому сайті зараз не відображається для відвідувачів.
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('billing.index') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-sm">
+                            Продовжити →
+                        </a>
+                    </div>
+                </div>
+            @endif
+
+            <!-- Subscription expiring soon (within 7 days) -->
+            @if(in_array($tenant->plan, ['starter', 'pro', 'enterprise']) && $tenant->plan_expires_at && $tenant->plan_expires_at->isFuture() && $tenant->plan_expires_at->diffInDays(now()) <= 7)
+                <div class="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">⚠️</span>
+                            <div>
+                                <h3 class="font-bold text-amber-900">Підписка закінчується скоро</h3>
+                                <p class="text-amber-700 text-sm mt-1">
+                                    Ваша підписка {{ ucfirst($tenant->plan) }} діє до <strong>{{ $tenant->plan_expires_at->format('d.m.Y H:i') }}</strong>
+                                    ({{ $tenant->plan_expires_at->diffForHumans() }}).
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('billing.index') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition shadow-sm">
+                            Продовжити →
+                        </a>
+                    </div>
+                </div>
+            @endif
+
             <!-- Stats Grid -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <!-- Usage -->

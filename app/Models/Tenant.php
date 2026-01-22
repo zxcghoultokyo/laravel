@@ -387,33 +387,92 @@ class Tenant extends Model
             ];
         }
         
-        // Trial expired - need to pay
-        if ($this->isTrialExpired()) {
+        // TRIAL PLAN checks
+        if ($this->plan === self::PLAN_TRIAL) {
+            // Trial expired
+            if ($this->trial_ends_at && $this->trial_ends_at->isPast()) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'trial_expired',
+                    'message' => 'Тріал період закінчився',
+                    'details' => 'Оберіть тарифний план для продовження роботи',
+                ];
+            }
+            
+            // No trial set
+            if (!$this->trial_ends_at) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'no_subscription',
+                    'message' => 'Потрібна підписка',
+                    'details' => 'Оберіть тарифний план для активації віджету',
+                ];
+            }
+            
+            // Trial active
             return [
-                'allowed' => false,
-                'reason' => 'trial_expired',
-                'message' => 'Тріал період закінчився',
-                'details' => 'Оберіть тарифний план для продовження роботи',
+                'allowed' => true,
+                'reason' => null,
+                'message' => null,
+                'details' => null,
             ];
         }
         
-        // Not on trial but no active paid plan (plan = trial but no trial_ends_at or expired)
-        if ($this->plan === self::PLAN_TRIAL && !$this->trial_ends_at) {
+        // PAID PLANS (starter/pro/enterprise) - require plan_expires_at
+        if (in_array($this->plan, [self::PLAN_STARTER, self::PLAN_PRO, self::PLAN_ENTERPRISE])) {
+            // No expiration date = not paid
+            if (!$this->plan_expires_at) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'not_paid',
+                    'message' => 'Підписка не оплачена',
+                    'details' => 'Зверніться до менеджера для оплати тарифу',
+                ];
+            }
+            
+            // Subscription expired
+            if ($this->plan_expires_at->isPast()) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'subscription_expired',
+                    'message' => 'Підписка закінчилась',
+                    'details' => 'Продовжіть підписку для відновлення роботи віджету',
+                ];
+            }
+            
+            // Paid and active
             return [
-                'allowed' => false,
-                'reason' => 'no_subscription',
-                'message' => 'Потрібна підписка',
-                'details' => 'Оберіть тарифний план для активації віджету',
+                'allowed' => true,
+                'reason' => null,
+                'message' => null,
+                'details' => null,
             ];
         }
         
-        // Widget OK
+        // Unknown plan - block
         return [
-            'allowed' => true,
-            'reason' => null,
-            'message' => null,
-            'details' => null,
+            'allowed' => false,
+            'reason' => 'unknown_plan',
+            'message' => 'Невідомий тарифний план',
+            'details' => 'Зверніться до підтримки',
         ];
+    }
+
+    /**
+     * Check if paid subscription is expiring soon (within 7 days).
+     */
+    public function isSubscriptionExpiringSoon(): bool
+    {
+        if (!in_array($this->plan, [self::PLAN_STARTER, self::PLAN_PRO, self::PLAN_ENTERPRISE])) {
+            return false;
+        }
+        
+        if (!$this->plan_expires_at) {
+            return false;
+        }
+        
+        return $this->plan_expires_at->isFuture() && 
+               $this->plan_expires_at->diffInDays(now()) <= 7;
     }
 
     /**

@@ -4614,4 +4614,215 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * GET /api/diagnostic/benchmark-models
+     * Compare GPT models speed and quality
+     * 
+     * @param Request $request
+     *   - models: comma-separated list of models (default: gpt-4o,gpt-5.1)
+     *   - runs: number of runs per model (default: 1)
+     */
+    public function benchmarkModels(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $apiKey = config('services.openai.api_key');
+        $baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
+
+        if (empty($apiKey)) {
+            return response()->json(['error' => 'OPENAI_API_KEY not configured'], 500);
+        }
+
+        $modelsParam = $request->query('models', 'gpt-4o,gpt-5.1');
+        $models = array_map('trim', explode(',', $modelsParam));
+        $runs = min((int) $request->query('runs', 1), 3); // Max 3 runs
+
+        // Test cases
+        $testCases = [
+            [
+                'name' => 'product_search',
+                'messages' => [
+                    ['role' => 'system', 'content' => 'Ти консультант інтернет-магазину тактичного спорядження. Відповідай коротко.'],
+                    ['role' => 'user', 'content' => 'покажи берці'],
+                ],
+                'tools' => $this->getBenchmarkTools(),
+            ],
+            [
+                'name' => 'slang_correction',
+                'messages' => [
+                    ['role' => 'system', 'content' => 'Ти консультант. Виправляй сленг і помилки автоматично.'],
+                    ['role' => 'user', 'content' => 'покаж бойовку'],
+                ],
+                'tools' => $this->getBenchmarkTools(),
+            ],
+            [
+                'name' => 'faq_no_tools',
+                'messages' => [
+                    ['role' => 'system', 'content' => 'Ти консультант. Відповідай коротко.'],
+                    ['role' => 'user', 'content' => 'яка у вас доставка?'],
+                ],
+                'tools' => null,
+            ],
+            [
+                'name' => 'english',
+                'messages' => [
+                    ['role' => 'system', 'content' => 'You are a shop assistant. Reply in the user\'s language.'],
+                    ['role' => 'user', 'content' => 'show me tactical gloves'],
+                ],
+                'tools' => $this->getBenchmarkTools(),
+            ],
+        ];
+
+        $results = [];
+        $client = new \GuzzleHttp\Client(['timeout' => 60]);
+
+        foreach ($models as $model) {
+            $modelResults = [];
+
+            foreach ($testCases as $case) {
+                $times = [];
+                $lastResponse = null;
+
+                for ($i = 0; $i < $runs; $i++) {
+                    $start = microtime(true);
+
+                    try {
+                        $payload = [
+                            'model' => $model,
+                            'messages' => $case['messages'],
+                            'temperature' => 0.3,
+                        ];
+
+                        if ($case['tools']) {
+                            $payload['tools'] = $case['tools'];
+                            $payload['tool_choice'] = 'auto';
+                        }
+
+                        $response = $client->post($baseUrl . '/chat/completions', [
+                            'headers' => [
+                                'Authorization' => 'Bearer ' . $apiKey,
+                                'Content-Type' => 'application/json',
+                            ],
+                            'json' => $payload,
+                        ]);
+
+                        $elapsed = round((microtime(true) - $start) * 1000);
+                        $data = json_decode($response->getBody()->getContents(), true);
+
+                        $choice = $data['choices'][0]['message'] ?? [];
+                        $lastResponse = [
+                            'time_ms' => $elapsed,
+                            'content' => $choice['content'] ?? null,
+                            'tool_calls' => $choice['tool_calls'] ?? [],
+                            'tokens' => $data['usage']['total_tokens'] ?? 0,
+                            'error' => null,
+                        ];
+                    } catch (\Exception $e) {
+                        $elapsed = round((microtime(true) - $start) * 1000);
+                        $lastResponse = [
+                            'time_ms' => $elapsed,
+                            'content' => null,
+                            'tool_calls' => [],
+                            'tokens' => 0,
+                            'error' => $e->getMessage(),
+                        ];
+                    }
+
+                    $times[] = $lastResponse['time_ms'];
+
+                    if ($runs > 1) {
+                        usleep(300000); // 0.3s pause
+                    }
+                }
+
+                $avgTime = count($times) > 0 ? round(array_sum($times) / count($times)) : 0;
+
+                $modelResults[$case['name']] = [
+                    'avg_ms' => $avgTime,
+                    'min_ms' => min($times),
+                    'max_ms' => max($times),
+                    'tokens' => $lastResponse['tokens'] ?? 0,
+                    'has_tool_call' => !empty($lastResponse['tool_calls']),
+                    'tool_name' => $lastResponse['tool_calls'][0]['function']['name'] ?? null,
+                    'content_preview' => mb_substr($lastResponse['content'] ?? '', 0, 100),
+                    'error' => $lastResponse['error'] ?? null,
+                ];
+            }
+
+            // Calculate average across all tests
+            $avgTotal = round(array_sum(array_column($modelResults, 'avg_ms')) / count($testCases));
+            
+            $results[$model] = [
+                'tests' => $modelResults,
+                'avg_total_ms' => $avgTotal,
+            ];
+        }
+
+        // Comparison summary
+        $summary = [];
+        if (count($models) >= 2) {
+            $m1 = $models[0];
+            $m2 = $models[1];
+            $avg1 = $results[$m1]['avg_total_ms'] ?? 0;
+            $avg2 = $results[$m2]['avg_total_ms'] ?? 0;
+            
+            if ($avg2 > 0) {
+                $ratio = round($avg1 / $avg2, 2);
+                $diff = $avg1 - $avg2;
+                $diffPercent = round(($avg1 / $avg2 - 1) * 100);
+                
+                $summary = [
+                    'faster_model' => $avg1 < $avg2 ? $m1 : $m2,
+                    'slower_model' => $avg1 < $avg2 ? $m2 : $m1,
+                    'ratio' => $avg1 < $avg2 ? round($avg2 / $avg1, 2) : $ratio,
+                    'diff_ms' => abs($diff),
+                    'diff_percent' => abs($diffPercent),
+                    'recommendation' => $avg1 < $avg2 
+                        ? "Use {$m1} - it's " . round($avg2 / $avg1, 1) . "x faster"
+                        : "Use {$m2} - it's " . round($avg1 / $avg2, 1) . "x faster",
+                ];
+            }
+        }
+
+        return response()->json([
+            'models_tested' => $models,
+            'runs_per_test' => $runs,
+            'results' => $results,
+            'summary' => $summary,
+            'api_key_prefix' => substr($apiKey, 0, 8) . '...',
+        ]);
+    }
+
+    /**
+     * Get tools for benchmark tests
+     */
+    private function getBenchmarkTools(): array
+    {
+        return [
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'search_products',
+                    'description' => 'Пошук товарів в каталозі магазину',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'query' => [
+                                'type' => 'string',
+                                'description' => 'Пошуковий запит',
+                            ],
+                            'price_max' => [
+                                'type' => 'number',
+                                'description' => 'Максимальна ціна',
+                            ],
+                        ],
+                        'required' => ['query'],
+                    ],
+                ],
+            ],
+        ];
+    }
 }

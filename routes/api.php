@@ -136,6 +136,9 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/color-palette', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorPalette']);
     Route::post('/auto-detect-colors', [\App\Http\Controllers\Api\DiagnosticController::class, 'autoDetectColors']);
     
+    // Model benchmark
+    Route::get('/benchmark-models', [\App\Http\Controllers\Api\DiagnosticController::class, 'benchmarkModels']);
+    
     // Tenant management
     Route::get('/tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenants']);
     Route::get('/tenant/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantDetails']);

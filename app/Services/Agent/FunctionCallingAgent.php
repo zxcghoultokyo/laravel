@@ -318,6 +318,25 @@ CONTEXT
 
             $result = $this->executeTool($functionName, $args);
 
+            // Filter out already shown products for both search and popular products
+            if (in_array($functionName, ['search_products', 'get_popular_products']) 
+                && !empty($result['products']) 
+                && !empty($this->shownProductIds)) {
+                $beforeCount = count($result['products']);
+                $result['products'] = array_filter(
+                    $result['products'],
+                    fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds)
+                );
+                $result['products'] = array_values($result['products']);
+                $result['count'] = count($result['products']);
+                
+                Log::info('FunctionCallingAgent: filtered shown products', [
+                    'tool' => $functionName,
+                    'before' => $beforeCount,
+                    'after' => count($result['products']),
+                ]);
+            }
+
             // Collect products from search tools
             if (in_array($functionName, ['search_products', 'get_popular_products']) && !empty($result['products'])) {
                 $products = array_merge($products, $result['products']);

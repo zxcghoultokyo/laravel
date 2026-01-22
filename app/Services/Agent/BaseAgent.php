@@ -1140,6 +1140,29 @@ PROMPT;
         $priceRange = [];
         $userQuestions = [];
 
+        // Category patterns for user queries
+        $userCategoryPatterns = [
+            'плитоноск' => 'плитоноски',
+            'шолом|каск' => 'шоломи',
+            'берц|черевик' => 'берці',
+            'рюкзак' => 'рюкзаки',
+            'підсумок|підсумк' => 'підсумки',
+            'куртк' => 'куртки',
+            'штан' => 'штани',
+            'футболк' => 'футболки',
+            'жилет|розвантаж' => 'жилети',
+            'бронеплас|плит' => 'бронеплати',
+            'рукавиц|рукавич|перчатк' => 'рукавиці',
+            'окуляр' => 'окуляри',
+            'наколін|налокіт' => 'захист',
+            'ремен|ремін|пояс' => 'ремені',
+            'патч|шеврон|нашивк' => 'патчі/шеврони',
+            'медик|аптечк|турнікет|бандаж|ifak' => 'медицина',
+            'ліхтар' => 'ліхтарі',
+            'ніж|мультитул' => 'ножі',
+            'кепк|бейсболк|панам|шапк' => 'головні убори',
+        ];
+
         foreach ($history as $msg) {
             $content = $msg['content'] ?? '';
             $role = $msg['role'] ?? '';
@@ -1147,6 +1170,13 @@ PROMPT;
             // Collect last 3 user questions for context
             if ($role === 'user' && mb_strlen($content) > 3) {
                 $userQuestions[] = mb_substr($content, 0, 100);
+                
+                // Extract categories from user queries (not just shown products)
+                foreach ($userCategoryPatterns as $pattern => $category) {
+                    if (preg_match("/($pattern)/ui", $content)) {
+                        $productCategories[] = $category;
+                    }
+                }
             }
 
             // Extract shown products from [Показані товари: ...]
@@ -1170,6 +1200,11 @@ PROMPT;
                     'окуляр' => 'окуляри',
                     'наколін|налокіт' => 'захист',
                     'ремен|ремін|пояс' => 'ремені',
+                    'патч|шеврон|нашивк' => 'патчі/шеврони',
+                    'медик|аптечк|турнікет|бандаж|ifak' => 'медицина',
+                    'ліхтар' => 'ліхтарі',
+                    'ніж|мультитул' => 'ножі',
+                    'кепк|бейсболк|панам|шапк' => 'головні убори',
                 ];
                 foreach ($categoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $products)) {

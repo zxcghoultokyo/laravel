@@ -184,10 +184,11 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
-        // Use model_analyze for batch enrichment (gpt-4o-mini recommended for cost/limits)
-        $model = $config['model_analyze'] ?? 'gpt-4o-mini';
+        // Use gpt-4o-mini for batch enrichment - best cost/limits balance
+        // Note: gpt-5-nano has severe rate limits and parameter restrictions
+        $model = 'gpt-4o-mini';
         
-        // Build request body - newer models use max_completion_tokens
+        // Build request body with max_tokens for gpt-4o-mini
         $requestBody = [
             'model' => $model,
             'messages' => [
@@ -195,14 +196,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
                 ['role' => 'user', 'content' => $prompt],
             ],
             'temperature' => 0.3,
+            'max_tokens' => 800,
         ];
-        
-        // Use max_completion_tokens for newer models (gpt-5*, o1*, etc.), max_tokens for older
-        if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
-            $requestBody['max_completion_tokens'] = 800;
-        } else {
-            $requestBody['max_tokens'] = 800;
-        }
         
         $response = Http::timeout(30)
             ->withToken($apiKey)

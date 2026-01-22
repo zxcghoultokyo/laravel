@@ -866,10 +866,11 @@ class DiagnosticController extends Controller
 
         $prompt = $this->buildPromptForTest($title, $description, $category, $characteristics);
 
-        $model = $config['model_analyze'] ?? 'gpt-4o-mini';
+        // Hardcode gpt-4o-mini for testing - gpt-5-nano has too many restrictions
+        $model = 'gpt-4o-mini';
         $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         
-        // Build request body - newer models use max_completion_tokens
+        // Build request body for gpt-4o-mini
         $requestBody = [
             'model' => $model,
             'messages' => [
@@ -877,14 +878,8 @@ class DiagnosticController extends Controller
                 ['role' => 'user', 'content' => $prompt],
             ],
             'temperature' => 0.3,
+            'max_tokens' => 800,
         ];
-        
-        // Use max_completion_tokens for newer models (gpt-5*, o1*, etc.), max_tokens for older
-        if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
-            $requestBody['max_completion_tokens'] = 800;
-        } else {
-            $requestBody['max_tokens'] = 800;
-        }
         
         try {
             $response = \Illuminate\Support\Facades\Http::timeout(30)

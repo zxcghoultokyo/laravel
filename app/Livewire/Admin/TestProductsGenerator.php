@@ -197,7 +197,7 @@ class TestProductsGenerator extends Component
     public function render()
     {
         return view('livewire.admin.test-products-generator')
-            ->layout('components.admin-layout');
+            ->layout('admin.layout');
     }
 
     public function generateCsv()

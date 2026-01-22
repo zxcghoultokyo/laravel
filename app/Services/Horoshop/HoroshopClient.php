@@ -12,12 +12,34 @@ class HoroshopClient
     protected string $login;
     protected string $password;
     protected bool $isConfigured = false;
+    protected string $cacheKeyPrefix;
 
-    public function __construct()
+    /**
+     * Create a new HoroshopClient instance.
+     * 
+     * If credentials are provided, they will be used (tenant-specific mode).
+     * Otherwise, falls back to config values (legacy mode).
+     *
+     * @param string|null $domain   The Horoshop domain (e.g., http://shop123.horoshop.ua)
+     * @param string|null $login    The API login
+     * @param string|null $password The API password
+     */
+    public function __construct(?string $domain = null, ?string $login = null, ?string $password = null)
     {
-        $this->domain   = (string) config('services.horoshop.domain');
-        $this->login    = (string) config('services.horoshop.login');
-        $this->password = (string) config('services.horoshop.password');
+        // If credentials are provided, use them (tenant-specific mode)
+        if ($domain && $login && $password) {
+            $this->domain = $domain;
+            $this->login = $login;
+            $this->password = $password;
+            // Create unique cache key based on domain to avoid token conflicts between tenants
+            $this->cacheKeyPrefix = 'horoshop_api_token_' . md5($domain);
+        } else {
+            // Fall back to config (legacy mode for global/default shop)
+            $this->domain   = (string) config('services.horoshop.domain');
+            $this->login    = (string) config('services.horoshop.login');
+            $this->password = (string) config('services.horoshop.password');
+            $this->cacheKeyPrefix = 'horoshop_api_token';
+        }
 
         // Check if configured
         $this->isConfigured = !empty($this->domain) && !empty($this->login) && !empty($this->password);
@@ -32,11 +54,20 @@ class HoroshopClient
     }
 
     /**
+     * Get the domain this client is connected to
+     */
+    public function getDomain(): string
+    {
+        return $this->domain;
+    }
+
+    /**
      * Отримати токен авторизації та закешувати його на ~9 хвилин (540 секунд).
+     * Uses tenant-specific cache key to avoid conflicts between shops.
      */
     protected function authenticate(): string
     {
-        return Cache::remember('horoshop_api_token', 540, function () {
+        return Cache::remember($this->cacheKeyPrefix, 540, function () {
             $url = $this->domain . '/api/auth/';
 
             $response = Http::acceptJson()
@@ -47,7 +78,7 @@ class HoroshopClient
                 ]);
 
             if (! $response->ok()) {
-                throw new RuntimeException('Horoshop auth HTTP error: ' . $response->status());
+                throw new RuntimeException('Horoshop auth HTTP error: ' . $response->status() . ' for ' . $this->domain);
             }
 
             $json   = $response->json();
@@ -55,13 +86,13 @@ class HoroshopClient
 
             if ($status !== 'OK') {
                 $message = $json['response']['message'] ?? 'Unknown auth error';
-                throw new RuntimeException('Horoshop auth error: ' . $message);
+                throw new RuntimeException('Horoshop auth error for ' . $this->domain . ': ' . $message);
             }
 
             $token = $json['response']['token'] ?? null;
 
             if (! $token) {
-                throw new RuntimeException('Horoshop auth: token not returned');
+                throw new RuntimeException('Horoshop auth: token not returned for ' . $this->domain);
             }
 
             return $token;

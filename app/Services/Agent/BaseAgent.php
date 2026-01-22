@@ -198,6 +198,20 @@ abstract class BaseAgent
 - Виклич search_products з ТОЮ Ж категорією + exclude_ids щоб не повторювати
 - НІКОЛИ не показуй інші категорії на "покажи ще"!
 - Приклад: показав шеврони → "покажи ще" → search_products("шеврон патч", exclude_shown=true)
+
+🔄 ПОВТОРНИЙ ЗАПИТ — ЗАВЖДИ ПОКАЗУЙ КАРТКИ!
+Якщо користувач повторно запитує про той самий товар/категорію:
+- ЗАВЖДИ показуй картки товарів знову, навіть якщо вже показував раніше!
+- НЕ кажи "вже показував ці товари" — ПОКАЖИ ЇХ ЗНОВУ!
+- Клієнт може порівнювати, вибирати — йому потрібно бачити товари!
+- Виклич search_products БЕЗ exclude_shown для повторних запитів
+
+ЛАКОНІЧНІСТЬ — ЗОЛОТЕ ПРАВИЛО:
+- МАКСИМУМ 1-2 речення перед показом товарів!
+- НЕ описуй товари словами — картки це зроблять краще!
+- НЕ перераховуй характеристики в тексті — вони є на картці!
+- Формат: "Ось [N] варіанти [категорія]:" + картки
+- Приклад: "Ось 2 футболки:" замість "Дякую за запит! Ось топ варіанти футболок (T‑Shirt), які є в наявності..."
 RULES;
     }
 
@@ -398,6 +412,7 @@ PROMPT;
                             'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (для бюджетних)'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово з назви'],
+                            'exclude_shown' => ['type' => 'boolean', 'description' => 'true = виключити вже показані товари (для "покажи ще"). false = показати всі включаючи раніше показані'],
                             'limit' => ['type' => 'integer', 'description' => 'Кількість (максимум 3)'],
                             'sort_by' => [
                                 'type' => 'string',
@@ -578,8 +593,10 @@ PROMPT;
             $results = array_values($results);
         }
 
-        // Exclude already shown products
-        if (!empty($this->shownProductIds) && !empty($results)) {
+        // Exclude already shown products ONLY if explicitly requested (for "покажи ще")
+        // By default, allow showing same products again (for repeated queries)
+        $excludeShown = $args['exclude_shown'] ?? false;
+        if ($excludeShown && !empty($this->shownProductIds) && !empty($results)) {
             $results = array_filter($results, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
             $results = array_values($results);
         }

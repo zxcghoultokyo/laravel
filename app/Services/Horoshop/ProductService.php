@@ -90,11 +90,23 @@ class ProductService
             throw new \RuntimeException('Tenant has no Horoshop credentials');
         }
         
+        // Ensure credentials are strings
+        $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
+        $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
+        $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
+        
+        Log::info('Creating tenant HoroshopClient', [
+            'tenant_id' => $tenant->id,
+            'domain' => $domain,
+            'credentials_type' => gettype($credentials),
+            'domain_type' => gettype($credentials['domain'] ?? null),
+        ]);
+        
         // Create tenant-specific client
         $tenantClient = new HoroshopClient(
-            $credentials['domain'],
-            $credentials['login'],
-            $credentials['password']
+            $domain,
+            $login,
+            $password
         );
         
         $offset = 0;

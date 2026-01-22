@@ -48,6 +48,17 @@ class DiagnosticController extends Controller
                 $row->tenant_id ?? 'NULL' => $row->count
             ]);
 
+        // AI Enrichment statistics
+        $totalAiIndex = DB::table('product_ai_index')->count();
+        $withAiType = DB::table('product_ai_index')->whereNotNull('ai_product_type')->where('ai_product_type', '!=', '')->count();
+        $withAiCategory = DB::table('product_ai_index')->whereNotNull('ai_category')->where('ai_category', '!=', '')->count();
+        $aiIndexByTenant = DB::table('product_ai_index')
+            ->join('products', 'product_ai_index.product_id', '=', 'products.id')
+            ->select('products.tenant_id', DB::raw('COUNT(*) as count'))
+            ->groupBy('products.tenant_id')
+            ->get()
+            ->mapWithKeys(fn($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
+
         $stats = [
             'total_products' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count(),
             'in_stock' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->count(),
@@ -57,6 +68,15 @@ class DiagnosticController extends Controller
             'unique_colors' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->distinct()->pluck('color')->toArray(),
             'categories_count' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->distinct('category_path')->count('category_path'),
             'products_by_tenant' => $tenantStats,
+            'ai_enrichment' => [
+                'total_indexed' => $totalAiIndex,
+                'with_ai_type' => $withAiType,
+                'with_ai_category' => $withAiCategory,
+                'by_tenant' => $aiIndexByTenant,
+                'coverage_percent' => $tenantStats->sum() > 0 
+                    ? round(($totalAiIndex / $tenantStats->sum()) * 100, 1) 
+                    : 0,
+            ],
             'price_stats' => [
                 'min' => $priceStats['min'],
                 'max' => $priceStats['max'],

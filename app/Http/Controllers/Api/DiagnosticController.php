@@ -4629,7 +4629,7 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $apiKey = config('services.openai.api_key');
+        $apiKey = config('services.openai.key');
         $baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
 
         if (empty($apiKey)) {

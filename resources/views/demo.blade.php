@@ -876,6 +876,13 @@
             Built for <a href="https://horoshop.ua" target="_blank">Хорошоп</a> • 
             Demo: <a href="https://contractor.kiev.ua" target="_blank">Contractor</a>
         </p>
+        <p style="margin-top: 8px; font-size: 11px; opacity: 0.7;">
+            <a href="/privacy">Конфіденційність</a> • 
+            <a href="/terms">Умови</a> • 
+            <a href="/refund">Повернення</a> • 
+            <a href="/offer">Оферта</a> •
+            ФОП Цяцько В.О. • ІПН 3547513490
+        </p>
     </footer>
 
     <!-- AIntento Chat Widget (production version) -->

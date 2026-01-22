@@ -25,6 +25,14 @@ Route::get('/terms', function () {
     return view('legal.terms');
 })->name('terms');
 
+Route::get('/refund', function () {
+    return view('legal.refund');
+})->name('refund');
+
+Route::get('/offer', function () {
+    return view('legal.offer');
+})->name('offer');
+
 // Dashboard - tenant scoped (protected by trial middleware)
 Route::get('/dashboard', TenantDashboard::class)
     ->middleware(['auth', 'verified', 'trial.active'])

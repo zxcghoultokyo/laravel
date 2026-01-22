@@ -1338,9 +1338,14 @@
                 <div style="display: flex; justify-content: center; gap: 24px; margin-top: 24px; flex-wrap: wrap;">
                     <a href="/privacy" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Політика конфіденційності</a>
                     <a href="/terms" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Умови використання</a>
+                    <a href="/refund" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Повернення коштів</a>
+                    <a href="/offer" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Публічна оферта</a>
                 </div>
-                <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
-                    <p>© 2026 AIntento — зроблено в 🇺🇦 Україні</p>
+                <div style="text-align: center; margin-top: 16px; color: var(--text-gray); font-size: 12px;">
+                    <p>ФОП Цяцько В.О. • ІПН 3547513490 • <a href="tel:+380936490518" style="color: var(--text-gray);">+38 (093) 649-05-18</a> • <a href="mailto:v.tsiatsko@gmail.com" style="color: var(--text-gray);">v.tsiatsko@gmail.com</a></p>
+                </div>
+                <div style="text-align: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <p>© {{ date('Y') }} AIntento — зроблено в 🇺🇦 Україні</p>
                 </div>
             </div>
         </footer>

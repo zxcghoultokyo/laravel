@@ -49,18 +49,39 @@ class WidgetController extends Controller
         Log::info('WidgetController::settings called');
         
         $tenant = $this->resolveTenant($request);
+        $token = $request->header('X-Widget-Token');
         
-        // Get settings for specific tenant or first available
-        $settings = $tenant 
-            ? WidgetSettings::withoutGlobalScope(TenantScope::class)
+        // Get settings - try by tenant first, then by token directly
+        $settings = null;
+        if ($tenant) {
+            $settings = WidgetSettings::withoutGlobalScope(TenantScope::class)
                 ->where('tenant_id', $tenant->id)
-                ->first()
-            : WidgetSettings::first();
+                ->first();
+        }
         
-        Log::info('WidgetSettings fetched', ['settings' => $settings, 'tenant_id' => $tenant?->id]);
+        // Fallback: find settings by api_token directly
+        if (!$settings && $token) {
+            $settings = WidgetSettings::withoutGlobalScope(TenantScope::class)
+                ->where('api_token', $token)
+                ->first();
+            // If found, get tenant from settings
+            if ($settings && $settings->tenant_id && !$tenant) {
+                $tenant = Tenant::find($settings->tenant_id);
+            }
+        }
+        
+        // Last fallback: first available settings
+        if (!$settings) {
+            $settings = WidgetSettings::first();
+        }
+        
+        // Ensure tenant_id comes from settings if tenant not resolved
+        $tenantId = $tenant?->id ?? $settings?->tenant_id;
+        
+        Log::info('WidgetSettings fetched', ['settings_id' => $settings?->id, 'tenant_id' => $tenantId]);
         
         $data = $settings ? [
-            'tenant_id' => $tenant?->id,
+            'tenant_id' => $tenantId,
             'merchant_id' => $tenant?->slug ?? 'default',
             'enabled' => $settings->enabled,
             'primary_color' => $settings->primary_color,

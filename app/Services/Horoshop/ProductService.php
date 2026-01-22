@@ -242,6 +242,9 @@ class ProductService
         ]);
 
         $product->search_index = $this->buildSearchIndex($item, $product);
+        
+        // Force update timestamp even if no other changes
+        $product->updated_at = now();
         $product->save();
         
         return $isNew ? 'created' : 'updated';

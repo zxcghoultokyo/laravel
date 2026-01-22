@@ -2304,22 +2304,101 @@ class DiagnosticController extends Controller
         if (!$this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
-        $stats = [
-            'chat_events' => DB::table('chat_events')->count(),
-            'chat_conversions' => DB::table('chat_conversions')->count(),
-            'ab_test_events' => DB::table('ab_test_events')->count(),
+
+        $dryRun = $request->boolean('dry_run', true);
+        $tenantId = $request->query('tenant_id');
+
+        // Define all tables to clear (in correct order for foreign keys)
+        $tables = [
+            'chat_messages' => 'Chat messages',
+            'chat_sessions' => 'Chat sessions',
+            'chat_events' => 'Chat events (analytics)',
+            'chat_conversions' => 'Conversions (purchases, carts)',
+            'chat_session_outcomes' => 'Session outcomes (funnels)',
+            'active_chat_sessions' => 'Active chat sessions (real-time)',
+            'ab_test_events' => 'A/B test events',
         ];
         
-        // Clear all analytics tables
-        DB::table('chat_events')->truncate();
-        DB::table('chat_conversions')->truncate();
-        DB::table('ab_test_events')->truncate();
-        
+        $stats = [];
+        $totalDeleted = 0;
+
+        foreach ($tables as $table => $description) {
+            // Check if table exists
+            if (!DB::getSchemaBuilder()->hasTable($table)) {
+                $stats[$table] = ['exists' => false, 'description' => $description, 'count' => 0];
+                continue;
+            }
+
+            $query = DB::table($table);
+            
+            // Filter by tenant if specified
+            if ($tenantId) {
+                $columns = DB::getSchemaBuilder()->getColumnListing($table);
+                if (in_array('tenant_id', $columns)) {
+                    $query->where('tenant_id', $tenantId);
+                } elseif (in_array('merchant_id', $columns)) {
+                    $query->where('merchant_id', $tenantId);
+                }
+            }
+
+            $count = $query->count();
+            
+            if ($dryRun) {
+                $stats[$table] = [
+                    'exists' => true,
+                    'description' => $description,
+                    'count' => $count,
+                    'will_delete' => $count,
+                ];
+                $totalDeleted += $count;
+            } else {
+                // Rebuild query for actual delete
+                $deleteQuery = DB::table($table);
+                if ($tenantId) {
+                    $columns = DB::getSchemaBuilder()->getColumnListing($table);
+                    if (in_array('tenant_id', $columns)) {
+                        $deleteQuery->where('tenant_id', $tenantId);
+                    } elseif (in_array('merchant_id', $columns)) {
+                        $deleteQuery->where('merchant_id', $tenantId);
+                    }
+                }
+                $deleted = $deleteQuery->delete();
+                $stats[$table] = [
+                    'exists' => true,
+                    'description' => $description,
+                    'deleted' => $deleted,
+                ];
+                $totalDeleted += $deleted;
+            }
+        }
+
+        // Clear cache
+        if (!$dryRun) {
+            try {
+                \Illuminate\Support\Facades\Cache::flush();
+                $stats['cache'] = ['cleared' => true];
+            } catch (\Exception $e) {
+                $stats['cache'] = ['cleared' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        if ($dryRun) {
+            return response()->json([
+                'dry_run' => true,
+                'tenant_id' => $tenantId ?? 'all',
+                'total_to_delete' => $totalDeleted,
+                'tables' => $stats,
+                'note' => '⚠️ Set dry_run=false to actually delete. This is IRREVERSIBLE!',
+            ]);
+        }
+
         return response()->json([
             'success' => true,
-            'deleted' => $stats,
-            'message' => '🔥 All analytics data cleared! Starting fresh.',
+            'dry_run' => false,
+            'tenant_id' => $tenantId ?? 'all',
+            'total_deleted' => $totalDeleted,
+            'tables' => $stats,
+            'message' => '🔥 All statistics cleared! Dashboard will show 0 until new data is collected.',
         ]);
     }
     

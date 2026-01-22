@@ -774,6 +774,7 @@ class DiagnosticController extends Controller
      * Remove products from DB that were not updated in the last sync
      * Useful when Horoshop has fewer products than DB (removed from showcase)
      * Required: tenant_id parameter
+     * Optional: minutes (default 30), or cutoff_time (absolute datetime, format: Y-m-d H:i:s)
      */
     public function cleanupStaleProducts(Request $request): JsonResponse
     {
@@ -792,18 +793,24 @@ class DiagnosticController extends Controller
         }
 
         $dryRun = $request->query('dry_run', '1') !== '0';
-        $cutoffMinutes = (int) $request->query('minutes', 30); // Products not updated in last X minutes
+        
+        // Allow absolute cutoff time or relative minutes
+        $cutoffTimeParam = $request->query('cutoff_time');
+        if ($cutoffTimeParam) {
+            $cutoffTime = \Carbon\Carbon::parse($cutoffTimeParam);
+        } else {
+            $cutoffMinutes = (int) $request->query('minutes', 30);
+            $cutoffTime = now()->subMinutes($cutoffMinutes);
+        }
 
         try {
-            $cutoffTime = now()->subMinutes($cutoffMinutes);
-            
             // Find stale products: updated_at < cutoff time
             $staleQuery = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->where('updated_at', '<', $cutoffTime);
             
             $staleCount = $staleQuery->count();
-            $sampleArticles = $staleQuery->limit(10)->pluck('article')->toArray();
+            $sampleArticles = (clone $staleQuery)->limit(10)->pluck('article')->toArray();
             
             // Current products count
             $currentCount = Product::withoutGlobalScopes()

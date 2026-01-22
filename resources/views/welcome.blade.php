@@ -1029,14 +1029,6 @@
                                 <p>Статистика діалогів, конверсії, популярні запити</p>
                             </div>
                         </div>
-                        
-                        <div class="feature-item" onclick="showFeatureDemo(7)" data-aos="fade-right" data-aos-delay="800">
-                            <div class="icon">🏪</div>
-                            <div class="info">
-                                <h3>Мультимагазин <span class="badge badge-success">Працює</span></h3>
-                                <p>Один акаунт — кілька магазинів, кожен зі своїм каталогом</p>
-                            </div>
-                        </div>
                     </div>
                     
                     <div class="demo-preview" data-aos="fade-left" data-aos-delay="300">
@@ -1401,11 +1393,6 @@
                 [
                     { role: 'bot', text: '📊 Статистика за сьогодні:', stats: true },
                     { role: 'bot', text: 'Топ запити:\n• "плитоноска" — 47 разів\n• "футболка олива" — 32\n• "ціна доставки" — 28' }
-                ],
-                // 7: Multi-store
-                [
-                    { role: 'bot', text: '🏪 Ваші магазини:', stores: true },
-                    { role: 'bot', text: 'Кожен магазин має:\n• Окремий каталог\n• Свої налаштування\n• Власну аналітику' }
                 ]
             ];
             
@@ -1493,14 +1480,6 @@
                     content += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px;">';
                     content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">1,247</div><div style="font-size: 10px; color: var(--text-gray);">Діалогів</div></div>';
                     content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">23%</div><div style="font-size: 10px; color: var(--text-gray);">Конверсія</div></div>';
-                    content += '</div>';
-                }
-                
-                if (message.stores) {
-                    content += '<div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">';
-                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>🛒 Тактик Україна</span><span style="color: var(--primary); font-size: 12px;">3,524 товари</span></div>';
-                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>🎯 Military Shop</span><span style="color: var(--primary); font-size: 12px;">1,890 товарів</span></div>';
-                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>👕 Outdoor Pro</span><span style="color: var(--primary); font-size: 12px;">756 товарів</span></div>';
                     content += '</div>';
                 }
                 

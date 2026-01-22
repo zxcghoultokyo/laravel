@@ -555,7 +555,8 @@ class ProductService
         $characters = $item['characteristics'] ?? [];
         foreach ($characters as $key => $val) {
             if (is_array($val)) {
-                $parts[] = implode(' ', $val);
+                // Recursively flatten nested arrays to strings
+                $parts[] = $this->flattenToString($val);
             } else {
                 $parts[] = (string) $val;
             }
@@ -567,6 +568,28 @@ class ProductService
         $searchIndex = implode(' ', array_filter($parts));
 
         return mb_strtolower($searchIndex);
+    }
+
+    /**
+     * Recursively flatten a nested array structure into a single string.
+     */
+    protected function flattenToString($value): string
+    {
+        if (is_scalar($value) || $value === null) {
+            return (string) $value;
+        }
+        
+        if (is_array($value)) {
+            $flattened = [];
+            array_walk_recursive($value, function ($item) use (&$flattened) {
+                if (is_scalar($item) || $item === null) {
+                    $flattened[] = (string) $item;
+                }
+            });
+            return implode(' ', array_filter($flattened));
+        }
+        
+        return '';
     }
 
     /**

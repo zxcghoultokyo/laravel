@@ -3843,4 +3843,104 @@ class DiagnosticController extends Controller
             'note' => "Fixed {$fixed} messages by inheriting tenant_id from their sessions.",
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/horoshop-stock-count
+     * Query Horoshop API directly to count products in stock
+     */
+    public function horoshopStockCount(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = (int) $request->query('tenant_id', 2);
+        $tenant = \App\Models\Tenant::find($tenantId);
+        
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
+            return response()->json(['error' => 'Tenant has no Horoshop credentials'], 400);
+        }
+
+        set_time_limit(300);
+
+        try {
+            $credentials = $tenant->platform_credentials;
+            $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
+            $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
+            $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
+            
+            $client = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
+            
+            // Fetch all products with presence field
+            $allProducts = [];
+            $offset = 0;
+            $limit = 500;
+            
+            do {
+                $response = $client->request('catalog/export', [
+                    'expr' => ['display_in_showcase' => 1],
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'includedParams' => ['article', 'presence', 'title'],
+                ]);
+                
+                $products = $response['products'] ?? [];
+                if (empty($products)) {
+                    break;
+                }
+                
+                foreach ($products as $product) {
+                    $allProducts[] = $product;
+                }
+                
+                $offset += $limit;
+            } while (count($products) === $limit);
+
+            // Count by presence status
+            $presenceCounts = [];
+            $inStockCount = 0;
+            $outOfStockCount = 0;
+            
+            foreach ($allProducts as $product) {
+                $presence = $product['presence'] ?? 'unknown';
+                if (is_array($presence)) {
+                    $presence = $presence['value'] ?? $presence['ua'] ?? $presence['ru'] ?? json_encode($presence);
+                }
+                $presenceLower = mb_strtolower(trim($presence));
+                
+                $presenceCounts[$presence] = ($presenceCounts[$presence] ?? 0) + 1;
+                
+                // Check if in stock
+                $isOutOfStock = str_contains($presenceLower, 'немає') || 
+                                str_contains($presenceLower, 'нема') ||
+                                str_contains($presenceLower, 'нет в') ||
+                                str_contains($presenceLower, 'відсутн');
+                
+                if ($isOutOfStock) {
+                    $outOfStockCount++;
+                } else {
+                    $inStockCount++;
+                }
+            }
+
+            return response()->json([
+                'tenant_id' => $tenantId,
+                'domain' => $domain,
+                'total_products' => count($allProducts),
+                'in_stock_count' => $inStockCount,
+                'out_of_stock_count' => $outOfStockCount,
+                'presence_breakdown' => $presenceCounts,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => explode("\n", $e->getTraceAsString())[0] ?? '',
+            ], 500);
+        }
+    }
 }

@@ -107,11 +107,11 @@
                         </td>
                         <td class="px-4 py-3">
                             <span class="px-2 py-1 text-xs font-medium rounded-full 
-                                {{ $tenant->subscription?->plan === 'enterprise' ? 'bg-purple-100 text-purple-700' : '' }}
-                                {{ $tenant->subscription?->plan === 'pro' ? 'bg-blue-100 text-blue-700' : '' }}
-                                {{ $tenant->subscription?->plan === 'starter' ? 'bg-green-100 text-green-700' : '' }}
-                                {{ $tenant->subscription?->plan === 'trial' ? 'bg-gray-100 text-gray-700' : '' }}">
-                                {{ ucfirst($tenant->subscription?->plan ?? 'trial') }}
+                                {{ $tenant->plan === 'enterprise' ? 'bg-purple-100 text-purple-700' : '' }}
+                                {{ $tenant->plan === 'pro' ? 'bg-blue-100 text-blue-700' : '' }}
+                                {{ $tenant->plan === 'starter' ? 'bg-green-100 text-green-700' : '' }}
+                                {{ $tenant->plan === 'trial' ? 'bg-gray-100 text-gray-700' : '' }}">
+                                {{ ucfirst($tenant->plan ?? 'trial') }}
                             </span>
                         </td>
                         <td class="px-4 py-3">

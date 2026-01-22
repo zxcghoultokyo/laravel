@@ -137,13 +137,15 @@ class FunctionCallingAgent extends BaseAgent
         // Add conversation history if available
         $history = $context['history'] ?? [];
 
-        // Extract conversation context from history
-        $conversationContext = $this->extractConversationContext($history);
+        // Check if this is a fresh/new query (not a follow-up)
+        $isFreshQuery = $this->isFreshQuery($message, $history);
+        $conversationContext = $isFreshQuery ? '' : $this->extractConversationContext($history);
 
         Log::info('FunctionCallingAgent: extracted context', [
             'context' => $conversationContext,
             'history_count' => count($history),
             'is_trigger' => $isTriggerQuery,
+            'is_fresh_query' => $isFreshQuery,
         ]);
 
         if ($conversationContext) {

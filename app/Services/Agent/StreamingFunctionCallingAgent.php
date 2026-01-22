@@ -61,7 +61,10 @@ class StreamingFunctionCallingAgent extends BaseAgent
 
         // Load conversation history for context
         $history = $this->loadConversationHistory($sessionId);
-        $conversationContext = $this->extractConversationContext($history);
+        
+        // Check if this is a fresh/new query (not a follow-up)
+        $isFreshQuery = $this->isFreshQuery($message, $history);
+        $conversationContext = $isFreshQuery ? '' : $this->extractConversationContext($history);
 
         // Load shown product IDs to exclude from subsequent searches
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
@@ -69,6 +72,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         Log::info('StreamingAgent: loaded history', [
             'session_id' => $sessionId,
             'history_count' => count($history),
+            'is_fresh_query' => $isFreshQuery,
             'context' => $conversationContext,
             'shown_product_ids' => count($this->shownProductIds),
         ]);

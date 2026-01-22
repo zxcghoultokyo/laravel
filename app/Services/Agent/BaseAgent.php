@@ -1061,6 +1061,70 @@ PROMPT;
     }
 
     /**
+     * Detect if the current message is a fresh/new query (not a follow-up).
+     * A fresh query should NOT use previous context.
+     */
+    protected function isFreshQuery(string $message, array $history): bool
+    {
+        $msg = mb_strtolower(trim($message));
+        $wordCount = count(preg_split('/\s+/u', $msg));
+        
+        // Short confirmations are NOT fresh queries - they're follow-ups
+        $confirmations = ['так', 'ні', 'добре', 'ок', 'окей', 'зрозумів', 'дякую', 'ще', 'інші', 'більше', 'показуй'];
+        if (in_array($msg, $confirmations) || $wordCount <= 2 && preg_match('/^(ще|інші|більше|показуй)/u', $msg)) {
+            return false;
+        }
+        
+        // If message contains clear category/brand without modifiers - it's a fresh query
+        // Brands that indicate a fresh brand-specific search
+        $brands = ['defcon', 'm-tac', 'mtac', 'helikon', 'pentagon', 'velmet', '5.11', 'uf pro', 'condor', 
+                   'direct action', 'crye', 'ops-core', 'emerson', 'wartech', 'архангел', 'p1g', 'a-tac', 'hrt',
+                   'mechanix', 'oakley', 'salomon', 'lowa', 'meindl', 'haix'];
+        
+        foreach ($brands as $brand) {
+            // If message is ONLY the brand name (with maybe small variations)
+            if (preg_match('/^' . preg_quote($brand, '/') . '\s*\d*$/ui', $msg)) {
+                return true;
+            }
+        }
+        
+        // Clear new category queries (single category word without modifiers from context)
+        $categories = ['плитоноски', 'шоломи', 'берці', 'рюкзаки', 'куртки', 'штани', 'футболки', 
+                       'підсумки', 'рукавиці', 'окуляри', 'ремені', 'бронеплати', 'жилети',
+                       'термобілизна', 'фліс', 'софтшел', 'шапки', 'балаклави', 'носки'];
+        
+        foreach ($categories as $cat) {
+            if (preg_match('/^' . preg_quote($cat, '/') . '$/ui', $msg)) {
+                return true;
+            }
+        }
+        
+        // If there's NO history, it's always fresh
+        if (empty($history)) {
+            return true;
+        }
+        
+        // If user explicitly starts a new topic with "покажи", "знайди", "шукаю" + different category
+        // This is a heuristic - if the new query has a clear product type and it's different from context
+        $lastUserMsg = '';
+        foreach (array_reverse($history) as $h) {
+            if (($h['role'] ?? '') === 'user') {
+                $lastUserMsg = mb_strtolower($h['content'] ?? '');
+                break;
+            }
+        }
+        
+        // Check if current message has a clear search intent with new category
+        if (preg_match('/^(покажи|знайди|шукаю|є|маєте)\s+/ui', $msg)) {
+            // Extract what they're searching for now vs before
+            // If it's clearly different - fresh query
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
      * Extract conversation context from history.
      */
     protected function extractConversationContext(array $history): string

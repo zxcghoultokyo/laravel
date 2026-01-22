@@ -424,4 +424,63 @@ class OnboardingController extends Controller
 
         return redirect()->route('dashboard')->with('success', 'Вітаємо! Ваш AI-асистент готовий до роботи.');
     }
+
+    /**
+     * Get AI enrichment progress for current tenant.
+     * Used for progress bar on step 5.
+     */
+    public function enrichmentProgress(): JsonResponse
+    {
+        $tenant = $this->tenant();
+        
+        // Count total products in stock
+        $totalProducts = $tenant->products()
+            ->where('in_stock', true)
+            ->count();
+        
+        // Count products with AI enrichment
+        $enrichedProducts = \App\Models\ProductAiIndex::where('tenant_id', $tenant->id)
+            ->whereNotNull('keywords')
+            ->count();
+        
+        // Count products indexed in Meilisearch (via search_index field)
+        $meiliIndexed = $tenant->products()
+            ->where('in_stock', true)
+            ->whereNotNull('search_index')
+            ->where('search_index', '!=', '')
+            ->count();
+        
+        // Calculate percentages
+        $enrichmentPercent = $totalProducts > 0 
+            ? round(($enrichedProducts / $totalProducts) * 100, 1) 
+            : 0;
+        $meiliPercent = $totalProducts > 0 
+            ? round(($meiliIndexed / $totalProducts) * 100, 1) 
+            : 0;
+        
+        // Overall progress: AI enrichment (60%) + Meili indexing (40%)
+        $overallPercent = round(($enrichmentPercent * 0.6) + ($meiliPercent * 0.4), 1);
+        
+        // Determine status
+        $status = 'processing';
+        if ($enrichmentPercent >= 100 && $meiliPercent >= 100) {
+            $status = 'completed';
+        } elseif ($totalProducts === 0) {
+            $status = 'no_products';
+        }
+        
+        return response()->json([
+            'status' => $status,
+            'total_products' => $totalProducts,
+            'ai_enrichment' => [
+                'completed' => $enrichedProducts,
+                'percent' => $enrichmentPercent,
+            ],
+            'meili_indexing' => [
+                'completed' => $meiliIndexed,
+                'percent' => $meiliPercent,
+            ],
+            'overall_percent' => $overallPercent,
+        ]);
+    }
 }

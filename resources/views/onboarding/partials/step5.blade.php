@@ -10,6 +10,29 @@
 </div>
 
 <div class="max-w-2xl mx-auto">
+    <!-- AI Enrichment Progress Banner -->
+    <div id="enrichment-progress" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center">
+                <svg id="enrichment-spinner" class="animate-spin w-5 h-5 text-blue-600 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <svg id="enrichment-check" class="hidden w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <span class="font-medium text-blue-800" id="enrichment-title">🧠 AI обробляє ваші товари...</span>
+            </div>
+            <span class="text-sm font-semibold text-blue-700" id="enrichment-percent">0%</span>
+        </div>
+        <div class="w-full bg-blue-200 rounded-full h-2">
+            <div id="enrichment-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+        <p class="mt-2 text-xs text-blue-600" id="enrichment-details">
+            AI-аналіз: <span id="ai-count">0</span> | Пошуковий індекс: <span id="meili-count">0</span>
+        </p>
+    </div>
+
     <!-- Embed code -->
     <div class="mb-8">
         <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -129,6 +152,69 @@ document.addEventListener('DOMContentLoaded', function() {
                 copyBtn.textContent = '📋 Копіювати';
             }, 2000);
         });
+    });
+
+    // AI Enrichment Progress Polling
+    const progressBar = document.getElementById('enrichment-bar');
+    const progressPercent = document.getElementById('enrichment-percent');
+    const progressTitle = document.getElementById('enrichment-title');
+    const progressDetails = document.getElementById('enrichment-details');
+    const progressContainer = document.getElementById('enrichment-progress');
+    const spinner = document.getElementById('enrichment-spinner');
+    const checkIcon = document.getElementById('enrichment-check');
+    const aiCount = document.getElementById('ai-count');
+    const meiliCount = document.getElementById('meili-count');
+
+    let pollInterval = null;
+    let completedOnce = false;
+
+    function updateProgress() {
+        fetch('{{ route("onboarding.enrichment.progress") }}')
+            .then(r => r.json())
+            .then(data => {
+                const percent = Math.round(data.overall_percent);
+                progressBar.style.width = percent + '%';
+                progressPercent.textContent = percent + '%';
+                aiCount.textContent = data.ai_enrichment.completed + '/' + data.total_products;
+                meiliCount.textContent = data.meili_indexing.completed + '/' + data.total_products;
+
+                if (data.status === 'completed' && !completedOnce) {
+                    completedOnce = true;
+                    progressTitle.textContent = '✅ Всі товари оброблено!';
+                    progressContainer.classList.remove('bg-blue-50', 'border-blue-200');
+                    progressContainer.classList.add('bg-green-50', 'border-green-200');
+                    progressBar.classList.remove('bg-blue-600');
+                    progressBar.classList.add('bg-green-500');
+                    spinner.classList.add('hidden');
+                    checkIcon.classList.remove('hidden');
+                    progressPercent.classList.remove('text-blue-700');
+                    progressPercent.classList.add('text-green-700');
+                    progressDetails.classList.remove('text-blue-600');
+                    progressDetails.classList.add('text-green-600');
+                    
+                    // Stop polling when complete
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                } else if (data.status === 'no_products') {
+                    progressContainer.classList.add('hidden');
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                }
+            })
+            .catch(err => console.error('Progress fetch error:', err));
+    }
+
+    // Initial check and start polling
+    updateProgress();
+    pollInterval = setInterval(updateProgress, 3000); // Poll every 3 seconds
+
+    // Cleanup on page leave
+    window.addEventListener('beforeunload', function() {
+        if (pollInterval) clearInterval(pollInterval);
     });
 });
 </script>

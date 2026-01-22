@@ -75,6 +75,9 @@ Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(fu
     // Step 5: Embed
     Route::get('/embed', [OnboardingController::class, 'step5'])->name('step5');
     Route::post('/complete', [OnboardingController::class, 'complete'])->name('complete');
+    
+    // Enrichment progress (AJAX endpoint)
+    Route::get('/enrichment-progress', [OnboardingController::class, 'enrichmentProgress'])->name('enrichment.progress');
 });
 
 // Widget embed route (public, no auth required)

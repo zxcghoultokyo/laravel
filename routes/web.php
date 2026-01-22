@@ -16,6 +16,15 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Legal pages
+Route::get('/privacy', function () {
+    return view('legal.privacy');
+})->name('privacy');
+
+Route::get('/terms', function () {
+    return view('legal.terms');
+})->name('terms');
+
 // Dashboard - tenant scoped (protected by trial middleware)
 Route::get('/dashboard', TenantDashboard::class)
     ->middleware(['auth', 'verified', 'trial.active'])

@@ -1021,6 +1021,22 @@
                                 <p>Кольори, шрифти, положення — все під ваш бренд</p>
                             </div>
                         </div>
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(6)" data-aos="fade-right" data-aos-delay="700">
+                            <div class="icon">📊</div>
+                            <div class="info">
+                                <h3>Детальна аналітика <span class="badge badge-success">Працює</span></h3>
+                                <p>Статистика діалогів, конверсії, популярні запити</p>
+                            </div>
+                        </div>
+                        
+                        <div class="feature-item" onclick="showFeatureDemo(7)" data-aos="fade-right" data-aos-delay="800">
+                            <div class="icon">🏪</div>
+                            <div class="info">
+                                <h3>Мультимагазин <span class="badge badge-success">Працює</span></h3>
+                                <p>Один акаунт — кілька магазинів, кожен зі своїм каталогом</p>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="demo-preview" data-aos="fade-left" data-aos-delay="300">
@@ -1246,6 +1262,72 @@
             </div>
         </section>
 
+        <!-- Partner Program Section -->
+        <section class="partner-program" id="partner" style="padding: 80px 0; background: linear-gradient(135deg, #065f46 0%, #047857 50%, #10b981 100%); color: white;">
+            <div class="container">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;" data-aos="fade-up">
+                    <div>
+                        <span style="display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 16px;">🤝 Партнерська програма</span>
+                        <h2 style="font-size: clamp(28px, 4vw, 40px); margin-bottom: 20px; font-family: 'Space Grotesk', sans-serif;">Заробляйте з AIntento</h2>
+                        <p style="font-size: 18px; opacity: 0.9; margin-bottom: 24px; line-height: 1.7;">
+                            Приведіть клієнта — отримуйте <strong style="color: #fef3c7; font-size: 24px;">15% від його платежів назавжди</strong>. 
+                            Без обмежень за кількістю рефералів.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
+                            <div style="background: rgba(255,255,255,0.15); padding: 20px 16px; border-radius: 12px; text-align: center;">
+                                <div style="font-size: 32px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">15%</div>
+                                <div style="font-size: 13px; opacity: 0.9;">від кожного платежу</div>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.15); padding: 20px 16px; border-radius: 12px; text-align: center;">
+                                <div style="font-size: 32px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">∞</div>
+                                <div style="font-size: 13px; opacity: 0.9;">назавжди</div>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.15); padding: 20px 16px; border-radius: 12px; text-align: center;">
+                                <div style="font-size: 32px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">5+</div>
+                                <div style="font-size: 13px; opacity: 0.9;">рефералів без ліміту</div>
+                            </div>
+                        </div>
+
+                        <a href="https://t.me/AIntento" target="_blank" class="btn" style="background: white; color: #065f46; font-size: 16px; padding: 16px 32px;">
+                            💬 Стати партнером
+                        </a>
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.1); border-radius: 24px; padding: 32px; backdrop-filter: blur(10px);">
+                        <h3 style="font-size: 18px; margin-bottom: 24px; font-family: 'Space Grotesk', sans-serif;">Як це працює</h3>
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div style="display: flex; gap: 16px; align-items: flex-start;">
+                                <div style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">1</div>
+                                <div>
+                                    <strong style="display: block; margin-bottom: 4px;">Отримайте унікальне посилання</strong>
+                                    <span style="font-size: 14px; opacity: 0.8;">Напишіть нам у Telegram і отримайте персональний реферальний код</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 16px; align-items: flex-start;">
+                                <div style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">2</div>
+                                <div>
+                                    <strong style="display: block; margin-bottom: 4px;">Рекомендуйте AIntento</strong>
+                                    <span style="font-size: 14px; opacity: 0.8;">Діліться з власниками інтернет-магазинів, веб-студіями, агенціями</span>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 16px; align-items: flex-start;">
+                                <div style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">3</div>
+                                <div>
+                                    <strong style="display: block; margin-bottom: 4px;">Отримуйте виплати</strong>
+                                    <span style="font-size: 14px; opacity: 0.8;">15% від кожного платежу рефералів — щомісячно на вашу карту</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.2);">
+                            <div style="font-size: 13px; opacity: 0.8;">💡 Приклад: 5 клієнтів на Pro плані = <strong>1 500 ₴/міс</strong> пасивного доходу</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Footer -->
         <footer>
             <div class="container">
@@ -1257,11 +1339,15 @@
                     <div class="footer-links">
                         <a href="#features">Функції</a>
                         <a href="#pricing">Ціни</a>
-                        <a href="/admin">Адмін-панель</a>
+                        <a href="#partner">Партнерам</a>
                         <a href="https://t.me/AIntento" target="_blank">💬 Підтримка</a>
                     </div>
                 </div>
-                <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: center; gap: 24px; margin-top: 24px; flex-wrap: wrap;">
+                    <a href="/privacy" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Політика конфіденційності</a>
+                    <a href="/terms" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Умови використання</a>
+                </div>
+                <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
                     <p>© 2025 AIntento — зроблено в 🇺🇦 Україні</p>
                 </div>
             </div>
@@ -1310,6 +1396,16 @@
                 // 5: Customization
                 [
                     { role: 'bot', text: 'Віджет можна налаштувати під ваш бренд:', themes: true }
+                ],
+                // 6: Analytics
+                [
+                    { role: 'bot', text: '📊 Статистика за сьогодні:', stats: true },
+                    { role: 'bot', text: 'Топ запити:\n• "плитоноска" — 47 разів\n• "футболка олива" — 32\n• "ціна доставки" — 28' }
+                ],
+                // 7: Multi-store
+                [
+                    { role: 'bot', text: '🏪 Ваші магазини:', stores: true },
+                    { role: 'bot', text: 'Кожен магазин має:\n• Окремий каталог\n• Свої налаштування\n• Власну аналітику' }
                 ]
             ];
             
@@ -1397,6 +1493,14 @@
                     content += '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px;">';
                     content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">1,247</div><div style="font-size: 10px; color: var(--text-gray);">Діалогів</div></div>';
                     content += '<div style="background: var(--bg-light); padding: 12px; border-radius: 8px; text-align: center;"><div style="font-size: 20px; font-weight: 700; color: var(--primary);">23%</div><div style="font-size: 10px; color: var(--text-gray);">Конверсія</div></div>';
+                    content += '</div>';
+                }
+                
+                if (message.stores) {
+                    content += '<div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">';
+                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>🛒 Тактик Україна</span><span style="color: var(--primary); font-size: 12px;">3,524 товари</span></div>';
+                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>🎯 Military Shop</span><span style="color: var(--primary); font-size: 12px;">1,890 товарів</span></div>';
+                    content += '<div style="background: var(--bg-light); padding: 10px 14px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;"><span>👕 Outdoor Pro</span><span style="color: var(--primary); font-size: 12px;">756 товарів</span></div>';
                     content += '</div>';
                 }
                 

@@ -1,228 +1,149 @@
 # Production Configuration & Debugging
 
-## Environment Variables (Production на contractor.kiev.ua)
+## Environment Variables
 
 ### Core Application
-```
-APP_KEY=base64:gFu0hElUakUI69dU+9fcI=
+```bash
+APP_KEY=base64:YOUR_APP_KEY_HERE
 APP_ENV=production
 APP_DEBUG=false
-APP_NAME=Contractor
-APP_URL=https://contractor.kiev.ua
+APP_NAME=AIntento
+APP_URL=https://aimbot.laravel.cloud
 ```
 
 ### OpenAI Integration
-```
-OPENAI_API_KEY=sk-proj-5Lf9p1J3RZK0DYA
-OPENAI_MODEL=gpt-5.1
+```bash
+OPENAI_API_KEY=sk-proj-YOUR_KEY_HERE
+OPENAI_MODEL=gpt-4.1
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
-### Meilisearch (Hosted on Fly.io)
-```
+### Meilisearch
+```bash
 MEILI_ENABLED=1
-MEILI_HOST=https://meilisearch-aimbot.fly.dev
-MEILI_MASTER_KEY=58684e6d92692
+MEILI_HOST=https://your-meili-instance.fly.dev
+MEILI_MASTER_KEY=YOUR_MEILI_KEY
 MEILI_INDEX_PRODUCTS=products
 ```
-**⚠️ CRITICAL**: 
-- Якщо `MEILI_ENABLED=0` → код падає на Eloquent fallback (повільно)
-- Перевірити що Meili **доступний з Laravel Cloud** (network connectivity)
-- Master key потрібен для синхронізації індексів
 
-### Horoshop Platform (Taktyka API)
+### Horoshop Platform
+```bash
+HOROSHOP_DOMAIN=https://your-shop.horoshop.ua
+HOROSHOP_API_LOGIN=your_login
+HOROSHOP_API_PASSWORD=your_password
 ```
-HOROSHOP_DOMAIN=https://contractor.kiev.ua
-HOROSHOP_API_LOGIN=owner
-HOROSHOP_API_PASSWORD=wel01
+
+### Billing (WayForPay)
+```bash
+WAYFORPAY_MERCHANT_ACCOUNT=your_merchant
+WAYFORPAY_MERCHANT_SECRET=your_secret
+WAYFORPAY_WEBHOOK_URL=https://aimbot.laravel.cloud/api/billing/webhook/wayforpay
 ```
 
 ### Caching & Queue
-```
+```bash
 CACHE_DRIVER=file
-CACHE_STORE=file
 QUEUE_CONNECTION=database
 ```
 
 ### Admin
-```
-ADMIN_JOBS_TOKEN=someret
-```
-
-### Logging
-```
-LOG_CHANNEL=stderr
+```bash
+ADMIN_JOBS_TOKEN=your_secure_token
 ```
 
 ---
 
-## Debugging на Проді
+## Debugging
 
-### 1. Перевірити Meilisearch статус
+### 1. Check Meilisearch Status
 ```bash
-# Через tinker
+# Via tinker
 php artisan tinker
 >>> config('meilisearch.enabled') ? 'Meili OK' : 'DISABLED'
->>> exit
 
-# Або прямо через curl на fly.io
-curl -i https://meilisearch-aimbot.fly.dev/health
+# Via curl
+curl -i https://your-meili.fly.dev/health
 ```
 
-### 2. Перевірити що продукти індексовані в Meili
+### 2. Check Products Index
 ```bash
-# Через tinker
 php artisan tinker
 >>> $index = app('meilisearch')->index('products');
 >>> $index->getRawInfo()['numberOfDocuments']
->>> exit
 ```
 
-### 3. Протестувати пошук
+### 3. Test Search
 ```bash
 # Meili search API
-curl -X POST https://meilisearch-aimbot.fly.dev/indexes/products/search \
-  -H "Authorization: Bearer 58684e6d92692" \
+curl -X POST https://your-meili.fly.dev/indexes/products/search \
+  -H "Authorization: Bearer YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"q": "плитоноска", "limit": 5}'
-
-# Через Laravel Eloquent fallback
-php artisan tinker
->>> \App\Models\Product::where('title', 'like', '%плитонос%')->count()
->>> \App\Models\Product::where('title', 'like', '%плитонос%')->first(['article', 'title'])->dump()
->>> exit
 ```
 
-### 4. Перевірити пошук через чат
-1. Відкрити https://contractor.kiev.ua
-2. Відправити запит: `"плитоноска мультикам"`
-3. Перевірити логи:
+### 4. Check Chat via API
 ```bash
-tail -100 storage/logs/laravel.log | grep -i "meili\|eloquent\|plitono"
-```
+# SSE Stream
+curl "https://aimbot.laravel.cloud/api/chat/stream?message=привіт&session_id=test123&widget_key=YOUR_KEY"
 
-### 5. Перевірити OpenAI інтеграцію
-```bash
-php artisan tinker
->>> app(\App\Services\Ai\AiRouter::class)->classify('плитоноска')
+# POST JSON
+curl -X POST https://aimbot.laravel.cloud/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"плитоноска","session_id":"test","widget_key":"YOUR_KEY"}'
 ```
 
 ---
 
 ## Common Issues
 
-### ❌ "Meilisearch is disabled (MEILI_ENABLED=0)"
-- **Причина**: Env var не прочитано або файл `.env` не синхронізований
-- **Фікс**: 
-  ```bash
-  # На Laravel Cloud:
-  php artisan config:cache
-  php artisan config:clear
-  # або redeploy
-  ```
+### ❌ "Meilisearch is disabled"
+- **Fix**: Check `.env` and run `php artisan config:cache`
 
 ### ❌ "Meilisearch connection refused"
-- **Причина**: Network issue між Laravel Cloud та Fly.io
-- **Фікс**: Перевірити що Fly.io Meili доступна:
-  ```bash
-  curl -i https://meilisearch-aimbot.fly.dev/health
-  ```
-- Якщо не відповідає: перезавантажити Meili на Fly
+- **Fix**: Verify Fly.io Meili is running: `flyctl status -a your-meili`
 
-### ❌ "No products found" у пошуку
-- **Причина 1**: Eloquent fallback не знайшов товарів:
-  ```bash
-  php artisan tinker
-  >>> \App\Models\Product::count()  # Скільки всього товарів
-  >>> \App\Models\Product::where('title', 'like', '%плитонос%')->count()  # Скільки плитоносок
-  ```
-- **Причина 2**: Meili не синхронізував індекс:
-  ```bash
-  # На проді запустити re-index
-  php artisan meili:reindex-products
-  # або через адмін
-  curl https://contractor.kiev.ua/admin/jobs/rebuild-category-index?token=someret
-  ```
+### ❌ "No products found"
+- **Fix 1**: Check DB: `Product::count()`
+- **Fix 2**: Re-index: `php artisan meili:reindex-products`
 
-### ❌ "Query expanded to too many synonyms"
-- **Причина**: `normalizeSearchQuery()` у AiRouter додав занадто багато синонімів
-- **Фікс**: Переконатися що запит містить специфічний продуктовий термін:
-  ```php
-  // app/Services/Ai/AiRouter.php line ~120
-  $specificTerms = ['плитоноск', 'бронеплит', 'берц', ...];
-  // Якщо запит містить один із цих термінів → ранній повернення
-  ```
+### ❌ "Widget blocked"
+- **Fix**: Check tenant trial/subscription: `Tenant::find(ID)->canUseWidget()`
 
 ---
 
 ## Monitoring Commands
 
-### Real-time log tail
 ```bash
-# На Laravel Cloud SSH
-tail -f storage/logs/laravel.log | grep -v "production.DEBUG"
-```
+# Real-time logs
+tail -f storage/logs/laravel.log
 
-### Check recent searches
-```bash
+# Recent chats
 php artisan tinker --execute="
-\App\Models\ChatMessage::latest('created_at')
-  ->limit(10)
-  ->get(['id', 'message', 'created_at'])
-  ->dump();
+\App\Models\ChatMessage::latest()->limit(10)->get(['message', 'created_at'])->dump();
 "
-```
 
-### Check product count by type
-```bash
+# Product stats
 php artisan tinker --execute="
-echo 'Total products: ' . \App\Models\Product::count() . \"\n\";
-echo 'Plate carriers: ' . \App\Models\Product::where('title', 'like', '%плитонос%')->count() . \"\n\";
-echo 'Armor plates: ' . \App\Models\Product::where('title', 'like', '%бронеплит%')->count() . \"\n\";
-echo 'Boots: ' . \App\Models\Product::where('title', 'like', '%берц%')->count() . \"\n\";
+echo 'Total: ' . \App\Models\Product::count();
 "
-```
-
-### Check cache usage
-```bash
-# Session contexts cached in /storage/framework/cache
-ls -lah storage/framework/cache/data/
 ```
 
 ---
 
-## Deployment Pipeline
+## Deployment
 
-1. **Code push** → GitHub
-2. **Laravel Cloud auto-deploys** (git hook)
-3. **Run migrations** (auto or manual)
-4. **Clear config cache**:
-   ```bash
-   php artisan config:cache
-   ```
-5. **Re-index if needed**:
-   ```bash
-   php artisan meili:reindex-products
-   ```
-6. **Verify** via test chat query
+1. Push to GitHub → Laravel Cloud auto-deploys
+2. Run migrations: `php artisan migrate`
+3. Clear cache: `php artisan config:cache`
+4. Re-index if needed: `php artisan meili:reindex-products`
 
 ---
 
-## Key Files Reference
+## Key Files
 
-- **Config**: 
-  - [config/services.php](config/services.php) — OpenAI, Horoshop
-  - [config/meilisearch.php](config/meilisearch.php) — Meili settings
-  
-- **Core Services**:
-  - [app/Services/Ai/AiRouter.php](app/Services/Ai/AiRouter.php) — Intent classification, query normalization
-  - [app/Services/Agent/AgentOrchestrator.php](app/Services/Agent/AgentOrchestrator.php) — Chat orchestration
-  - [app/Services/Agent/Tools/MeiliProductSearchTool.php](app/Services/Agent/Tools/MeiliProductSearchTool.php) — Search execution
-  
-- **Models**:
-  - [app/Models/Product.php](app/Models/Product.php) — Product entity
-  - [app/Models/ChatSession.php](app/Models/ChatSession.php) — Session tracking
-  
-- **Logs**:
-  - [storage/logs/laravel.log](storage/logs/laravel.log) — All events (check for errors)
+- **Config**: `config/services.php`, `config/meilisearch.php`, `config/billing.php`
+- **Agents**: `app/Services/Agent/FunctionCallingAgent.php`, `app/Services/Agent/StreamingFunctionCallingAgent.php`
+- **Search**: `app/Services/Agent/Tools/MeiliProductSearchTool.php`
+- **Tenant**: `app/Models/Tenant.php`
+- **Logs**: `storage/logs/laravel.log`
 

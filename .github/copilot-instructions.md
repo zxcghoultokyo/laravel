@@ -1,6 +1,31 @@
 # Copilot Instructions (AI Coding Agents)
 
-Purpose: make agents productive fast in this Laravel 12 AI‑commerce backend. Keep to existing patterns and use the services layer.
+Purpose: make agents productive fast in this Laravel 12 multi-tenant AI‑commerce SaaS backend. Keep to existing patterns and use the services layer.
+
+## 🏗️ Multi-Tenant Architecture
+
+This is a **multi-tenant SaaS** where each tenant (customer) has their own:
+- Products catalog (`products` table with `tenant_id`)
+- Widget settings
+- Chat sessions & messages
+- Analytics data
+
+**Key files:**
+- `app/Models/Tenant.php` — Core tenant model with subscription logic
+- `app/Scopes/TenantScope.php` — Global scope for automatic tenant filtering
+- `app/Http/Middleware/SetTenantContext.php` — Sets tenant from auth or API key
+- `app/Models/Concerns/BelongsToTenant.php` — Trait for tenant-scoped models
+
+**Subscription Logic (Tenant.php):**
+```php
+isOnTrial()           // Has trial_ends_at in future
+isTrialExpired()      // Trial ended
+hasActiveSubscription() // plan + plan_expires_at valid
+canUseWidget()        // Trial OR active subscription
+```
+
+**Plans:** starter (799₴), pro (1999₴), enterprise (custom)
+**Trial:** 14 days from registration
 
 Big Picture
 - Core logic lives in services: [app/Services](app/Services) (Ai, Agent, Chat, Search, Horoshop, Catalog).
@@ -149,9 +174,10 @@ When Adding Features
 References
 - High‑level overview: [README.md](README.md). 
 - Chat architecture: [docs/CHAT_ARCHITECTURE.md](docs/CHAT_ARCHITECTURE.md)
-- Agent details (legacy): [AGENT_ORCHESTRATOR.md](AGENT_ORCHESTRATOR.md). 
 - Chat examples: [docs/CHAT_EXAMPLES.md](docs/CHAT_EXAMPLES.md).
 - Admin UI Roadmap: [docs/ADMIN_UI_ROADMAP.md](docs/ADMIN_UI_ROADMAP.md)
+- Billing: [config/billing.php](config/billing.php) — plans and payment config
+- Multi-tenant: `app/Models/Tenant.php`, `app/Scopes/TenantScope.php`
 
 ## Product Images
 

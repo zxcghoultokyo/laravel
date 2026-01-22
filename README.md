@@ -1,10 +1,40 @@
 ## AI‑Powered Tactical Commerce — Backend (Laravel 12)
 
-Проєкт: e‑commerce для тактичного спорядження з AI‑пошуком, чат‑асистентом і Meilisearch. Код має продакшн‑фокус: черги, ідемпотентність, сувора відповідність схемам БД, backward‑compat для job‑ів.
+Проєкт: **Multi-tenant SaaS** для e‑commerce з AI‑чатботом, пошуком на Meilisearch та інтеграцією Horoshop. Продакшн-фокус: черги, ідемпотентність, tenant isolation, backward‑compat для job‑ів.
 
-Посилання:
-- Архітектурні інструкції для інженерів: [.github/copilot-instructions.md](.github/copilot-instructions.md)
-- MASTER PROMPT для AI‑агентів: [docs/MASTER_PROMPT.md](docs/MASTER_PROMPT.md)
+**Посилання:**
+- Архітектурні інструкції: [.github/copilot-instructions.md](.github/copilot-instructions.md)
+- Multi-tenant архітектура: [docs/MULTI_TENANT.md](docs/MULTI_TENANT.md)
+- Billing система: [docs/BILLING.md](docs/BILLING.md)
+- Chat архітектура: [docs/CHAT_ARCHITECTURE.md](docs/CHAT_ARCHITECTURE.md)
+
+---
+
+## 🏗️ Multi-Tenant Architecture
+
+Кожен **tenant** (клієнт-магазин) має ізольовані:
+- Каталог товарів
+- Налаштування віджета
+- Чат-сесії та історію
+- Аналітику
+- Білінг та підписку
+
+**Ключові файли:**
+```
+app/Models/Tenant.php                    # Core tenant model
+app/Scopes/TenantScope.php               # Global query scope
+app/Http/Middleware/SetTenantContext.php # Sets tenant from request
+app/Models/Concerns/BelongsToTenant.php  # Trait for scoped models
+```
+
+**Підписки:**
+| План | Ціна | Повідомлень | Товарів |
+|------|------|-------------|---------|
+| Starter | 799₴/міс | 1,000 | 500 |
+| Pro | 1,999₴/міс | 5,000 | 10,000 |
+| Enterprise | Custom | ∞ | ∞ |
+
+**Trial:** 14 днів з повним функціоналом Pro
 
 ### Архітектура (огляд)
 - **Сервіси**: бізнес‑логіка в `app/Services/`.

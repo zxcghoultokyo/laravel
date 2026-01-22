@@ -32,7 +32,7 @@ class AgentSmokeTest extends Command
             $accessoryTool = app(\App\Services\Agent\Tools\AccessoryFilterTool::class);
             $this->line('  ✅ AccessoryFilterTool зареєстровано');
             
-            $this->line('  ✅ AgentOrchestrator зареєстровано (ін'єкція працює)');
+            $this->line('  ✅ AgentOrchestrator зареєстровано (інєкція працює)');
             
             $this->info('  🎉 Всі сервіси зареєстровані успішно!');
             $this->newLine();

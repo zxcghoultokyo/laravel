@@ -812,6 +812,9 @@ class DiagnosticController extends Controller
                 return response()->json([
                     'status' => 'error',
                     'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'trace' => array_slice($e->getTrace(), 0, 5), // First 5 trace entries
                 ], 500);
             }
         }

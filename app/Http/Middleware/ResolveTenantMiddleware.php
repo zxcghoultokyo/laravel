@@ -26,6 +26,13 @@ class ResolveTenantMiddleware
     {
         $tenant = $this->resolveTenant($request);
 
+        \Log::info('ResolveTenantMiddleware executed', [
+            'tenant_id' => $tenant?->id,
+            'tenant_slug' => $tenant?->slug,
+            'has_token_header' => $request->hasHeader('X-Widget-Token'),
+            'token' => $request->header('X-Widget-Token'),
+        ]);
+
         if ($tenant) {
             // Bind tenant to container
             app()->instance('current_tenant', $tenant);

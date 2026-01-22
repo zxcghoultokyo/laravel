@@ -977,11 +977,12 @@ class ChatService
     }
 
     /**
-     * Get current tenant ID from TenantContext.
+     * Get current tenant ID from TenantContext or request headers.
      * Uses centralized TenantContext service for consistency.
      */
     protected function getCurrentTenantId(): ?int
     {
+        // First try TenantContext
         $context = app(\App\Services\Tenant\TenantContext::class);
         
         // Super admin without specific tenant context
@@ -989,8 +990,39 @@ class ChatService
             return null;
         }
         
+        $tenantId = $context->getTenantId();
+        if ($tenantId) {
+            return $tenantId;
+        }
+        
+        // Fallback: resolve from X-Widget-Token header directly
+        if ($token = request()->header('X-Widget-Token')) {
+            // Try api_token in WidgetSettings
+            $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('api_token', $token)
+                ->first();
+            
+            if ($widgetSettings && $widgetSettings->tenant_id) {
+                Log::info('ChatService: resolved tenant from WidgetSettings', ['tenant_id' => $widgetSettings->tenant_id]);
+                return $widgetSettings->tenant_id;
+            }
+            
+            // Fallback: token is tenant slug
+            $tenant = \App\Models\Tenant::where('slug', $token)->first();
+            if ($tenant) {
+                Log::info('ChatService: resolved tenant from slug', ['slug' => $token, 'tenant_id' => $tenant->id]);
+                return $tenant->id;
+            }
+        }
+        
+        // Fallback: request param tenant_id
+        if ($requestTenantId = request()->input('tenant_id')) {
+            Log::info('ChatService: using request tenant_id', ['tenant_id' => $requestTenantId]);
+            return (int) $requestTenantId;
+        }
+        
         // Default to main tenant (Contractor, id=2) for widget calls
-        return $context->getTenantId() ?? 2;
+        return 2;
     }
 
     /**

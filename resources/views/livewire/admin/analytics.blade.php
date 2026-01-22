@@ -414,7 +414,10 @@
             
             <!-- Recent Chat Events Only -->
             <div class="bg-white rounded-lg shadow p-4">
-                <h2 class="font-semibold text-gray-700 mb-4">💬 Останні події чатів</h2>
+                <div class="flex items-center gap-2 mb-4">
+                    <h2 class="font-semibold text-gray-700">💬 Останні події чатів</h2>
+                    <span class="text-xs text-gray-400" title="Посилання на чат доступне тільки для подій, де був діалог з ботом">ℹ️</span>
+                </div>
                 @if(count($recentChatEvents) > 0)
                     <div class="space-y-1 max-h-80 overflow-y-auto">
                         @foreach($recentChatEvents as $event)
@@ -427,22 +430,29 @@
                                     'quick_action_click' => '⚡',
                                     default => '📌'
                                 };
+                                $hasChat = $event->has_chat ?? false;
                             @endphp
                             <div class="flex items-center gap-2 text-sm py-1 border-b border-gray-50">
                                 <span class="text-xs text-gray-400 w-16">{{ \Carbon\Carbon::parse($event->created_at)->format('H:i:s') }}</span>
                                 <span>{{ $eventIcon }}</span>
                                 <span class="text-gray-600">{{ $event->event_type }}</span>
-                                @if($embedded)
-                                    {{-- In embedded mode, link to dashboard with chat params --}}
-                                    <a href="{{ url('/dashboard') }}?activeTab=chats&selectedChatId={{ $event->session_id }}"
-                                       class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
-                                        {{ substr($event->session_id, -12) }}
-                                    </a>
+                                @if($hasChat)
+                                    @if($embedded)
+                                        {{-- In embedded mode, link to dashboard with chat params --}}
+                                        <a href="{{ url('/dashboard') }}?activeTab=chats&selectedChatId={{ $event->session_id }}"
+                                           class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                            {{ substr($event->session_id, -12) }}
+                                        </a>
+                                    @else
+                                        <a href="{{ route('admin.chats.show', $event->session_id) }}" 
+                                           class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                            {{ substr($event->session_id, -12) }}
+                                        </a>
+                                    @endif
                                 @else
-                                    <a href="{{ route('admin.chats.show', $event->session_id) }}" 
-                                       class="text-xs text-blue-500 hover:underline truncate ml-auto" style="max-width: 120px;">
+                                    <span class="text-xs text-gray-400 truncate ml-auto" style="max-width: 120px;" title="Немає діалогу">
                                         {{ substr($event->session_id, -12) }}
-                                    </a>
+                                    </span>
                                 @endif
                             </div>
                         @endforeach

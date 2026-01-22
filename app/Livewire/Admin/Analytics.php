@@ -416,17 +416,24 @@ class Analytics extends Component
     private function getRecentChatEvents(): array
     {
         $query = DB::table('chat_events')
-            ->whereIn('event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
+            ->leftJoin('chat_sessions', 'chat_events.session_id', '=', 'chat_sessions.session_id')
+            ->whereIn('chat_events.event_type', ['message', 'chat_opened', 'chat_closed', 'session_start', 'quick_action_click']);
         
         // Filter by merchant_ids (tenant slug + all api_tokens)
         if (!empty($this->merchantIds) && Schema::hasColumn('chat_events', 'merchant_id')) {
-            $query->whereIn('merchant_id', $this->merchantIds);
+            $query->whereIn('chat_events.merchant_id', $this->merchantIds);
         }
         
         $events = $query
-            ->orderByDesc('created_at')
+            ->orderByDesc('chat_events.created_at')
             ->limit(20)
-            ->get(['event_type', 'session_id', 'created_at', 'message_type'])
+            ->get([
+                'chat_events.event_type',
+                'chat_events.session_id',
+                'chat_events.created_at',
+                'chat_events.message_type',
+                DB::raw('CASE WHEN chat_sessions.id IS NOT NULL THEN 1 ELSE 0 END as has_chat')
+            ])
             ->toArray();
         
         // Fallback to chat_messages if no events
@@ -446,7 +453,8 @@ class Analytics extends Component
             ->select([
                 'chat_messages.role as event_type',
                 'chat_sessions.session_id as session_id',  // Use public session_id, not internal chat_session_id
-                'chat_messages.created_at'
+                'chat_messages.created_at',
+                DB::raw('1 as has_chat')  // Always has chat since data comes from chat_messages
             ]);
         
         // Filter by tenant_id (new tables use integer ID)

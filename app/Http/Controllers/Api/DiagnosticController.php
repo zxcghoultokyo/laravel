@@ -691,6 +691,140 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/ai-enrich
+     * Run AI enrichment for products without AI index
+     * 
+     * Query params:
+     *   - tenant_id: optional, specific tenant (default: all tenants)
+     *   - sync: run synchronously (default: queue)
+     *   - batch: batch size (default: 50)
+     *   - force: re-analyze even if already has AI index
+     */
+    public function aiEnrich(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id') ? (int) $request->input('tenant_id') : null;
+        $sync = $request->boolean('sync', false);
+        $batchSize = min(200, max(10, (int) $request->input('batch', 50)));
+        $force = $request->boolean('force', false);
+
+        // Count products needing enrichment
+        $query = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('in_stock', true);
+        
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        if (!$force) {
+            $query->whereNotIn('id', function ($q) {
+                $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+            });
+        }
+        
+        $productsToEnrich = $query->count();
+        
+        // Get stats per tenant
+        $statsByTenant = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('in_stock', true)
+            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
+            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+                $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+            }))
+            ->selectRaw('tenant_id, COUNT(*) as count')
+            ->groupBy('tenant_id')
+            ->pluck('count', 'tenant_id')
+            ->toArray();
+
+        if ($productsToEnrich === 0) {
+            return response()->json([
+                'status' => 'skipped',
+                'message' => 'All products already have AI index',
+                'by_tenant' => $statsByTenant,
+            ]);
+        }
+
+        if ($sync) {
+            // Run synchronously for all tenants
+            set_time_limit(600); // 10 minutes
+            $results = [];
+            
+            $tenants = $tenantId 
+                ? [\App\Models\Tenant::find($tenantId)]
+                : \App\Models\Tenant::where('status', 'active')->get();
+            
+            foreach ($tenants as $tenant) {
+                if (!$tenant) continue;
+                
+                $tenantCount = $statsByTenant[$tenant->id] ?? 0;
+                if ($tenantCount === 0) continue;
+                
+                try {
+                    $job = new \App\Jobs\AnalyzeProductsWithAiJob(
+                        batchSize: min($batchSize, $tenantCount),
+                        offset: 0,
+                        forceReanalyze: $force,
+                        tenantId: $tenant->id
+                    );
+                    $job->handle();
+                    
+                    $results[$tenant->id] = [
+                        'status' => 'completed',
+                        'products_processed' => $tenantCount,
+                    ];
+                } catch (\Throwable $e) {
+                    $results[$tenant->id] = [
+                        'status' => 'error',
+                        'error' => $e->getMessage(),
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'status' => 'completed',
+                'mode' => 'sync',
+                'total_to_enrich' => $productsToEnrich,
+                'by_tenant' => $statsByTenant,
+                'results' => $results,
+            ]);
+        }
+
+        // Dispatch jobs per tenant
+        $tenants = $tenantId 
+            ? [\App\Models\Tenant::find($tenantId)]
+            : \App\Models\Tenant::where('status', 'active')->get();
+        
+        $dispatched = [];
+        foreach ($tenants as $tenant) {
+            if (!$tenant) continue;
+            
+            $tenantCount = $statsByTenant[$tenant->id] ?? 0;
+            if ($tenantCount === 0) continue;
+            
+            \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
+                batchSize: min($batchSize, $tenantCount),
+                offset: 0,
+                forceReanalyze: $force,
+                tenantId: $tenant->id
+            )->onQueue('default');
+            
+            $dispatched[$tenant->id] = $tenantCount;
+        }
+
+        return response()->json([
+            'status' => 'dispatched',
+            'mode' => 'queue',
+            'total_to_enrich' => $productsToEnrich,
+            'by_tenant' => $statsByTenant,
+            'jobs_dispatched' => $dispatched,
+            'message' => 'Jobs dispatched to queue. Check queue worker logs.',
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/cleanup-meili
      * Remove stale documents from Meilisearch (products deleted from Horoshop or out of stock)
      * Faster than full reindex - only deletes, doesn't re-add

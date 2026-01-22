@@ -71,10 +71,57 @@
                                 <p class="text-red-700 text-sm mt-1">
                                     Ваш безкоштовний період закінчився. Оберіть план, щоб продовжити користуватись AI-асистентом.
                                 </p>
+                                <p class="text-red-600 text-xs mt-2 font-medium">
+                                    ⚠️ Віджет на вашому сайті зараз не відображається для відвідувачів.
+                                </p>
                             </div>
                         </div>
                         <a href="{{ route('billing.index') }}" 
                            class="inline-flex items-center px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-sm">
+                            Обрати план →
+                        </a>
+                    </div>
+                </div>
+            @endif
+
+            <!-- Suspended Account Banner -->
+            @if($tenant->status === 'suspended')
+                <div class="mb-6 p-4 bg-gray-100 border-2 border-gray-400 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">🚫</span>
+                            <div>
+                                <h3 class="font-bold text-gray-900">Акаунт призупинено</h3>
+                                <p class="text-gray-700 text-sm mt-1">
+                                    Ваш акаунт тимчасово призупинено. Віджет не відображається на вашому сайті.
+                                </p>
+                                <p class="text-gray-600 text-xs mt-2">
+                                    Зверніться до підтримки: <a href="mailto:support@aintento.com" class="underline">support@aintento.com</a>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            <!-- No Subscription Banner (plan=trial but no trial_ends_at) -->
+            @if($tenant->plan === 'trial' && !$tenant->trial_ends_at && $tenant->status === 'active')
+                <div class="mb-6 p-4 bg-amber-50 border border-amber-300 rounded-xl">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <span class="text-3xl">💳</span>
+                            <div>
+                                <h3 class="font-bold text-amber-900">Потрібна підписка</h3>
+                                <p class="text-amber-700 text-sm mt-1">
+                                    Для активації віджету необхідно обрати тарифний план.
+                                </p>
+                                <p class="text-amber-600 text-xs mt-2 font-medium">
+                                    ⚠️ Віджет на вашому сайті зараз не відображається для відвідувачів.
+                                </p>
+                            </div>
+                        </div>
+                        <a href="{{ route('billing.index') }}" 
+                           class="inline-flex items-center px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition shadow-sm">
                             Обрати план →
                         </a>
                     </div>

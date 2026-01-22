@@ -97,6 +97,15 @@
         .then(res => res.json())
         .then(settings => {
             log('Settings loaded', settings);
+            
+            // Check if widget is blocked (subscription/trial issue)
+            if (settings.blocked) {
+                log('Widget blocked:', settings.reason, settings.message);
+                // Don't render widget at all - just silently exit
+                // The widget won't appear on the site
+                return;
+            }
+            
             renderWidget(container, settings, token);
         })
         .catch(err => {

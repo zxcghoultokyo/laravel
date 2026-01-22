@@ -361,6 +361,61 @@ class Tenant extends Model
     }
 
     /**
+     * Check if widget can be displayed.
+     * Returns array with 'allowed' boolean and 'reason' string.
+     */
+    public function canUseWidget(): array
+    {
+        // Suspended tenant - widget blocked
+        if ($this->status === self::STATUS_SUSPENDED) {
+            return [
+                'allowed' => false,
+                'reason' => 'suspended',
+                'message' => 'Акаунт призупинено',
+                'details' => 'Зверніться до підтримки для відновлення доступу',
+            ];
+        }
+        
+        // Cancelled tenant - widget blocked
+        if ($this->status === self::STATUS_CANCELLED) {
+            return [
+                'allowed' => false,
+                'reason' => 'cancelled',
+                'message' => 'Акаунт скасовано',
+                'details' => 'Зверніться до підтримки для відновлення',
+            ];
+        }
+        
+        // Trial expired - need to pay
+        if ($this->isTrialExpired()) {
+            return [
+                'allowed' => false,
+                'reason' => 'trial_expired',
+                'message' => 'Тріал період закінчився',
+                'details' => 'Оберіть тарифний план для продовження роботи',
+            ];
+        }
+        
+        // Not on trial but no active paid plan (plan = trial but no trial_ends_at or expired)
+        if ($this->plan === self::PLAN_TRIAL && !$this->trial_ends_at) {
+            return [
+                'allowed' => false,
+                'reason' => 'no_subscription',
+                'message' => 'Потрібна підписка',
+                'details' => 'Оберіть тарифний план для активації віджету',
+            ];
+        }
+        
+        // Widget OK
+        return [
+            'allowed' => true,
+            'reason' => null,
+            'message' => null,
+            'details' => null,
+        ];
+    }
+
+    /**
      * Check if tenant can send messages.
      */
     public function canSendMessage(): bool

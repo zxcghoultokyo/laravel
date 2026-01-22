@@ -80,6 +80,27 @@ class WidgetController extends Controller
         
         Log::info('WidgetSettings fetched', ['settings_id' => $settings?->id, 'tenant_id' => $tenantId]);
         
+        // Check if tenant can use widget (subscription/trial status)
+        $widgetAccess = $tenant?->canUseWidget() ?? ['allowed' => true];
+        
+        if (!$widgetAccess['allowed']) {
+            Log::warning('Widget blocked for tenant', [
+                'tenant_id' => $tenantId,
+                'reason' => $widgetAccess['reason'],
+            ]);
+            
+            return response()->json([
+                'blocked' => true,
+                'reason' => $widgetAccess['reason'],
+                'message' => $widgetAccess['message'],
+                'details' => $widgetAccess['details'],
+                'billing_url' => $tenant ? route('billing.plans') : null,
+                'support_email' => config('mail.from.address', 'support@aintento.com'),
+            ], 200, [
+                'Content-Type' => 'application/json',
+            ]);
+        }
+        
         $data = $settings ? [
             'tenant_id' => $tenantId,
             'merchant_id' => $tenant?->slug ?? 'default',

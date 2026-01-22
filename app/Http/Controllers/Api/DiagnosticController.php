@@ -770,6 +770,87 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * DELETE /api/diagnostic/cleanup-stale-products
+     * Remove products from DB that were not updated in the last sync
+     * Useful when Horoshop has fewer products than DB (removed from showcase)
+     * Required: tenant_id parameter
+     */
+    public function cleanupStaleProducts(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
+        if (!$tenantId) {
+            return response()->json(['error' => 'tenant_id is required'], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        $dryRun = $request->query('dry_run', '1') !== '0';
+        $cutoffMinutes = (int) $request->query('minutes', 30); // Products not updated in last X minutes
+
+        try {
+            $cutoffTime = now()->subMinutes($cutoffMinutes);
+            
+            // Find stale products: updated_at < cutoff time
+            $staleQuery = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('updated_at', '<', $cutoffTime);
+            
+            $staleCount = $staleQuery->count();
+            $sampleArticles = $staleQuery->limit(10)->pluck('article')->toArray();
+            
+            // Current products count
+            $currentCount = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->count();
+            
+            // Recent products count
+            $recentCount = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('updated_at', '>=', $cutoffTime)
+                ->count();
+
+            if ($dryRun) {
+                return response()->json([
+                    'status' => 'dry_run',
+                    'tenant_id' => $tenantId,
+                    'current_products' => $currentCount,
+                    'recent_products' => $recentCount,
+                    'stale_products' => $staleCount,
+                    'would_remain' => $recentCount,
+                    'cutoff_time' => $cutoffTime->toDateTimeString(),
+                    'sample_stale_articles' => $sampleArticles,
+                    'message' => "Would delete {$staleCount} stale products. Add &dry_run=0 to execute.",
+                ]);
+            }
+
+            // Actually delete
+            $deleted = $staleQuery->delete();
+
+            return response()->json([
+                'status' => 'completed',
+                'tenant_id' => $tenantId,
+                'deleted' => $deleted,
+                'remaining' => $recentCount,
+                'cutoff_time' => $cutoffTime->toDateTimeString(),
+                'message' => "Deleted {$deleted} stale products",
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/diagnostic/sync-horoshop
      * Trigger full sync from Horoshop (marks deleted products as out of stock)
      * Add ?queue=0 to run synchronously (slow, ~5-10 min)

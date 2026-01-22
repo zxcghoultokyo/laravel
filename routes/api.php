@@ -87,6 +87,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/sync-sample', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncSample']);
     Route::post('/reindex-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'reindexMeili']);
     Route::post('/cleanup-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupMeili']);
+    Route::delete('/cleanup-stale-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupStaleProducts']);
     Route::post('/sync-horoshop', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncHoroshop']);
     Route::post('/delete-tenant-products/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'deleteTenantProducts']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);

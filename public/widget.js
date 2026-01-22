@@ -1133,8 +1133,8 @@
         function buildStoreInfo(s) {
             let info = '';
             
-            // Store name
-            const storeName = s.store_name || 'CONTRACTOR';
+            // Store name - use from settings or generic fallback
+            const storeName = s.store_name || 'Магазин';
             info += `🏪 **${storeName}**\n\n`;
             
             // Parse address from faq_contacts_text if store_address contains full FAQ

@@ -25,8 +25,25 @@ class IndexProductsToMeiliJob implements ShouldQueue
 
     public ?int $chunk = null;
 
-    public function __construct(int $chunkSize = 500)
+    /**
+     * Optional tenant_id filter - if set, only index products for this tenant.
+     * When null, indexes ALL products across all tenants.
+     */
+    public ?int $tenantId = null;
+
+    /**
+     * Constructor accepts optional tenant_id as first param (for tenant-specific indexing)
+     * and optional chunkSize as second param.
+     * 
+     * Usage:
+     *   IndexProductsToMeiliJob::dispatch();           // All tenants
+     *   IndexProductsToMeiliJob::dispatch(5);          // Only tenant 5
+     *   IndexProductsToMeiliJob::dispatch(null, 100);  // All tenants, chunk=100
+     *   IndexProductsToMeiliJob::dispatch(5, 100);     // Tenant 5, chunk=100
+     */
+    public function __construct(?int $tenantId = null, int $chunkSize = 500)
     {
+        $this->tenantId = $tenantId;
         $this->chunkSize = max(50, (int) $chunkSize);
         // Use default queue - ensure queue worker processes this
         // If you have separate meili queue worker, change back to 'meili'
@@ -46,15 +63,30 @@ class IndexProductsToMeiliJob implements ShouldQueue
         $index = $meili->productsIndex();
         $chunkSize = $this->effectiveChunkSize();
         
-        // Count ALL products (bypass tenant scope for system job)
-        $totalCount = Product::withoutGlobalScope(TenantScope::class)->count();
+        // Build base query - bypass tenant scope for system job
+        $baseQuery = Product::withoutGlobalScope(TenantScope::class);
+        
+        // Filter by tenant if specified
+        if ($this->tenantId !== null) {
+            $baseQuery->where('tenant_id', $this->tenantId);
+        }
+        
+        $totalCount = (clone $baseQuery)->count();
         $processedCount = 0;
         $startTime = microtime(true);
         
+        // Build log message
+        $logMessage = $this->tenantId 
+            ? "Reindex {$totalCount} products for tenant #{$this->tenantId}"
+            : "Reindex {$totalCount} products (all tenants)";
+        
         // Start sync log
-        $syncLog = SyncLog::start(SyncLog::TYPE_MEILISEARCH, "Reindex {$totalCount} products");
+        $syncLog = SyncLog::start(SyncLog::TYPE_MEILISEARCH, $logMessage);
 
         echo "🔄 Індексація товарів у Meilisearch...\n";
+        if ($this->tenantId !== null) {
+            echo "🏪 Тенант: #{$this->tenantId}\n";
+        }
         echo "📦 Всього товарів: {$totalCount}\n";
         echo "📊 Розмір чанку: {$chunkSize}\n\n";
         
@@ -140,11 +172,17 @@ class IndexProductsToMeiliJob implements ShouldQueue
             echo "⚠️  Налаштування Meili: {$e->getMessage()}\n\n";
         }
 
-        // Index ALL products (bypass tenant scope - this is a system job)
-        Product::withoutGlobalScope(TenantScope::class)
+        // Index products (bypass tenant scope - this is a system job)
+        $query = Product::withoutGlobalScope(TenantScope::class)
             ->with('aiIndex')
-            ->orderBy('id')
-            ->chunk($chunkSize, function ($products) use ($index, $meili, &$processedCount, $totalCount) {
+            ->orderBy('id');
+        
+        // Filter by tenant if specified
+        if ($this->tenantId !== null) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        
+        $query->chunk($chunkSize, function ($products) use ($index, $meili, &$processedCount, $totalCount) {
                 $docs = [];
 
                 // Підтягнемо raw батьківських товарів для fallback
@@ -312,24 +350,45 @@ class IndexProductsToMeiliJob implements ShouldQueue
     /**
      * 🧹 Видаляє з Meilisearch товари, яких немає в БД або мають in_stock=false.
      * Це вирішує проблему коли товари видаляються з Horoshop, але залишаються в індексі.
+     * 
+     * При tenant-specific індексації (tenantId != null), видаляє тільки застарілі товари цього тенанта.
      */
     protected function cleanupStaleDocuments($index, MeiliClient $meili): void
     {
         echo "🧹 Перевірка застарілих товарів у Meili...\n";
         
         try {
-            // Отримуємо всі ID з Meilisearch
+            // Отримуємо ID з Meilisearch (з фільтром по тенанту якщо потрібно)
             $meiliIds = [];
             $limit = 1000;
             $offset = 0;
             
+            // Build Meili query with tenant filter if needed
+            $meiliFilter = null;
+            if ($this->tenantId !== null) {
+                $meiliFilter = "tenant_id = {$this->tenantId}";
+                echo "   🏪 Фільтр тенанта: #{$this->tenantId}\n";
+            }
+            
             do {
-                $query = (new \Meilisearch\Contracts\DocumentsQuery())
-                    ->setLimit($limit)
-                    ->setOffset($offset)
-                    ->setFields(['id']);
-                $result = $index->getDocuments($query);
-                $docs = $result->getResults();
+                if ($meiliFilter) {
+                    // Use search with filter to get only tenant's documents
+                    $result = $index->search('', [
+                        'limit' => $limit,
+                        'offset' => $offset,
+                        'filter' => $meiliFilter,
+                        'attributesToRetrieve' => ['id'],
+                    ]);
+                    $docs = $result->getHits();
+                } else {
+                    // Get all documents
+                    $query = (new \Meilisearch\Contracts\DocumentsQuery())
+                        ->setLimit($limit)
+                        ->setOffset($offset)
+                        ->setFields(['id']);
+                    $result = $index->getDocuments($query);
+                    $docs = $result->getResults();
+                }
                 
                 if (empty($docs)) {
                     break;
@@ -350,9 +409,16 @@ class IndexProductsToMeiliJob implements ShouldQueue
             echo "   📋 Знайдено " . count($meiliIds) . " товарів у Meili\n";
             
             // Отримуємо валідні ID з БД (тільки in_stock=true, без tenant scope)
-            $validIds = Product::withoutGlobalScope(TenantScope::class)
+            $validQuery = Product::withoutGlobalScope(TenantScope::class)
                 ->where('in_stock', true)
-                ->whereIn('id', $meiliIds)
+                ->whereIn('id', $meiliIds);
+            
+            // Apply tenant filter to DB query as well (for consistency)
+            if ($this->tenantId !== null) {
+                $validQuery->where('tenant_id', $this->tenantId);
+            }
+            
+            $validIds = $validQuery
                 ->pluck('id')
                 ->map(fn($id) => (int) $id)
                 ->toArray();

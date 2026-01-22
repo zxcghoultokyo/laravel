@@ -77,6 +77,25 @@ class SyncHoroshopProductsJob implements ShouldQueue
                     'tenant_name' => $tenant->name,
                     'result' => $result,
                 ]);
+                
+                // 🔄 Trigger Meilisearch reindex for this tenant if products were changed
+                $changedCount = ($result['created'] ?? 0) + ($result['updated'] ?? 0) + ($result['deleted'] ?? 0);
+                if ($changedCount > 0) {
+                    IndexProductsToMeiliJob::dispatch($tenant->id)
+                        ->delay(now()->addSeconds(5))
+                        ->onQueue('default');
+                }
+                
+                // 🧠 Trigger AI enrichment for new products (if any were created)
+                $createdCount = $result['created'] ?? 0;
+                if ($createdCount > 0) {
+                    AnalyzeProductsWithAiJob::dispatch(
+                        batchSize: min(50, $createdCount),
+                        offset: 0,
+                        forceReanalyze: false,
+                        tenantId: $tenant->id
+                    )->delay(now()->addMinutes(1))->onQueue('default');
+                }
             } catch (\Throwable $e) {
                 $errors[$tenant->id] = $e->getMessage();
                 Log::error('SyncHoroshopProductsJob failed for tenant', [
@@ -140,6 +159,37 @@ class SyncHoroshopProductsJob implements ShouldQueue
                 'tenant_id' => $this->tenantId,
                 'result' => $result,
             ]);
+            
+            // 🔄 Trigger Meilisearch reindex for this tenant if products were changed
+            $changedCount = ($result['created'] ?? 0) + ($result['updated'] ?? 0) + ($result['deleted'] ?? 0);
+            if ($changedCount > 0) {
+                Log::info('SyncHoroshopProductsJob: Triggering Meili reindex for tenant', [
+                    'tenant_id' => $this->tenantId,
+                    'changed_count' => $changedCount,
+                ]);
+                
+                // Dispatch with small delay to ensure DB changes are committed
+                IndexProductsToMeiliJob::dispatch($this->tenantId)
+                    ->delay(now()->addSeconds(5))
+                    ->onQueue('default');
+            }
+            
+            // 🧠 Trigger AI enrichment for new products (if any were created)
+            $createdCount = $result['created'] ?? 0;
+            if ($createdCount > 0) {
+                Log::info('SyncHoroshopProductsJob: Triggering AI enrichment for new products', [
+                    'tenant_id' => $this->tenantId,
+                    'new_products' => $createdCount,
+                ]);
+                
+                // Dispatch AI enrichment with delay (after Meili reindex)
+                AnalyzeProductsWithAiJob::dispatch(
+                    batchSize: min(50, $createdCount), 
+                    offset: 0, 
+                    forceReanalyze: false,
+                    tenantId: $this->tenantId
+                )->delay(now()->addMinutes(1))->onQueue('default');
+            }
         } catch (\Throwable $e) {
             $syncLog->fail($e->getMessage());
             Log::error('SyncHoroshopProductsJob failed for tenant', [

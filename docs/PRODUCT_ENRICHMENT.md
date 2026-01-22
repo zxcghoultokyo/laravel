@@ -168,18 +168,24 @@ php artisan products:build-ai-index --only-missing --timeout=3600
 
 ### 2. **Застарілий AI-індекс**
 
-**Проблема:** Після sync нових товарів вони не мають AI-індексу
+**Проблема:** ~~Після sync нових товарів вони не мають AI-індексу~~ **ВИРІШЕНО!**
 
-**Наслідки:**
-- Нові товари гірше знаходяться
-- Inconsistent search results
+**Реалізоване рішення (v2025.01):**
+Автоматично після sync товарів запускаються:
+1. `IndexProductsToMeiliJob::dispatch($tenantId)` — реіндексація в Meilisearch
+2. `AnalyzeProductsWithAiJob::dispatch(tenantId: $tenantId)` — AI enrichment для нових товарів
 
-**Рішення:**
-Автоматично запускати enrichment після sync:
 ```php
-// В SyncHoroshopProducts після успішного sync
-AnalyzeProductsWithAiJob::dispatch()->delay(now()->addMinutes(5));
+// SyncHoroshopProductsJob автоматично тригерить:
+if ($changedCount > 0) {
+    IndexProductsToMeiliJob::dispatch($tenantId)->delay(5s);
+}
+if ($createdCount > 0) {
+    AnalyzeProductsWithAiJob::dispatch(tenantId: $tenantId)->delay(1min);
+}
 ```
+
+Jobs тепер підтримують `tenant_id` параметр для tenant-specific операцій.
 
 ### 3. **Якість slang/keywords**
 

@@ -151,6 +151,7 @@ class WidgetController extends Controller
             'tone' => $settings->tone ?? 'official',
             'brand_rules' => $settings->brand_rules ?? [],
             // Store info for quick actions
+            'store_name' => $settings->store_name ?: $tenant?->name ?: 'Магазин',
             'store_phone' => $settings->shop_phone,
             'store_address' => $settings->faq_contacts_text,
             'store_hours' => $settings->store_hours,
@@ -177,6 +178,7 @@ class WidgetController extends Controller
             'greetings' => [],
             'tone' => 'official',
             'brand_rules' => [],
+            'store_name' => 'Магазин',
             'store_phone' => null,
             'store_address' => null,
             'store_hours' => null,

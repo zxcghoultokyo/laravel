@@ -33,19 +33,33 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     public int $timeout = 300;
     public int $tries = 3;
 
+    /**
+     * Constructor with optional tenant_id filter for tenant-specific enrichment.
+     * 
+     * @param int $batchSize Products per batch
+     * @param int $offset Skip first N products
+     * @param bool $forceReanalyze Re-analyze even if already has keywords
+     * @param int|null $tenantId If set, only analyze products for this tenant
+     */
     public function __construct(
         public int $batchSize = 10,
         public int $offset = 0,
-        public bool $forceReanalyze = false
+        public bool $forceReanalyze = false,
+        public ?int $tenantId = null
     ) {
         $this->onQueue('default');
     }
 
     public function handle(): void
     {
+        // Build log message with tenant info if specified
+        $logMsg = $this->tenantId 
+            ? "AI enrichment batch={$this->batchSize} tenant=#{$this->tenantId}"
+            : "AI enrichment batch={$this->batchSize}";
+        
         // Only log SyncLog for first batch (offset = 0)
         $syncLog = $this->offset === 0 
-            ? SyncLog::start(SyncLog::TYPE_AI_ENRICHMENT, "AI enrichment batch={$this->batchSize}")
+            ? SyncLog::start(SyncLog::TYPE_AI_ENRICHMENT, $logMsg)
             : null;
         
         try {
@@ -71,11 +85,16 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             return;
         }
 
-        // Get products to analyze (all tenants)
+        // Get products to analyze (bypass tenant scope for system job)
         $query = Product::withoutGlobalScope(TenantScope::class)
             ->where('in_stock', true)
             ->whereNotNull('title')
             ->orderBy('id');
+        
+        // Filter by tenant if specified
+        if ($this->tenantId !== null) {
+            $query->where('tenant_id', $this->tenantId);
+        }
 
         // Skip already analyzed unless force
         if (!$this->forceReanalyze) {

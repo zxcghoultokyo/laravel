@@ -59,8 +59,10 @@ class DiagnosticController extends Controller
             ->get()
             ->mapWithKeys(fn($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
 
+        $totalProducts = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count();
+
         $stats = [
-            'total_products' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count(),
+            'total_products' => $totalProducts,
             'in_stock' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->count(),
             'with_color' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('color')->where('color', '!=', '')->count(),
             'with_size' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->whereNotNull('size')->where('size', '!=', '')->count(),
@@ -73,8 +75,8 @@ class DiagnosticController extends Controller
                 'with_ai_type' => $withAiType,
                 'with_ai_category' => $withAiCategory,
                 'by_tenant' => $aiIndexByTenant,
-                'coverage_percent' => $tenantStats->sum() > 0 
-                    ? round(($totalAiIndex / $tenantStats->sum()) * 100, 1) 
+                'coverage_percent' => $totalProducts > 0 
+                    ? round(($totalAiIndex / $totalProducts) * 100, 1) 
                     : 0,
             ],
             'price_stats' => [

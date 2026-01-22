@@ -184,20 +184,29 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
-        // Use model_analyze for batch enrichment (cheaper model like gpt-5-nano)
-        $model = $config['model_analyze'] ?? 'gpt-5-nano';
+        // Use model_analyze for batch enrichment (gpt-4o-mini recommended for cost/limits)
+        $model = $config['model_analyze'] ?? 'gpt-4o-mini';
+        
+        // Build request body - newer models use max_completion_tokens
+        $requestBody = [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+            'temperature' => 0.3,
+        ];
+        
+        // Use max_completion_tokens for newer models (gpt-5*, o1*, etc.), max_tokens for older
+        if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
+            $requestBody['max_completion_tokens'] = 800;
+        } else {
+            $requestBody['max_tokens'] = 800;
+        }
         
         $response = Http::timeout(30)
             ->withToken($apiKey)
-            ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
-                    ['role' => 'user', 'content' => $prompt],
-                ],
-                'temperature' => 0.3,
-                'max_tokens' => 800,
-            ]);
+            ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', $requestBody);
 
         $data = $response->json();
         $content = $data['choices'][0]['message']['content'] ?? null;

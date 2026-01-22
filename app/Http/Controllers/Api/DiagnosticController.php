@@ -869,18 +869,27 @@ class DiagnosticController extends Controller
         $model = $config['model_analyze'] ?? 'gpt-4o-mini';
         $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
         
+        // Build request body - newer models use max_completion_tokens
+        $requestBody = [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+            'temperature' => 0.3,
+        ];
+        
+        // Use max_completion_tokens for newer models (gpt-5*, o1*, etc.), max_tokens for older
+        if (str_starts_with($model, 'gpt-5') || str_starts_with($model, 'o1') || str_starts_with($model, 'o3')) {
+            $requestBody['max_completion_tokens'] = 800;
+        } else {
+            $requestBody['max_tokens'] = 800;
+        }
+        
         try {
             $response = \Illuminate\Support\Facades\Http::timeout(30)
                 ->withToken($apiKey)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => $model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
-                    'temperature' => 0.3,
-                    'max_tokens' => 800,
-                ]);
+                ->post($baseUrl . '/chat/completions', $requestBody);
 
             $data = $response->json();
             $content = $data['choices'][0]['message']['content'] ?? null;

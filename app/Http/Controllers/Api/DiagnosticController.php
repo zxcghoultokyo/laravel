@@ -748,8 +748,8 @@ class DiagnosticController extends Controller
         }
 
         if ($sync) {
-            // Run synchronously for all tenants
-            set_time_limit(600); // 10 minutes
+            // Run synchronously for all tenants - process ALL batches in a loop
+            set_time_limit(3600); // 1 hour for large datasets
             $results = [];
             
             $tenants = $tenantId 
@@ -763,17 +763,68 @@ class DiagnosticController extends Controller
                 if ($tenantCount === 0) continue;
                 
                 try {
-                    $job = new \App\Jobs\AnalyzeProductsWithAiJob(
-                        batchSize: min($batchSize, $tenantCount),
-                        offset: 0,
-                        forceReanalyze: $force,
-                        tenantId: $tenant->id
-                    );
-                    $job->handle();
+                    $processed = 0;
+                    $batchNum = 0;
+                    
+                    // Process all batches in a loop (not via dispatch)
+                    while ($processed < $tenantCount) {
+                        $batchNum++;
+                        
+                        // Get products for this batch directly (not via job)
+                        $products = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                            ->where('tenant_id', $tenant->id)
+                            ->where('in_stock', true)
+                            ->whereNotNull('title')
+                            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+                                $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+                            }))
+                            ->orderBy('id')
+                            ->take($batchSize)
+                            ->get();
+                        
+                        if ($products->isEmpty()) {
+                            break;
+                        }
+                        
+                        // Process products using ProductIndexBuilder directly
+                        $builder = app(\App\Services\Ai\ProductIndexBuilder::class);
+                        foreach ($products as $product) {
+                            try {
+                                $builder->buildAndSaveIndex($product);
+                                $processed++;
+                            } catch (\Throwable $e) {
+                                \Illuminate\Support\Facades\Log::warning('AI enrichment failed for product', [
+                                    'product_id' => $product->id,
+                                    'error' => $e->getMessage(),
+                                ]);
+                                // Continue with next product even on error
+                            }
+                            
+                            // Rate limiting: 300ms between API calls
+                            usleep(300000);
+                        }
+                        
+                        // Update tenantCount for accurate tracking
+                        $tenantCount = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                            ->where('tenant_id', $tenant->id)
+                            ->where('in_stock', true)
+                            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+                                $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+                            }))
+                            ->count();
+                        
+                        \Illuminate\Support\Facades\Log::info('AI enrichment batch complete', [
+                            'tenant_id' => $tenant->id,
+                            'batch' => $batchNum,
+                            'batch_size' => $products->count(),
+                            'total_processed' => $processed,
+                            'remaining' => $tenantCount,
+                        ]);
+                    }
                     
                     $results[$tenant->id] = [
                         'status' => 'completed',
-                        'products_processed' => $tenantCount,
+                        'products_processed' => $processed,
                     ];
                 } catch (\Throwable $e) {
                     $results[$tenant->id] = [

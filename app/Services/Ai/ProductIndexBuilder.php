@@ -160,8 +160,9 @@ class ProductIndexBuilder
                 'search_index'  => (string) ($product->search_index ?? ''),
             ];
 
-            // Use model_analyze from config for enrichment (cheap model like gpt-5-nano)
-            $model = config('services.openai.model_analyze', 'gpt-5-nano');
+            // Use gpt-4o-mini for enrichment - best cost/performance balance
+            // Note: gpt-5-nano has too many restrictions (rate limits, no response_format, etc.)
+            $model = 'gpt-4o-mini';
             
             $aiData = $ai->chatJson($system, $payload, [
                 'temperature' => 0.3,

@@ -30,7 +30,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 300;
+    public int $timeout = 600; // 10 minutes for batch with rate limiting delays
     public int $tries = 3;
 
     /**
@@ -124,16 +124,26 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         $analyzed = 0;
         $errors = 0;
-        foreach ($products as $product) {
+        foreach ($products as $index => $product) {
             try {
                 $this->analyzeProduct($product, $apiKey, $config);
                 $analyzed++;
+                
+                // Rate limit protection: delay between API calls (skip for last product)
+                if ($index < $products->count() - 1) {
+                    usleep(300000); // 300ms delay = ~3 requests/sec
+                }
             } catch (\Throwable $e) {
                 $errors++;
                 Log::error('AnalyzeProductsWithAiJob: failed to analyze product', [
                     'product_id' => $product->id,
                     'error' => $e->getMessage(),
                 ]);
+                
+                // On rate limit, wait longer
+                if (str_contains($e->getMessage(), 'rate_limit') || str_contains($e->getMessage(), '429')) {
+                    sleep(5);
+                }
             }
         }
 

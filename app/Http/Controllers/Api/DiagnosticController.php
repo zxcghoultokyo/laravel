@@ -75,8 +75,9 @@ class DiagnosticController extends Controller
             ];
         }
 
-        // Tenant statistics - bypass TenantScope to see all data
+        // Tenant statistics - bypass TenantScope to see all data, but respect soft deletes
         $tenantStats = DB::table('products')
+            ->whereNull('deleted_at')
             ->select('tenant_id', DB::raw('COUNT(*) as count'))
             ->groupBy('tenant_id')
             ->get()
@@ -1085,8 +1086,8 @@ class DiagnosticController extends Controller
 
         $dryRun = $request->boolean('dry_run', true);
         
-        // Count products
-        $productCount = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+        // Count products including soft-deleted (using DB::table to bypass SoftDeletes)
+        $productCount = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->count();
         
@@ -1101,14 +1102,16 @@ class DiagnosticController extends Controller
         }
         
         // Delete AI index first (foreign key)
+        // Note: Use products table directly to include soft-deleted products
         $aiDeleted = DB::table('product_ai_index')
             ->whereIn('product_id', function ($q) use ($tenantId) {
                 $q->select('id')->from('products')->where('tenant_id', $tenantId);
             })
             ->delete();
         
-        // Delete products
-        $deleted = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+        // Force delete products (bypassing soft delete)
+        // DB::table() doesn't respect SoftDeletes, so it will delete all including soft-deleted
+        $deleted = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->delete();
         

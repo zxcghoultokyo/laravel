@@ -87,6 +87,13 @@ class ResolveTenantMiddleware
                          ->first();
         }
 
+        // 3.5. Query parameter - tenant_id (for SSE streams which can't use headers)
+        if ($tenantId = $request->query('tenant_id')) {
+            return Tenant::where('id', (int) $tenantId)
+                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                         ->first();
+        }
+
         // 4. Query parameter - token (alternative)
         if ($token = $request->query('token')) {
             // Try api_token first

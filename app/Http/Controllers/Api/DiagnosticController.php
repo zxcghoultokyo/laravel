@@ -2317,6 +2317,7 @@ class DiagnosticController extends Controller
             'chat_session_outcomes' => 'Session outcomes (funnels)',
             'active_chat_sessions' => 'Active chat sessions (real-time)',
             'ab_test_events' => 'A/B test events',
+            'proactive_trigger_events' => 'Proactive trigger events',
         ];
         
         $stats = [];
@@ -2370,6 +2371,30 @@ class DiagnosticController extends Controller
                 ];
                 $totalDeleted += $deleted;
             }
+        }
+
+        // Reset counters in proactive_trigger_rules
+        if (!$dryRun && DB::getSchemaBuilder()->hasTable('proactive_trigger_rules')) {
+            $rulesQuery = DB::table('proactive_trigger_rules');
+            if ($tenantId) {
+                $rulesQuery->where('tenant_id', $tenantId);
+            }
+            $rulesReset = $rulesQuery->update([
+                'shown_count' => 0,
+                'clicked_count' => 0,
+                'converted_count' => 0,
+                'purchased_count' => 0,
+            ]);
+            $stats['proactive_trigger_rules_counters'] = ['reset' => $rulesReset];
+        } elseif ($dryRun && DB::getSchemaBuilder()->hasTable('proactive_trigger_rules')) {
+            $rulesQuery = DB::table('proactive_trigger_rules');
+            if ($tenantId) {
+                $rulesQuery->where('tenant_id', $tenantId);
+            }
+            $stats['proactive_trigger_rules_counters'] = [
+                'description' => 'Reset shown/clicked/converted counters',
+                'rules_to_reset' => $rulesQuery->count(),
+            ];
         }
 
         // Clear cache

@@ -323,8 +323,8 @@ class OnboardingController extends Controller
                 'text_color' => '#ffffff',
                 'position' => 'bottom-right',
                 'start_state' => 'closed',
-                'glow_color' => '#000000',
-                'bot_name' => 'AI Асистент',
+                'glow_color' => '#798ffb',
+                'bot_name' => 'AIntento',
                 'welcome_message' => 'Вітаю! 👋 Чим можу допомогти?',
                 'input_placeholder' => 'Напишіть, що шукаєте...',
                 'shop_phone' => '', // Empty by default, tenant fills in settings

@@ -29,11 +29,11 @@ class WidgetSettings extends Component
     public $api_token = '';
     
     // Branding fields (Phase 1)
-    public $bot_name = 'AI Асистент';
+    public $bot_name = 'AIntento';
     public $bot_avatar_url = '';
     public $bot_avatar_upload = null; // For file upload
     public $bot_avatar_base64 = null; // Base64 encoded avatar for serverless
-    public $glow_color = '#000000'; // Glow color for avatar, defaults to primary_color if empty
+    public $glow_color = '#798ffb'; // Glow color for avatar
     public $bot_status_text = 'Завжди онлайн';
     public $font_family = '';
     public $show_shadow = true;

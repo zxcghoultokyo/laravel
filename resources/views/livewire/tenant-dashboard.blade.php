@@ -604,6 +604,83 @@
                                 </div>
                             </dl>
                         </div>
+
+                        <!-- Subscription Info -->
+                        <div class="bg-gray-50 rounded-lg p-6">
+                            <h4 class="font-medium text-gray-900 mb-4">💳 Інформація про підписку</h4>
+                            <dl class="space-y-3">
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Поточний план</dt>
+                                    <dd class="font-medium">{{ $stats['plan_label'] }}</dd>
+                                </div>
+                                
+                                @if($stats['is_trial'])
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Статус</dt>
+                                        <dd class="font-medium text-amber-600">🎁 Тріал період</dd>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Тріал діє до</dt>
+                                        <dd class="font-medium">
+                                            {{ $stats['trial_ends_at']->format('d.m.Y H:i') }}
+                                            <span class="text-sm text-gray-500">({{ $stats['days_left'] }} днів)</span>
+                                        </dd>
+                                    </div>
+                                @elseif($stats['has_active_subscription'])
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Статус</dt>
+                                        <dd class="font-medium text-green-600">✅ Активна підписка</dd>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Підписка діє до</dt>
+                                        <dd class="font-medium">
+                                            {{ $stats['plan_expires_at']->format('d.m.Y H:i') }}
+                                            <span class="text-sm text-gray-500">({{ $stats['subscription_days_left'] }} днів)</span>
+                                        </dd>
+                                    </div>
+                                @elseif(!$stats['widget_active'])
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Статус</dt>
+                                        <dd class="font-medium text-red-600">⚠️ {{ $stats['widget_status']['message'] ?? 'Потрібна оплата' }}</dd>
+                                    </div>
+                                    @if($stats['trial_ends_at'])
+                                        <div class="flex justify-between">
+                                            <dt class="text-gray-500">Тріал закінчився</dt>
+                                            <dd class="font-medium text-red-500">{{ $stats['trial_ends_at']->format('d.m.Y') }}</dd>
+                                        </div>
+                                    @endif
+                                    @if($stats['plan_expires_at'])
+                                        <div class="flex justify-between">
+                                            <dt class="text-gray-500">Підписка закінчилась</dt>
+                                            <dd class="font-medium text-red-500">{{ $stats['plan_expires_at']->format('d.m.Y') }}</dd>
+                                        </div>
+                                    @endif
+                                @else
+                                    <div class="flex justify-between">
+                                        <dt class="text-gray-500">Статус</dt>
+                                        <dd class="font-medium text-gray-500">Немає активної підписки</dd>
+                                    </div>
+                                @endif
+                                
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Віджет</dt>
+                                    <dd class="font-medium {{ $stats['widget_active'] ? 'text-green-600' : 'text-red-600' }}">
+                                        {{ $stats['widget_active'] ? '✓ Працює' : '✗ Вимкнено' }}
+                                    </dd>
+                                </div>
+                            </dl>
+                            
+                            <!-- Support contact -->
+                            <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                                <p class="text-sm text-blue-800">
+                                    <strong>💬 Бажаєте змінити план або продовжити підписку?</strong>
+                                </p>
+                                <p class="text-sm text-blue-700 mt-1">
+                                    Зверніться до нашої підтримки в Telegram: 
+                                    <a href="https://t.me/AIntento" target="_blank" class="font-medium underline hover:text-blue-900">@AIntento</a>
+                                </p>
+                            </div>
+                        </div>
                     @endif
 
                     <div class="flex gap-3">

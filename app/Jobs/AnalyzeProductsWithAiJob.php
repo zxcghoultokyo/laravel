@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Models\SyncLog;
+use App\Scopes\TenantScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -70,8 +71,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             return;
         }
 
-        // Get products to analyze
-        $query = Product::query()
+        // Get products to analyze (all tenants)
+        $query = Product::withoutGlobalScope(TenantScope::class)
             ->where('in_stock', true)
             ->whereNotNull('title')
             ->orderBy('id');

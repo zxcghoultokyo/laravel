@@ -149,14 +149,15 @@
     @endif
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-        <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-            <div class="text-2xl font-bold text-blue-600">{{ number_format($stats['products_count']) }}</div>
-            <div class="text-sm text-gray-500">Товарів</div>
-        </div>
-        <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 relative group">
             <div class="text-2xl font-bold text-green-600">{{ number_format($stats['products_in_stock']) }}</div>
-            <div class="text-sm text-gray-500">В наявності</div>
+            <div class="text-sm text-gray-500">Товарів в наявності</div>
+            <!-- Tooltip -->
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                Товари з "В наявності" + показуються на сайті
+                <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+            </div>
         </div>
         <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
             <div class="text-2xl font-bold text-purple-600">{{ number_format($stats['categories_count']) }}</div>
@@ -177,6 +178,15 @@
             </div>
         </div>
     </div>
+    
+    <!-- Info about stock counting -->
+    @if($stats['products_in_stock'] > 0 && $stats['products_count'] != $stats['products_in_stock'])
+    <div class="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+        <span class="font-medium">ℹ️ Як рахується наявність:</span> 
+        Товар має бути <strong>"В наявності"</strong> + <strong>відображатися на сайті</strong>. 
+        Якщо у вас число відрізняється від очікуваного — перевірте, щоб всі товари показувались на сайті, та дочекайтеся наступної синхронізації.
+    </div>
+    @endif
 
     <!-- Tabs -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

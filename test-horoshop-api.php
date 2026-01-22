@@ -58,7 +58,6 @@ while (true) {
         'expr' => ['display_in_showcase' => 1],
         'limit' => $limit,
         'offset' => $offset,
-        'includedParams' => ['article', 'presence', 'title'],
     ]);
     
     $ch = curl_init($exportUrl);

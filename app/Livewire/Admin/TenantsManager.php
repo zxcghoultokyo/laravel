@@ -28,6 +28,10 @@ class TenantsManager extends Component
     public array $editForm = [];
     public bool $showCreateModal = false;
     public array $createForm = [];
+    
+    // Trial management
+    public ?int $extendTrialTenantId = null;
+    public int $extendTrialDays = 7;
 
     protected $queryString = ['search', 'statusFilter', 'planFilter'];
 
@@ -64,6 +68,8 @@ class TenantsManager extends Component
             'plan' => $tenant->plan ?? 'trial',  // Read from tenant, not subscription
             'messages_limit' => $tenant->messages_limit,
             'products_limit' => $tenant->products_limit,
+            'trial_ends_at' => $tenant->trial_ends_at?->format('Y-m-d\TH:i'),
+            'has_trial' => (bool) $tenant->trial_ends_at,
         ];
     }
 
@@ -76,9 +82,16 @@ class TenantsManager extends Component
             'editForm.plan' => 'required|in:trial,starter,pro,enterprise',
             'editForm.messages_limit' => 'nullable|integer|min:0|max:2147483647',
             'editForm.products_limit' => 'nullable|integer|min:0|max:2147483647',
+            'editForm.trial_ends_at' => 'nullable|date',
         ]);
 
         $tenant = Tenant::findOrFail($this->editingTenantId);
+        
+        // Parse trial_ends_at
+        $trialEndsAt = null;
+        if (!empty($this->editForm['has_trial']) && !empty($this->editForm['trial_ends_at'])) {
+            $trialEndsAt = \Carbon\Carbon::parse($this->editForm['trial_ends_at']);
+        }
         
         $tenant->update([
             'name' => $this->editForm['name'],
@@ -88,6 +101,7 @@ class TenantsManager extends Component
             'plan' => $this->editForm['plan'],  // Save plan to tenant
             'messages_limit' => $this->editForm['messages_limit'],
             'products_limit' => $this->editForm['products_limit'],
+            'trial_ends_at' => $trialEndsAt,
         ]);
 
         // Also update subscription plan if exists (for consistency)
@@ -125,6 +139,69 @@ class TenantsManager extends Component
         $tenant = Tenant::findOrFail($id);
         app(UsageTrackingService::class)->resetMonthlyUsage($tenant);
         session()->flash('success', "Лічильники {$tenant->name} скинуто");
+    }
+
+    /**
+     * Remove trial from tenant (set trial_ends_at to null).
+     */
+    public function removeTrial(int $id)
+    {
+        $tenant = Tenant::findOrFail($id);
+        $tenant->update(['trial_ends_at' => null]);
+        session()->flash('success', "Тріал для {$tenant->name} видалено");
+    }
+
+    /**
+     * Open extend trial modal.
+     */
+    public function openExtendTrialModal(int $id)
+    {
+        $this->extendTrialTenantId = $id;
+        $this->extendTrialDays = 7;
+    }
+
+    /**
+     * Close extend trial modal.
+     */
+    public function closeExtendTrialModal()
+    {
+        $this->extendTrialTenantId = null;
+        $this->extendTrialDays = 7;
+    }
+
+    /**
+     * Extend trial by specified days.
+     */
+    public function extendTrial()
+    {
+        $tenant = Tenant::findOrFail($this->extendTrialTenantId);
+        
+        // Calculate new trial end date
+        $baseDate = $tenant->trial_ends_at && $tenant->trial_ends_at->isFuture() 
+            ? $tenant->trial_ends_at 
+            : now();
+        
+        $newTrialEndsAt = $baseDate->copy()->addDays($this->extendTrialDays);
+        
+        $tenant->update(['trial_ends_at' => $newTrialEndsAt]);
+        
+        $this->closeExtendTrialModal();
+        session()->flash('success', "Тріал для {$tenant->name} продовжено до {$newTrialEndsAt->format('d.m.Y H:i')}");
+    }
+
+    /**
+     * Quick add trial for specific days.
+     */
+    public function quickAddTrial(int $id, int $days)
+    {
+        $tenant = Tenant::findOrFail($id);
+        
+        // Calculate from now (fresh trial)
+        $newTrialEndsAt = now()->addDays($days);
+        
+        $tenant->update(['trial_ends_at' => $newTrialEndsAt]);
+        
+        session()->flash('success', "Тріал {$days} днів для {$tenant->name} активовано до {$newTrialEndsAt->format('d.m.Y')}");
     }
 
     /**

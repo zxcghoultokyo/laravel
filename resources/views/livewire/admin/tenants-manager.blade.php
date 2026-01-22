@@ -78,6 +78,7 @@
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Статус</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Товари</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Чатів</th>
+                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Тріал</th>
                     <th wire:click="sortBy('created_at')" class="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100">
                         Створено
                         @if($sortBy === 'created_at')
@@ -138,6 +139,52 @@
                         <td class="px-4 py-3 text-sm text-gray-600">
                             {{ $tenant->chat_sessions_count ?? 0 }}
                         </td>
+                        <td class="px-4 py-3">
+                            @if($tenant->trial_ends_at)
+                                @if($tenant->trial_ends_at->isFuture())
+                                    <div class="text-sm">
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                            🟢 {{ $tenant->trial_ends_at->diffForHumans() }}
+                                        </span>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            до {{ $tenant->trial_ends_at->format('d.m.Y H:i') }}
+                                        </div>
+                                    </div>
+                                @else
+                                    <div class="text-sm">
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                            🔴 закінчився
+                                        </span>
+                                        <div class="text-xs text-gray-500 mt-1">
+                                            {{ $tenant->trial_ends_at->format('d.m.Y') }}
+                                        </div>
+                                    </div>
+                                @endif
+                                <div class="flex gap-1 mt-1">
+                                    <button wire:click="openExtendTrialModal({{ $tenant->id }})" class="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200" title="Продовжити">
+                                        +
+                                    </button>
+                                    <button wire:click="removeTrial({{ $tenant->id }})" wire:confirm="Прибрати тріал для {{ $tenant->name }}?" class="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded hover:bg-red-200" title="Прибрати тріал">
+                                        ✕
+                                    </button>
+                                </div>
+                            @else
+                                <div class="text-sm">
+                                    <span class="text-gray-400">—</span>
+                                    <div class="flex gap-1 mt-1">
+                                        <button wire:click="quickAddTrial({{ $tenant->id }}, 7)" class="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Тріал на 7 днів">
+                                            +7д
+                                        </button>
+                                        <button wire:click="quickAddTrial({{ $tenant->id }}, 14)" class="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Тріал на 14 днів">
+                                            +14д
+                                        </button>
+                                        <button wire:click="quickAddTrial({{ $tenant->id }}, 30)" class="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Тріал на 30 днів">
+                                            +30д
+                                        </button>
+                                    </div>
+                                </div>
+                            @endif
+                        </td>
                         <td class="px-4 py-3 text-sm text-gray-600">
                             {{ $tenant->created_at->format('d.m.Y') }}
                         </td>
@@ -194,7 +241,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                        <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                             Тенантів не знайдено
                         </td>
                     </tr>
@@ -257,6 +304,34 @@
                             <p class="text-xs text-gray-500 mt-1">0 = без ліміту</p>
                         </div>
                     </div>
+                    
+                    <!-- Trial settings -->
+                    <div class="border-t border-gray-200 pt-4 mt-4">
+                        <h3 class="font-medium text-gray-900 mb-3">🕐 Тріал період</h3>
+                        <div class="flex items-center gap-3 mb-3">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" wire:model.live="editForm.has_trial" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-sm text-gray-700">Тріал активний</span>
+                            </label>
+                        </div>
+                        @if($editForm['has_trial'] ?? false)
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Дата закінчення тріалу</label>
+                                <input type="datetime-local" wire:model="editForm.trial_ends_at" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <div class="flex gap-2 mt-2">
+                                    <button type="button" wire:click="$set('editForm.trial_ends_at', '{{ now()->addDays(7)->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+                                        +7 днів
+                                    </button>
+                                    <button type="button" wire:click="$set('editForm.trial_ends_at', '{{ now()->addDays(14)->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+                                        +14 днів
+                                    </button>
+                                    <button type="button" wire:click="$set('editForm.trial_ends_at', '{{ now()->addDays(30)->format('Y-m-d\\TH:i') }}')" class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200">
+                                        +30 днів
+                                    </button>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
                 </div>
                 <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
                     <button wire:click="cancelEdit" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
@@ -315,6 +390,81 @@
                     </button>
                     <button wire:click="create" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
                         Створити
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Extend Trial Modal -->
+    @if($extendTrialTenantId)
+        @php
+            $extendTenant = \App\Models\Tenant::find($extendTrialTenantId);
+        @endphp
+        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" wire:click.self="closeExtendTrialModal">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+                <div class="p-6 border-b border-gray-200">
+                    <h2 class="text-xl font-bold">🕐 Продовжити тріал</h2>
+                    <p class="text-sm text-gray-500 mt-1">{{ $extendTenant?->name }}</p>
+                </div>
+                <div class="p-6 space-y-4">
+                    @if($extendTenant?->trial_ends_at)
+                        <div class="p-3 bg-gray-50 rounded-lg">
+                            <div class="text-sm text-gray-600">Поточна дата закінчення:</div>
+                            <div class="font-medium {{ $extendTenant->trial_ends_at->isFuture() ? 'text-green-600' : 'text-red-600' }}">
+                                {{ $extendTenant->trial_ends_at->format('d.m.Y H:i') }}
+                                ({{ $extendTenant->trial_ends_at->diffForHumans() }})
+                            </div>
+                        </div>
+                    @else
+                        <div class="p-3 bg-yellow-50 rounded-lg text-yellow-700">
+                            <span>⚠️</span> Тріал не активний. Буде додано від поточної дати.
+                        </div>
+                    @endif
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Продовжити на (днів)</label>
+                        <input type="number" wire:model="extendTrialDays" min="1" max="365" class="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" wire:click="$set('extendTrialDays', 3)" class="px-3 py-1 text-sm {{ $extendTrialDays == 3 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            3 дні
+                        </button>
+                        <button type="button" wire:click="$set('extendTrialDays', 7)" class="px-3 py-1 text-sm {{ $extendTrialDays == 7 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            7 днів
+                        </button>
+                        <button type="button" wire:click="$set('extendTrialDays', 14)" class="px-3 py-1 text-sm {{ $extendTrialDays == 14 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            14 днів
+                        </button>
+                        <button type="button" wire:click="$set('extendTrialDays', 30)" class="px-3 py-1 text-sm {{ $extendTrialDays == 30 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            30 днів
+                        </button>
+                        <button type="button" wire:click="$set('extendTrialDays', 60)" class="px-3 py-1 text-sm {{ $extendTrialDays == 60 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            60 днів
+                        </button>
+                        <button type="button" wire:click="$set('extendTrialDays', 90)" class="px-3 py-1 text-sm {{ $extendTrialDays == 90 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }} rounded-lg hover:bg-blue-500 hover:text-white transition">
+                            90 днів
+                        </button>
+                    </div>
+                    
+                    @php
+                        $baseDate = $extendTenant?->trial_ends_at && $extendTenant?->trial_ends_at->isFuture() 
+                            ? $extendTenant->trial_ends_at 
+                            : now();
+                        $newEndDate = $baseDate->copy()->addDays($extendTrialDays);
+                    @endphp
+                    <div class="p-3 bg-blue-50 rounded-lg">
+                        <div class="text-sm text-blue-600">Нова дата закінчення:</div>
+                        <div class="font-bold text-blue-700">{{ $newEndDate->format('d.m.Y H:i') }}</div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-gray-200 flex justify-end gap-3">
+                    <button wire:click="closeExtendTrialModal" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
+                        Скасувати
+                    </button>
+                    <button wire:click="extendTrial" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                        Продовжити тріал
                     </button>
                 </div>
             </div>

@@ -861,7 +861,7 @@
             <div class="tech-items">
                 <span class="tech-item">Laravel 12</span>
                 <span class="tech-item">OpenAI GPT (chat)</span>
-                <span class="tech-item">GPT-4.1-mini (analyze)</span>
+                <span class="tech-item">GPT-4o-mini (analyze)</span>
                 <span class="tech-item">Meilisearch</span>
                 <span class="tech-item">SSE Streaming</span>
                 <span class="tech-item">Horoshop API</span>

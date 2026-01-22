@@ -1356,10 +1356,21 @@ PROMPT;
         if (!$sessionId) return;
 
         try {
+            $tenantId = $this->searchTool->getCurrentTenantId();
+            
             $session = ChatSession::firstOrCreate(
                 ['session_id' => $sessionId],
-                ['created_at' => now(), 'updated_at' => now()]
+                [
+                    'tenant_id' => $tenantId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
             );
+            
+            // Update tenant_id if session exists but has null tenant_id
+            if ($session->tenant_id === null && $tenantId !== null) {
+                $session->update(['tenant_id' => $tenantId]);
+            }
 
             ChatMessage::create([
                 'chat_session_id' => $session->id,

@@ -200,13 +200,22 @@ class StreamingChatController extends Controller
     private function saveUserMessage(string $sessionId, string $content): void
     {
         try {
+            // Get tenant_id from TenantContext
+            $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
+            
             $chatSession = \App\Models\ChatSession::firstOrCreate(
                 ['session_id' => $sessionId],
                 [
+                    'tenant_id' => $tenantId,
                     'status' => 'open',
                     'started_at' => now(),
                 ]
             );
+            
+            // Update tenant_id if session exists but has null tenant_id
+            if ($chatSession->tenant_id === null && $tenantId !== null) {
+                $chatSession->update(['tenant_id' => $tenantId]);
+            }
 
             \App\Models\ChatMessage::create([
                 'chat_session_id' => $chatSession->id,

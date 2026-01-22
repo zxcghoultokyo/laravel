@@ -428,39 +428,37 @@ class ChatStatsService
     
     /**
      * Get recent chat activity for display.
+     * 
+     * Uses chat_sessions table (which has TenantScope via Eloquent),
+     * joined with chat_messages for preview.
      */
     public function getRecentChats(int $limit = 10): array
     {
-        // Determine session column name
-        $sessionColumn = Schema::hasColumn('chat_messages', 'session_id') 
-            ? 'session_id' 
-            : 'chat_session_id';
-        
-        // Get from chat_messages grouped by session
-        $sessions = DB::table('chat_messages')
-            ->select($sessionColumn, DB::raw('MIN(created_at) as created_at'), DB::raw('MAX(created_at) as updated_at'), DB::raw('COUNT(*) as message_count'))
-            ->groupBy($sessionColumn)
+        // Use Eloquent to properly apply TenantScope from ChatSession
+        $sessions = \App\Models\ChatSession::query()
+            ->withCount('messages')
             ->orderByDesc('updated_at')
             ->limit($limit)
             ->get();
         
         $result = [];
-        foreach ($sessions as $s) {
-            $sessionId = $s->$sessionColumn;
-            
+        foreach ($sessions as $session) {
             // Get first user message as preview
-            $firstMessage = DB::table('chat_messages')
-                ->where($sessionColumn, $sessionId)
+            $firstMessage = $session->messages()
                 ->where('role', 'user')
                 ->orderBy('created_at')
                 ->first(['content']);
             
             $result[] = [
-                'session_id' => $sessionId,
-                'preview' => $firstMessage ? mb_substr($firstMessage->content, 0, 50) . (mb_strlen($firstMessage->content) > 50 ? '...' : '') : 'Новий чат',
-                'messages_count' => $s->message_count,
-                'time_ago' => Carbon::parse($s->updated_at)->diffForHumans(),
-                'created_at' => $s->updated_at,
+                'session_id' => $session->session_id,
+                'preview' => $firstMessage 
+                    ? mb_substr($firstMessage->content, 0, 50) . (mb_strlen($firstMessage->content) > 50 ? '...' : '') 
+                    : ($session->last_user_query 
+                        ? mb_substr($session->last_user_query, 0, 50) . (mb_strlen($session->last_user_query) > 50 ? '...' : '') 
+                        : 'Новий чат'),
+                'messages_count' => $session->messages_count,
+                'time_ago' => $session->updated_at?->diffForHumans() ?? 'невідомо',
+                'created_at' => $session->updated_at ?? $session->created_at,
             ];
         }
         

@@ -755,20 +755,43 @@ class DiagnosticController extends Controller
         }
 
         $limit = min((int) $request->query('limit', 20), 100);
+        $tenantId = $request->query('tenant_id');
+        $showNullTenant = $request->boolean('null_tenant');
         
-        $sessions = \App\Models\ChatSession::orderByDesc('last_message_at')
-            ->take($limit)
+        // Build query without TenantScope to see all sessions for diagnostics
+        $query = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->orderByDesc('updated_at');
+        
+        if ($showNullTenant) {
+            $query->whereNull('tenant_id');
+        } elseif ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        
+        $sessions = $query->take($limit)
             ->get()
             ->map(fn($s) => [
                 'session_id' => $s->session_id,
+                'tenant_id' => $s->tenant_id,
                 'messages_count' => $s->messages_count,
                 'status' => $s->status,
                 'last_intent' => $s->last_intent,
                 'last_message_at' => $s->last_message_at?->format('Y-m-d H:i:s'),
+                'updated_at' => $s->updated_at?->format('Y-m-d H:i:s'),
+            ]);
+        
+        // Count sessions by tenant_id for diagnostics
+        $tenantStats = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->selectRaw('tenant_id, COUNT(*) as count')
+            ->groupBy('tenant_id')
+            ->get()
+            ->mapWithKeys(fn($row) => [
+                $row->tenant_id ?? 'NULL' => $row->count
             ]);
 
         return response()->json([
             'count' => $sessions->count(),
+            'tenant_stats' => $tenantStats,
             'sessions' => $sessions,
         ]);
     }

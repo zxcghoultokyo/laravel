@@ -2,19 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Scopes\TenantScope;
 
 class ChatSession extends Model
 {
-    /**
-     * Boot the model and add global tenant scope.
-     */
-    protected static function booted(): void
-    {
-        static::addGlobalScope(new TenantScope());
-    }
+    use BelongsToTenant;
 
     protected $fillable = [
         'tenant_id',

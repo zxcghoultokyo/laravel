@@ -86,11 +86,24 @@ class SyncHoroshopProductsJob implements ShouldQueue
                         ->onQueue('default');
                 }
                 
-                // 🧠 Trigger AI enrichment for new products (if any were created)
-                $createdCount = $result['created'] ?? 0;
-                if ($createdCount > 0) {
+                // 🧠 Trigger AI enrichment for products without AI index
+                // Always run to ensure all products get enriched (not just new ones)
+                $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenant->id)
+                    ->where('in_stock', true)
+                    ->whereNotIn('id', function ($q) {
+                        $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+                    })
+                    ->count();
+                
+                if ($productsWithoutAi > 0) {
+                    Log::info('SyncHoroshopProductsJob: Triggering AI enrichment', [
+                        'tenant_id' => $tenant->id,
+                        'products_without_ai' => $productsWithoutAi,
+                    ]);
+                    
                     AnalyzeProductsWithAiJob::dispatch(
-                        batchSize: min(50, $createdCount),
+                        batchSize: min(100, $productsWithoutAi),
                         offset: 0,
                         forceReanalyze: false,
                         tenantId: $tenant->id
@@ -172,8 +185,29 @@ class SyncHoroshopProductsJob implements ShouldQueue
                 IndexProductsToMeiliJob::dispatch($this->tenantId)
                     ->delay(now()->addSeconds(5))
                     ->onQueue('default');
-            }
+            }            
+            // 🧠 Trigger AI enrichment for products without AI index
+            $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('tenant_id', $this->tenantId)
+                ->where('in_stock', true)
+                ->whereNotIn('id', function ($q) {
+                    $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+                })
+                ->count();
             
+            if ($productsWithoutAi > 0) {
+                Log::info('SyncHoroshopProductsJob: Triggering AI enrichment', [
+                    'tenant_id' => $this->tenantId,
+                    'products_without_ai' => $productsWithoutAi,
+                ]);
+                
+                AnalyzeProductsWithAiJob::dispatch(
+                    batchSize: min(100, $productsWithoutAi),
+                    offset: 0,
+                    forceReanalyze: false,
+                    tenantId: $this->tenantId
+                )->delay(now()->addMinutes(1))->onQueue('default');
+            }            
             // 🧠 Trigger AI enrichment for new products (if any were created)
             $createdCount = $result['created'] ?? 0;
             if ($createdCount > 0) {

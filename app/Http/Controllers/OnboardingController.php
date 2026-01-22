@@ -299,9 +299,24 @@ class OnboardingController extends Controller
     {
         $tenant = $this->tenant();
         
-        // Dispatch AI analysis job
+        // Dispatch AI analysis job for store context
         if ($tenant->products()->count() > 0) {
             AnalyzeStoreContextJob::dispatch($tenant->id);
+            
+            // 🧠 CRITICAL: Trigger AI enrichment for product search
+            // This ensures all products have keywords, slang, categories in product_ai_index
+            $productsCount = $tenant->products()->where('in_stock', true)->count();
+            \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
+                batchSize: min(100, $productsCount),
+                offset: 0,
+                forceReanalyze: false,
+                tenantId: $tenant->id
+            )->onQueue('default');
+            
+            // 🔍 Trigger Meilisearch indexing
+            \App\Jobs\IndexProductsToMeiliJob::dispatch($tenant->id)
+                ->delay(now()->addSeconds(10))
+                ->onQueue('default');
         }
         
         // Create default widget settings automatically

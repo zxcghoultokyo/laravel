@@ -45,22 +45,55 @@ Schedule::command('orders:sync --days=3 --update-counts')
 // ─────────────────────────────────────────────
 // 2. AI ENRICHMENT (04:00) - after Horoshop sync
 // ─────────────────────────────────────────────
-// Enrich new products with AI (limit 50 per run to control costs)
-Schedule::command('products:build-ai-index --limit=50')
+// Enrich products for ALL tenants that have products without AI index
+// This is CRITICAL for search quality - runs per-tenant to ensure coverage
+Schedule::call(function () {
+    $tenants = \App\Models\Tenant::where('status', 'active')
+        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->get();
+    
+    foreach ($tenants as $tenant) {
+        // Count products without AI index for this tenant
+        $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->where('in_stock', true)
+            ->whereNotIn('id', function ($q) {
+                $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+            })
+            ->count();
+        
+        if ($productsWithoutAi > 0) {
+            \Illuminate\Support\Facades\Log::info('Scheduled AI enrichment for tenant', [
+                'tenant_id' => $tenant->id,
+                'products_without_ai' => $productsWithoutAi,
+            ]);
+            
+            \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
+                batchSize: min(100, $productsWithoutAi),
+                offset: 0,
+                forceReanalyze: false,
+                tenantId: $tenant->id
+            )->onQueue('default');
+        }
+    }
+})
     ->dailyAt('04:00')
-    ->runInBackground()
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/sync-ai-enrichment.log'));
+    ->name('ai-enrichment-all-tenants')
+    ->withoutOverlapping();
 
 // ─────────────────────────────────────────────
 // 3. MEILISEARCH INDEXING (05:00) - after AI enrichment
 // ─────────────────────────────────────────────
-// Reindex products in Meilisearch
-Schedule::command('meili:reindex-products')
+// Reindex products in Meilisearch for ALL tenants
+Schedule::call(function () {
+    // Full reindex for all tenants (no tenant filter = all)
+    \App\Jobs\IndexProductsToMeiliJob::dispatch(null)->onQueue('default');
+    
+    \Illuminate\Support\Facades\Log::info('Scheduled Meilisearch full reindex started');
+})
     ->dailyAt('05:00')
-    ->runInBackground()
-    ->withoutOverlapping()
-    ->appendOutputTo(storage_path('logs/sync-meilisearch.log'));
+    ->name('meili-reindex-all')
+    ->withoutOverlapping();
 
 // ─────────────────────────────────────────────
 // 3.5. COLOR DETECTION (05:30) - after Meilisearch

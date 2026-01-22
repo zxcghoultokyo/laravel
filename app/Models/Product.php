@@ -45,6 +45,7 @@ class Product extends Model
         'popularity',
         'we_recommended',
         'color',
+        'size',
         'brand',
     ];
 

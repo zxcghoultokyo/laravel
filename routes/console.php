@@ -17,12 +17,19 @@ Artisan::command('inspire', function () {
 // ─────────────────────────────────────────────
 // 1. HOROSHOP SYNC (03:00)
 // ─────────────────────────────────────────────
-// Sync products from Horoshop API for ALL active tenants
+// Sync products from Horoshop API for ALL active tenants (paid OR on trial)
 Schedule::call(function () {
-    $tenants = \App\Models\Tenant::where('status', 'active')->get();
+    // Get all tenants that can use the service (active subscription OR on trial)
+    $tenants = \App\Models\Tenant::canUseService()->get();
+    
     foreach ($tenants as $tenant) {
         \App\Jobs\SyncHoroshopProductsJob::dispatch($tenant->id);
     }
+    
+    \Illuminate\Support\Facades\Log::info('Scheduled Horoshop sync for active tenants', [
+        'tenants_count' => $tenants->count(),
+        'tenant_ids' => $tenants->pluck('id')->toArray(),
+    ]);
 })
     ->dailyAt('03:00')
     ->name('sync-all-tenants')
@@ -45,10 +52,11 @@ Schedule::command('orders:sync --days=3 --update-counts')
 // ─────────────────────────────────────────────
 // 2. AI ENRICHMENT (04:00) - after Horoshop sync
 // ─────────────────────────────────────────────
-// Enrich products for ALL tenants that have products without AI index
+// Enrich products for ALL active tenants (paid OR on trial) that have products without AI index
 // This is CRITICAL for search quality - runs per-tenant to ensure coverage
 Schedule::call(function () {
-    $tenants = \App\Models\Tenant::where('status', 'active')
+    // Get all tenants that can use the service AND have products
+    $tenants = \App\Models\Tenant::canUseService()
         ->whereHas('products', fn($q) => $q->where('in_stock', true))
         ->get();
     

@@ -323,6 +323,30 @@ class Tenant extends Model
         return $this->hasOne(StoreContext::class);
     }
 
+    // ==================== SCOPES ====================
+
+    /**
+     * Scope to filter tenants that can actively use the service.
+     * Includes: active status AND (on trial OR has paid subscription)
+     * Use this for scheduled jobs like sync, enrichment, indexing.
+     */
+    public function scopeCanUseService($query)
+    {
+        return $query->where('status', self::STATUS_ACTIVE)
+            ->where(function ($q) {
+                $q->where(function ($sub) {
+                    // On trial (trial not expired)
+                    $sub->whereNotNull('trial_ends_at')
+                        ->where('trial_ends_at', '>', now());
+                })->orWhere(function ($sub) {
+                    // Has active subscription
+                    $sub->whereIn('plan', [self::PLAN_STARTER, self::PLAN_PRO, self::PLAN_ENTERPRISE])
+                        ->whereNotNull('plan_expires_at')
+                        ->where('plan_expires_at', '>', now());
+                });
+            });
+    }
+
     // ==================== HELPERS ====================
 
     /**

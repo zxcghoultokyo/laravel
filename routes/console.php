@@ -90,6 +90,55 @@ Schedule::call(function () {
     ->withoutOverlapping();
 
 // ─────────────────────────────────────────────
+// 2.5. AI ENRICHMENT HEALTH CHECK (every 30 min)
+// ─────────────────────────────────────────────
+// Auto-restart enrichment if products remain unenriched
+// This ensures enrichment completes even if worker restarts
+Schedule::call(function () {
+    $tenants = \App\Models\Tenant::canUseService()
+        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->get();
+    
+    foreach ($tenants as $tenant) {
+        // Count products without AI index for this tenant
+        $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->where('in_stock', true)
+            ->whereNotIn('id', function ($q) {
+                $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
+            })
+            ->count();
+        
+        // Only dispatch if there are unenriched products AND coverage < 95%
+        $totalProducts = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->where('in_stock', true)
+            ->count();
+        
+        $coverage = $totalProducts > 0 ? (($totalProducts - $productsWithoutAi) / $totalProducts) * 100 : 100;
+        
+        if ($productsWithoutAi > 0 && $coverage < 95) {
+            \Illuminate\Support\Facades\Log::info('AI enrichment health check: dispatching batch', [
+                'tenant_id' => $tenant->id,
+                'products_without_ai' => $productsWithoutAi,
+                'coverage_percent' => round($coverage, 1),
+            ]);
+            
+            // Dispatch small batch to continue enrichment
+            \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
+                batchSize: min(50, $productsWithoutAi),
+                offset: 0,
+                forceReanalyze: false,
+                tenantId: $tenant->id
+            )->onQueue('default');
+        }
+    }
+})
+    ->everyThirtyMinutes()
+    ->name('ai-enrichment-health-check')
+    ->withoutOverlapping();
+
+// ─────────────────────────────────────────────
 // 3. MEILISEARCH INDEXING (05:00) - after AI enrichment
 // ─────────────────────────────────────────────
 // Reindex products in Meilisearch for ALL tenants

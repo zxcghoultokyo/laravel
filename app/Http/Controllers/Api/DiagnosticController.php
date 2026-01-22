@@ -858,6 +858,126 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * DELETE /api/diagnostic/cleanup-by-api
+     * Remove products from DB that don't exist in Horoshop API
+     * Fetches all articles from API and deletes DB products not in that list
+     * Required: tenant_id parameter
+     */
+    public function cleanupByApi(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
+        if (!$tenantId) {
+            return response()->json(['error' => 'tenant_id is required'], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
+            return response()->json(['error' => 'Tenant has no Horoshop credentials'], 400);
+        }
+
+        $dryRun = $request->query('dry_run', '1') !== '0';
+        set_time_limit(300);
+
+        try {
+            $credentials = $tenant->platform_credentials;
+            $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
+            $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
+            $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
+            
+            $client = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
+            
+            // Fetch all articles from API
+            $apiArticles = [];
+            $offset = 0;
+            $limit = 200;
+            
+            do {
+                $response = $client->request('catalog/export', [
+                    'expr' => ['display_in_showcase' => 1],
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'includedParams' => ['article'],
+                ]);
+                
+                $products = $response['products'] ?? [];
+                if (empty($products)) {
+                    break;
+                }
+                
+                foreach ($products as $product) {
+                    if (!empty($product['article'])) {
+                        $apiArticles[] = $product['article'];
+                    }
+                }
+                
+                $offset += $limit;
+            } while (count($products) === $limit);
+            
+            // Get DB articles for tenant
+            $dbArticles = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->pluck('article')
+                ->toArray();
+            
+            // Find articles to delete (in DB but not in API)
+            $articlesToDelete = array_diff($dbArticles, $apiArticles);
+            
+            if (empty($articlesToDelete)) {
+                return response()->json([
+                    'status' => 'ok',
+                    'tenant_id' => $tenantId,
+                    'api_count' => count($apiArticles),
+                    'db_count' => count($dbArticles),
+                    'to_delete' => 0,
+                    'message' => 'No stale products found - DB matches API',
+                ]);
+            }
+
+            if ($dryRun) {
+                return response()->json([
+                    'status' => 'dry_run',
+                    'tenant_id' => $tenantId,
+                    'api_count' => count($apiArticles),
+                    'db_count' => count($dbArticles),
+                    'to_delete' => count($articlesToDelete),
+                    'would_remain' => count($apiArticles),
+                    'sample_stale_articles' => array_slice($articlesToDelete, 0, 20),
+                    'message' => "Would delete " . count($articlesToDelete) . " stale products. Add &dry_run=0 to execute.",
+                ]);
+            }
+
+            // Actually delete
+            $deleted = Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereIn('article', $articlesToDelete)
+                ->delete();
+
+            return response()->json([
+                'status' => 'completed',
+                'tenant_id' => $tenantId,
+                'api_count' => count($apiArticles),
+                'deleted' => $deleted,
+                'remaining' => count($dbArticles) - $deleted,
+                'message' => "Deleted {$deleted} stale products",
+            ]);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/diagnostic/sync-horoshop
      * Trigger full sync from Horoshop (marks deleted products as out of stock)
      * Add ?queue=0 to run synchronously (slow, ~5-10 min)

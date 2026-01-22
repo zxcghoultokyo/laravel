@@ -79,6 +79,7 @@
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Товари</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Чатів</th>
                     <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Тріал</th>
+                    <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Віджет</th>
                     <th wire:click="sortBy('created_at')" class="px-4 py-3 text-left text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-100">
                         Створено
                         @if($sortBy === 'created_at')
@@ -181,6 +182,26 @@
                                         <button wire:click="quickAddTrial({{ $tenant->id }}, 30)" class="text-xs px-2 py-0.5 bg-green-100 text-green-600 rounded hover:bg-green-200" title="Тріал на 30 днів">
                                             +30д
                                         </button>
+                                    </div>
+                                </div>
+                            @endif
+                        </td>
+                        {{-- Widget Status --}}
+                        <td class="px-4 py-3">
+                            @php
+                                $widgetStatus = $tenant->canUseWidget();
+                            @endphp
+                            @if($widgetStatus['allowed'])
+                                <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                                    ✓ Активний
+                                </span>
+                            @else
+                                <div>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                                        ✗ Вимкнено
+                                    </span>
+                                    <div class="text-xs text-red-500 mt-1" title="{{ $widgetStatus['details'] ?? '' }}">
+                                        {{ $widgetStatus['message'] ?? $widgetStatus['reason'] ?? 'помилка' }}
                                     </div>
                                 </div>
                             @endif

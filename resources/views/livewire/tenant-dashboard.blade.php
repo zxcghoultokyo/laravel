@@ -7,17 +7,33 @@
                 <h1 class="text-2xl font-bold text-gray-900">{{ $tenant->name }}</h1>
                 <p class="text-gray-500">{{ $tenant->domain ?? $tenant->slug }}</p>
             </div>
-            <div class="flex items-center gap-2">
-                @if($stats['is_trial_expired'])
+            <div class="flex items-center gap-3">
+                {{-- Widget Status Badge --}}
+                @if($stats['widget_active'])
+                    <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                        ✓ Віджет активний
+                    </span>
+                @else
+                    <span class="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium animate-pulse">
+                        ✗ Віджет вимкнено
+                    </span>
+                @endif
+                
+                {{-- Plan Status Badge --}}
+                @if(!$stats['widget_active'])
                     <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium animate-pulse">
-                        ⚠️ Тріал закінчився
+                        ⚠️ Потрібна оплата
                     </span>
                 @elseif($stats['is_trial'])
                     <span class="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium">
                         🎁 Trial Pro: {{ $stats['days_left'] }} днів
                     </span>
-                @else
+                @elseif($stats['has_active_subscription'])
                     <span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
+                        ✅ {{ $stats['plan_label'] }}
+                    </span>
+                @else
+                    <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">
                         {{ $stats['plan_label'] }}
                     </span>
                 @endif
@@ -32,20 +48,46 @@
         </div>
     @endif
 
-    <!-- Trial Expired Banner -->
-    @if($stats['is_trial_expired'])
+    <!-- Widget Status Alert (if widget not active) -->
+    @if(!$stats['widget_active'])
         <div class="mb-6 p-4 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300 rounded-xl shadow-lg">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex items-start gap-3">
-                    <span class="text-3xl">⚠️</span>
+                    <span class="text-3xl">🚫</span>
                     <div>
-                        <h3 class="font-bold text-red-800 text-lg">Тріал період закінчився!</h3>
+                        <h3 class="font-bold text-red-800 text-lg">Віджет не активний!</h3>
                         <p class="text-red-700 text-sm mt-1">
-                            Ваш безкоштовний період закінчився. <strong>Віджет на сайті не працює.</strong>
-                            Оберіть тарифний план для відновлення роботи.
+                            @switch($stats['widget_status']['reason'] ?? 'unknown')
+                                @case('trial_expired')
+                                    Ваш тріал період закінчився. Оберіть тарифний план для відновлення роботи.
+                                    @break
+                                @case('subscription_expired')
+                                    Ваша підписка закінчилась. Продовжіть підписку для відновлення роботи віджету.
+                                    @break
+                                @case('not_paid')
+                                    Підписка не оплачена. Оплатіть тариф <strong>{{ $stats['plan_label'] }}</strong> для активації віджету.
+                                    @break
+                                @case('no_subscription')
+                                    Потрібна підписка. Оберіть тарифний план для активації віджету.
+                                    @break
+                                @case('suspended')
+                                    Акаунт призупинено. Зверніться до підтримки.
+                                    @break
+                                @case('cancelled')
+                                    Акаунт скасовано. Зверніться до підтримки.
+                                    @break
+                                @default
+                                    {{ $stats['widget_status']['message'] ?? 'Віджет заблоковано' }}
+                            @endswitch
                         </p>
                         <p class="text-red-600 text-xs mt-2">
-                            Поточний план: <strong>{{ $stats['plan_label'] }}</strong>
+                            План: <strong>{{ $stats['plan_label'] }}</strong>
+                            @if($stats['trial_ends_at'])
+                                | Тріал до: {{ $stats['trial_ends_at']->format('d.m.Y') }}
+                            @endif
+                            @if($stats['plan_expires_at'])
+                                | Підписка до: {{ $stats['plan_expires_at']->format('d.m.Y') }}
+                            @endif
                         </p>
                     </div>
                 </div>
@@ -59,7 +101,7 @@
             </div>
         </div>
     @elseif($stats['is_trial'])
-    <!-- Trial Banner -->
+    <!-- Trial Banner (widget active) -->
         <div class="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div class="flex items-start gap-3">
@@ -68,6 +110,7 @@
                         <h3 class="font-bold text-amber-900">Ваш Pro-тріал активний!</h3>
                         <p class="text-amber-700 text-sm mt-1">
                             Залишилось <strong>{{ $stats['days_left'] }} днів</strong> безкоштовного доступу до всіх Pro-функцій.
+                            <span class="text-green-600 font-medium">✓ Віджет працює</span>
                         </p>
                     </div>
                 </div>
@@ -77,6 +120,29 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
                     </svg>
                     Обрати план
+                </a>
+            </div>
+        </div>
+    @elseif($stats['has_active_subscription'])
+    <!-- Active Subscription Banner -->
+        <div class="mb-6 p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="flex items-start gap-3">
+                    <span class="text-3xl">✅</span>
+                    <div>
+                        <h3 class="font-bold text-emerald-900">Підписка {{ $stats['plan_label'] }} активна</h3>
+                        <p class="text-emerald-700 text-sm mt-1">
+                            @if($stats['subscription_days_left'] !== null)
+                                Діє до <strong>{{ $stats['plan_expires_at']->format('d.m.Y') }}</strong> 
+                                ({{ $stats['subscription_days_left'] }} {{ trans_choice('днів|день|дні', $stats['subscription_days_left']) }})
+                            @endif
+                            <span class="text-green-600 font-medium">✓ Віджет працює</span>
+                        </p>
+                    </div>
+                </div>
+                <a href="{{ route('billing.index') }}" 
+                   class="inline-flex items-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-medium rounded-lg transition shadow-sm">
+                    Керування підпискою
                 </a>
             </div>
         </div>

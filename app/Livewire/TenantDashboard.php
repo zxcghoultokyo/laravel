@@ -593,11 +593,21 @@ class TenantDashboard extends Component
             'plan' => $tenant->plan,
             'plan_label' => $tenant->getPlanLabel(),
             'trial_ends_at' => $tenant->trial_ends_at,
+            'plan_expires_at' => $tenant->plan_expires_at,
             'is_trial' => $tenant->isOnTrial(),
             'is_trial_expired' => $tenant->isTrialExpired(),
+            'has_active_subscription' => $tenant->hasActiveSubscription(),
+            'is_subscription_expired' => $tenant->plan_expires_at && $tenant->plan_expires_at->isPast(),
             'days_left' => $tenant->trial_ends_at 
                 ? max(0, (int) floor(now()->diffInDays($tenant->trial_ends_at, false))) 
                 : null,
+            'subscription_days_left' => $tenant->plan_expires_at 
+                ? max(0, (int) floor(now()->diffInDays($tenant->plan_expires_at, false))) 
+                : null,
+            
+            // Widget status
+            'widget_status' => $tenant->canUseWidget(),
+            'widget_active' => $tenant->canUseWidget()['allowed'],
             
             // Last sync
             'last_sync_at' => $tenant->last_sync_at,

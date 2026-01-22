@@ -1124,7 +1124,7 @@
                     <div class="advantage-card" data-aos="zoom-in" data-aos-delay="500">
                         <div class="advantage-icon">🧠</div>
                         <h4>Не скриптовий</h4>
-                        <p>GPT-5.1 за лаштунками. Реальний AI, а не дерево відповідей з 90-х.</p>
+                        <p>AI на базі OpenAI (GPT-4o/5). Реальний AI, а не дерево відповідей з 90-х.</p>
                     </div>
 
                     <div class="advantage-card" data-aos="zoom-in" data-aos-delay="600">

@@ -2521,6 +2521,10 @@ class DiagnosticController extends Controller
         }
 
         $tenants = \App\Models\Tenant::all()->map(function ($tenant) {
+            // Extract horoshop domain from credentials (without exposing login/password)
+            $credentials = $tenant->platform_credentials ?? [];
+            $horoshopDomain = $credentials['domain'] ?? null;
+            
             return [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
@@ -2529,6 +2533,8 @@ class DiagnosticController extends Controller
                 'plan' => $tenant->plan,
                 'status' => $tenant->status,
                 'platform' => $tenant->platform,
+                'horoshop_domain' => $horoshopDomain,
+                'has_credentials' => !empty($credentials),
                 'trial_ends_at' => $tenant->trial_ends_at?->toDateTimeString(),
                 'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
                 'messages_used' => $tenant->messages_used,

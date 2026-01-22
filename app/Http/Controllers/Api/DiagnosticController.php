@@ -2347,6 +2347,42 @@ class DiagnosticController extends Controller
     }
     
     /**
+     * GET /api/diagnostic/tenant/{id}
+     * Get tenant info with widget status check
+     */
+    public function tenantInfo(Request $request, int $id): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        
+        $tenant = \App\Models\Tenant::find($id);
+        
+        if (!$tenant) {
+            return response()->json(['error' => "Tenant #{$id} not found"], 404);
+        }
+        
+        $widgetAccess = $tenant->canUseWidget();
+        
+        return response()->json([
+            'id' => $tenant->id,
+            'name' => $tenant->name,
+            'slug' => $tenant->slug,
+            'status' => $tenant->status,
+            'plan' => $tenant->plan,
+            'trial_ends_at' => $tenant->trial_ends_at?->toIso8601String(),
+            'trial_ends_at_human' => $tenant->trial_ends_at?->diffForHumans(),
+            'is_on_trial' => $tenant->isOnTrial(),
+            'is_trial_expired' => $tenant->isTrialExpired(),
+            'is_active' => $tenant->isActive(),
+            'can_use_widget' => $widgetAccess,
+            'messages_limit' => $tenant->messages_limit,
+            'messages_used' => $tenant->messages_used,
+            'products_count' => $tenant->products()->count(),
+        ]);
+    }
+    
+    /**
      * POST /api/diagnostic/clear-queue
      * Clear all pending jobs from queue (use when queue is backed up)
      */

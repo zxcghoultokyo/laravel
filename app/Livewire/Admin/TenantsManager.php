@@ -103,6 +103,16 @@ class TenantsManager extends Component
             'products_limit' => $this->editForm['products_limit'],
             'trial_ends_at' => $trialEndsAt,
         ]);
+        
+        // Force refresh to verify
+        $tenant->refresh();
+        
+        \Illuminate\Support\Facades\Log::info('Tenant updated', [
+            'id' => $tenant->id,
+            'plan_saved' => $tenant->plan,
+            'status' => $tenant->status,
+            'trial_ends_at' => $tenant->trial_ends_at,
+        ]);
 
         // Also update subscription plan if exists (for consistency)
         if ($tenant->subscription && $tenant->subscription->plan !== $this->editForm['plan']) {

@@ -34,6 +34,7 @@ class Tenant extends Model
         'status',
         'suspension_reason',
         'settings',
+        'products_limit',
     ];
 
     protected $casts = [

@@ -1340,7 +1340,7 @@
                     <a href="/terms" style="color: var(--text-gray); font-size: 13px; text-decoration: none;">Умови використання</a>
                 </div>
                 <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
-                    <p>© 2025 AIntento — зроблено в 🇺🇦 Україні</p>
+                    <p>© 2026 AIntento — зроблено в 🇺🇦 Україні</p>
                 </div>
             </div>
         </footer>

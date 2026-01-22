@@ -57,4 +57,7 @@ Route::middleware(['auth', 'verified', 'super-admin'])->prefix('admin')->name('a
     Route::get('/tenants', TenantsManager::class)->name('tenants');
     Route::get('/tenants/{tenant}', \App\Livewire\Admin\TenantDetails::class)->name('tenants.show');
     Route::get('/sync-reports', SyncReports::class)->name('sync-reports');
+    
+    // Tools
+    Route::get('/test-products', \App\Livewire\Admin\TestProductsGenerator::class)->name('test-products');
 });

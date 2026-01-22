@@ -825,6 +825,79 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/ai-enrich-stats
+     * Get AI enrichment statistics per tenant
+     */
+    public function aiEnrichStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        // Count products by tenant
+        $productsByTenant = DB::table('products')
+            ->whereNull('deleted_at')
+            ->where('in_stock', true)
+            ->select('tenant_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('tenant_id')
+            ->get()
+            ->keyBy('tenant_id');
+
+        // Count AI indexed products by tenant
+        $aiIndexByTenant = DB::table('product_ai_index')
+            ->join('products', 'product_ai_index.product_id', '=', 'products.id')
+            ->where('products.in_stock', true)
+            ->whereNull('products.deleted_at')
+            ->select(
+                'products.tenant_id',
+                DB::raw('COUNT(*) as indexed'),
+                DB::raw('SUM(CASE WHEN product_ai_index.keywords IS NOT NULL AND product_ai_index.keywords != "[]" THEN 1 ELSE 0 END) as with_keywords'),
+                DB::raw('SUM(CASE WHEN product_ai_index.slang IS NOT NULL AND product_ai_index.slang != "[]" THEN 1 ELSE 0 END) as with_slang'),
+                DB::raw('SUM(CASE WHEN product_ai_index.product_type IS NOT NULL AND product_ai_index.product_type != "" THEN 1 ELSE 0 END) as with_type')
+            )
+            ->groupBy('products.tenant_id')
+            ->get()
+            ->keyBy('tenant_id');
+
+        $stats = [];
+        foreach ($productsByTenant as $tenantId => $data) {
+            $ai = $aiIndexByTenant[$tenantId] ?? null;
+            $stats[$tenantId] = [
+                'total_products' => $data->total,
+                'indexed' => $ai->indexed ?? 0,
+                'with_keywords' => $ai->with_keywords ?? 0,
+                'with_slang' => $ai->with_slang ?? 0,
+                'with_type' => $ai->with_type ?? 0,
+                'coverage_percent' => $data->total > 0 
+                    ? round((($ai->indexed ?? 0) / $data->total) * 100, 1) 
+                    : 0,
+            ];
+        }
+
+        // Sample AI index records
+        $samples = DB::table('product_ai_index')
+            ->join('products', 'product_ai_index.product_id', '=', 'products.id')
+            ->select(
+                'product_ai_index.product_id',
+                'products.tenant_id',
+                'products.title',
+                'product_ai_index.product_type',
+                'product_ai_index.ai_category',
+                'product_ai_index.keywords',
+                'product_ai_index.slang',
+                'product_ai_index.created_at'
+            )
+            ->limit(5)
+            ->get();
+
+        return response()->json([
+            'by_tenant' => $stats,
+            'total_ai_records' => DB::table('product_ai_index')->count(),
+            'samples' => $samples,
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/cleanup-meili
      * Remove stale documents from Meilisearch (products deleted from Horoshop or out of stock)
      * Faster than full reindex - only deletes, doesn't re-add

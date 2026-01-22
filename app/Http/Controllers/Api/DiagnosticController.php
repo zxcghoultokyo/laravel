@@ -2753,16 +2753,21 @@ class DiagnosticController extends Controller
             ->limit(5)
             ->get(['id', 'sync_type', 'status', 'started_at', 'total_processed', 'created', 'updated', 'failed']);
 
-        // Get categories
+        // Get categories (include all, not just in_stock)
         $categories = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('tenant_id', $tenant->id)
-            ->where('in_stock', true)
             ->whereNotNull('category_path')
             ->select('category_path', DB::raw('COUNT(*) as count'))
             ->groupBy('category_path')
             ->orderByDesc('count')
             ->limit(20)
             ->get();
+        
+        // Get sample products (first 5)
+        $sampleProducts = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->limit(5)
+            ->get(['id', 'article', 'title', 'price', 'link', 'in_stock', 'category_path']);
 
         return response()->json([
             'tenant' => [
@@ -2804,6 +2809,7 @@ class DiagnosticController extends Controller
                 'greetings' => DB::table('greetings')->where('tenant_id', $tenant->id)->count(),
             ],
             'top_categories' => $categories,
+            'sample_products' => $sampleProducts,
             'recent_sync_logs' => $syncLogs,
         ]);
     }

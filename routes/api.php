@@ -88,6 +88,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/reindex-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'reindexMeili']);
     Route::post('/ai-enrich', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrich']);
     Route::get('/ai-enrich-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrichStats']);
+    Route::get('/ai-test-one', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiTestOne']);
+    Route::get('/sync-logs', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncLogs']);
     Route::post('/cleanup-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupMeili']);
     Route::delete('/cleanup-stale-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupStaleProducts']);
     Route::delete('/cleanup-by-api', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupByApi']);

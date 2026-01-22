@@ -825,6 +825,185 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/ai-test-one
+     * Test AI enrichment on a single product with full debug output
+     */
+    public function aiTestOne(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $productId = $request->input('product_id');
+        
+        // Get one product to test
+        $product = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('in_stock', true)
+            ->whereNotNull('title')
+            ->when($productId, fn($q) => $q->where('id', $productId))
+            ->first();
+        
+        if (!$product) {
+            return response()->json(['error' => 'No product found'], 404);
+        }
+
+        $config = config('services.openai', []);
+        $apiKey = $config['key'] ?? null;
+        
+        if (!$apiKey) {
+            return response()->json([
+                'error' => 'OpenAI API key not configured',
+                'config_keys' => array_keys($config),
+            ], 500);
+        }
+
+        $raw = is_array($product->raw) ? $product->raw : json_decode($product->raw ?? '{}', true);
+        
+        $title = $product->title ?? '';
+        $description = $this->extractDescriptionForTest($raw);
+        $category = $product->category_path ?? '';
+        $characteristics = $this->extractCharacteristicsForTest($raw);
+
+        $prompt = $this->buildPromptForTest($title, $description, $category, $characteristics);
+
+        $model = $config['model_analyze'] ?? 'gpt-4o-mini';
+        $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
+        
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withToken($apiKey)
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                        ['role' => 'user', 'content' => $prompt],
+                    ],
+                    'temperature' => 0.3,
+                    'max_tokens' => 800,
+                ]);
+
+            $data = $response->json();
+            $content = $data['choices'][0]['message']['content'] ?? null;
+            
+            // Try to parse JSON
+            $json = null;
+            if ($content) {
+                $cleanContent = preg_replace('/```json\s*/i', '', $content);
+                $cleanContent = preg_replace('/```\s*$/i', '', $cleanContent);
+                $cleanContent = trim($cleanContent);
+                $json = json_decode($cleanContent, true);
+            }
+            
+            return response()->json([
+                'product' => [
+                    'id' => $product->id,
+                    'title' => $title,
+                    'category' => $category,
+                    'tenant_id' => $product->tenant_id,
+                ],
+                'api_config' => [
+                    'model' => $model,
+                    'base_url' => $baseUrl,
+                    'has_key' => !empty($apiKey),
+                ],
+                'prompt_length' => mb_strlen($prompt),
+                'response_status' => $response->status(),
+                'response_raw' => $data,
+                'content' => $content,
+                'parsed_json' => $json,
+                'json_error' => $json === null ? json_last_error_msg() : null,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'product' => [
+                    'id' => $product->id,
+                    'title' => $title,
+                ],
+                'api_config' => [
+                    'model' => $model,
+                    'base_url' => $baseUrl,
+                ],
+            ], 500);
+        }
+    }
+
+    private function extractDescriptionForTest(array $raw): string
+    {
+        $desc = $raw['description'] ?? $raw['description_full'] ?? '';
+        if (is_array($desc)) {
+            $desc = $desc['uk'] ?? $desc['ua'] ?? reset($desc) ?: '';
+        }
+        return mb_substr(strip_tags((string)$desc), 0, 1000);
+    }
+
+    private function extractCharacteristicsForTest(array $raw): string
+    {
+        $chars = $raw['characteristics'] ?? $raw['attrs'] ?? [];
+        if (!is_array($chars)) {
+            return '';
+        }
+        $lines = [];
+        foreach ($chars as $key => $value) {
+            if (is_array($value)) {
+                $value = implode(', ', $value);
+            }
+            $lines[] = "{$key}: {$value}";
+        }
+        return implode('; ', array_slice($lines, 0, 20));
+    }
+
+    private function buildPromptForTest(string $title, string $description, string $category, string $characteristics): string
+    {
+        return "Проаналізуй цей товар військового спорядження та згенеруй JSON для пошукового індексу.
+
+ТОВАР:
+Назва: {$title}
+Категорія: {$category}
+Опис: " . mb_substr($description, 0, 500) . "
+Характеристики: {$characteristics}
+
+Згенеруй JSON з полями:
+1. \"product_type\": основний тип товару англійською (plate_carrier, helmet, boots, pouch, gloves, uniform, etc)
+2. \"ai_category\": загальна категорія (armor, apparel, footwear, accessories, bags, optics, etc)
+3. \"keywords\": масив 10-15 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку
+4. \"slang\": масив 5-10 сленгових/жаргонних назв УКРАЇНСЬКОЮ як шукають реальні люди
+5. \"materials\": масив матеріалів якщо є
+6. \"standards\": масив стандартів якщо є
+7. \"usage\": масив призначення
+
+ВАЖЛИВО: Відповідай ТІЛЬКИ валідним JSON без markdown.";
+    }
+
+    /**
+     * GET /api/diagnostic/sync-logs
+     * Get sync logs for debugging
+     */
+    public function syncLogs(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $type = $request->input('type'); // horoshop, ai_enrichment, meili_index
+        $limit = min(50, max(10, (int) $request->input('limit', 20)));
+
+        $query = DB::table('sync_logs')
+            ->orderBy('created_at', 'desc');
+        
+        if ($type) {
+            $query->where('type', $type);
+        }
+
+        $logs = $query->limit($limit)->get();
+
+        return response()->json([
+            'logs' => $logs,
+            'count' => $logs->count(),
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/ai-enrich-stats
      * Get AI enrichment statistics per tenant
      */

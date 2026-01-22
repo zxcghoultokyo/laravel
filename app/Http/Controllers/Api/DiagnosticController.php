@@ -315,6 +315,9 @@ class DiagnosticController extends Controller
                 'title' => $product->title,
                 'price' => $product->price,
                 'in_stock' => $product->in_stock,
+                'presence' => $product->presence,
+                'quantity' => $product->quantity,
+                'display_in_showcase' => $product->display_in_showcase,
                 'category_path' => $product->category_path,
                 'brand' => $product->brand,
                 'tenant_id' => $product->tenant_id,
@@ -322,6 +325,9 @@ class DiagnosticController extends Controller
                 'raw_pictures' => $product->raw['pictures'] ?? null,
                 'raw_images' => $product->raw['images'] ?? null,
                 'raw_image' => $product->raw['image'] ?? null,
+                'raw_presence' => $product->raw['presence'] ?? null,
+                'raw_quantity' => $product->raw['quantity'] ?? null,
+                'raw_display_in_showcase' => $product->raw['display_in_showcase'] ?? null,
             ],
         ]);
     }

@@ -4693,8 +4693,12 @@ class DiagnosticController extends Controller
                         $payload = [
                             'model' => $model,
                             'messages' => $case['messages'],
-                            'temperature' => 0.3,
                         ];
+
+                        // gpt-5 models don't support temperature parameter
+                        if (!str_starts_with($model, 'gpt-5')) {
+                            $payload['temperature'] = 0.3;
+                        }
 
                         if ($case['tools']) {
                             $payload['tools'] = $case['tools'];

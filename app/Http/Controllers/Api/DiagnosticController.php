@@ -48,16 +48,24 @@ class DiagnosticController extends Controller
                 $row->tenant_id ?? 'NULL' => $row->count
             ]);
 
-        // AI Enrichment statistics
-        $totalAiIndex = DB::table('product_ai_index')->count();
-        $withAiType = DB::table('product_ai_index')->whereNotNull('ai_product_type')->where('ai_product_type', '!=', '')->count();
-        $withAiCategory = DB::table('product_ai_index')->whereNotNull('ai_category')->where('ai_category', '!=', '')->count();
-        $aiIndexByTenant = DB::table('product_ai_index')
-            ->join('products', 'product_ai_index.product_id', '=', 'products.id')
-            ->select('products.tenant_id', DB::raw('COUNT(*) as count'))
-            ->groupBy('products.tenant_id')
-            ->get()
-            ->mapWithKeys(fn($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
+        // AI Enrichment statistics (may not exist in all environments)
+        try {
+            $totalAiIndex = DB::table('product_ai_index')->count();
+            $withAiType = DB::table('product_ai_index')->whereNotNull('ai_product_type')->where('ai_product_type', '!=', '')->count();
+            $withAiCategory = DB::table('product_ai_index')->whereNotNull('ai_category')->where('ai_category', '!=', '')->count();
+            $aiIndexByTenant = DB::table('product_ai_index')
+                ->join('products', 'product_ai_index.product_id', '=', 'products.id')
+                ->select('products.tenant_id', DB::raw('COUNT(*) as count'))
+                ->groupBy('products.tenant_id')
+                ->get()
+                ->mapWithKeys(fn($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
+        } catch (\Exception $e) {
+            // Table may not exist
+            $totalAiIndex = 0;
+            $withAiType = 0;
+            $withAiCategory = 0;
+            $aiIndexByTenant = collect([]);
+        }
 
         $totalProducts = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count();
 

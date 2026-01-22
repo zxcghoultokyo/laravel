@@ -77,6 +77,13 @@
             return;
         }
 
+        // Read tenant_id from data attribute (more reliable than resolving from token)
+        const tenantIdFromAttr = container.dataset.tenantId;
+        if (tenantIdFromAttr) {
+            window.aintentoTenantId = tenantIdFromAttr;
+            log('Tenant ID from data attribute:', tenantIdFromAttr);
+        }
+
         log('Token received, loading settings...');
 
         const apiUrl = BASE_URL + '/api/widget/settings';
@@ -133,7 +140,9 @@
 
         // Store settings globally (including tenant_id for API calls)
         window.aintentoSettings = settings;
-        window.aintentoTenantId = settings.tenant_id || null;
+        // Priority: data-tenant-id attribute > settings.tenant_id (attribute is more reliable)
+        window.aintentoTenantId = window.aintentoTenantId || settings.tenant_id || null;
+        log('Final tenant_id:', window.aintentoTenantId);
 
         // Inject CSS (only once)
         injectStyles(settings);

@@ -642,7 +642,7 @@ PROMPT;
                 }
             }
 
-            // Fallback: curated queries
+            // Fallback: use dynamic categories from tenant's catalog
             if (count($products) < $limit) {
                 if ($category) {
                     $results = $this->searchTool->search($category, [], $limit * 3);
@@ -656,7 +656,14 @@ PROMPT;
                         }
                     }
                 } else {
-                    $popularQueries = ['плитоноска НАТО', 'підсумок магазин', 'рукавички тактичні', 'аптечка ІФАК'];
+                    // Get top categories dynamically from tenant's products
+                    $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
+                    
+                    // If no categories found, use generic fallback
+                    if (empty($popularQueries)) {
+                        $popularQueries = ['товар', 'новинка', 'акція'];
+                    }
+                    
                     $existingIds = array_column($products, 'id');
                     foreach ($popularQueries as $q) {
                         $results = $this->searchTool->search($q, [], 10);
@@ -673,6 +680,27 @@ PROMPT;
                     }
                 }
             }
+            
+            // Last resort: just get any in-stock products from tenant
+            if (count($products) < $limit) {
+                $query = Product::where('in_stock', true)->where('quantity', '>', 0);
+                if ($tenantId) $query->where('tenant_id', $tenantId);
+                $anyProducts = $query->orderByDesc('updated_at')->take(($limit - count($products)) * 2)->get();
+                
+                $existingIds = array_column($products, 'id');
+                foreach ($anyProducts as $p) {
+                    $item = [
+                        'id' => $p->id, 'article' => $p->article, 'title' => $p->title,
+                        'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
+                        'orders_count' => $p->orders_count ?? 0, 'popularity' => $p->popularity ?? 0,
+                    ];
+                    if ($filterProduct($item) && !in_array($p->id, $existingIds)) {
+                        $products[] = $item;
+                        $existingIds[] = $p->id;
+                    }
+                    if (count($products) >= $limit) break;
+                }
+            }
 
             // Get full cards with images
             if (!empty($products)) {
@@ -683,6 +711,42 @@ PROMPT;
             }
 
             return ['products' => array_slice($products, 0, $limit), 'count' => count($products)];
+        });
+    }
+
+    /**
+     * Get top categories for a tenant to use as fallback queries.
+     */
+    protected function getTopCategoriesForTenant(?int $tenantId, int $limit = 5): array
+    {
+        $cacheKey = 'tenant_top_categories:' . ($tenantId ?? 'all') . ':' . $limit;
+        
+        return Cache::remember($cacheKey, 600, function () use ($tenantId, $limit) {
+            $query = Product::where('in_stock', true);
+            if ($tenantId) $query->where('tenant_id', $tenantId);
+            
+            $categories = $query
+                ->selectRaw('category_path, count(*) as cnt')
+                ->whereNotNull('category_path')
+                ->where('category_path', '!=', '')
+                ->groupBy('category_path')
+                ->orderByDesc('cnt')
+                ->limit($limit * 2)
+                ->pluck('category_path')
+                ->toArray();
+            
+            // Extract last segment of category path as search query
+            $queries = [];
+            foreach ($categories as $cat) {
+                $parts = explode('/', $cat);
+                $lastPart = trim(end($parts));
+                if (!empty($lastPart) && mb_strlen($lastPart) > 2 && !in_array($lastPart, $queries)) {
+                    $queries[] = $lastPart;
+                }
+                if (count($queries) >= $limit) break;
+            }
+            
+            return $queries;
         });
     }
 

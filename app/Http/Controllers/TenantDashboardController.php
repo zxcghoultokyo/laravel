@@ -43,13 +43,8 @@ class TenantDashboardController extends Controller
             return 3;
         }
         
-        // Step 4: Widget not customized
-        $settings = $tenant->widgetSettings;
-        if (!$settings || $settings->header_text === 'AI Асистент') {
-            return 4;
-        }
-        
-        // Step 5: Final
+        // Widget settings are created automatically with good defaults
+        // Skip directly to Step 5 (embed code)
         return 5;
     }
 

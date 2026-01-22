@@ -334,19 +334,13 @@
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
-                            <input type="text" wire:model.live="shop_phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="50">
+                            <input type="text" wire:model.live="shop_phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="50" placeholder="+380 XX XXX XXXX">
+                            <p class="text-xs text-gray-500 mt-1">Телефон для зв'язку з магазином</p>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Форма зворотного зв'язку</label>
-                            <input type="url" wire:model.live="callback_form_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Трекінг НП</label>
-                            <input type="url" wire:model.live="nova_poshta_tracking_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255">
-                        </div>
-                        <div class="flex items-center space-x-3">
-                            <input type="checkbox" wire:model.live="enable_delivery_tracking" id="enable_delivery_tracking" class="rounded border-gray-300">
-                            <label for="enable_delivery_tracking" class="text-sm text-gray-700">Статус доставки</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Форма зворотного зв'язку (URL)</label>
+                            <input type="url" wire:model.live="callback_form_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg" maxlength="255" placeholder="https://ваш-сайт.ua/kontakty/#callback">
+                            <p class="text-xs text-gray-500 mt-1">Посилання на сторінку з формою замовлення дзвінка</p>
                         </div>
                     </div>
                 </div>

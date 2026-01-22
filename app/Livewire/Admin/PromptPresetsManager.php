@@ -123,15 +123,15 @@ class PromptPresetsManager extends Component
         return [
             'shop_name' => [
                 'description' => 'Назва магазину',
-                'default' => 'CONTRACTOR',
+                'default' => 'Магазин',
             ],
             'shop_phone' => [
                 'description' => 'Телефон магазину',
-                'default' => '+380 63 631 9919',
+                'default' => '', // Динамічно з налаштувань
             ],
             'brand_name' => [
                 'description' => 'Назва бренду (те саме що shop_name)',
-                'default' => 'CONTRACTOR',
+                'default' => 'Магазин',
             ],
             'language' => [
                 'description' => 'Мова спілкування',

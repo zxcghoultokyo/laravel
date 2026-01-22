@@ -260,14 +260,45 @@ PROMPT;
      */
     protected function getDefaultVariables(): array
     {
+        $tenantInfo = $this->getTenantInfo();
         return [
-            'shop_name' => 'Contractor',
-            'shop_domain' => 'contractor.kiev.ua',
+            'shop_name' => $tenantInfo['name'],
+            'shop_domain' => $tenantInfo['domain'],
             'shop_phone' => $this->getShopPhone(),
             'faq_info' => $this->loadFaqInfo(),
             'tone_section' => $this->toneService->getFullPromptSection(),
             'price_context' => $this->loadPriceContext(),
         ];
+    }
+
+    /**
+     * Get tenant info (name, domain) from current context.
+     */
+    protected function getTenantInfo(): array
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'tenant_info:' . ($tenantId ?? 'global');
+        
+        return Cache::remember($cacheKey, 300, function () use ($tenantId) {
+            if ($tenantId) {
+                $tenant = \App\Models\Tenant::find($tenantId);
+                if ($tenant) {
+                    // Extract domain without protocol
+                    $domain = $tenant->domain ?? '';
+                    $domain = preg_replace('#^https?://#', '', $domain);
+                    $domain = rtrim($domain, '/');
+                    
+                    return [
+                        'name' => $tenant->name ?? 'Магазин',
+                        'domain' => $domain ?: 'сайт магазину',
+                    ];
+                }
+            }
+            return [
+                'name' => 'Магазин',
+                'domain' => 'сайт магазину',
+            ];
+        });
     }
 
     /**
@@ -284,7 +315,7 @@ PROMPT;
             }
             return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
-        return $settings?->shop_phone ?? '+380 63 631 9919';
+        return $settings?->shop_phone ?? ''; // Empty if not configured
     }
 
     /**
@@ -303,7 +334,8 @@ PROMPT;
         });
 
         if (!$settings) {
-            return "Актуальну інформацію дивіться на сайті contractor.kiev.ua";
+            $tenantInfo = $this->getTenantInfo();
+            return "Актуальну інформацію дивіться на сайті {$tenantInfo['domain']}";
         }
 
         $info = [];
@@ -313,7 +345,12 @@ PROMPT;
         if (!empty($settings->faq_returns_text)) $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";
         if (!empty($settings->faq_about_text)) $info[] = "ПРО МАГАЗИН:\n{$settings->faq_about_text}";
 
-        return empty($info) ? "Актуальну інформацію дивіться на сайті contractor.kiev.ua" : implode("\n\n", $info);
+        if (empty($info)) {
+            $tenantInfo = $this->getTenantInfo();
+            return "Актуальну інформацію дивіться на сайті {$tenantInfo['domain']}";
+        }
+        
+        return implode("\n\n", $info);
     }
 
     /**

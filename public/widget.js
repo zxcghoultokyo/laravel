@@ -2064,9 +2064,13 @@
         if (callbackLink) {
             callbackLink.click();
         } else {
-            // Fallback: show phone number in alert
-            const phone = window.aintentoSettings?.store_phone || '+380 63 631 9919';
-            alert('Зателефонуйте нам: ' + phone);
+            // Fallback: show phone number if configured
+            const phone = window.aintentoSettings?.store_phone;
+            if (phone) {
+                alert('Зателефонуйте нам: ' + phone);
+            } else {
+                alert('Зверніться до нас через сайт');
+            }
         }
     };
 

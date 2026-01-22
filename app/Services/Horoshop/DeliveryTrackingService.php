@@ -55,8 +55,9 @@ class DeliveryTrackingService
             'delivery_data' => $deliveryData,
         ];
         
-        if (!empty($novaPoshta) && $settings) {
-            $result['tracking_url'] = rtrim($settings->nova_poshta_tracking_url, '/') . "#{$novaPoshta}";
+        if (!empty($novaPoshta)) {
+            // Nova Poshta tracking URL is constant - no need for settings
+            $result['tracking_url'] = "https://tracking.novaposhta.ua/#{$novaPoshta}";
             $result['message'] = "Ваше замовлення відправлено.\n"
                 . "TTN: " . $novaPoshta . "\n"
                 . "Відстежити: " . $result['tracking_url'];

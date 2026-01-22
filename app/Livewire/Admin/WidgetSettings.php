@@ -17,9 +17,9 @@ class WidgetSettings extends Component
     public bool $hideEmbedCode = false; // If true, hides embed code section (when shown elsewhere)
     
     public $domain = 'default';
-    public $primary_color = '#2563eb';
+    public $primary_color = '#000000';
     public $text_color = '#ffffff';
-    public $position = 'right';
+    public $position = 'bottom-right';
     public $start_state = 'closed';
     public $border_radius = 12;
     public $welcome_message = 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?';
@@ -29,31 +29,30 @@ class WidgetSettings extends Component
     public $api_token = '';
     
     // Branding fields (Phase 1)
-    public $bot_name = 'AIntento';
+    public $bot_name = 'AI Асистент';
     public $bot_avatar_url = '';
     public $bot_avatar_upload = null; // For file upload
     public $bot_avatar_base64 = null; // Base64 encoded avatar for serverless
-    public $glow_color = ''; // Glow color for avatar, defaults to primary_color if empty
+    public $glow_color = '#000000'; // Glow color for avatar, defaults to primary_color if empty
     public $bot_status_text = 'Завжди онлайн';
     public $font_family = '';
     public $show_shadow = true;
     public $tone = 'official';
     public $brand_rules = ['', '', '', '', '']; // Up to 5 brand rules
     
-    public $shop_phone = '+380 63 631 9919';
-    public $callback_form_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/#callback';
-    public $nova_poshta_tracking_url = 'https://tracking.novaposhta.ua/';
-    public $enable_delivery_tracking = true;
+    public $shop_phone = ''; // Empty by default - tenant fills in
+    public $callback_form_url = ''; // Empty by default - auto-detected or filled by tenant
+    public $enable_delivery_tracking = false; // Disabled by default
     public $enable_faq_from_horoshop = true;
     public $horoshop_domain = '';
     public $enable_faq_custom_content = true;
-    public $faq_payment_delivery_url = 'https://contractor.kiev.ua/oplata-i-dostavka/';
+    public $faq_payment_delivery_url = '';
     public $faq_payment_delivery_text = '';
-    public $faq_returns_url = 'https://contractor.kiev.ua/obmin-ta-povernennya/';
+    public $faq_returns_url = '';
     public $faq_returns_text = '';
-    public $faq_contacts_url = 'https://contractor.kiev.ua/kontaktna-informatsiya/';
+    public $faq_contacts_url = '';
     public $faq_contacts_text = '';
-    public $faq_about_url = 'https://contractor.kiev.ua/pro-nas/';
+    public $faq_about_url = '';
     public $faq_about_text = '';
     public $faq_last_ingest_at = null;
     public $can_fetch_now = true;
@@ -120,9 +119,8 @@ class WidgetSettings extends Component
                 'tone' => 'nullable|in:official,spartan,friendly',
                 'brand_rules' => 'nullable|array|max:5',
                 'brand_rules.*' => 'nullable|string|max:200',
-                'shop_phone' => 'required|string|max:50',
+                'shop_phone' => 'nullable|string|max:50',
                 'callback_form_url' => 'nullable|url|max:255',
-                'nova_poshta_tracking_url' => 'nullable|url|max:255',
                 'horoshop_domain' => 'nullable|url|max:255',
                 'faq_payment_delivery_url' => 'nullable|url|max:255',
                 'faq_returns_url' => 'nullable|url|max:255',

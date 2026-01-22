@@ -53,13 +53,8 @@ class OnboardingController extends Controller
             return 3;
         }
         
-        // Step 4: Widget not customized (check if still default)
-        $settings = $tenant->widgetSettings;
-        if (!$settings || $settings->header_text === 'AI Асистент') {
-            return 4;
-        }
-        
-        // All done
+        // Widget settings created automatically with good defaults
+        // Skip directly to Step 5 (embed code)
         return 5;
     }
 
@@ -309,7 +304,34 @@ class OnboardingController extends Controller
             AnalyzeStoreContextJob::dispatch($tenant->id);
         }
         
-        return redirect()->route('onboarding.step4');
+        // Create default widget settings automatically
+        $this->createDefaultWidgetSettings($tenant);
+        
+        // Skip widget customization step, go directly to embed code
+        return redirect()->route('onboarding.step5');
+    }
+    
+    /**
+     * Create default widget settings for tenant.
+     */
+    protected function createDefaultWidgetSettings(Tenant $tenant): void
+    {
+        $tenant->widgetSettings()->updateOrCreate(
+            ['tenant_id' => $tenant->id],
+            [
+                'primary_color' => '#000000',
+                'text_color' => '#ffffff',
+                'position' => 'bottom-right',
+                'start_state' => 'closed',
+                'glow_color' => '#000000',
+                'bot_name' => 'AI Асистент',
+                'welcome_message' => 'Вітаю! 👋 Чим можу допомогти?',
+                'input_placeholder' => 'Напишіть, що шукаєте...',
+                'shop_phone' => '', // Empty by default, tenant fills in settings
+                'callback_form_url' => '', // Empty by default
+                'enable_delivery_tracking' => false, // Disabled by default
+            ]
+        );
     }
 
     /**

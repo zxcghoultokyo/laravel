@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Models\Order;
 use App\Models\Category;
+use App\Scopes\TenantScope;
 use Livewire\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -152,7 +153,9 @@ class SyncReports extends Component
             return;
         }
 
-        $query = SyncLog::orderByDesc('started_at')
+        // Bypass TenantScope for superadmin - show all sync logs
+        $query = SyncLog::withoutGlobalScope(TenantScope::class)
+            ->orderByDesc('started_at')
             ->where('started_at', '>=', now()->subDays($this->historyDays));
 
         if ($this->selectedType) {
@@ -170,14 +173,16 @@ class SyncReports extends Component
                 'command' => 'horoshop:sync (all tenants)',
                 'schedule' => 'Щодня о 03:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_HOROSHOP_PRODUCTS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_HOROSHOP_PRODUCTS),
                 'next_run' => 'Завтра о 03:00',
-                'is_queue' => true, // Long running - dispatched to queue per tenant
+                'is_queue' => true,
             ],
             [
                 'name' => '📦 Orders',
                 'command' => 'orders:sync --days=3 --update-counts',
                 'schedule' => 'Двічі на день о 08:00 та 20:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_ORDERS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_ORDERS),
                 'next_run' => 'Сьогодні/завтра',
                 'is_queue' => false,
             ],
@@ -186,14 +191,16 @@ class SyncReports extends Component
                 'command' => 'products:build-ai-index --limit=50',
                 'schedule' => 'Щодня о 04:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_AI_ENRICHMENT),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_AI_ENRICHMENT),
                 'next_run' => 'Завтра о 04:00',
-                'is_queue' => true, // Long running - dispatched to queue
+                'is_queue' => true,
             ],
             [
                 'name' => '🔍 Meilisearch (async)',
                 'command' => 'meili:reindex-products',
                 'schedule' => 'Щодня о 05:00',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_MEILISEARCH),
                 'next_run' => 'Завтра о 05:00',
                 'is_queue' => false,
             ],
@@ -202,6 +209,7 @@ class SyncReports extends Component
                 'command' => 'meili:reindex-products-sync',
                 'schedule' => 'Ручний запуск',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_MEILISEARCH),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_MEILISEARCH),
                 'next_run' => '-',
                 'is_queue' => false,
             ],
@@ -210,6 +218,7 @@ class SyncReports extends Component
                 'command' => 'products:update-orders-count',
                 'schedule' => 'Після синхронізації замовлень',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_STATS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_STATS),
                 'next_run' => '-',
                 'is_queue' => false,
             ],
@@ -218,6 +227,7 @@ class SyncReports extends Component
                 'command' => 'brands:sync',
                 'schedule' => 'Щодня о 03:30',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_BRANDS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_BRANDS),
                 'next_run' => 'Завтра о 03:30',
                 'is_queue' => false,
             ],
@@ -226,16 +236,18 @@ class SyncReports extends Component
                 'command' => 'products:generate-embeddings --limit=100',
                 'schedule' => 'Щотижня',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_EMBEDDINGS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_EMBEDDINGS),
                 'next_run' => '-',
-                'is_queue' => true, // Long running - dispatched to queue
+                'is_queue' => true,
             ],
             [
                 'name' => '🎨 Визначення кольорів',
                 'command' => 'colors:detect --limit=100',
                 'schedule' => 'Щодня о 05:30',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_COLOR_DETECTION),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_COLOR_DETECTION),
                 'next_run' => 'Завтра о 05:30',
-                'is_queue' => true, // Uses ColorThief for image analysis
+                'is_queue' => true,
                 'description' => 'Автоматично визначає кольори товарів з фото та опису',
             ],
         ];
@@ -247,12 +259,55 @@ class SyncReports extends Component
             return 'Немає даних';
         }
 
-        $last = SyncLog::lastSuccessfulForType($type);
+        // Bypass TenantScope for sync logs - superadmin should see all syncs
+        $last = SyncLog::withoutGlobalScope(TenantScope::class)
+            ->where('sync_type', $type)
+            ->where('status', SyncLog::STATUS_COMPLETED)
+            ->orderByDesc('started_at')
+            ->first();
+            
         if (!$last) {
             return 'Ніколи';
         }
 
         return $last->started_at->format('d.m.Y H:i');
+    }
+    
+    /**
+     * Get last sync info with stats for a type.
+     */
+    private function getLastSyncInfo(string $type): array
+    {
+        if (!Schema::hasTable('sync_logs')) {
+            return ['time' => 'Немає даних', 'stats' => null];
+        }
+
+        $last = SyncLog::withoutGlobalScope(TenantScope::class)
+            ->where('sync_type', $type)
+            ->orderByDesc('started_at')
+            ->first();
+            
+        if (!$last) {
+            return ['time' => 'Ніколи', 'stats' => null];
+        }
+        
+        $stats = null;
+        if ($last->status === SyncLog::STATUS_COMPLETED) {
+            $stats = [
+                'total' => $last->total_processed ?? 0,
+                'created' => $last->created ?? 0,
+                'updated' => $last->updated ?? 0,
+                'failed' => $last->failed ?? 0,
+                'duration' => $last->duration_seconds ? "{$last->duration_seconds}с" : null,
+            ];
+        }
+
+        return [
+            'time' => $last->started_at->format('d.m.Y H:i'),
+            'status' => $last->status,
+            'stats' => $stats,
+            'error' => $last->status === SyncLog::STATUS_FAILED ? $last->error_message : null,
+        ];
     }
 
     public function filterByType(?string $type)

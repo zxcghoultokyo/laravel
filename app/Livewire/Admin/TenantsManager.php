@@ -61,7 +61,7 @@ class TenantsManager extends Component
             'slug' => $tenant->slug,
             'domain' => $tenant->domain,
             'status' => $tenant->status,
-            'plan' => $tenant->subscription?->plan ?? 'trial',
+            'plan' => $tenant->plan ?? 'trial',  // Read from tenant, not subscription
             'messages_limit' => $tenant->messages_limit,
             'products_limit' => $tenant->products_limit,
         ];
@@ -73,6 +73,7 @@ class TenantsManager extends Component
             'editForm.name' => 'required|string|max:255',
             'editForm.slug' => 'required|string|max:100',
             'editForm.status' => 'required|in:active,suspended,trial',
+            'editForm.plan' => 'required|in:trial,starter,pro,enterprise',
             'editForm.messages_limit' => 'nullable|integer|min:0|max:2147483647',
             'editForm.products_limit' => 'nullable|integer|min:0|max:2147483647',
         ]);
@@ -84,11 +85,12 @@ class TenantsManager extends Component
             'slug' => $this->editForm['slug'],
             'domain' => $this->editForm['domain'],
             'status' => $this->editForm['status'],
+            'plan' => $this->editForm['plan'],  // Save plan to tenant
             'messages_limit' => $this->editForm['messages_limit'],
             'products_limit' => $this->editForm['products_limit'],
         ]);
 
-        // Update subscription plan if changed
+        // Also update subscription plan if exists (for consistency)
         if ($tenant->subscription && $tenant->subscription->plan !== $this->editForm['plan']) {
             $tenant->subscription->update(['plan' => $this->editForm['plan']]);
         }

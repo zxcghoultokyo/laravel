@@ -180,12 +180,18 @@
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Задача</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Розклад</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Остання синхронізація</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Результат</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Команда</th>
                         <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Дія</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach($scheduleInfo as $schedule)
+                        @php
+                            $info = $schedule['last_info'] ?? [];
+                            $stats = $info['stats'] ?? null;
+                            $status = $info['status'] ?? null;
+                        @endphp
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-3 text-sm font-medium text-gray-900">
                                 {{ $schedule['name'] }}
@@ -194,7 +200,42 @@
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-sm text-gray-600">{{ $schedule['schedule'] }}</td>
-                            <td class="px-4 py-3 text-sm text-gray-500">{{ $schedule['last_run'] }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="{{ $status === 'completed' ? 'text-green-600' : ($status === 'failed' ? 'text-red-600' : ($status === 'running' ? 'text-yellow-600' : 'text-gray-500')) }}">
+                                    @if($status === 'completed') ✅
+                                    @elseif($status === 'failed') ❌
+                                    @elseif($status === 'running') ⏳
+                                    @endif
+                                    {{ $schedule['last_run'] }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-xs text-gray-500">
+                                @if($stats)
+                                    <div class="flex flex-wrap gap-1">
+                                        @if($stats['total'] > 0)
+                                            <span class="px-1.5 py-0.5 bg-gray-100 rounded">📊 {{ number_format($stats['total']) }}</span>
+                                        @endif
+                                        @if($stats['created'] > 0)
+                                            <span class="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">+{{ $stats['created'] }}</span>
+                                        @endif
+                                        @if($stats['updated'] > 0)
+                                            <span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">✏️{{ $stats['updated'] }}</span>
+                                        @endif
+                                        @if($stats['failed'] > 0)
+                                            <span class="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">❌{{ $stats['failed'] }}</span>
+                                        @endif
+                                        @if($stats['duration'])
+                                            <span class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded">⏱️{{ $stats['duration'] }}</span>
+                                        @endif
+                                    </div>
+                                @elseif($status === 'running')
+                                    <span class="text-yellow-600">⏳ Виконується...</span>
+                                @elseif($info['error'] ?? null)
+                                    <span class="text-red-600 truncate max-w-xs" title="{{ $info['error'] }}">{{ Str::limit($info['error'], 30) }}</span>
+                                @else
+                                    <span class="text-gray-400">—</span>
+                                @endif
+                            </td>
                             <td class="px-4 py-3 text-xs font-mono text-gray-400">{{ $schedule['command'] }}</td>
                             <td class="px-4 py-3 text-right">
                                 <button wire:click="runSync('{{ $schedule['command'] }}')" 

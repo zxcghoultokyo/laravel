@@ -164,10 +164,13 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         $prompt = $this->buildPrompt($title, $description, $category, $characteristics);
 
+        // Use model_analyze for batch enrichment (cheaper model like gpt-5-nano)
+        $model = $config['model_analyze'] ?? 'gpt-5-nano';
+        
         $response = Http::timeout(30)
             ->withToken($apiKey)
             ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', [
-                'model' => $config['model'] ?? 'gpt-4o-mini',
+                'model' => $model,
                 'messages' => [
                     ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
                     ['role' => 'user', 'content' => $prompt],

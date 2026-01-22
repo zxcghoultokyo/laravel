@@ -3,16 +3,12 @@
 namespace App\Livewire\Admin;
 
 use Livewire\Component;
-use Illuminate\Support\Facades\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TestProductsGenerator extends Component
 {
     public int $productCount = 1000;
-    public string $shopType = 'plumbing'; // сантехніка
-    public bool $generating = false;
-    public ?string $downloadUrl = null;
-    public ?string $generatedFilename = null;
+    public string $shopType = 'plumbing';
 
     protected array $plumbingCategories = [
         'Змішувачі/Для кухні' => [
@@ -192,7 +188,6 @@ class TestProductsGenerator extends Component
     ];
 
     protected array $colors = ['Хром', 'Білий', 'Чорний', 'Нікель', 'Бронза', 'Золото', 'Графіт', 'Нержавіюча сталь'];
-    protected array $sizes = ['S', 'M', 'L', 'XL', '40x50', '50x60', '60x80', '80x100', '100x150'];
 
     public function render()
     {
@@ -200,75 +195,72 @@ class TestProductsGenerator extends Component
             ->layout('admin.layout');
     }
 
-    public function generateCsv()
+    /**
+     * Генерація та пряме завантаження CSV
+     */
+    public function downloadCsv()
     {
-        $this->generating = true;
-        
         $filename = 'plumbing_products_' . date('Y-m-d_His') . '.csv';
-        $path = storage_path('app/public/' . $filename);
+        $productCount = $this->productCount;
+        $categories = $this->plumbingCategories;
+        $colors = $this->colors;
         
-        // Ensure directory exists
-        if (!file_exists(storage_path('app/public'))) {
-            mkdir(storage_path('app/public'), 0755, true);
-        }
-        
-        $handle = fopen($path, 'w');
-        
-        // UTF-8 BOM for Excel
-        fwrite($handle, "\xEF\xBB\xBF");
-        
-        // Horoshop CSV header
-        $headers = [
-            'article',           // Артикул
-            'title',             // Назва
-            'price',             // Ціна
-            'price_old',         // Стара ціна
-            'category',          // Категорія
-            'brand',             // Бренд
-            'description',       // Опис
-            'quantity',          // Кількість
-            'in_stock',          // Наявність (1/0)
-            'color',             // Колір
-            'size',              // Розмір
-            'weight',            // Вага
-            'images',            // Зображення (URL)
-            'meta_title',        // SEO заголовок
-            'meta_description',  // SEO опис
-        ];
-        
-        fputcsv($handle, $headers, ';');
-        
-        $productsPerCategory = ceil($this->productCount / count($this->plumbingCategories));
-        $totalGenerated = 0;
-        
-        foreach ($this->plumbingCategories as $category => $config) {
-            if ($totalGenerated >= $this->productCount) {
-                break;
+        return response()->streamDownload(function () use ($productCount, $categories, $colors) {
+            $handle = fopen('php://output', 'w');
+            
+            // UTF-8 BOM for Excel
+            fwrite($handle, "\xEF\xBB\xBF");
+            
+            // Horoshop CSV header
+            $headers = [
+                'article',
+                'title',
+                'price',
+                'price_old',
+                'category',
+                'brand',
+                'description',
+                'quantity',
+                'in_stock',
+                'color',
+                'size',
+                'weight',
+                'images',
+                'meta_title',
+                'meta_description',
+            ];
+            
+            fputcsv($handle, $headers, ';');
+            
+            $productsPerCategory = ceil($productCount / count($categories));
+            $totalGenerated = 0;
+            
+            foreach ($categories as $category => $config) {
+                if ($totalGenerated >= $productCount) {
+                    break;
+                }
+                
+                $toGenerate = min($productsPerCategory, $productCount - $totalGenerated);
+                
+                for ($i = 0; $i < $toGenerate; $i++) {
+                    $product = $this->generateProductStatic($category, $config, $i, $colors);
+                    fputcsv($handle, $product, ';');
+                    $totalGenerated++;
+                }
             }
             
-            $toGenerate = min($productsPerCategory, $this->productCount - $totalGenerated);
-            
-            for ($i = 0; $i < $toGenerate; $i++) {
-                $product = $this->generateProduct($category, $config, $i);
-                fputcsv($handle, $product, ';');
-                $totalGenerated++;
-            }
-        }
-        
-        fclose($handle);
-        
-        $this->generatedFilename = $filename;
-        $this->downloadUrl = asset('storage/' . $filename);
-        $this->generating = false;
-        
-        session()->flash('success', "Згенеровано {$totalGenerated} товарів у файлі {$filename}");
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
     }
 
-    protected function generateProduct(string $category, array $config, int $index): array
+    protected function generateProductStatic(string $category, array $config, int $index, array $colors): array
     {
         $productName = $config['products'][array_rand($config['products'])];
         $brand = $config['brands'][array_rand($config['brands'])];
-        $color = $this->colors[array_rand($this->colors)];
+        $color = $colors[array_rand($colors)];
         
         // Generate article
         $article = sprintf('%s-%05d', $config['prefix'], $index + 1);
@@ -288,17 +280,17 @@ class TestProductsGenerator extends Component
         $priceOld = rand(0, 1) ? round($price * (1 + rand(10, 30) / 100)) : 0;
         
         // Generate description
-        $description = $this->generateDescription($productName, $brand, $category, $color);
+        $description = $this->generateDescriptionStatic($productName, $brand, $category, $color);
         
         // Generate quantity
         $quantity = rand(1, 50);
-        $inStock = rand(0, 10) > 1 ? 1 : 0; // 90% in stock
+        $inStock = rand(0, 10) > 1 ? 1 : 0;
         
         // Generate weight (in kg)
         $weight = round(rand(1, 300) / 10, 1);
         
         // Use placeholder image
-        $imageUrl = $this->getPlaceholderImage($category);
+        $imageUrl = $this->getPlaceholderImageStatic($category);
         
         return [
             $article,
@@ -311,7 +303,7 @@ class TestProductsGenerator extends Component
             $quantity,
             $inStock,
             $color,
-            '', // size
+            '',
             $weight,
             $imageUrl,
             "Купити {$productName} {$brand} за найкращою ціною",
@@ -319,7 +311,7 @@ class TestProductsGenerator extends Component
         ];
     }
 
-    protected function generateDescription(string $product, string $brand, string $category, string $color): string
+    protected function generateDescriptionStatic(string $product, string $brand, string $category, string $color): string
     {
         $features = [
             'Гарантія від виробника',
@@ -342,18 +334,14 @@ class TestProductsGenerator extends Component
         
         $description = "{$product} від бренду {$brand}. Колір: {$color}. ";
         $description .= "Категорія: {$mainCategory}. ";
-        $description .= "\n\nОсобливості:\n";
-        foreach ($selectedFeatures as $feature) {
-            $description .= "• {$feature}\n";
-        }
-        $description .= "\nДоставка по всій Україні. Гарантія якості.";
+        $description .= "Особливості: " . implode(', ', $selectedFeatures) . ". ";
+        $description .= "Доставка по всій Україні. Гарантія якості.";
         
         return $description;
     }
 
-    protected function getPlaceholderImage(string $category): string
+    protected function getPlaceholderImageStatic(string $category): string
     {
-        // Using placeholder.com for demo images
         $categoryColors = [
             'Змішувачі' => '4A90D9',
             'Унітази' => 'FFFFFF',
@@ -375,16 +363,6 @@ class TestProductsGenerator extends Component
         $color = $categoryColors[$mainCategory] ?? '808080';
         $text = urlencode(mb_substr($mainCategory, 0, 15));
         
-        return "https://via.placeholder.com/500x500/{$color}/FFFFFF?text={$text}";
-    }
-
-    public function downloadFile()
-    {
-        if ($this->generatedFilename) {
-            return response()->download(
-                storage_path('app/public/' . $this->generatedFilename),
-                $this->generatedFilename
-            );
-        }
+        return "https://placehold.co/500x500/{$color}/FFFFFF?text={$text}";
     }
 }

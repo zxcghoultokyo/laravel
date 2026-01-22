@@ -1,19 +1,8 @@
 <div class="max-w-4xl mx-auto">
     <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Генератор тестових товарів</h1>
-        <p class="mt-2 text-gray-600 dark:text-gray-400">Генерація CSV файлу з тестовими товарами для імпорту в Horoshop</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🚿 Генератор тестових товарів</h1>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">Генерація CSV файлу з тестовими товарами сантехніки для імпорту в Horoshop</p>
     </div>
-
-    @if (session()->has('success'))
-        <div class="mb-6 p-4 bg-green-100 dark:bg-green-900 border border-green-400 dark:border-green-600 rounded-lg">
-            <div class="flex items-center">
-                <svg class="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                </svg>
-                <span class="text-green-700 dark:text-green-300">{{ session('success') }}</span>
-            </div>
-        </div>
-    @endif
 
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">⚙️ Налаштування</h2>
@@ -25,7 +14,7 @@
                 </label>
                 <input 
                     type="number" 
-                    wire:model="productCount" 
+                    wire:model.live="productCount" 
                     min="10" 
                     max="5000" 
                     step="10"
@@ -50,7 +39,7 @@
     </div>
 
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">📦 Категорії товарів</h2>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">📦 Категорії товарів (30 категорій)</h2>
         
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             <div class="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-sm">
@@ -156,54 +145,37 @@
         </p>
     </div>
 
-    <div class="flex flex-col sm:flex-row gap-4">
+    <div class="flex flex-col gap-4">
         <button 
-            wire:click="generateCsv"
-            wire:loading.attr="disabled"
-            wire:loading.class="opacity-50 cursor-not-allowed"
-            class="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all shadow-lg flex items-center justify-center gap-2"
+            wire:click="downloadCsv"
+            class="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg flex items-center justify-center gap-3 text-lg"
         >
-            <span wire:loading.remove wire:target="generateCsv">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-                </svg>
-            </span>
-            <span wire:loading wire:target="generateCsv">
-                <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </span>
-            <span wire:loading.remove wire:target="generateCsv">Згенерувати {{ $productCount }} товарів</span>
-            <span wire:loading wire:target="generateCsv">Генерація...</span>
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Завантажити CSV ({{ number_format($productCount) }} товарів)
         </button>
-
-        @if($downloadUrl)
-            <a 
-                href="{{ $downloadUrl }}" 
-                download="{{ $generatedFilename }}"
-                class="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg flex items-center justify-center gap-2"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-                Завантажити CSV
-            </a>
-        @endif
     </div>
 
-    @if($downloadUrl)
-        <div class="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
-            <h3 class="font-semibold text-blue-800 dark:text-blue-200 mb-2">📋 Інструкція по імпорту в Horoshop:</h3>
-            <ol class="list-decimal list-inside text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                <li>Завантажте CSV файл</li>
-                <li>Увійдіть в адмін-панель Horoshop</li>
-                <li>Перейдіть в <strong>Каталог → Імпорт товарів</strong></li>
-                <li>Виберіть завантажений CSV файл</li>
-                <li>Вкажіть роздільник: <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">;</code></li>
-                <li>Зіставте поля CSV з полями Horoshop</li>
-                <li>Запустіть імпорт</li>
-            </ol>
-        </div>
-    @endif
+    <div class="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg">
+        <h3 class="font-semibold text-blue-800 dark:text-blue-200 mb-2">📋 Інструкція по імпорту в Horoshop:</h3>
+        <ol class="list-decimal list-inside text-sm text-blue-700 dark:text-blue-300 space-y-1">
+            <li>Натисніть кнопку "Завантажити CSV" вище</li>
+            <li>Увійдіть в адмін-панель Horoshop</li>
+            <li>Перейдіть в <strong>Каталог → Імпорт товарів</strong></li>
+            <li>Виберіть завантажений CSV файл</li>
+            <li>Вкажіть роздільник: <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">;</code></li>
+            <li>Зіставте поля CSV з полями Horoshop</li>
+            <li>Запустіть імпорт</li>
+        </ol>
+    </div>
+    
+    <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+        <h3 class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">💡 Примітка:</h3>
+        <p class="text-sm text-yellow-700 dark:text-yellow-300">
+            Файл генерується "на льоту" і завантажується напряму. 
+            Для 1000 товарів це займає ~1-2 секунди.
+            Зображення використовують placeholder-и, які можна замінити після імпорту.
+        </p>
+    </div>
 </div>

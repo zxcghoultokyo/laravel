@@ -35,9 +35,45 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        // Price statistics
-        $priceService = app(\App\Services\Catalog\PriceStatsService::class);
-        $priceStats = $priceService->getStats();
+        // Price statistics (bypass TenantScope)
+        try {
+            $prices = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('in_stock', true)
+                ->where('price', '>', 0)
+                ->pluck('price')
+                ->map(fn($p) => (float) $p)
+                ->sort()
+                ->values();
+            
+            $count = $prices->count();
+            if ($count > 0) {
+                $p25 = $prices->get((int) ($count * 0.25)) ?? $prices->first();
+                $p50 = $prices->get((int) ($count * 0.50)) ?? $prices->avg();
+                $p75 = $prices->get((int) ($count * 0.75)) ?? $prices->last();
+                
+                $priceStats = [
+                    'min' => (int) $prices->min(),
+                    'max' => (int) $prices->max(),
+                    'avg' => (int) round($prices->avg()),
+                    'median' => (int) $p50,
+                    'budget_max' => (int) $p25,
+                    'mid_min' => (int) $p25,
+                    'mid_max' => (int) $p75,
+                    'premium_min' => (int) $p75,
+                ];
+            } else {
+                $priceStats = [
+                    'min' => 0, 'max' => 0, 'avg' => 0, 'median' => 0,
+                    'budget_max' => 500, 'mid_min' => 500, 'mid_max' => 3000, 'premium_min' => 3000,
+                ];
+            }
+        } catch (\Exception $e) {
+            $priceStats = [
+                'min' => 0, 'max' => 0, 'avg' => 0, 'median' => 0,
+                'budget_max' => 500, 'mid_min' => 500, 'mid_max' => 3000, 'premium_min' => 3000,
+                'error' => $e->getMessage(),
+            ];
+        }
 
         // Tenant statistics - bypass TenantScope to see all data
         $tenantStats = DB::table('products')

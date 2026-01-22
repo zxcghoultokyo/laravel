@@ -91,6 +91,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::delete('/cleanup-by-api', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupByApi']);
     Route::post('/sync-horoshop', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncHoroshop']);
     Route::post('/delete-tenant-products/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'deleteTenantProducts']);
+    Route::delete('/tenant/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'deleteTenant']);
     Route::get('/horoshop-stock-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopStockCount']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);
     Route::get('/chat-history/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatHistory']);

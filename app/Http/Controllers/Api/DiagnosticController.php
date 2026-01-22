@@ -1143,6 +1143,118 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * DELETE /api/diagnostic/tenant/{tenantId}
+     * Completely delete a tenant and all its data (for re-onboarding)
+     */
+    public function deleteTenant(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        $dryRun = $request->boolean('dry_run', true);
+
+        // Collect all related data counts
+        $stats = [
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'domain' => $tenant->domain,
+            ],
+            'products' => DB::table('products')->where('tenant_id', $tenantId)->count(),
+            'product_ai_index' => DB::table('product_ai_index')
+                ->whereIn('product_id', function ($q) use ($tenantId) {
+                    $q->select('id')->from('products')->where('tenant_id', $tenantId);
+                })->count(),
+            'widget_settings' => DB::table('widget_settings')->where('tenant_id', $tenantId)->count(),
+            'chat_sessions' => DB::table('chat_sessions')->where('tenant_id', $tenantId)->count(),
+            'chat_messages' => DB::table('chat_messages')
+                ->whereIn('chat_session_id', function ($q) use ($tenantId) {
+                    $q->select('id')->from('chat_sessions')->where('tenant_id', $tenantId);
+                })->count(),
+            'proactive_trigger_rules' => DB::table('proactive_trigger_rules')->where('tenant_id', $tenantId)->count(),
+            'proactive_trigger_events' => DB::table('proactive_trigger_events')
+                ->whereIn('rule_id', function ($q) use ($tenantId) {
+                    $q->select('id')->from('proactive_trigger_rules')->where('tenant_id', $tenantId);
+                })->count(),
+            'prompt_presets' => DB::table('prompt_presets')->where('tenant_id', $tenantId)->count(),
+            'greetings' => DB::table('greetings')->where('tenant_id', $tenantId)->count(),
+            'sync_logs' => DB::table('sync_logs')->where('tenant_id', $tenantId)->count(),
+            'users' => DB::table('users')->where('tenant_id', $tenantId)->count(),
+        ];
+
+        if ($dryRun) {
+            return response()->json([
+                'dry_run' => true,
+                'tenant_id' => $tenantId,
+                'will_delete' => $stats,
+                'note' => '⚠️ Set dry_run=false to PERMANENTLY delete this tenant and ALL its data!',
+            ]);
+        }
+
+        // Delete in correct order (respect foreign keys)
+        $deleted = [];
+
+        // 1. Chat messages (FK to chat_sessions)
+        $deleted['chat_messages'] = DB::table('chat_messages')
+            ->whereIn('chat_session_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('chat_sessions')->where('tenant_id', $tenantId);
+            })->delete();
+
+        // 2. Chat sessions
+        $deleted['chat_sessions'] = DB::table('chat_sessions')->where('tenant_id', $tenantId)->delete();
+
+        // 3. Proactive trigger events (FK to rules)
+        $deleted['proactive_trigger_events'] = DB::table('proactive_trigger_events')
+            ->whereIn('rule_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('proactive_trigger_rules')->where('tenant_id', $tenantId);
+            })->delete();
+
+        // 4. Proactive trigger rules
+        $deleted['proactive_trigger_rules'] = DB::table('proactive_trigger_rules')->where('tenant_id', $tenantId)->delete();
+
+        // 5. Product AI index (FK to products)
+        $deleted['product_ai_index'] = DB::table('product_ai_index')
+            ->whereIn('product_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('products')->where('tenant_id', $tenantId);
+            })->delete();
+
+        // 6. Products
+        $deleted['products'] = DB::table('products')->where('tenant_id', $tenantId)->delete();
+
+        // 7. Widget settings
+        $deleted['widget_settings'] = DB::table('widget_settings')->where('tenant_id', $tenantId)->delete();
+
+        // 8. Prompt presets
+        $deleted['prompt_presets'] = DB::table('prompt_presets')->where('tenant_id', $tenantId)->delete();
+
+        // 9. Greetings
+        $deleted['greetings'] = DB::table('greetings')->where('tenant_id', $tenantId)->delete();
+
+        // 10. Sync logs
+        $deleted['sync_logs'] = DB::table('sync_logs')->where('tenant_id', $tenantId)->delete();
+
+        // 11. Users (unlink from tenant, don't delete users)
+        $deleted['users_unlinked'] = DB::table('users')->where('tenant_id', $tenantId)->update(['tenant_id' => null]);
+
+        // 12. Finally, delete the tenant itself
+        $deleted['tenant'] = DB::table('tenants')->where('id', $tenantId)->delete();
+
+        return response()->json([
+            'dry_run' => false,
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'deleted' => $deleted,
+            'message' => '🗑️ Tenant and all related data deleted. You can now re-onboard.',
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/chat-sessions
      * List recent chat sessions
      */

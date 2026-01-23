@@ -198,12 +198,50 @@ class DetectProductColorsJob implements ShouldQueue
                 // Detect color
                 $detectedColor = null;
                 
-                // Priority 1: Description keywords
-                if (is_string($description) && !empty($description)) {
+                // Priority 1: Title keywords (highest priority - most accurate)
+                $title = $product->title ?? '';
+                if (!empty($title)) {
+                    $detectedColor = $colorService->extractColorFromText($title);
+                }
+                
+                // Priority 2: Raw color attribute (from Horoshop)
+                if (!$detectedColor) {
+                    $rawColor = $raw['color'] ?? $raw['Колір'] ?? $raw['kolir'] ?? null;
+                    if (!empty($rawColor) && is_string($rawColor)) {
+                        $detectedColor = $colorService->extractColorFromText($rawColor);
+                        // If raw color doesn't match keywords, use it directly
+                        if (!$detectedColor && !in_array(strtolower($rawColor), ['null', '-', 'n/a', ''])) {
+                            $detectedColor = $rawColor;
+                        }
+                    }
+                }
+                
+                // Priority 3: Description keywords
+                if (!$detectedColor && is_string($description) && !empty($description)) {
                     $detectedColor = $colorService->extractColorFromText($description);
                 }
                 
-                // Priority 2: Image analysis (only if no color from description)
+                // Priority 4: Attributes text
+                if (!$detectedColor) {
+                    $attributes = $raw['attributes'] ?? $raw['attrs'] ?? [];
+                    if (is_array($attributes)) {
+                        foreach ($attributes as $attr) {
+                            $attrName = is_array($attr) ? ($attr['name'] ?? '') : '';
+                            $attrValue = is_array($attr) ? ($attr['value'] ?? '') : (is_string($attr) ? $attr : '');
+                            if (stripos($attrName, 'колір') !== false || stripos($attrName, 'color') !== false) {
+                                if (!empty($attrValue)) {
+                                    $detectedColor = $colorService->extractColorFromText($attrValue);
+                                    if (!$detectedColor) {
+                                        $detectedColor = $attrValue; // Use raw attribute value
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Priority 5: Image analysis (only if no color from text)
                 if (!$detectedColor && $imageUrl) {
                     try {
                         $detectedColor = $colorService->analyzeImage($imageUrl);

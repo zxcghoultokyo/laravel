@@ -430,10 +430,9 @@
                                     'quick_action_click' => '⚡',
                                     default => '📌'
                                 };
-                                // has_chat = 1 means there's a chat_session record
-                                // For message/quick_action events, always show link (user interacted)
+                                // has_chat = 1 means there's a chat_session record in DB
+                                // Only show clickable link if chat_session exists
                                 $hasChat = $event->has_chat ?? false;
-                                $showLink = $hasChat || in_array($event->event_type, ['message', 'quick_action_click']);
                                 // Convert UTC time to Kyiv timezone
                                 $localTime = \Carbon\Carbon::parse($event->created_at, 'UTC')->setTimezone('Europe/Kyiv');
                             @endphp
@@ -441,7 +440,7 @@
                                 <span class="text-xs text-gray-400 w-16">{{ $localTime->format('H:i:s') }}</span>
                                 <span>{{ $eventIcon }}</span>
                                 <span class="text-gray-600">{{ $event->event_type }}</span>
-                                @if($showLink)
+                                @if($hasChat)
                                     @if($embedded)
                                         {{-- In embedded mode, link to dashboard with chat params --}}
                                         <a href="{{ url('/dashboard') }}?activeTab=chats&selectedChatId={{ $event->session_id }}"

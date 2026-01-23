@@ -420,6 +420,15 @@ RULES;
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
 Не кажи "цього немає" поки не перевіриш пошуком.
 
+ПІДБІР РОЗМІРІВ — КРИТИЧНО ВАЖЛИВО!
+Коли клієнт називає зріст і вагу, ВРАХОВУЙ ВАГУ для розміру:
+- 70-85 кг → M або L (залежно від зросту)
+- 85-95 кг → L або XL
+- 95-110 кг → XL (зазвичай XL/L для високих)
+- 110+ кг → XXL
+Приклад: 185 см + 105 кг = XL/L або XXL/L, НЕ M/L!
+Тактичний одяг великомірить, але при вазі 100+ кг завжди рекомендуй XL або більше.
+
 ЗАБОРОНА ГАЛЮЦИНАЦІЙ — КРИТИЧНО!
 - НЕ ВИГАДУЙ факти про товари, кольори, матеріали, виробників!
 - Якщо питають про характеристику якої НЕМАЄ в каталозі — кажи: "Точної інформації не маю, {$phoneNote}"
@@ -712,13 +721,13 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'recommend_size',
-                    'description' => 'Підібрати розмір за замірами клієнта (зріст, вага, обхват).',
+                    'description' => 'Підібрати розмір за параметрами клієнта. ВАЖЛИВО: при вазі 90+ кг рекомендуй L/XL, при 100+ кг — XL/XXL. Зріст 185+ і вага 100+ = XL/L або XXL/L!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
                             'article' => ['type' => 'string', 'description' => 'Артикул товару'],
                             'height' => ['type' => 'integer', 'description' => 'Зріст в см'],
-                            'weight' => ['type' => 'integer', 'description' => 'Вага в кг'],
+                            'weight' => ['type' => 'integer', 'description' => 'Вага в кг (ОБОВ\'ЯЗКОВО передавай якщо є!)'],
                             'chest' => ['type' => 'integer', 'description' => 'Обхват грудей в см'],
                             'waist' => ['type' => 'integer', 'description' => 'Обхват талії в см'],
                         ],
@@ -1143,6 +1152,31 @@ PROMPT;
         $availableSizes = $sizesResult['sizes'] ?? [];
         if (empty($availableSizes)) return ['error' => 'No sizes available', 'recommendation' => 'Товар відсутній в наявності'];
 
+        // Estimate chest from weight if not provided (rough formula for tactical gear)
+        // Average male: weight/height ratio affects chest size
+        if (!$chest && $weight && $height) {
+            // BMI-based chest estimation for men
+            $bmi = $weight / (($height / 100) ** 2);
+            // Rough estimation: BMI 18-22 = ~90-95cm, 22-26 = ~100-105cm, 26-30 = ~110-115cm, 30+ = ~120+cm
+            if ($bmi < 22) {
+                $chest = 90 + ($bmi - 18) * 2;
+            } elseif ($bmi < 26) {
+                $chest = 98 + ($bmi - 22) * 3;
+            } elseif ($bmi < 30) {
+                $chest = 110 + ($bmi - 26) * 3;
+            } else {
+                $chest = 122 + ($bmi - 30) * 2;
+            }
+            $chest = (int)round($chest);
+        }
+        
+        // If only weight provided, estimate chest directly
+        if (!$chest && $weight) {
+            // Simple formula: chest ≈ weight * 1.05 + 10 (rough average for men)
+            // 70kg → ~84cm, 85kg → ~99cm, 100kg → ~115cm, 115kg → ~131cm
+            $chest = (int)round($weight * 1.05 + 10);
+        }
+
         // ECWCS size chart (US Army standard)
         $ecwcsSizes = [
             'XS/XS' => ['height' => [150, 157], 'chest' => [79, 86], 'waist' => [64, 71]],
@@ -1150,9 +1184,11 @@ PROMPT;
             'S/XS' => ['height' => [150, 157], 'chest' => [86, 94], 'waist' => [71, 79]],
             'S/S' => ['height' => [157, 165], 'chest' => [86, 94], 'waist' => [71, 79]],
             'S/R' => ['height' => [165, 175], 'chest' => [86, 94], 'waist' => [71, 79]],
+            'S/L' => ['height' => [175, 183], 'chest' => [86, 94], 'waist' => [71, 79]],
             'M/S' => ['height' => [157, 165], 'chest' => [94, 102], 'waist' => [79, 86]],
             'M/R' => ['height' => [165, 175], 'chest' => [94, 102], 'waist' => [79, 86]],
             'M/L' => ['height' => [175, 183], 'chest' => [94, 102], 'waist' => [79, 86]],
+            'L/S' => ['height' => [157, 165], 'chest' => [102, 112], 'waist' => [86, 94]],
             'L/R' => ['height' => [165, 175], 'chest' => [102, 112], 'waist' => [86, 94]],
             'L/L' => ['height' => [175, 183], 'chest' => [102, 112], 'waist' => [86, 94]],
             'XL/R' => ['height' => [165, 175], 'chest' => [112, 122], 'waist' => [94, 102]],
@@ -1171,22 +1207,42 @@ PROMPT;
             $sizeMatches = false;
 
             // Check if this size is available
-            $availableSize = collect($availableSizes)->first(fn($s) => stripos($s['size'], explode('/', $size)[0]) !== false);
+            $sizePrefix = explode('/', $size)[0]; // Get XS, S, M, L, XL, XXL part
+            $availableSize = collect($availableSizes)->first(function($s) use ($sizePrefix, $size) {
+                $sizeStr = $s['size'] ?? '';
+                // Match exact size or prefix match
+                return stripos($sizeStr, $size) !== false || stripos($sizeStr, $sizePrefix) !== false;
+            });
             if (!$availableSize) continue;
 
             $sizeMatches = true;
 
-            if ($height) {
-                $mid = ($ranges['height'][0] + $ranges['height'][1]) / 2;
-                $score += abs($height - $mid);
-            }
+            // Calculate score - lower is better
+            // Chest/body size is MOST important (weight = 4)
             if ($chest) {
-                $mid = ($ranges['chest'][0] + $ranges['chest'][1]) / 2;
-                $score += abs($chest - $mid) * 2;
+                $chestMid = ($ranges['chest'][0] + $ranges['chest'][1]) / 2;
+                // Penalize heavily if chest is larger than max range
+                if ($chest > $ranges['chest'][1]) {
+                    $score += ($chest - $ranges['chest'][1]) * 5; // Heavy penalty for too small
+                } else {
+                    $score += abs($chest - $chestMid) * 4;
+                }
             }
+            
+            // Height is secondary (weight = 2)
+            if ($height) {
+                $heightMid = ($ranges['height'][0] + $ranges['height'][1]) / 2;
+                $score += abs($height - $heightMid) * 2;
+            }
+            
+            // Waist if provided (weight = 3)
             if ($waist) {
-                $mid = ($ranges['waist'][0] + $ranges['waist'][1]) / 2;
-                $score += abs($waist - $mid) * 2;
+                $waistMid = ($ranges['waist'][0] + $ranges['waist'][1]) / 2;
+                if ($waist > $ranges['waist'][1]) {
+                    $score += ($waist - $ranges['waist'][1]) * 4;
+                } else {
+                    $score += abs($waist - $waistMid) * 3;
+                }
             }
 
             if ($sizeMatches && $score < $bestScore) {
@@ -1200,15 +1256,26 @@ PROMPT;
             $warnings[] = 'Великий обхват грудей — рекомендуємо уточнити у менеджера';
         }
         if ($weight && $weight > 110) {
-            $warnings[] = 'При вазі 110+ кг зверніть увагу на талію — вона визначає комфорт';
+            $warnings[] = 'При вазі 110+ кг можливо знадобиться XXL — зверніть увагу на таблицю розмірів';
+        }
+        
+        // Calculate estimated chest for response
+        $estimatedChest = $chest;
+        
+        // Default to XL/L for heavy people without better match
+        if (!$recommendation && $weight && $weight >= 100) {
+            $recommendation = 'XL/L';
+        } elseif (!$recommendation && $weight && $weight >= 85) {
+            $recommendation = 'L/L';
         }
 
         return [
             'product' => $sizesResult['product'],
-            'recommended_size' => $recommendation ?? 'M/R',
+            'recommended_size' => $recommendation ?? 'L/R',
             'available_sizes' => $availableSizes,
             'warnings' => $warnings,
-            'note' => 'Американський крій часто великомірить — можна брати на розмір менше',
+            'estimated_chest' => $estimatedChest ? "~{$estimatedChest} см" : null,
+            'note' => 'Американський/тактичний крій часто великомірить. При вазі 100+ кг рекомендуємо XL або XXL.',
         ];
     }
 

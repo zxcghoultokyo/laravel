@@ -951,7 +951,7 @@ class DiagnosticController extends Controller
         $requestBody = [
             'model' => $model,
             'messages' => [
-                ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                ['role' => 'system', 'content' => 'You are an e-commerce product expert for Ukrainian market. Classify ANY product type correctly. Respond ONLY with valid JSON.'],
                 ['role' => 'user', 'content' => $prompt],
             ],
             'temperature' => 0.3,
@@ -1066,7 +1066,7 @@ class DiagnosticController extends Controller
 
     private function buildPromptForTest(string $title, string $description, string $category, string $characteristics): string
     {
-        return "Проаналізуй цей товар військового спорядження та згенеруй JSON для пошукового індексу.
+        return "Проаналізуй цей товар та згенеруй JSON для пошукового індексу.
 
 ТОВАР:
 Назва: {$title}
@@ -1075,15 +1075,15 @@ class DiagnosticController extends Controller
 Характеристики: {$characteristics}
 
 Згенеруй JSON з полями:
-1. \"product_type\": основний тип товару англійською (plate_carrier, helmet, boots, pouch, gloves, uniform, etc)
-2. \"ai_category\": загальна категорія (armor, apparel, footwear, accessories, bags, optics, etc)
-3. \"keywords\": масив 10-15 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку
-4. \"slang\": масив 5-10 сленгових/жаргонних назв УКРАЇНСЬКОЮ як шукають реальні люди
+1. \"product_type\": основний тип товару англійською (ОБОВ'ЯЗКОВО! smartphone, laptop, plate_carrier, helmet, boots, jacket, etc)
+2. \"ai_category\": загальна категорія (electronics, armor, apparel, footwear, accessories, bags, home, etc)
+3. \"keywords\": масив 10-15 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ (включи синоніми: телефон/phone, смартфон/smartphone)
+4. \"slang\": масив 5-10 сленгових назв УКРАЇНСЬКОЮ як шукають реальні люди (айфон, мобілка, ноут, плитка, бронік)
 5. \"materials\": масив матеріалів якщо є
-6. \"standards\": масив стандартів якщо є
-7. \"usage\": масив призначення
+6. \"standards\": масив стандартів якщо є (IP68, NIJ III, etc)
+7. \"usage\": масив призначення (everyday, work, gaming, sport, etc)
 
-ВАЖЛИВО: Відповідай ТІЛЬКИ валідним JSON без markdown.";
+КРИТИЧНО: product_type та ai_category ОБОВ'ЯЗКОВІ - визнач з назви! Відповідай ТІЛЬКИ валідним JSON.";
     }
 
     /**

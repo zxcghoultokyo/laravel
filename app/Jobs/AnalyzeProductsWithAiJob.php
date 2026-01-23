@@ -192,7 +192,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         $requestBody = [
             'model' => $model,
             'messages' => [
-                ['role' => 'system', 'content' => 'You are a military/tactical gear expert. Respond ONLY with valid JSON.'],
+                ['role' => 'system', 'content' => 'You are an e-commerce product expert for Ukrainian market. Classify ANY product type correctly. Respond ONLY with valid JSON.'],
                 ['role' => 'user', 'content' => $prompt],
             ],
             'temperature' => 0.3,
@@ -247,7 +247,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     private function buildPrompt(string $title, string $description, string $category, string $characteristics): string
     {
         return <<<PROMPT
-Проаналізуй цей товар військового спорядження та згенеруй JSON для пошукового індексу.
+Проаналізуй цей товар та згенеруй JSON для пошукового індексу.
 
 ТОВАР:
 Назва: {$title}
@@ -257,35 +257,44 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 Згенеруй JSON з полями:
 
-1. "product_type": основний тип товару англійською (plate_carrier, helmet, boots, pouch, gloves, uniform, etc)
+1. "product_type": основний тип товару англійською (ОБОВ'ЯЗКОВО!)
+   Приклади:
+   - Військове: plate_carrier, helmet, boots, pouch, gloves, uniform, backpack, holster
+   - Електроніка: smartphone, laptop, tablet, headphones, smartwatch, camera, tv, speaker
+   - Одяг: jacket, pants, shirt, dress, shoes, sneakers, coat, hoodie
+   - Дім: furniture, lamp, mattress, pillow, kitchenware, decor
+   - Інше: toy, book, cosmetics, food, tool, sport_equipment
 
-2. "ai_category": загальна категорія (armor, apparel, footwear, accessories, bags, optics, etc)
+2. "ai_category": загальна категорія англійською (ОБОВ'ЯЗКОВО!)
+   Приклади: armor, apparel, footwear, accessories, bags, optics, electronics, home, beauty, sports, kids, food
 
 3. "keywords": масив 10-20 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку.
-   Включи: назву, бренд, тип, призначення, характеристики.
-   Приклад: ["плитоноска", "plate carrier", "бронежилет", "тактичний жилет", "molle", "швидкоскид"]
+   Включи: назву, бренд, тип, призначення, характеристики, синоніми.
+   Приклад для iPhone: ["iphone", "айфон", "смартфон", "телефон", "apple", "мобільний", "smartphone", "phone"]
+   Приклад для плитоноски: ["плитоноска", "plate carrier", "бронежилет", "тактичний жилет", "molle"]
 
 4. "slang": масив 5-10 сленгових/жаргонних назв УКРАЇНСЬКОЮ як шукають реальні люди.
+   Приклад для iPhone: ["яблуко", "айфончик", "телефон", "мобілка", "труба"]
    Приклад для плитоноски: ["плитка", "бронік", "броня", "жилетка", "pc"]
-   Приклад для шолома: ["каска", "шлем", "кєпка", "балістика"]
-   Приклад для берців: ["берци", "черевики", "боти", "чоботи"]
+   Приклад для ноутбука: ["ноут", "бук", "лептоп", "комп"]
 
 5. "synonyms": масив синонімів назви товару (варіанти написання, переклади)
 
 6. "search_queries": масив 5-10 ТИПОВИХ ПОШУКОВИХ ЗАПИТІВ українською як їх пише користувач.
-   Приклад: ["яку плитоноску обрати", "плитоноска для штурму", "легка плитоноска до 15000"]
+   Приклад: ["купити iphone", "який телефон краще", "смартфон до 20000", "телефон для мами"]
 
-7. "materials": масив матеріалів якщо є (cordura, nylon, PE, ceramic, steel)
+7. "materials": масив матеріалів якщо є (glass, aluminum, plastic, cordura, nylon, leather, etc)
 
-8. "standards": масив стандартів якщо є (NIJ III, NIJ IV, ДСТУ 8782, STANAG)
+8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, ДСТУ, etc)
 
-9. "usage": масив призначення (assault, reconnaissance, training, everyday)
+9. "usage": масив призначення (everyday, work, gaming, sport, travel, gift, professional, etc)
 
-ВАЖЛИВО:
+КРИТИЧНО ВАЖЛИВО:
+- product_type та ai_category ОБОВ'ЯЗКОВІ - НІКОЛИ не повертай null!
+- Визнач тип товару з назви та категорії навіть якщо опис порожній
 - Всі ключові слова МАЛИМИ ЛІТЕРАМИ
-- Українські слова в різних відмінках не потрібні, тільки основна форма
-- Slang має бути РЕАЛЬНИМ жаргоном який використовують військові/страйкболісти
-- Search queries мають бути РЕАЛІСТИЧНИМИ запитами з чату
+- Keywords має включати СИНОНІМИ та ПЕРЕКЛАДИ (укр + англ)
+- Slang має бути РЕАЛЬНИМ жаргоном який використовують люди в Україні
 
 Відповідай ТІЛЬКИ валідним JSON без markdown.
 PROMPT;

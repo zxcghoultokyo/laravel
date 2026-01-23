@@ -4,33 +4,79 @@ namespace App\Services\Catalog;
 
 use App\Models\Category;
 use App\Models\CategoryAlias;
+use App\Models\Tenant;
+use App\Scopes\TenantScope;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class CategoryIndexService
 {
+    /**
+     * Rebuild categories for ALL tenants
+     */
     public function rebuild(): void
     {
-        DB::transaction(function () {
-            $paths = DB::table('products')
+        // Get all tenant IDs that have products
+        $tenantIds = DB::table('products')
+            ->whereNotNull('tenant_id')
+            ->distinct()
+            ->pluck('tenant_id')
+            ->toArray();
+        
+        Log::info('CategoryIndexService: rebuilding categories for tenants', [
+            'tenant_ids' => $tenantIds,
+        ]);
+        
+        foreach ($tenantIds as $tenantId) {
+            $this->rebuildForTenant($tenantId);
+        }
+        
+        // Also handle products without tenant_id (legacy)
+        $this->rebuildForTenant(null);
+    }
+    
+    /**
+     * Rebuild categories for a specific tenant
+     */
+    public function rebuildForTenant(?int $tenantId): void
+    {
+        DB::transaction(function () use ($tenantId) {
+            $query = DB::table('products')
                 ->whereNotNull('category_path')
-                ->where('category_path', '!=', '')
+                ->where('category_path', '!=', '');
+            
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            } else {
+                $query->whereNull('tenant_id');
+            }
+            
+            $paths = $query
                 ->select('category_path', DB::raw('COUNT(*) as cnt'))
                 ->groupBy('category_path')
                 ->orderByDesc('cnt')
                 ->get();
 
+            Log::info('CategoryIndexService: found categories for tenant', [
+                'tenant_id' => $tenantId,
+                'count' => $paths->count(),
+            ]);
+
             foreach ($paths as $row) {
                 $path = (string) $row->category_path;
                 $cnt  = (int) $row->cnt;
 
-                $slug = Str::slug($path, '_');
-                if ($slug === '') {
-                    $slug = 'category_' . crc32($path);
+                // Make slug unique per tenant
+                $slugBase = Str::slug($path, '_');
+                if ($slugBase === '') {
+                    $slugBase = 'category_' . crc32($path);
                 }
+                $slug = $tenantId ? "t{$tenantId}_{$slugBase}" : $slugBase;
 
-                $cat = Category::query()->updateOrCreate(
-                    ['path' => $path],
+                // Use withoutGlobalScope to avoid tenant filtering during upsert
+                $cat = Category::withoutGlobalScope(TenantScope::class)->updateOrCreate(
+                    ['tenant_id' => $tenantId, 'path' => $path],
                     [
                         'slug'           => $slug,
                         'path_norm'      => $this->norm($path),

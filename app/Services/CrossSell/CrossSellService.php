@@ -211,11 +211,18 @@ class CrossSellService
     protected function askAiForAccessories(Product $product): array
     {
         try {
-            // Get available categories from DB
-            $availableCategories = Category::where('is_active', true)
-                ->where('products_count', '>', 0)
-                ->pluck('path')
-                ->toArray();
+            $tenantId = $this->getTenantId($product);
+            
+            // Get available categories from DB - filtered by tenant
+            $query = Category::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('is_active', true)
+                ->where('products_count', '>', 0);
+            
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
+            
+            $availableCategories = $query->pluck('path')->toArray();
             
             if (empty($availableCategories)) {
                 return [];

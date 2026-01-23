@@ -660,6 +660,7 @@ class DiagnosticController extends Controller
      * POST /api/diagnostic/reindex-meili
      * Trigger Meilisearch reindex
      * Add ?sync=1 to run synchronously (takes longer but doesn't need queue worker)
+     * Add ?tenant_id=N to reindex only specific tenant
      */
     public function reindexMeili(Request $request): JsonResponse
     {
@@ -669,7 +670,14 @@ class DiagnosticController extends Controller
 
         $chunk = min((int) $request->query('chunk', 200), 500);
         $sync = $request->query('sync', false);
-        $total = Product::count();
+        $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
+        
+        // Count products
+        $query = Product::withoutGlobalScope(\App\Scopes\TenantScope::class);
+        if ($tenantId !== null) {
+            $query->where('tenant_id', $tenantId);
+        }
+        $total = $query->count();
 
         if ($total === 0) {
             return response()->json([
@@ -681,25 +689,28 @@ class DiagnosticController extends Controller
         if ($sync) {
             // Run synchronously - for when queue worker is not running
             set_time_limit(300); // 5 minutes
-            $job = new \App\Jobs\IndexProductsToMeiliJob($chunk);
+            // Constructor: __construct(?int $tenantId = null, int $chunkSize = 500)
+            $job = new \App\Jobs\IndexProductsToMeiliJob($tenantId, $chunk);
             $job->handle(app(\App\Services\Search\MeiliClient::class));
             
             return response()->json([
                 'status' => 'completed',
                 'total_products' => $total,
+                'tenant_id' => $tenantId,
                 'chunk_size' => $chunk,
                 'message' => "Indexed {$total} product(s) synchronously",
             ]);
         }
 
-        // Dispatch to queue
-        \App\Jobs\IndexProductsToMeiliJob::dispatch($chunk)
+        // Dispatch to queue - correct argument order: (tenantId, chunkSize)
+        \App\Jobs\IndexProductsToMeiliJob::dispatch($tenantId, $chunk)
             ->onQueue('meili');
 
         return response()->json([
             'status' => 'dispatched',
             'jobs' => 1,
             'total_products' => $total,
+            'tenant_id' => $tenantId,
             'chunk_size' => $chunk,
             'message' => "Dispatched 1 job to queue=meili for {$total} product(s)",
         ]);

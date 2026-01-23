@@ -380,10 +380,10 @@ CONTEXT
         // Parse GPT response as JSON
         $structuredResponse = $this->parseStructuredResponse($responseText, $products);
 
-        // Generate outro for trigger queries if needed
+        // Generate outro for trigger queries if needed (pass GPT response to avoid duplication)
         $outro = $structuredResponse['outro'] ?? null;
         if ($isTriggerQuery && !empty($products) && empty($outro)) {
-            $outro = $this->generateTriggerOutro($products);
+            $outro = $this->generateTriggerOutro($products, $responseText);
             if (!empty($structuredResponse['messages'])) {
                 $structuredResponse['messages'][] = ['type' => 'text', 'content' => $outro];
             }

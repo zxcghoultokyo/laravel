@@ -90,16 +90,33 @@ abstract class BaseAgent
             '/\bписати\s+чимось\b/ui' => 'ручка OR pen',
             
             // Cutting → knife
-            '/\bsomething\s+to\s+cut\b/ui' => 'knife OR ніж OR scissors',
-            '/\bрізати\s+чимось\b/ui' => 'ніж OR knife',
+            '/\bsomething\s+to\s+cut\b/ui' => 'knife OR ніж OR multitool',
+            '/\bрізати\s+чимось\b/ui' => 'ніж OR knife OR мультитул',
             
             // Head protection → helmet  
-            '/\bhead\s+protection\b/ui' => 'helmet OR шолом OR каска',
-            '/\bзахист\s+голови\b/ui' => 'шолом OR helmet',
+            '/\bhead\s+protection\b/ui' => 'шолом OR helmet OR каска',
+            '/\bзахист\s+голови\b/ui' => 'шолом OR helmet OR каска',
+            '/\bprotect\s+(my\s+)?head\b/ui' => 'шолом OR helmet OR каска',
             
             // Stay warm → jacket
-            '/\bstay\s+warm\b/ui' => 'jacket OR куртка OR термобілизна',
+            '/\bstay\s+warm\b/ui' => 'куртка OR jacket OR термобілизна',
             '/\bзігрітися\b/ui' => 'куртка OR jacket',
+            '/\bcold\s+weather\b/ui' => 'термобілизна OR куртка OR Level 7',
+            
+            // Carry stuff → backpack/bag
+            '/\bcarry\s+(stuff|things|gear)\b/ui' => 'рюкзак OR backpack OR сумка',
+            '/\bneed\s+(a\s+)?bag\b/ui' => 'сумка OR рюкзак OR підсумок',
+            '/\bнести\s+речі\b/ui' => 'рюкзак OR сумка',
+            
+            // Stop bleeding → tourniquet/medical
+            '/\bstop\s+(the\s+)?bleeding\b/ui' => 'турнікет OR tourniquet OR бандаж',
+            '/\bзупинити\s+кров\b/ui' => 'турнікет OR джгут OR бандаж',
+            '/\bfirst\s+aid\b/ui' => 'аптечка OR турнікет OR медицина',
+            
+            // Body armor → plate carrier
+            '/\bbody\s+(armor|armour|protection)\b/ui' => 'бронежилет OR plate carrier OR плитоноска',
+            '/\bзахист\s+тіла\b/ui' => 'бронежилет OR плитоноска',
+            '/\bbullet\s*proof\b/ui' => 'бронежилет OR плитоноска OR броня',
         ];
         
         foreach ($implicitPatterns as $pattern => $searchQuery) {
@@ -1233,8 +1250,9 @@ PROMPT;
 
     /**
      * Generate CTA outro for trigger queries.
+     * Now checks if GPT already included a size question to avoid duplication.
      */
-    protected function generateTriggerOutro(array $products): string
+    protected function generateTriggerOutro(array $products, string $gptResponse = ''): string
     {
         if (empty($products)) return 'Є питання? Допоможу з вибором!';
 
@@ -1249,9 +1267,20 @@ PROMPT;
             if (!empty($p['color_variants']) && count($p['color_variants']) > 1) $hasMultipleColors = true;
         }
 
-        if ($hasMultipleSizes) return 'Який розмір/варіант вам потрібен? Допоможу підібрати!';
-        if ($hasMultipleColors) return 'Який колір вам більше підходить?';
-        if ($quantity > 0 && $quantity <= 3) return "Залишилось лише {$quantity} шт. в наявності. Оформлюємо?";
+        // Check if GPT already asked about size/color to avoid duplication
+        $lowerResponse = mb_strtolower($gptResponse);
+        $alreadyAskedSize = str_contains($lowerResponse, 'розмір') || str_contains($lowerResponse, 'size');
+        $alreadyAskedColor = str_contains($lowerResponse, 'колір') || str_contains($lowerResponse, 'color');
+
+        if ($hasMultipleSizes && !$alreadyAskedSize) {
+            return 'Який розмір/варіант вам потрібен? Допоможу підібрати!';
+        }
+        if ($hasMultipleColors && !$alreadyAskedColor) {
+            return 'Який колір вам більше підходить?';
+        }
+        if ($quantity > 0 && $quantity <= 3) {
+            return "Залишилось лише {$quantity} шт. в наявності. Оформлюємо?";
+        }
 
         return 'Оформлюємо замовлення? Або є питання?';
     }

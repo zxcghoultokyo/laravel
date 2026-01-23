@@ -218,6 +218,9 @@ class FaqGeneratorService
      */
     private function htmlToText(string $html): string
     {
+        // IMPORTANT: Extract social media links BEFORE stripping tags
+        $html = $this->extractSocialLinks($html);
+        
         // Preserve some structure
         $html = preg_replace('#<br\s*/?>#i', "\n", $html) ?? $html;
         $html = preg_replace('#</p>#i', "\n\n", $html) ?? $html;
@@ -230,6 +233,89 @@ class FaqGeneratorService
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         
         return $text;
+    }
+
+    /**
+     * Extract social media links from HTML and convert to readable format.
+     * This preserves Telegram, Instagram, Facebook, etc. links that would be lost by strip_tags.
+     */
+    private function extractSocialLinks(string $html): string
+    {
+        // Telegram links: t.me/username or telegram.me/username
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?(https?://(?:t\.me|telegram\.me)/([a-zA-Z0-9_]+))["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $url = $m[1];
+                $username = $m[2];
+                $text = trim($m[3]);
+                // Return formatted: "Telegram: @username (t.me/username)"
+                return " Telegram: @{$username} ({$url}) ";
+            },
+            $html
+        ) ?? $html;
+
+        // Instagram links: instagram.com/username
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?(https?://(?:www\.)?instagram\.com/([a-zA-Z0-9_.]+)/?)["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $url = $m[1];
+                $username = $m[2];
+                return " Instagram: @{$username} ({$url}) ";
+            },
+            $html
+        ) ?? $html;
+
+        // Facebook links: facebook.com/pagename
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?(https?://(?:www\.)?facebook\.com/([a-zA-Z0-9_.]+)/?)["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $url = $m[1];
+                $pagename = $m[2];
+                return " Facebook: {$pagename} ({$url}) ";
+            },
+            $html
+        ) ?? $html;
+
+        // Viber links
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?(viber://[^"\'>\s]+)["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                return " Viber: {$m[1]} ";
+            },
+            $html
+        ) ?? $html;
+
+        // WhatsApp links: wa.me/number or api.whatsapp.com
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?(https?://(?:wa\.me|api\.whatsapp\.com)/([0-9+]+))["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $number = $m[2];
+                return " WhatsApp: +{$number} ";
+            },
+            $html
+        ) ?? $html;
+
+        // Email links: mailto:
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?mailto:([^"\'>\s]+)["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $email = $m[1];
+                return " Email: {$email} ";
+            },
+            $html
+        ) ?? $html;
+
+        // Phone links: tel:
+        $html = preg_replace_callback(
+            '#<a[^>]*href=["\']?tel:([^"\'>\s]+)["\']?[^>]*>([^<]*)</a>#i',
+            function ($m) {
+                $phone = $m[1];
+                return " Телефон: {$phone} ";
+            },
+            $html
+        ) ?? $html;
+
+        return $html;
     }
 
     /**

@@ -848,7 +848,8 @@ class TenantDashboard extends Component
             ->where('tenant_id', $this->tenant->id)
             ->withCount('messages')
             ->with(['messages' => fn($q) => $q->latest()->limit(1)])
-            ->orderByDesc('updated_at');  // Sort by last activity, not creation
+            ->orderByDesc('last_message_at')  // Sort by last message date
+            ->orderByDesc('updated_at');      // Fallback for sessions without last_message_at
 
         if ($this->chatSearch) {
             $query->where(function($q) {

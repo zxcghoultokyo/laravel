@@ -324,10 +324,13 @@ CONTEXT
 
             $result = $this->executeTool($functionName, $args);
 
-            // Filter out already shown products for both search and popular products
+            // Filter out already shown products ONLY when explicitly requested (for "покажи ще" type requests)
+            // Regular searches should show all matching products, even if shown before
+            $excludeShown = $args['exclude_shown'] ?? false;
             if (in_array($functionName, ['search_products', 'get_popular_products']) 
                 && !empty($result['products']) 
-                && !empty($this->shownProductIds)) {
+                && !empty($this->shownProductIds)
+                && $excludeShown) {
                 $beforeCount = count($result['products']);
                 $result['products'] = array_filter(
                     $result['products'],
@@ -336,7 +339,7 @@ CONTEXT
                 $result['products'] = array_values($result['products']);
                 $result['count'] = count($result['products']);
                 
-                Log::info('FunctionCallingAgent: filtered shown products', [
+                Log::info('FunctionCallingAgent: filtered shown products (exclude_shown=true)', [
                     'tool' => $functionName,
                     'before' => $beforeCount,
                     'after' => count($result['products']),

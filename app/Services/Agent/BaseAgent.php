@@ -393,6 +393,7 @@ RULES;
         $tenantInfo = $this->getTenantInfo();
         $storeName = $tenantInfo['name'];
         $shopPhone = $this->getShopPhone();
+        $callbackFormUrl = $this->getCallbackFormUrl();
         $phoneNote = !empty($shopPhone) ? "рекомендую уточнити у менеджера: {$shopPhone}" : "рекомендую уточнити у менеджера на сайті";
 
         return <<<PROMPT
@@ -430,17 +431,17 @@ RULES;
 - Конкретні цифри (вага, розміри) якщо їх немає в каталозі — кажи "{$phoneNote}"
 - Питання не про товари магазину — ти ПРОДАВЕЦЬ, не експерт!
 
-ОФОРМЛЕННЯ ЗАМОВЛЕННЯ — ВАЖЛИВО!
-Ти НЕ МОЖЕШ оформити замовлення за клієнта! НЕ проси контактні дані для оформлення!
-Якщо клієнт хоче замовити:
-1. Поясни: "Я допоможу з вибором, але замовлення оформлюєте ви самі"
-2. Спосіб 1: Натиснути на картку товару → перейти на сайт → додати в кошик → оформити
-3. Спосіб 2: Зателефонувати за номером {$shopPhone} для оформлення по телефону
-НЕ збирай телефони/імена/адреси — це НЕ твоя функція!
+ОФОРМЛЕННЯ ЗАМОВЛЕННЯ — КРИТИЧНО ВАЖЛИВО!
+Ти НЕ МОЖЕШ оформити замовлення за клієнта! НЕ МОЖЕШ прийняти замовлення! НЕ проси контактні дані!
+НІКОЛИ не кажи "менеджер зв'яжеться" — це ОБМАН, ніхто не зв'яжеться!
 
-Якщо клієнт надсилає СВІЙ номер телефону (для замовлення):
-- НЕ використовуй get_order_status!
-- Відповідай: "Дякую за номер, але я не можу прийняти замовлення. Щоб оформити — зателефонуй {$shopPhone} або додай товар в кошик на сайті."
+Якщо клієнт хоче замовити або надає свій номер телефону:
+- ЧЕСНО кажи: "Я AI-бот і не можу приймати замовлення"
+- Направляй на сайт: "Натисни на картку товару → додай в кошик → оформи на сайті"
+- Якщо є телефон магазину ({$shopPhone}): "Або зателефонуй менеджеру: {$shopPhone}"
+- Якщо є форма зворотного зв'язку ({$callbackFormUrl}): "Або залиш заявку: {$callbackFormUrl}"
+- НЕ збирай телефони/імена/адреси — це НЕ твоя функція!
+- НЕ використовуй get_order_status коли клієнт дає СВІЙ номер!
 
 {$priceContext}
 
@@ -515,6 +516,23 @@ PROMPT;
     }
 
     /**
+     * Get callback form URL from settings.
+     */
+    protected function getCallbackFormUrl(): string
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
+            if ($tenantId) {
+                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenantId)->first();
+            }
+            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
+        });
+        return $settings?->callback_form_url ?? '';
+    }
+
+    /**
      * Load FAQ info from WidgetSettings.
      */
     protected function loadFaqInfo(): string
@@ -535,7 +553,8 @@ PROMPT;
         }
 
         $info = [];
-        if (!empty($settings->shop_phone)) $info[] = "ТЕЛЕФОН: {$settings->shop_phone}";
+        if (!empty($settings->shop_phone)) $info[] = "ТЕЛЕФОН МАГАЗИНУ: {$settings->shop_phone}";
+        if (!empty($settings->callback_form_url)) $info[] = "ФОРМА ЗВОРОТНОГО ЗВ'ЯЗКУ: {$settings->callback_form_url}";
         if (!empty($settings->faq_contacts_text)) $info[] = "КОНТАКТИ:\n{$settings->faq_contacts_text}";
         if (!empty($settings->faq_payment_delivery_text)) $info[] = "ОПЛАТА ТА ДОСТАВКА:\n{$settings->faq_payment_delivery_text}";
         if (!empty($settings->faq_returns_text)) $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";

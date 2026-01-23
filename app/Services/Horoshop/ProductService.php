@@ -342,13 +342,31 @@ class ProductService
             }
         }
         
-        // 2. Try mod_title (modification title)
+        // 1b. Try rozmir with lowercase (some Horoshop stores use lowercase)
+        if (!empty($item['rozmir']['value'])) {
+            $rozmir = $item['rozmir']['value'];
+            $size = is_array($rozmir) 
+                ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
+                : $rozmir;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 2. Try mod_title (modification title) - but only if it's different from title
+        // Some stores set mod_title = title when there's no actual modification
         if (!empty($item['mod_title'])) {
             $modTitle = is_array($item['mod_title']) 
                 ? ($item['mod_title']['ua'] ?? $item['mod_title']['ru'] ?? reset($item['mod_title']))
                 : $item['mod_title'];
             if (is_string($modTitle) && trim($modTitle) !== '') {
-                return trim($modTitle);
+                $modTitleTrimmed = trim($modTitle);
+                // Skip if mod_title equals the product title (not a real size/variant)
+                if ($title && mb_strtolower($modTitleTrimmed) === mb_strtolower($title)) {
+                    // mod_title is same as title, not useful as size
+                } else {
+                    return $modTitleTrimmed;
+                }
             }
         }
         

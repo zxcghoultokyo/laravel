@@ -121,6 +121,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 'searchableAttributes' => [
                     // Primary fields (highest priority)
                     'title',
+                    'ai_product_type',   // AI-detected product type (smartphone, helmet, etc.)
                     'ai_keywords',       // AI-generated keywords
                     'ai_slang',          // Slang/jargon terms
                     'ai_search_queries', // Typical user search queries
@@ -138,6 +139,12 @@ class IndexProductsToMeiliJob implements ShouldQueue
                 ],
                 // Синоніми для покращення пошуку (одне слово знаходить всі варіанти)
                 'synonyms' => [
+                    // Електроніка / Смартфони
+                    'smartphone' => ['смартфон', 'телефон', 'phone', 'mobile', 'iphone', 'мобільний'],
+                    'phone' => ['телефон', 'смартфон', 'smartphone', 'iphone', 'мобільний'],
+                    'телефон' => ['смартфон', 'smartphone', 'phone', 'iphone', 'мобільний'],
+                    'iphone' => ['айфон', 'apple phone', 'smartphone', 'телефон'],
+                    'айфон' => ['iphone', 'apple phone', 'smartphone', 'телефон'],
                     // Шоломи
                     'шолом' => ['каска', 'шлем', 'helmet', 'ballistic helmet', 'кевларовий шолом'],
                     'каска' => ['шолом', 'helmet', 'ballistic helmet'],

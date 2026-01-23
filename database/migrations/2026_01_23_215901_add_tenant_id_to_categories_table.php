@@ -12,15 +12,30 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('categories', function (Blueprint $table) {
-            $table->unsignedBigInteger('tenant_id')->nullable()->after('id');
-            $table->index('tenant_id');
-            
-            // Drop old unique constraint on path (was global)
-            $table->dropUnique(['path']);
-            
-            // Add new unique constraint per tenant
-            $table->unique(['tenant_id', 'path']);
+            // Only add tenant_id if it doesn't exist
+            if (!Schema::hasColumn('categories', 'tenant_id')) {
+                $table->unsignedBigInteger('tenant_id')->nullable()->after('id');
+                $table->index('tenant_id');
+            }
         });
+        
+        // Handle unique constraint change in separate call
+        Schema::table('categories', function (Blueprint $table) {
+            // Try to drop old unique constraint (may not exist)
+            try {
+                $table->dropUnique(['path']);
+            } catch (\Exception $e) {
+                // Ignore if doesn't exist
+            }
+        });
+        
+        // Check if composite unique exists, if not - add it
+        $indexExists = collect(\DB::select("SHOW INDEX FROM categories WHERE Key_name = 'categories_tenant_id_path_unique'"))->isNotEmpty();
+        if (!$indexExists) {
+            Schema::table('categories', function (Blueprint $table) {
+                $table->unique(['tenant_id', 'path']);
+            });
+        }
     }
 
     /**
@@ -29,9 +44,17 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('categories', function (Blueprint $table) {
-            $table->dropUnique(['tenant_id', 'path']);
-            $table->unique('path');
-            $table->dropColumn('tenant_id');
+            try {
+                $table->dropUnique(['tenant_id', 'path']);
+            } catch (\Exception $e) {}
+            
+            try {
+                $table->unique('path');
+            } catch (\Exception $e) {}
+            
+            if (Schema::hasColumn('categories', 'tenant_id')) {
+                $table->dropColumn('tenant_id');
+            }
         });
     }
 };

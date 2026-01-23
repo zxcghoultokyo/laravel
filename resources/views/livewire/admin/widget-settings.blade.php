@@ -373,16 +373,73 @@
                                     Генерую...
                                 </span>
                             </button>
+                            
+                            <!-- Help dropdown -->
+                            <div x-data="{ open: false }" class="relative">
+                                <button type="button" @click="open = !open" 
+                                        class="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-sm">
+                                    ?
+                                </button>
+                                <div x-show="open" @click.away="open = false" x-transition
+                                     class="absolute right-0 mt-2 w-80 p-4 bg-white rounded-lg shadow-xl border z-20 text-sm">
+                                    <h4 class="font-semibold text-gray-900 mb-2">📚 Як налаштувати FAQ</h4>
+                                    
+                                    <div class="space-y-3 text-gray-600 text-xs">
+                                        <div>
+                                            <p class="font-medium text-gray-800 mb-1">1️⃣ Вкажіть URL сторінок</p>
+                                            <p>Скопіюйте посилання на сторінки вашого сайту:</p>
+                                            <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                                                <li>Оплата і доставка</li>
+                                                <li>Обмін та повернення</li>
+                                                <li>Контакти (телефон, адреса, соцмережі)</li>
+                                                <li>Про магазин</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <div>
+                                            <p class="font-medium text-gray-800 mb-1">2️⃣ Натисніть "Перегенерувати з AI"</p>
+                                            <p>AI автоматично:</p>
+                                            <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                                                <li>Завантажить і розпарсить сторінки</li>
+                                                <li>Витягне важливу інформацію</li>
+                                                <li>Структурує для чат-бота</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <div>
+                                            <p class="font-medium text-gray-800 mb-1">3️⃣ Відредагуйте (за потреби)</p>
+                                            <p>Перевірте згенерований текст і відкоригуйте якщо потрібно.</p>
+                                        </div>
+                                        
+                                        <div>
+                                            <p class="font-medium text-gray-800 mb-1">4️⃣ Збережіть</p>
+                                            <p>Натисніть "Зберегти" і бот почне використовувати FAQ!</p>
+                                        </div>
+                                        
+                                        <div class="pt-2 border-t">
+                                            <p class="font-medium text-gray-800 mb-1">💡 Що AI витягує:</p>
+                                            <ul class="list-disc ml-4 space-y-0.5">
+                                                <li>📞 Телефони, email, адреси</li>
+                                                <li>🕐 Графік роботи</li>
+                                                <li>📸 Instagram, Telegram, Facebook</li>
+                                                <li>💳 Способи оплати</li>
+                                                <li>🚚 Умови доставки, терміни</li>
+                                                <li>🔄 Правила обміну/повернення</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    <button @click="open = false" class="mt-3 w-full py-1.5 bg-gray-100 hover:bg-gray-200 rounded text-xs text-gray-700">
+                                        Зрозуміло ✓
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
                     @if($faq_last_ingest_at)
                     <p class="text-xs text-gray-500 mb-2">Останнє оновлення: {{ \Carbon\Carbon::parse($faq_last_ingest_at)->format('d.m.Y H:i') }}</p>
                     @endif
-                    
-                    <p class="text-xs text-gray-500 mb-4">
-                        💡 Вкажіть URL сторінок вашого сайту. AI автоматично розпарсить контент і створить структурований FAQ для чат-бота.
-                    </p>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div class="p-3 bg-gray-50 rounded-lg space-y-2">
@@ -408,16 +465,6 @@
                             <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://yoursite.com/about">
                             <textarea wire:model.live="faq_about_text" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="4000" placeholder="AI згенерує текст автоматично..."></textarea>
                         </div>
-                    </div>
-                    
-                    <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
-                        <strong>Як це працює:</strong>
-                        <ol class="list-decimal ml-4 mt-1 space-y-1">
-                            <li>Вкажіть URL сторінок вашого сайту (доставка, контакти, про нас тощо)</li>
-                            <li>Натисніть "Перегенерувати з AI"</li>
-                            <li>AI розпарсить сторінки і створить структурований текст для чат-бота</li>
-                            <li>Ви можете відредагувати згенерований текст вручну</li>
-                        </ol>
                     </div>
                 </div>
 

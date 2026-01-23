@@ -198,6 +198,20 @@
                 </div>
             @endif
 
+            <!-- Onboarding Progress (show if onboarding in progress or not completed) -->
+            @php
+                $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+                $showOnboardingProgress = $onboardingProgress && in_array($onboardingProgress->status, ['pending', 'in_progress', 'failed']);
+                // Also show if tenant has no products and no onboarding started
+                $showStartOnboarding = !$onboardingProgress && $tenant->products()->count() === 0 && $tenant->platform_credentials;
+            @endphp
+            
+            @if($showOnboardingProgress || $showStartOnboarding)
+                <div class="mb-6">
+                    <livewire:onboarding-progress :compact="false" />
+                </div>
+            @endif
+
             <!-- Stats Grid -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                 <!-- Usage -->

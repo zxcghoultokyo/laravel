@@ -70,6 +70,12 @@ Route::post('/orders/search', [OrderSearchController::class, 'search']);
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
 
+// Onboarding progress API (for frontend polling)
+Route::get('/onboarding/progress/{tenantId}', [\App\Http\Controllers\Api\OnboardingProgressController::class, 'show'])
+    ->middleware('auth:sanctum');
+Route::post('/onboarding/start/{tenantId}', [\App\Http\Controllers\Api\OnboardingProgressController::class, 'start'])
+    ->middleware('auth:sanctum');
+
 // Diagnostic API (key protected)
 Route::prefix('diagnostic')->group(function () {
     Route::get('/db-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'dbStats']);

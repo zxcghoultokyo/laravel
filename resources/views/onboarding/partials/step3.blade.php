@@ -2,59 +2,52 @@
 {{-- Updated: force recompile --}}
 <div class="text-center mb-8">
     <h3 class="text-2xl font-bold text-gray-900">Синхронізація товарів</h3>
-    <p class="mt-2 text-gray-600">Імпортуємо каталог з вашого магазину</p>
+    <p class="mt-2 text-gray-600">Імпортуємо каталог та налаштовуємо пошук</p>
 </div>
 
-<div class="max-w-md mx-auto">
-    <div id="sync-status" class="p-6 bg-gray-50 rounded-xl text-center">
-        @if($productsCount > 0)
-            <!-- Already synced -->
-            <div class="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
-                <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-            </div>
-            <h4 class="font-semibold text-lg text-green-700">Синхронізовано!</h4>
-            <div class="mt-4 grid grid-cols-2 gap-4 text-left">
-                <div class="p-3 bg-white rounded-lg">
-                    <p class="text-2xl font-bold text-gray-900">{{ number_format($productsCount) }}</p>
-                    <p class="text-sm text-gray-500">товарів</p>
-                </div>
-                <div class="p-3 bg-white rounded-lg">
-                    <p class="text-2xl font-bold text-gray-900">{{ $categoriesCount }}</p>
-                    <p class="text-sm text-gray-500">категорій</p>
-                </div>
-            </div>
+<div class="max-w-lg mx-auto">
+    @if($productsCount > 0)
+        {{-- Already synced - show compact progress or success --}}
+        @php
+            $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+        @endphp
+        
+        @if($onboardingProgress && $onboardingProgress->status === 'in_progress')
+            {{-- Onboarding in progress - show detailed progress --}}
+            <livewire:onboarding-progress :compact="false" />
         @else
-            <!-- Ready to sync -->
-            <div id="sync-ready">
-                <div class="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            {{-- Sync completed --}}
+            <div id="sync-status" class="p-6 bg-gray-50 rounded-xl text-center">
+                <div class="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                     </svg>
                 </div>
-                <h4 class="font-semibold text-lg">Готово до синхронізації</h4>
-                <p class="text-sm text-gray-500 mt-2">Це може зайняти кілька хвилин</p>
-                <button type="button" id="start-sync-btn" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Почати синхронізацію
-                </button>
-            </div>
-
-            <!-- Syncing -->
-            <div id="sync-progress" class="hidden">
-                <div class="w-16 h-16 mx-auto mb-4">
-                    <svg class="animate-spin w-16 h-16 text-blue-600" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                <h4 class="font-semibold text-lg text-green-700">Синхронізовано!</h4>
+                <div class="mt-4 grid grid-cols-2 gap-4 text-left">
+                    <div class="p-3 bg-white rounded-lg">
+                        <p class="text-2xl font-bold text-gray-900">{{ number_format($productsCount) }}</p>
+                        <p class="text-sm text-gray-500">товарів</p>
+                    </div>
+                    <div class="p-3 bg-white rounded-lg">
+                        <p class="text-2xl font-bold text-gray-900">{{ $categoriesCount }}</p>
+                        <p class="text-sm text-gray-500">категорій</p>
+                    </div>
                 </div>
-                <h4 class="font-semibold text-lg">Синхронізація...</h4>
-                <p class="text-sm text-gray-500 mt-2">
-                    Знайдено товарів: <span id="products-count">0</span>
-                </p>
+                
+                @if($onboardingProgress && $onboardingProgress->status === 'completed')
+                    <div class="mt-4 p-3 bg-green-50 rounded-lg">
+                        <p class="text-sm text-green-700">
+                            ✅ AI-аналіз та індексація завершені
+                        </p>
+                    </div>
+                @endif
             </div>
         @endif
-    </div>
+    @else
+        {{-- No products yet - show onboarding progress component --}}
+        <livewire:onboarding-progress :compact="false" />
+    @endif
 
     @if($tenant->platform === 'manual')
         <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -74,78 +67,33 @@
             </svg>
             Назад
         </a>
-        <x-primary-button id="continue-btn" :disabled="$productsCount === 0 && $tenant->platform !== 'manual'">
-            Продовжити
-            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-            </svg>
+        @php
+            $canContinue = $productsCount > 0 || $tenant->platform === 'manual';
+            $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+            $onboardingInProgress = $onboardingProgress && $onboardingProgress->status === 'in_progress';
+        @endphp
+        <x-primary-button id="continue-btn" :disabled="!$canContinue || $onboardingInProgress">
+            @if($onboardingInProgress)
+                <svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Зачекайте...
+            @else
+                Продовжити
+                <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            @endif
         </x-primary-button>
     </div>
 </form>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const startBtn = document.getElementById('start-sync-btn');
-    const readyDiv = document.getElementById('sync-ready');
-    const progressDiv = document.getElementById('sync-progress');
-    const productsSpan = document.getElementById('products-count');
-    const continueBtn = document.getElementById('continue-btn');
-    const syncStatus = document.getElementById('sync-status');
-
-    if (startBtn) {
-        startBtn.addEventListener('click', function() {
-            // Show progress
-            readyDiv.classList.add('hidden');
-            progressDiv.classList.remove('hidden');
-            
-            // Start sync (now synchronous - will wait for completion)
-            fetch('{{ route("onboarding.step3.start") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                }
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.status === 'completed') {
-                    // Sync completed successfully - reload to show results
-                    window.location.reload();
-                } else if (data.status === 'error') {
-                    // Show error
-                    progressDiv.innerHTML = `
-                        <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                            <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                        </div>
-                        <h4 class="font-semibold text-lg text-red-700">Помилка синхронізації</h4>
-                        <p class="text-sm text-red-600 mt-2">${data.message}</p>
-                        <button type="button" onclick="window.location.reload()" class="mt-4 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                            Спробувати знову
-                        </button>
-                    `;
-                } else if (data.status === 'skip') {
-                    // Manual mode - just proceed
-                    window.location.reload();
-                }
-            })
-            .catch(err => {
-                // Network error
-                progressDiv.innerHTML = `
-                    <div class="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                        <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
-                        </svg>
-                    </div>
-                    <h4 class="font-semibold text-lg text-red-700">Помилка мережі</h4>
-                    <p class="text-sm text-gray-600 mt-2">Перевірте з'єднання та спробуйте знову</p>
-                    <button type="button" onclick="window.location.reload()" class="mt-4 px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                        Спробувати знову
-                    </button>
-                `;
-            });
-        });
-    }
-});
-</script>
+@if($onboardingInProgress ?? false)
+    {{-- Auto-refresh page while onboarding in progress --}}
+    <script>
+        setTimeout(function() {
+            window.location.reload();
+        }, 5000);
+    </script>
+@endif

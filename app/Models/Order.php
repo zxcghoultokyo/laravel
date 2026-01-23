@@ -2,13 +2,16 @@
 
 namespace App\Models;
 
+use App\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class Order extends Model
 {
     protected $fillable = [
+        'tenant_id',
         'order_id',
         'session_id',
         'status_code',
@@ -41,6 +44,7 @@ class Order extends Model
     ];
 
     protected $casts = [
+        'tenant_id'             => 'integer',
         'order_id'              => 'integer',
         'status_code'           => 'integer',
         'total_default'         => 'decimal:2',
@@ -59,6 +63,22 @@ class Order extends Model
         'analytics'             => 'array',
         'ordered_at'            => 'datetime',
     ];
+
+    /**
+     * Apply tenant scope for multi-tenancy
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new TenantScope);
+    }
+
+    /**
+     * Tenant relationship
+     */
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
+    }
 
     /**
      * Status labels mapping

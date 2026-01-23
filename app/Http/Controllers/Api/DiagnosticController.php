@@ -5163,4 +5163,58 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * POST /api/diagnostic/onboard-tenant
+     * Run full onboarding for a tenant (sync, categories, AI, Meili)
+     */
+    public function onboardTenant(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+        
+        if (!$tenantId) {
+            return response()->json([
+                'success' => false,
+                'error' => 'tenant_id is required',
+            ], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        
+        if (!$tenant) {
+            return response()->json([
+                'success' => false,
+                'error' => "Tenant {$tenantId} not found",
+            ], 404);
+        }
+
+        $sync = $request->boolean('sync', false); // Run synchronously?
+        
+        if ($sync) {
+            // Run synchronously (blocking)
+            \App\Jobs\OnboardTenantJob::dispatchSync($tenantId);
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Onboarding completed for tenant {$tenantId}",
+                'tenant_name' => $tenant->name,
+                'sync' => true,
+            ]);
+        } else {
+            // Dispatch to queue (async)
+            \App\Jobs\OnboardTenantJob::dispatch($tenantId)->onQueue('default');
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Onboarding job dispatched for tenant {$tenantId}",
+                'tenant_name' => $tenant->name,
+                'sync' => false,
+                'hint' => 'Check queue worker logs for progress',
+            ]);
+        }
+    }
 }

@@ -82,6 +82,12 @@ class RegisteredUserController extends Controller
                 'role' => User::ROLE_OWNER,
             ]);
 
+            // Dispatch onboarding job (async - sync products, categories, AI, Meili)
+            // This will run after user completes onboarding wizard and configures Horoshop
+            \App\Jobs\OnboardTenantJob::dispatch($tenant->id)
+                ->onQueue('default')
+                ->delay(now()->addMinutes(5)); // Delay to allow user to configure Horoshop first
+
             return $user;
         });
 

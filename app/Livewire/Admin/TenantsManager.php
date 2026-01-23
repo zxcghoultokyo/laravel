@@ -361,8 +361,11 @@ class TenantsManager extends Component
             'ends_at' => now()->addDays(14),
         ]);
 
+        // Dispatch onboarding job (sync products, categories, AI, Meili)
+        \App\Jobs\OnboardTenantJob::dispatch($tenant->id)->onQueue('default');
+
         $this->showCreateModal = false;
-        session()->flash('success', "Тенант {$tenant->name} створено!");
+        session()->flash('success', "Тенант {$tenant->name} створено! Онбординг запущено в фоні.");
     }
 
     private function getEmptyForm(): array

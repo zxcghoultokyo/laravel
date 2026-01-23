@@ -129,6 +129,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/run-sync', [\App\Http\Controllers\Api\DiagnosticController::class, 'runSyncJob']);
     Route::post('/clear-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'clearQueue']);
     Route::post('/rebuild-categories', [\App\Http\Controllers\Api\DiagnosticController::class, 'rebuildCategories']);
+    Route::post('/onboard-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'onboardTenant']);
     Route::get('/tenant/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantInfo']);
     Route::get('/test-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueue']);
     Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);

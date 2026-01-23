@@ -156,6 +156,9 @@ class WidgetController extends Controller
             'store_address' => $settings->faq_contacts_text,
             'store_hours' => $settings->store_hours,
             'store_about' => $settings->faq_about_text,
+            // FAQ texts (for "Про магазин" button)
+            'faq_contacts_text' => $settings->faq_contacts_text,
+            'faq_about_text' => $settings->faq_about_text,
         ] : [
             'tenant_id' => 1, // Default tenant
             'merchant_id' => 'default',

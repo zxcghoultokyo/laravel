@@ -1134,73 +1134,103 @@
             let info = '';
             
             // Store name - use from settings or generic fallback
-            const storeName = s.store_name || 'Магазин';
+            const storeName = s.store_name || s.bot_name || 'Магазин';
             info += `🏪 **${storeName}**\n\n`;
             
-            // Parse address from faq_contacts_text if store_address contains full FAQ
+            // Use faq_contacts_text as primary source (AI-generated, structured)
+            const contactsText = s.faq_contacts_text || '';
+            const aboutText = s.faq_about_text || '';
+            
+            // Extract structured data from FAQ contacts
             let address = '';
             let phone = s.store_phone || '';
-            let hours = s.store_hours || '';
+            let hours = '';
             let email = '';
             let instagram = '';
             let telegram = '';
             
-            // If store_address contains FAQ text, parse it
-            if (s.store_address && s.store_address.length > 50) {
-                const text = s.store_address;
-                
-                // Extract address (м. Київ, ...)
-                const addressMatch = text.match(/м\.\s*Київ[^\\n]+/i) || text.match(/Адреса[:\s]+([^\n]+)/i);
+            if (contactsText) {
+                // Extract address (м. Київ, вул. XXX or Адреса: XXX)
+                const addressMatch = contactsText.match(/(?:Адреса[:\s]*)?м\.\s*[А-Яа-яІіЇїЄєҐґ']+,\s*вул\.\s*[^\n]+/i);
                 if (addressMatch) {
-                    address = addressMatch[0].replace(/^Адреса[:\s]+/i, '').trim();
+                    address = addressMatch[0].replace(/^Адреса[:\s]*/i, '').trim();
                 }
                 
-                // Extract hours
-                const hoursMatch = text.match(/Пн-Пт[:\s]+[\d:–\s]+/i) || text.match(/Графік[^:]*:[^\n]+/i);
-                if (hoursMatch) {
-                    hours = hoursMatch[0].replace(/^Графік[^:]*:/i, '').trim();
+                // Extract phone if not in settings
+                if (!phone) {
+                    const phoneMatch = contactsText.match(/(?:Телефон[:\s]*)?(\+38[\s\-]?0[\s\-]?\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})/i);
+                    if (phoneMatch) phone = phoneMatch[1];
                 }
+                
+                // Extract hours (Пн-Пт: 10:00 – 19:00 or similar)
+                const hoursMatch = contactsText.match(/(?:Графік[^:]*:|Режим[^:]*:)?\s*(Пн[^,\n]+(?:,\s*Сб[^,\n]+)?)/i) 
+                    || contactsText.match(/((?:Пн-Пт|Пн–Пт)[:\s]+[\d:–\-\s]+)/i);
+                if (hoursMatch) hours = hoursMatch[1].trim();
                 
                 // Extract email
-                const emailMatch = text.match(/E-mail[:\s]+([^\n\s]+)/i);
+                const emailMatch = contactsText.match(/(?:E-mail[:\s]*|Email[:\s]*)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
                 if (emailMatch) email = emailMatch[1];
                 
-                // Extract Instagram
-                const igMatch = text.match(/@contractor_kyiv|Instagram[:\s]+@?([^\n\s]+)/i);
-                if (igMatch) instagram = igMatch[1] || igMatch[0];
+                // Extract Instagram (@username or instagram.com/username or "Instagram: username")
+                const igMatch = contactsText.match(/Instagram[:\s]*@?([a-zA-Z0-9_\.]+)/i) 
+                    || contactsText.match(/instagram\.com\/([a-zA-Z0-9_\.]+)/i);
+                if (igMatch) instagram = igMatch[1];
                 
-            } else if (s.store_address) {
-                address = s.store_address;
+                // Extract Telegram (t.me/username or "Telegram: @username")
+                const tgMatch = contactsText.match(/Telegram[:\s]*@?([a-zA-Z0-9_]+)/i) 
+                    || contactsText.match(/t\.me\/([a-zA-Z0-9_]+)/i);
+                if (tgMatch) telegram = tgMatch[1];
             }
             
-            // Build clean info
+            // Fallback: parse from store_address if no FAQ contacts
+            if (!address && s.store_address) {
+                const oldMatch = s.store_address.match(/м\.\s*[А-Яа-яІіЇїЄєҐґ']+[^\\n]+/i);
+                if (oldMatch) address = oldMatch[0];
+                else if (s.store_address.length < 100) address = s.store_address;
+            }
+            
+            // Build formatted info with clickable links
             if (address) {
-                info += `📍 ${address}\n`;
+                // Make address clickable → Google Maps
+                const encodedAddr = encodeURIComponent(address);
+                info += `📍 [${address}](https://www.google.com/maps/search/?api=1&query=${encodedAddr})\n`;
             }
             if (phone) {
-                info += `📞 ${phone}\n`;
+                // Make phone clickable → tel:
+                const cleanPhone = phone.replace(/[\s\-]/g, '');
+                info += `📞 [${phone}](tel:${cleanPhone})\n`;
             }
             if (hours) {
                 info += `🕐 ${hours}\n`;
             }
             if (email) {
-                info += `✉️ ${email}\n`;
+                info += `✉️ [${email}](mailto:${email})\n`;
             }
             if (instagram) {
-                info += `📸 Instagram: ${instagram}\n`;
+                info += `📸 Instagram: [@${instagram}](https://instagram.com/${instagram})\n`;
+            }
+            if (telegram) {
+                info += `💬 Telegram: [@${telegram}](https://t.me/${telegram})\n`;
             }
             
-            // Callback button hint
-            info += `\n💬 [Замовити дзвінок](#callback)\n`;
+            // Callback button hint (if no telegram/instagram)
+            if (!telegram && !instagram) {
+                info += `\n💬 [Замовити дзвінок](#callback)\n`;
+            }
             
-            // Short description from store_about (first sentence only)
-            if (s.store_about) {
-                const firstSentence = s.store_about
+            // Short description from faq_about_text or store_about
+            const about = aboutText || s.store_about || '';
+            if (about) {
+                // Get first meaningful sentence (skip headers)
+                const sentences = about
+                    .replace(/^[=\s]+[^=\n]+[=\s]+\n*/gm, '') // Remove === headers ===
+                    .replace(/^###?\s+[^\n]+\n*/gm, '') // Remove ### headers
                     .replace(/\n+/g, ' ')
                     .replace(/\s+/g, ' ')
                     .trim()
-                    .split(/[.!?]\s/)[0];
-                if (firstSentence && firstSentence.length < 150) {
+                    .split(/[.!?]\s/);
+                const firstSentence = sentences.find(s => s.length > 20 && s.length < 150);
+                if (firstSentence) {
                     info += `\n_${firstSentence}._\n`;
                 }
             }

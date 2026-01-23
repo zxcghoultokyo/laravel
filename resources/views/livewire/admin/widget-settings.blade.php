@@ -83,6 +83,16 @@
     </div>
     @endif
 
+    @if (session()->has('error'))
+    <div x-data="{ show: true }" x-show="show" x-init="setTimeout(() => { show = false; $dispatch('notify', 'Помилка: {{ session('error') }}') }, 100)"
+         class="mb-4 p-4 bg-red-50 border border-red-200 text-red-800 rounded-lg flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+        {{ session('error') }}
+    </div>
+    @endif
+
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <!-- Settings Form -->
         <div class="space-y-6">
@@ -349,46 +359,65 @@
                 <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6 border-2 border-indigo-100">
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                         <h3 class="text-lg font-semibold text-gray-900">❓ FAQ</h3>
-                        <button type="button" wire:click="fetchFaqNow" 
-                                class="px-3 py-1.5 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 disabled:opacity-50 w-fit" 
-                                @if(!$can_fetch_now) disabled @endif>
-                            🔄 Оновити FAQ
-                        </button>
+                        <div class="flex gap-2">
+                            <button type="button" wire:click="regenerateFaqWithAi" 
+                                    wire:loading.attr="disabled"
+                                    wire:target="regenerateFaqWithAi"
+                                    class="px-3 py-1.5 text-sm bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 disabled:opacity-50 w-fit flex items-center gap-1 shadow-sm">
+                                <span wire:loading.remove wire:target="regenerateFaqWithAi">🤖 Перегенерувати з AI</span>
+                                <span wire:loading wire:target="regenerateFaqWithAi">
+                                    <svg class="animate-spin h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    Генерую...
+                                </span>
+                            </button>
+                        </div>
                     </div>
                     
                     @if($faq_last_ingest_at)
-                    <p class="text-xs text-gray-500 mb-4">Оновлено: {{ $faq_last_ingest_at }}</p>
+                    <p class="text-xs text-gray-500 mb-2">Останнє оновлення: {{ \Carbon\Carbon::parse($faq_last_ingest_at)->format('d.m.Y H:i') }}</p>
                     @endif
-
-                    <div class="flex items-center space-x-3 mb-4">
-                        <input type="checkbox" wire:model.live="enable_faq_custom_content" id="enable_faq_custom_content" class="rounded border-gray-300">
-                        <label for="enable_faq_custom_content" class="text-sm text-gray-700">Власний контент FAQ</label>
-                    </div>
+                    
+                    <p class="text-xs text-gray-500 mb-4">
+                        💡 Вкажіть URL сторінок вашого сайту. AI автоматично розпарсить контент і створить структурований FAQ для чат-бота.
+                    </p>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div class="p-3 bg-gray-50 rounded-lg space-y-2">
                             <label class="block text-sm font-medium text-gray-700">💳 Оплата і доставка</label>
-                            <input type="url" wire:model.live="faq_payment_delivery_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
-                            <textarea wire:model.live="faq_payment_delivery_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
+                            <input type="url" wire:model.live="faq_payment_delivery_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://yoursite.com/delivery">
+                            <textarea wire:model.live="faq_payment_delivery_text" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="4000" placeholder="AI згенерує текст автоматично..."></textarea>
                         </div>
 
                         <div class="p-3 bg-gray-50 rounded-lg space-y-2">
                             <label class="block text-sm font-medium text-gray-700">🔄 Обмін та повернення</label>
-                            <input type="url" wire:model.live="faq_returns_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
-                            <textarea wire:model.live="faq_returns_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
+                            <input type="url" wire:model.live="faq_returns_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://yoursite.com/returns">
+                            <textarea wire:model.live="faq_returns_text" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="4000" placeholder="AI згенерує текст автоматично..."></textarea>
                         </div>
 
                         <div class="p-3 bg-gray-50 rounded-lg space-y-2">
                             <label class="block text-sm font-medium text-gray-700">📍 Контакти</label>
-                            <input type="url" wire:model.live="faq_contacts_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
-                            <textarea wire:model.live="faq_contacts_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
+                            <input type="url" wire:model.live="faq_contacts_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://yoursite.com/contacts">
+                            <textarea wire:model.live="faq_contacts_text" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="4000" placeholder="AI згенерує текст автоматично..."></textarea>
                         </div>
 
                         <div class="p-3 bg-gray-50 rounded-lg space-y-2">
-                            <label class="block text-sm font-medium text-gray-700">ℹ️ Про нас</label>
-                            <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="URL">
-                            <textarea wire:model.live="faq_about_text" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="2000" placeholder="Текст"></textarea>
+                            <label class="block text-sm font-medium text-gray-700">ℹ️ Про магазин</label>
+                            <input type="url" wire:model.live="faq_about_url" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="https://yoursite.com/about">
+                            <textarea wire:model.live="faq_about_text" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" maxlength="4000" placeholder="AI згенерує текст автоматично..."></textarea>
                         </div>
+                    </div>
+                    
+                    <div class="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
+                        <strong>Як це працює:</strong>
+                        <ol class="list-decimal ml-4 mt-1 space-y-1">
+                            <li>Вкажіть URL сторінок вашого сайту (доставка, контакти, про нас тощо)</li>
+                            <li>Натисніть "Перегенерувати з AI"</li>
+                            <li>AI розпарсить сторінки і створить структурований текст для чат-бота</li>
+                            <li>Ви можете відредагувати згенерований текст вручну</li>
+                        </ol>
                     </div>
                 </div>
 

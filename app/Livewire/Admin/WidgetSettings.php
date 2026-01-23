@@ -127,10 +127,10 @@ class WidgetSettings extends Component
                 'faq_returns_url' => 'nullable|url|max:255',
                 'faq_contacts_url' => 'nullable|url|max:255',
                 'faq_about_url' => 'nullable|url|max:255',
-                'faq_payment_delivery_text' => 'nullable|string|max:2000',
-                'faq_returns_text' => 'nullable|string|max:2000',
-                'faq_contacts_text' => 'nullable|string|max:2000',
-                'faq_about_text' => 'nullable|string|max:2000',
+                'faq_payment_delivery_text' => 'nullable|string|max:5000',
+                'faq_returns_text' => 'nullable|string|max:5000',
+                'faq_contacts_text' => 'nullable|string|max:5000',
+                'faq_about_text' => 'nullable|string|max:5000',
             ]);
 
         // Get current tenant ID from auth context
@@ -293,6 +293,63 @@ class WidgetSettings extends Component
             $settings->update(['api_token' => bin2hex(random_bytes(32))]);
             $this->api_token = $settings->api_token;
             session()->flash('message', 'Токен оновлено!');
+        }
+    }
+
+    /**
+     * Regenerate FAQ using AI - parses URLs and generates structured content.
+     */
+    public function regenerateFaqWithAi()
+    {
+        $settings = WidgetSettingsModel::first();
+        if (!$settings) {
+            session()->flash('error', 'Спершу збережіть налаштування.');
+            return;
+        }
+
+        // Check if at least one URL is configured
+        $hasUrls = !empty($settings->faq_payment_delivery_url) ||
+                   !empty($settings->faq_returns_url) ||
+                   !empty($settings->faq_contacts_url) ||
+                   !empty($settings->faq_about_url);
+
+        if (!$hasUrls) {
+            session()->flash('error', 'Вкажіть хоча б один URL для парсингу.');
+            return;
+        }
+
+        try {
+            $service = app(\App\Services\Support\FaqGeneratorService::class);
+            $result = $service->generate($settings);
+
+            if ($result['success']) {
+                // Reload texts into component
+                $settings->refresh();
+                $this->faq_payment_delivery_text = $settings->faq_payment_delivery_text;
+                $this->faq_returns_text = $settings->faq_returns_text;
+                $this->faq_contacts_text = $settings->faq_contacts_text;
+                $this->faq_about_text = $settings->faq_about_text;
+
+                // Update cache timestamps
+                $key = $this->getIngestCacheKey();
+                $nowIso = now()->toISOString();
+                \Illuminate\Support\Facades\Cache::put($key, $nowIso, 60 * 60 * 24 * 365);
+                $this->faq_last_ingest_at = $nowIso;
+                $this->can_fetch_now = false;
+                $this->next_fetch_time = now()->addDay()->format('Y-m-d H:i');
+
+                $sectionsCount = count($result['updated_fields'] ?? []);
+                session()->flash('message', "✅ FAQ згенеровано AI! Оновлено {$sectionsCount} секцій.");
+            } else {
+                $errors = implode('; ', $result['errors'] ?? ['Невідома помилка']);
+                session()->flash('error', "⚠️ Помилка генерації: {$errors}");
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('FAQ AI generation failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            session()->flash('error', "❌ Помилка: {$e->getMessage()}");
         }
     }
 

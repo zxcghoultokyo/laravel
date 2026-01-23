@@ -386,7 +386,7 @@ class DiagnosticController extends Controller
 
             $searchParams = [
                 'limit' => $limit,
-                'attributesToRetrieve' => ['id', 'article', 'title', 'price', 'category_path', 'color', 'color_norm', 'size', 'brand', 'in_stock', 'ai_product_type'],
+                'attributesToRetrieve' => ['id', 'article', 'title', 'price', 'category_path', 'color', 'color_norm', 'size', 'brand', 'in_stock', 'ai_product_type', 'tenant_id'],
             ];
 
             if ($filter) {

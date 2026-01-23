@@ -2162,6 +2162,29 @@ class DiagnosticController extends Controller
                 'store_name' => $settings->store_name,
                 'domain' => $settings->domain,
                 'enabled' => $settings->enabled,
+                // FAQ texts for debugging
+                'faq_texts' => [
+                    'faq_payment_delivery' => [
+                        'url' => $settings->faq_payment_delivery_url,
+                        'text_length' => strlen($settings->faq_payment_delivery_text ?? ''),
+                        'text_preview' => mb_substr($settings->faq_payment_delivery_text ?? '', 0, 200),
+                    ],
+                    'faq_returns' => [
+                        'url' => $settings->faq_returns_url,
+                        'text_length' => strlen($settings->faq_returns_text ?? ''),
+                        'text_preview' => mb_substr($settings->faq_returns_text ?? '', 0, 200),
+                    ],
+                    'faq_contacts' => [
+                        'url' => $settings->faq_contacts_url,
+                        'text_length' => strlen($settings->faq_contacts_text ?? ''),
+                        'text_preview' => mb_substr($settings->faq_contacts_text ?? '', 0, 200),
+                    ],
+                    'faq_about' => [
+                        'url' => $settings->faq_about_url,
+                        'text_length' => strlen($settings->faq_about_text ?? ''),
+                        'text_preview' => mb_substr($settings->faq_about_text ?? '', 0, 200),
+                    ],
+                ],
             ];
         });
 

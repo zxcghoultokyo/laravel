@@ -321,6 +321,17 @@ class DiagnosticController extends Controller
             ]);
         }
 
+        // Extract size-related fields from raw for debugging
+        $sizeDebug = [
+            'Rozmir' => $product->raw['Rozmir'] ?? null,
+            'mod_title' => $product->raw['mod_title'] ?? null,
+            'select_size' => $product->raw['select']['size'] ?? null,
+            'select_rozmir' => $product->raw['select']['rozmir'] ?? null,
+            'characteristics_size' => $product->raw['characteristics']['size'] ?? null,
+            'characteristics_rozmir' => $product->raw['characteristics']['rozmir'] ?? null,
+            'params_size' => $product->raw['params']['size'] ?? null,
+        ];
+        
         return response()->json([
             'found' => true,
             'article' => $article,
@@ -335,6 +346,8 @@ class DiagnosticController extends Controller
                 'display_in_showcase' => $product->display_in_showcase,
                 'category_path' => $product->category_path,
                 'brand' => $product->brand,
+                'color' => $product->color,
+                'size' => $product->size,
                 'tenant_id' => $product->tenant_id,
                 'images' => $product->images,
                 'raw_pictures' => $product->raw['pictures'] ?? null,
@@ -343,7 +356,9 @@ class DiagnosticController extends Controller
                 'raw_presence' => $product->raw['presence'] ?? null,
                 'raw_quantity' => $product->raw['quantity'] ?? null,
                 'raw_display_in_showcase' => $product->raw['display_in_showcase'] ?? null,
+                'raw' => $request->query('full_raw') ? $product->raw : null,
             ],
+            'size_debug' => $sizeDebug,
         ]);
     }
 

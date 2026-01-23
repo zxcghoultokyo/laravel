@@ -111,10 +111,7 @@ abstract class BaseAgent
                 ]);
                 
                 // Execute search directly
-                $products = $this->searchTool->search([
-                    'query' => $searchQuery,
-                    'limit' => 3,
-                ]);
+                $products = $this->searchTool->search($searchQuery, [], 3);
                 
                 if (!empty($products)) {
                     // Determine language for response

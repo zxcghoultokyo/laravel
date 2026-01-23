@@ -1123,8 +1123,9 @@ class DiagnosticController extends Controller
             ];
         }
 
-        // Sample AI index records
-        $samples = DB::table('product_ai_index')
+        // Sample AI index records - optionally filter by tenant_id
+        $tenantIdFilter = $request->input('tenant_id');
+        $samplesQuery = DB::table('product_ai_index')
             ->join('products', 'product_ai_index.product_id', '=', 'products.id')
             ->select(
                 'product_ai_index.product_id',
@@ -1135,12 +1136,28 @@ class DiagnosticController extends Controller
                 'product_ai_index.keywords',
                 'product_ai_index.slang',
                 'product_ai_index.created_at'
-            )
-            ->limit(5)
-            ->get();
+            );
+        
+        if ($tenantIdFilter) {
+            $samplesQuery->where('products.tenant_id', (int) $tenantIdFilter);
+        }
+        
+        $samples = $samplesQuery->limit(10)->get();
+        
+        // Count products without AI index per tenant
+        $missingAiByTenant = DB::table('products')
+            ->leftJoin('product_ai_index', 'products.id', '=', 'product_ai_index.product_id')
+            ->whereNull('product_ai_index.product_id')
+            ->where('products.in_stock', true)
+            ->whereNull('products.deleted_at')
+            ->select('products.tenant_id', DB::raw('COUNT(*) as missing'))
+            ->groupBy('products.tenant_id')
+            ->get()
+            ->keyBy('tenant_id');
 
         return response()->json([
             'by_tenant' => $stats,
+            'missing_ai_by_tenant' => $missingAiByTenant,
             'total_ai_records' => DB::table('product_ai_index')->count(),
             'samples' => $samples,
         ]);

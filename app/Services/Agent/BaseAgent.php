@@ -66,6 +66,88 @@ abstract class BaseAgent
     }
 
     // ============================================================
+    // IMPLICIT QUERY HANDLER
+    // ============================================================
+
+    /**
+     * Detect implicit queries and search directly without GPT.
+     * Returns array if handled, null if should continue to GPT.
+     */
+    protected function handleImplicitQuery(string $message, ?string $sessionId): ?array
+    {
+        $lower = mb_strtolower(trim($message));
+        
+        // Patterns that imply product need without naming the product
+        $implicitPatterns = [
+            // Calling/communication → smartphone
+            '/\b(call|дзвонити|зателефонувати|позвонить)\b.*\b(mother|mom|мама|мамі|батько|друг|someone)\b/ui' => 'smartphone OR телефон OR phone',
+            '/\b(make|робити)\s+(calls?|дзвінки)\b/ui' => 'smartphone OR телефон OR phone',
+            '/\bneed\s+to\s+call\b/ui' => 'smartphone OR телефон OR phone',
+            '/\bsomething\s+to\s+call\b/ui' => 'smartphone OR телефон OR phone',
+            
+            // Writing → pen
+            '/\bsomething\s+to\s+write\b/ui' => 'pen OR ручка OR marker',
+            '/\bписати\s+чимось\b/ui' => 'ручка OR pen',
+            
+            // Cutting → knife
+            '/\bsomething\s+to\s+cut\b/ui' => 'knife OR ніж OR scissors',
+            '/\bрізати\s+чимось\b/ui' => 'ніж OR knife',
+            
+            // Head protection → helmet  
+            '/\bhead\s+protection\b/ui' => 'helmet OR шолом OR каска',
+            '/\bзахист\s+голови\b/ui' => 'шолом OR helmet',
+            
+            // Stay warm → jacket
+            '/\bstay\s+warm\b/ui' => 'jacket OR куртка OR термобілизна',
+            '/\bзігрітися\b/ui' => 'куртка OR jacket',
+        ];
+        
+        foreach ($implicitPatterns as $pattern => $searchQuery) {
+            if (preg_match($pattern, $lower)) {
+                Log::info('BaseAgent: detected implicit query', [
+                    'message' => $message,
+                    'pattern' => $pattern,
+                    'search_query' => $searchQuery,
+                ]);
+                
+                // Execute search directly
+                $products = $this->searchTool->search([
+                    'query' => $searchQuery,
+                    'limit' => 3,
+                ]);
+                
+                if (!empty($products)) {
+                    // Determine language for response
+                    $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
+                    $intro = $isEnglish 
+                        ? "Here's what I found for you:"
+                        : "Ось що я знайшов для вас:";
+                    
+                    return [
+                        'message' => $intro,
+                        'products' => $products,
+                        'messages' => [
+                            ['type' => 'text', 'content' => $intro],
+                            ['type' => 'products', 'products' => $products],
+                        ],
+                        'meta' => [
+                            'intent' => 'product_search',
+                            'agent' => 'function_calling',
+                            'source' => 'implicit_query_handler',
+                            'implicit_pattern' => $pattern,
+                        ],
+                    ];
+                }
+                
+                // No products found - let GPT handle
+                break;
+            }
+        }
+        
+        return null;
+    }
+
+    // ============================================================
     // SYSTEM PROMPT
     // ============================================================
 

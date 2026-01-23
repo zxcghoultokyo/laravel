@@ -48,6 +48,32 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Log user message to DB
         $this->logUserMessage($sessionId, $message);
 
+        // PRE-PROCESS: Handle implicit queries directly
+        $implicitResult = $this->handleImplicitQuery($message, $sessionId);
+        if ($implicitResult) {
+            Log::info('StreamingAgent: implicit query handled directly', [
+                'message' => $message,
+                'products_found' => count($implicitResult['products'] ?? []),
+            ]);
+            
+            // Stream the intro text
+            if (!empty($implicitResult['message'])) {
+                yield ['type' => 'text', 'data' => ['text' => $implicitResult['message']]];
+            }
+            
+            // Stream products
+            if (!empty($implicitResult['products'])) {
+                yield ['type' => 'products', 'data' => ['products' => $implicitResult['products']]];
+                
+                // Log assistant response
+                $this->logAssistantResponse($sessionId, $implicitResult['message'], $implicitResult['products']);
+            }
+            
+            // End stream
+            yield ['type' => 'done', 'data' => []];
+            return;
+        }
+
         // Track response data for logging
         $responseText = '';
         $responseProducts = [];

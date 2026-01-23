@@ -38,6 +38,12 @@ class FunctionCallingAgent extends BaseAgent
 
         Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId, 'tenant_id' => $tenantId]);
 
+        // PRE-PROCESS: Detect implicit queries and search directly
+        $implicitSearchResult = $this->handleImplicitQuery($message, $sessionId);
+        if ($implicitSearchResult) {
+            return $implicitSearchResult;
+        }
+
         // Load shown product IDs to exclude from subsequent searches
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
 

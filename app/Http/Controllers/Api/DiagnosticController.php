@@ -964,6 +964,25 @@ class DiagnosticController extends Controller
                 $json = json_decode($cleanContent, true);
             }
             
+            // Save if requested and JSON parsed successfully
+            $saved = false;
+            if ($request->boolean('save') && $json !== null) {
+                \App\Models\ProductAiIndex::updateOrCreate(
+                    ['product_id' => $product->id],
+                    [
+                        'product_type' => $json['product_type'] ?? null,
+                        'ai_category' => $json['ai_category'] ?? null,
+                        'materials' => $json['materials'] ?? [],
+                        'standards' => $json['standards'] ?? [],
+                        'slang' => $json['slang'] ?? [],
+                        'keywords' => $json['keywords'] ?? [],
+                        'usage' => $json['usage'] ?? [],
+                        'raw_ai_json' => $json,
+                    ]
+                );
+                $saved = true;
+            }
+            
             return response()->json([
                 'product' => [
                     'id' => $product->id,
@@ -971,6 +990,7 @@ class DiagnosticController extends Controller
                     'category' => $category,
                     'tenant_id' => $product->tenant_id,
                 ],
+                'saved' => $saved,
                 'api_config' => [
                     'model' => $model,
                     'base_url' => $baseUrl,
@@ -1053,6 +1073,189 @@ class DiagnosticController extends Controller
 7. \"usage\": масив призначення
 
 ВАЖЛИВО: Відповідай ТІЛЬКИ валідним JSON без markdown.";
+    }
+
+    /**
+     * POST /api/diagnostic/ai-enrich-batch-sync
+     * Synchronously process a batch of products without AI index
+     * 
+     * Query params:
+     * - tenant_id: required - process only this tenant's products
+     * - batch_size: 1-20, default 5 - how many products to process
+     * - offset: skip N products (for manual pagination)
+     */
+    public function aiEnrichBatchSync(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id');
+        if (!$tenantId) {
+            return response()->json(['error' => 'tenant_id is required'], 400);
+        }
+
+        $batchSize = min(20, max(1, (int) $request->input('batch_size', 5)));
+        $offset = max(0, (int) $request->input('offset', 0));
+
+        // Get products without AI index for this tenant
+        $products = \App\Models\Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNotIn('id', function($query) {
+                $query->select('product_id')->from('product_ai_index');
+            })
+            ->orderBy('id')
+            ->offset($offset)
+            ->limit($batchSize)
+            ->get();
+
+        if ($products->isEmpty()) {
+            // Check if there are any products left
+            $remainingCount = \App\Models\Product::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereNotIn('id', function($query) {
+                    $query->select('product_id')->from('product_ai_index');
+                })
+                ->count();
+
+            return response()->json([
+                'status' => 'complete',
+                'message' => 'No more products to process',
+                'remaining' => $remainingCount,
+                'processed' => [],
+            ]);
+        }
+
+        // API config
+        $apiKey = config('services.openai.api_key');
+        $baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
+        $model = config('services.openai.model', 'gpt-4.1-mini');
+
+        if (empty($apiKey)) {
+            return response()->json(['error' => 'OpenAI API key not configured'], 500);
+        }
+
+        $results = [];
+        $successCount = 0;
+        $errorCount = 0;
+
+        foreach ($products as $product) {
+            $raw = $product->raw ?? [];
+            $title = is_array($raw['title'] ?? null)
+                ? ($raw['title']['uk'] ?? $raw['title']['ua'] ?? $product->title)
+                : ($raw['title'] ?? $product->title);
+            $category = $product->category_path ?? '';
+            $description = $this->extractDescriptionForTest($raw);
+            $characteristics = $this->extractCharacteristicsForTest($raw);
+
+            $prompt = $this->buildPromptForTest($title, $description, $category, $characteristics);
+
+            $requestBody = [
+                'model' => $model,
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'temperature' => 0.3,
+                'max_tokens' => 1000,
+            ];
+
+            try {
+                $response = \Illuminate\Support\Facades\Http::timeout(45)
+                    ->withToken($apiKey)
+                    ->post($baseUrl . '/chat/completions', $requestBody);
+
+                if (!$response->successful()) {
+                    $results[] = [
+                        'product_id' => $product->id,
+                        'title' => $title,
+                        'status' => 'error',
+                        'error' => 'API error: ' . $response->status(),
+                    ];
+                    $errorCount++;
+                    continue;
+                }
+
+                $data = $response->json();
+                $content = $data['choices'][0]['message']['content'] ?? null;
+
+                // Parse JSON
+                $json = null;
+                if ($content) {
+                    $cleanContent = preg_replace('/```json\s*/i', '', $content);
+                    $cleanContent = preg_replace('/```\s*$/i', '', $cleanContent);
+                    $cleanContent = trim($cleanContent);
+                    $json = json_decode($cleanContent, true);
+                }
+
+                if ($json === null) {
+                    $results[] = [
+                        'product_id' => $product->id,
+                        'title' => $title,
+                        'status' => 'error',
+                        'error' => 'Failed to parse JSON: ' . json_last_error_msg(),
+                        'raw_content' => mb_substr($content ?? '', 0, 200),
+                    ];
+                    $errorCount++;
+                    continue;
+                }
+
+                // Save to database
+                \App\Models\ProductAiIndex::updateOrCreate(
+                    ['product_id' => $product->id],
+                    [
+                        'product_type' => $json['product_type'] ?? null,
+                        'ai_category' => $json['ai_category'] ?? null,
+                        'materials' => $json['materials'] ?? [],
+                        'standards' => $json['standards'] ?? [],
+                        'slang' => $json['slang'] ?? [],
+                        'keywords' => $json['keywords'] ?? [],
+                        'usage' => $json['usage'] ?? [],
+                        'raw_ai_json' => $json,
+                    ]
+                );
+
+                $results[] = [
+                    'product_id' => $product->id,
+                    'title' => $title,
+                    'status' => 'success',
+                    'product_type' => $json['product_type'] ?? null,
+                    'ai_category' => $json['ai_category'] ?? null,
+                ];
+                $successCount++;
+
+                // Small delay to avoid rate limiting
+                usleep(200000); // 200ms
+
+            } catch (\Throwable $e) {
+                $results[] = [
+                    'product_id' => $product->id,
+                    'title' => $title,
+                    'status' => 'error',
+                    'error' => $e->getMessage(),
+                ];
+                $errorCount++;
+            }
+        }
+
+        // Get remaining count
+        $remainingCount = \App\Models\Product::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNotIn('id', function($query) {
+                $query->select('product_id')->from('product_ai_index');
+            })
+            ->count();
+
+        return response()->json([
+            'status' => 'processed',
+            'tenant_id' => (int) $tenantId,
+            'batch_size' => $batchSize,
+            'offset' => $offset,
+            'success_count' => $successCount,
+            'error_count' => $errorCount,
+            'remaining' => $remainingCount,
+            'processed' => $results,
+            'next_offset' => $offset + $batchSize,
+        ]);
     }
 
     /**

@@ -89,6 +89,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/ai-enrich', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrich']);
     Route::get('/ai-enrich-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrichStats']);
     Route::get('/ai-test-one', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiTestOne']);
+    Route::post('/ai-enrich-batch-sync', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrichBatchSync']);
     Route::get('/sync-logs', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncLogs']);
     Route::post('/cleanup-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupMeili']);
     Route::delete('/cleanup-stale-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupStaleProducts']);

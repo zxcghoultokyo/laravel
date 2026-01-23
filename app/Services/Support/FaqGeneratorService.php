@@ -260,7 +260,7 @@ class FaqGeneratorService
      */
     public function isAiAvailable(): bool
     {
-        return !empty(config('services.openai.api_key'));
+        return !empty(config('services.openai.key'));
     }
 
     /**
@@ -268,7 +268,7 @@ class FaqGeneratorService
      */
     private function generateFaqWithAi(string $content, array $section): ?string
     {
-        $apiKey = config('services.openai.api_key');
+        $apiKey = config('services.openai.key');
         
         // If no API key, return cleaned raw content as fallback
         if (empty($apiKey)) {

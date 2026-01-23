@@ -88,7 +88,7 @@ class DiagnosticController extends Controller
         // AI Enrichment statistics (may not exist in all environments)
         try {
             $totalAiIndex = DB::table('product_ai_index')->count();
-            $withAiType = DB::table('product_ai_index')->whereNotNull('ai_product_type')->where('ai_product_type', '!=', '')->count();
+            $withAiType = DB::table('product_ai_index')->whereNotNull('product_type')->where('product_type', '!=', '')->count();
             $withAiCategory = DB::table('product_ai_index')->whereNotNull('ai_category')->where('ai_category', '!=', '')->count();
             $aiIndexByTenant = DB::table('product_ai_index')
                 ->join('products', 'product_ai_index.product_id', '=', 'products.id')

@@ -2052,6 +2052,46 @@
         // Regular links: [text](url)
         html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">$1</a>');
         
+        // === AUTO-LINKIFY CONTACT INFO ===
+        
+        // Phone numbers: +380 XX XXX XXXX or similar formats
+        // Match: +380, then digits with optional spaces/dashes
+        html = html.replace(/(\+38[\s\-]?0[\s\-]?\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})/g, function(match) {
+            const cleanPhone = match.replace(/[\s\-]/g, '');
+            return '<a href="tel:' + cleanPhone + '" style="color: inherit; text-decoration: underline;">' + match + '</a>';
+        });
+        
+        // Email addresses
+        html = html.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, 
+            '<a href="mailto:$1" style="color: inherit; text-decoration: underline;">$1</a>');
+        
+        // Instagram: "Instagram: username" or "@username" (when preceded by Instagram mention)
+        html = html.replace(/Instagram:\s*@?([a-zA-Z0-9_\.]+)/gi, 
+            'Instagram: <a href="https://instagram.com/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
+        html = html.replace(/📸\s*Instagram:\s*@?([a-zA-Z0-9_\.]+)/gi, 
+            '📸 Instagram: <a href="https://instagram.com/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
+        
+        // Telegram: "Telegram: username" or "t.me/username"
+        html = html.replace(/Telegram:\s*@?([a-zA-Z0-9_]+)/gi, 
+            'Telegram: <a href="https://t.me/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
+        html = html.replace(/💬\s*Telegram:\s*@?([a-zA-Z0-9_]+)/gi, 
+            '💬 Telegram: <a href="https://t.me/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
+        
+        // Address with city: "м. Київ, вул. XXX" -> Google Maps link
+        // Match Ukrainian address patterns
+        html = html.replace(/(м\.\s*[А-Яа-яІіЇїЄєҐґ']+,\s*вул\.\s*[А-Яа-яІіЇїЄєҐґ'\s]+\d*[а-яА-Я]?)/g, function(match) {
+            const encodedAddress = encodeURIComponent(match);
+            return '<a href="https://www.google.com/maps/search/?api=1&query=' + encodedAddress + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + match + '</a>';
+        });
+        
+        // Also match "Адреса: м. Київ..." pattern
+        html = html.replace(/Адреса:\s*(м\.\s*[^<\n]+)/gi, function(match, address) {
+            // Skip if already linkified
+            if (match.includes('href=')) return match;
+            const encodedAddress = encodeURIComponent(address.trim());
+            return 'Адреса: <a href="https://www.google.com/maps/search/?api=1&query=' + encodedAddress + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + address + '</a>';
+        });
+        
         // Newlines to <br> (preserve pre-wrap behavior for multiple newlines)
         html = html.replace(/\n/g, '<br>');
         

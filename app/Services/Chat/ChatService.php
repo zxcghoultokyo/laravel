@@ -1098,6 +1098,10 @@ class ChatService
 
             // Мета-дані з AgentOrchestrator мають пріоритет
             $products = $response['data']['products'] ?? $response['products'] ?? [];
+            
+            // Build detailed product info for follow-up questions
+            $productDetails = $this->buildProductDetailsForStorage($products);
+            
             $meta = [
                 'intent'            => $agentMeta['intent'] ?? $response['intent'] ?? 'unknown',
                 'ambiguous'         => $agentMeta['ambiguous'] ?? false,
@@ -1107,6 +1111,9 @@ class ChatService
                 'filters'           => $agentMeta['filters'] ?? [],
                 'search_debug'      => $agentMeta['search_debug'] ?? [],
                 'products_shown'    => count($products),
+                'product_ids'       => array_column($products, 'id'),
+                'product_articles'  => array_column($products, 'article'),
+                'product_details'   => $productDetails, // Full details for follow-up questions
                 // Зберігаємо скорочену інфу про продукти для відображення в адмінці
                 'products'          => array_map(fn($p) => [
                     'id' => $p['id'] ?? null,
@@ -1277,5 +1284,142 @@ class ChatService
             ]);
             return null;
         }
+    }
+    
+    /**
+     * Build detailed product info for storage in meta.
+     * Includes description, attributes, sizes - everything GPT might need for follow-up questions.
+     */
+    protected function buildProductDetailsForStorage(array $products): array
+    {
+        if (empty($products)) {
+            return [];
+        }
+
+        $productIds = array_filter(array_column($products, 'id'));
+        if (empty($productIds)) {
+            return [];
+        }
+        
+        try {
+            // Load full product data from DB - bypass TenantScope for diagnostic access
+            $dbProducts = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->whereIn('id', $productIds)
+                ->get()
+                ->keyBy('id');
+            
+            $details = [];
+            foreach ($products as $p) {
+                $id = $p['id'] ?? null;
+                if (!$id) continue;
+                
+                $dbProduct = $dbProducts->get($id);
+                if (!$dbProduct) continue;
+                
+                // Extract description and attributes from raw
+                $raw = $dbProduct->raw ?? [];
+                $parentRaw = [];
+                
+                // Try to get parent raw if this is a variant
+                if ($dbProduct->parent_article) {
+                    $parent = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                        ->where('article', $dbProduct->parent_article)
+                        ->first();
+                    $parentRaw = $parent?->raw ?? [];
+                }
+                
+                $description = \App\Support\ProductRawExtractor::description($raw, 'ua', $parentRaw);
+                $attributes = \App\Support\ProductRawExtractor::attributes($raw, 'ua', $parentRaw);
+                
+                // Extract available sizes/variants
+                $sizes = $this->extractSizesFromProduct($dbProduct);
+                
+                $details[$id] = [
+                    'title' => $p['title'] ?? $dbProduct->title,
+                    'article' => $p['article'] ?? $dbProduct->article,
+                    'price' => $p['price'] ?? $dbProduct->price,
+                    'brand' => $p['brand'] ?? $dbProduct->brand,
+                    'description' => mb_substr($description, 0, 500), // Limit to 500 chars
+                    'attributes' => array_slice($attributes, 0, 15), // Max 15 attributes
+                    'sizes' => $sizes,
+                    'category' => $dbProduct->category_path,
+                ];
+            }
+            
+            return $details;
+        } catch (\Throwable $e) {
+            Log::warning('ChatService: failed to build product details', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+    
+    /**
+     * Extract available sizes from product - checks DB column, raw data, and sibling products.
+     */
+    protected function extractSizesFromProduct(Product $product): array
+    {
+        $sizes = [];
+        $raw = $product->raw ?? [];
+        
+        // 1. First check the product's own size column
+        if (!empty($product->size)) {
+            $sizes[] = $product->size;
+        }
+        
+        // 2. Check variants array in raw
+        if (!empty($raw['variants']) && is_array($raw['variants'])) {
+            foreach ($raw['variants'] as $variant) {
+                $size = $variant['size'] ?? ($variant['select']['size'] ?? null);
+                if ($size && is_string($size)) {
+                    $sizes[] = $size;
+                }
+            }
+        }
+        
+        // 3. Check select.size in raw
+        if (!empty($raw['select']['size'])) {
+            $sizeData = $raw['select']['size'];
+            if (is_string($sizeData)) {
+                $sizes[] = $sizeData;
+            } elseif (is_array($sizeData)) {
+                foreach ($sizeData as $s) {
+                    if (is_string($s)) {
+                        $sizes[] = $s;
+                    } elseif (is_array($s) && isset($s['value'])) {
+                        $sizes[] = $s['value'];
+                    }
+                }
+            }
+        }
+        
+        // 4. Look for sibling products with same parent_article
+        if (!empty($product->parent_article)) {
+            $siblingsSizes = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('parent_article', $product->parent_article)
+                ->whereNotNull('size')
+                ->where('size', '!=', '')
+                ->limit(20)
+                ->pluck('size')
+                ->filter()
+                ->toArray();
+            $sizes = array_merge($sizes, $siblingsSizes);
+        }
+        
+        // 5. If no parent_article, look for products with SAME title (size variants often have identical titles)
+        if (empty($product->parent_article) && count(array_unique($sizes)) <= 1) {
+            $titleSiblings = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('title', $product->title)
+                ->where('id', '!=', $product->id)
+                ->where('tenant_id', $product->tenant_id)
+                ->whereNotNull('size')
+                ->where('size', '!=', '')
+                ->limit(20)
+                ->pluck('size')
+                ->filter()
+                ->toArray();
+            $sizes = array_merge($sizes, $titleSiblings);
+        }
+        
+        return array_values(array_unique(array_filter($sizes)));
     }
 }

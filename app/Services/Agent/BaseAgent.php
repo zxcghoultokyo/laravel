@@ -729,17 +729,17 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'recommend_size',
-                    'description' => 'Підібрати розмір за параметрами клієнта. ВАЖЛИВО: при вазі 90+ кг рекомендуй L/XL, при 100+ кг — XL/XXL. Зріст 185+ і вага 100+ = XL/L або XXL/L!',
+                    'description' => 'Підібрати розмір ECWCS за параметрами клієнта. ВАЖЛИВО: при вазі 90+ кг рекомендуй L/XL, при 100+ кг — XL/XXL. Зріст 185+ і вага 100+ = XL/L або XXL/L! Артикул НЕ обов\'язковий - можна підібрати загальний розмір ECWCS.',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
-                            'article' => ['type' => 'string', 'description' => 'Артикул товару'],
+                            'article' => ['type' => 'string', 'description' => 'Артикул товару (опціонально - для перевірки наявності розміру)'],
                             'height' => ['type' => 'integer', 'description' => 'Зріст в см'],
                             'weight' => ['type' => 'integer', 'description' => 'Вага в кг (ОБОВ\'ЯЗКОВО передавай якщо є!)'],
                             'chest' => ['type' => 'integer', 'description' => 'Обхват грудей в см'],
                             'waist' => ['type' => 'integer', 'description' => 'Обхват талії в см'],
                         ],
-                        'required' => ['article'],
+                        'required' => [],
                     ],
                 ],
             ],
@@ -1151,14 +1151,20 @@ PROMPT;
         $chest = $args['chest'] ?? null;
         $waist = $args['waist'] ?? null;
 
-        if (empty($article)) return ['error' => 'Article required'];
-
-        // Get available sizes first
-        $sizesResult = $this->toolGetAvailableSizes(['article' => $article]);
-        if (isset($sizesResult['error'])) return $sizesResult;
-
-        $availableSizes = $sizesResult['sizes'] ?? [];
-        if (empty($availableSizes)) return ['error' => 'No sizes available', 'recommendation' => 'Товар відсутній в наявності'];
+        // If article provided, get available sizes first
+        $availableSizes = [];
+        $productTitle = 'ECWCS одяг';
+        
+        if (!empty($article)) {
+            $sizesResult = $this->toolGetAvailableSizes(['article' => $article]);
+            if (isset($sizesResult['error'])) {
+                // Article not found, continue without it - just recommend ECWCS size
+                $availableSizes = [];
+            } else {
+                $availableSizes = $sizesResult['sizes'] ?? [];
+                $productTitle = $sizesResult['product'] ?? 'товар';
+            }
+        }
 
         // Estimate chest from weight if not provided (rough formula for tactical gear)
         // Average male: weight/height ratio affects chest size
@@ -1210,20 +1216,22 @@ PROMPT;
         $bestScore = PHP_INT_MAX;
         $warnings = [];
 
+        // If we have specific available sizes, filter by them. Otherwise check all ECWCS sizes.
+        $hasAvailableSizes = !empty($availableSizes);
+
         foreach ($ecwcsSizes as $size => $ranges) {
             $score = 0;
-            $sizeMatches = false;
 
-            // Check if this size is available
-            $sizePrefix = explode('/', $size)[0]; // Get XS, S, M, L, XL, XXL part
-            $availableSize = collect($availableSizes)->first(function($s) use ($sizePrefix, $size) {
-                $sizeStr = $s['size'] ?? '';
-                // Match exact size or prefix match
-                return stripos($sizeStr, $size) !== false || stripos($sizeStr, $sizePrefix) !== false;
-            });
-            if (!$availableSize) continue;
-
-            $sizeMatches = true;
+            // Check if this size is available (only filter if we have specific sizes)
+            if ($hasAvailableSizes) {
+                $sizePrefix = explode('/', $size)[0]; // Get XS, S, M, L, XL, XXL part
+                $availableSize = collect($availableSizes)->first(function($s) use ($sizePrefix, $size) {
+                    $sizeStr = $s['size'] ?? '';
+                    // Match exact size or prefix match
+                    return stripos($sizeStr, $size) !== false || stripos($sizeStr, $sizePrefix) !== false;
+                });
+                if (!$availableSize) continue;
+            }
 
             // Calculate score - lower is better
             // Chest/body size is MOST important (weight = 4)
@@ -1253,7 +1261,7 @@ PROMPT;
                 }
             }
 
-            if ($sizeMatches && $score < $bestScore) {
+            if ($score < $bestScore) {
                 $bestScore = $score;
                 $recommendation = $size;
             }
@@ -1278,7 +1286,7 @@ PROMPT;
         }
 
         return [
-            'product' => $sizesResult['product'],
+            'product' => $productTitle,
             'recommended_size' => $recommendation ?? 'L/R',
             'available_sizes' => $availableSizes,
             'warnings' => $warnings,

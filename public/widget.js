@@ -2079,13 +2079,18 @@
         // Special callback link: [text](#callback) -> opens site's callback modal
         html = html.replace(/\[([^\]]+)\]\(#callback\)/g, '<a href="#" onclick="window.aintentoOpenCallback(); return false;" style="color: inherit; text-decoration: underline; cursor: pointer;">$1</a>');
         
-        // Regular links: [text](url)
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">$1</a>');
+        // Regular links: [text](url) - but protect the result from auto-linkify
+        // Use a placeholder for links to avoid double processing
+        const linkPlaceholders = [];
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, linkText, url) {
+            const placeholder = `__LINK_PLACEHOLDER_${linkPlaceholders.length}__`;
+            linkPlaceholders.push('<a href="' + url + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + linkText + '</a>');
+            return placeholder;
+        });
         
-        // === AUTO-LINKIFY CONTACT INFO ===
+        // === AUTO-LINKIFY CONTACT INFO (only for text not already in links) ===
         
         // Phone numbers: +380 XX XXX XXXX or similar formats
-        // Match: +380, then digits with optional spaces/dashes
         html = html.replace(/(\+38[\s\-]?0[\s\-]?\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})/g, function(match) {
             const cleanPhone = match.replace(/[\s\-]/g, '');
             return '<a href="tel:' + cleanPhone + '" style="color: inherit; text-decoration: underline;">' + match + '</a>';
@@ -2124,6 +2129,11 @@
         
         // Newlines to <br> (preserve pre-wrap behavior for multiple newlines)
         html = html.replace(/\n/g, '<br>');
+        
+        // Restore link placeholders (protected from auto-linkify)
+        linkPlaceholders.forEach((link, i) => {
+            html = html.replace(`__LINK_PLACEHOLDER_${i}__`, link);
+        });
         
         return html;
     }

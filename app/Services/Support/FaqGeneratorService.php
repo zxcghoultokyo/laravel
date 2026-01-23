@@ -256,13 +256,24 @@ class FaqGeneratorService
     }
 
     /**
-     * Generate FAQ text using GPT.
+     * Check if AI generation is available (API key configured).
+     */
+    public function isAiAvailable(): bool
+    {
+        return !empty(config('services.openai.api_key'));
+    }
+
+    /**
+     * Generate FAQ text using GPT, or return cleaned raw text as fallback.
      */
     private function generateFaqWithAi(string $content, array $section): ?string
     {
         $apiKey = config('services.openai.api_key');
-        if (!$apiKey) {
-            throw new \RuntimeException('OpenAI API key not configured');
+        
+        // If no API key, return cleaned raw content as fallback
+        if (empty($apiKey)) {
+            Log::warning('FaqGeneratorService: OpenAI API key not configured, using raw parsed content');
+            return $this->formatRawContentAsFaq($content, $section);
         }
 
         $prompt = $this->buildFaqPrompt($content, $section);
@@ -336,5 +347,40 @@ PROMPT;
 
 Створи структурований FAQ-текст для чат-бота. Включи тільки фактичну інформацію яка є в тексті.
 PROMPT;
+    }
+
+    /**
+     * Format raw parsed content as FAQ (fallback when AI is not available).
+     */
+    private function formatRawContentAsFaq(string $content, array $section): string
+    {
+        $lines = explode("\n", $content);
+        $result = [];
+        $result[] = "=== {$section['name']} ===";
+        $result[] = "";
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+            
+            // Skip very short lines (likely menu items)
+            if (mb_strlen($line) < 10) {
+                continue;
+            }
+            
+            // Skip lines that look like navigation
+            if (preg_match('/^(головна|каталог|кошик|увійти|меню|вхід|реєстрація)$/ui', $line)) {
+                continue;
+            }
+            
+            $result[] = $line;
+        }
+        
+        // Limit output
+        $text = implode("\n", array_slice($result, 0, 50));
+        
+        return mb_substr($text, 0, self::MAX_FAQ_LENGTH);
     }
 }

@@ -320,6 +320,10 @@ class WidgetSettings extends Component
 
         try {
             $service = app(\App\Services\Support\FaqGeneratorService::class);
+            
+            // Check if AI is available
+            $aiAvailable = $service->isAiAvailable();
+            
             $result = $service->generate($settings);
 
             if ($result['success']) {
@@ -339,7 +343,12 @@ class WidgetSettings extends Component
                 $this->next_fetch_time = now()->addDay()->format('Y-m-d H:i');
 
                 $sectionsCount = count($result['updated_fields'] ?? []);
-                session()->flash('message', "✅ FAQ згенеровано AI! Оновлено {$sectionsCount} секцій.");
+                
+                if ($aiAvailable) {
+                    session()->flash('message', "✅ FAQ згенеровано AI! Оновлено {$sectionsCount} секцій.");
+                } else {
+                    session()->flash('message', "⚠️ AI недоступний (немає API ключа). Збережено сирий текст зі сторінок ({$sectionsCount} секцій). Відредагуйте вручну.");
+                }
             } else {
                 $errors = implode('; ', $result['errors'] ?? ['Невідома помилка']);
                 session()->flash('error', "⚠️ Помилка генерації: {$errors}");

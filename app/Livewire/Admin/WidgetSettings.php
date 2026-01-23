@@ -42,6 +42,7 @@ class WidgetSettings extends Component
     
     public $shop_phone = ''; // Empty by default - tenant fills in
     public $callback_form_url = ''; // Empty by default - auto-detected or filled by tenant
+    public $nova_poshta_tracking_url = 'https://tracking.novaposhta.ua/'; // Default Nova Poshta tracking URL
     public $enable_delivery_tracking = false; // Disabled by default
     public $enable_faq_from_horoshop = true;
     public $horoshop_domain = '';

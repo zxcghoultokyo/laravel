@@ -1285,15 +1285,31 @@ PROMPT;
             $recommendation = 'L/L';
         }
 
+        // Extract base size (XS, S, M, L, XL, XXL) from ECWCS notation (XL/L -> XL)
+        $baseSize = $recommendation ? explode('/', $recommendation)[0] : 'L';
+        
+        // Build user-friendly size explanation
+        $sizeExplanation = match($baseSize) {
+            'XS' => 'XS (або XS-Short, XS-Regular)',
+            'S' => 'S (або S-Short, S-Regular, S-Long)',
+            'M' => 'M (або M-Short, M-Regular, M-Long)',
+            'L' => 'L (або L-Short, L-Regular, L-Long)',
+            'XL' => 'XL (або XL-Regular, XL-Long)',
+            'XXL' => 'XXL (або XXL-Regular, XXL-Long)',
+            default => $baseSize,
+        };
+
         $result = [
             'status' => 'success',
-            'message' => "Для параметрів (зріст: {$height} см, вага: {$weight} кг) рекомендований розмір ECWCS: {$recommendation}",
+            'message' => "Рекомендований розмір: {$sizeExplanation}. По системі ECWCS (американська): {$recommendation}",
             'product' => $productTitle,
             'recommended_size' => $recommendation ?? 'L/R',
+            'simple_size' => $baseSize,
+            'size_explanation' => $sizeExplanation,
             'available_sizes' => $availableSizes,
             'warnings' => $warnings,
             'estimated_chest' => $estimatedChest ? "~{$estimatedChest} см (оцінка за вагою)" : null,
-            'note' => 'Американський/тактичний крій часто великомірить. При вазі 100+ кг рекомендуємо XL або XXL.',
+            'note' => "Якщо товар має просту розмітку (S, M, L, XL) — обирайте {$baseSize}. Якщо є позначення росту (Short/Regular/Long або S/R/L) — обирайте {$recommendation}.",
         ];
         
         return $result;

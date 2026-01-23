@@ -2037,13 +2037,20 @@ class DiagnosticController extends Controller
                 if (!$fullContent) {
                     $content = mb_substr($content, 0, 500) . (mb_strlen($content) > 500 ? '...' : '');
                 }
+                
+                $meta = $msg->meta ?? [];
+                
                 return [
                     'id' => $msg->id,
                     'role' => $msg->role,
                     'content' => $content,
-                    'intent' => $msg->meta['intent'] ?? null,
-                    'products_shown' => $msg->meta['products_shown'] ?? null,
-                    'product_titles' => array_map(fn($p) => $p['title'] ?? '', $msg->meta['products'] ?? []),
+                    'meta' => $meta, // Return full meta for debugging
+                    'intent' => $meta['intent'] ?? null,
+                    'products_shown' => $meta['products_shown'] ?? null,
+                    'product_ids' => $meta['product_ids'] ?? null,
+                    'product_articles' => $meta['product_articles'] ?? null,
+                    'has_product_details' => !empty($meta['product_details']),
+                    'product_details_count' => count($meta['product_details'] ?? []),
                     'created_at' => $msg->created_at->format('Y-m-d H:i:s'),
                 ];
             });

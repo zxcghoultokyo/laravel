@@ -1,13 +1,23 @@
 <div>
+    <style>
+        /* Hide scrollbar but allow scroll */
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
 
     <!-- Header -->
     <div class="mb-6">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-900">{{ $tenant->name }}</h1>
-                <p class="text-gray-500">{{ $tenant->domain ?? $tenant->slug }}</p>
+        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div class="min-w-0">
+                <h1 class="text-xl md:text-2xl font-bold text-gray-900 truncate">{{ $tenant->name }}</h1>
+                <p class="text-gray-500 text-sm truncate">{{ $tenant->domain ?? $tenant->slug }}</p>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 flex-wrap">
                 {{-- Widget Status Badge --}}
                 @if($stats['widget_active'])
                     <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
@@ -149,7 +159,7 @@
     @endif
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-5 mb-6">
         <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100 relative group">
             <div class="text-2xl font-bold text-green-600">{{ number_format($stats['products_in_stock']) }}</div>
             <div class="text-sm text-gray-500">Товарів в наявності</div>
@@ -190,59 +200,59 @@
 
     <!-- Tabs -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="border-b border-gray-200">
-            <nav class="flex -mb-px">
+        <div class="border-b border-gray-200 overflow-x-auto scrollbar-hide">
+            <nav class="flex -mb-px min-w-max">
                 <button wire:click="setTab('overview')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'overview' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Огляд
                 </button>
                 <button wire:click="setTab('chats')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'chats' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Чати
                 </button>
                 <button wire:click="setTab('widget')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'widget' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Віджет
                 </button>
                 <button wire:click="setTab('prompts')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'prompts' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Промпти
                 </button>
                 <button wire:click="setTab('triggers')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'triggers' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Тригери
                 </button>
                 <button wire:click="setTab('analytics')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'analytics' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     Аналітика
                 </button>
                 <button wire:click="setTab('conversions')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'conversions' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
                     🎯 Конверсії
                 </button>
                 <button wire:click="setTab('settings')"
-                        class="px-6 py-3 text-sm font-medium border-b-2 transition
+                        class="px-3 md:px-6 py-3 text-xs md:text-sm font-medium border-b-2 transition whitespace-nowrap
                             {{ $activeTab === 'settings' 
                                 ? 'border-blue-500 text-blue-600' 
                                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' }}">
@@ -251,7 +261,7 @@
             </nav>
         </div>
 
-        <div class="p-6">
+        <div class="p-4 md:p-6">
             <!-- Overview Tab -->
             @if($activeTab === 'overview')
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

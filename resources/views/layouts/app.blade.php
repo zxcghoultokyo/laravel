@@ -37,8 +37,8 @@
             @endisset
 
             <!-- Page Content -->
-            <main class="py-6">
-                <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <main class="py-4 md:py-6">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     {{ $slot }}
                 </div>
             </main>

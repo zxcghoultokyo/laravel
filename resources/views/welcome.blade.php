@@ -79,6 +79,12 @@
                 box-sizing: border-box;
             }
             
+            html, body {
+                overflow-x: hidden;
+                width: 100%;
+                position: relative;
+            }
+            
             :root {
                 --primary: #10b981;
                 --primary-dark: #059669;
@@ -827,12 +833,20 @@
             
             @media (max-width: 768px) {
                 nav {
-                    gap: 12px;
+                    gap: 8px;
+                }
+                
+                nav a:not(.btn) {
+                    display: none;
                 }
                 
                 .btn-small {
-                    padding: 6px 12px;
-                    font-size: 12px;
+                    padding: 8px 14px;
+                    font-size: 13px;
+                }
+                
+                header .container {
+                    padding: 0 16px;
                 }
                 
                 .hero {
@@ -884,6 +898,12 @@
                     flex-wrap: wrap;
                     justify-content: center;
                 }
+                
+                /* Partner section tablet */
+                .partner-grid {
+                    grid-template-columns: 1fr !important;
+                    gap: 32px !important;
+                }
             }
             
             @media (max-width: 480px) {
@@ -906,6 +926,17 @@
                 
                 .scenario-btn {
                     min-width: 100%;
+                }
+                
+                /* Partner section mobile */
+                .partner-grid {
+                    grid-template-columns: 1fr !important;
+                    gap: 24px !important;
+                }
+                
+                .partner-stats {
+                    grid-template-columns: 1fr !important;
+                    gap: 12px !important;
                 }
             }
         </style>
@@ -1257,7 +1288,7 @@
         <!-- Partner Program Section -->
         <section class="partner-program" id="partner" style="padding: 80px 0; background: linear-gradient(135deg, #065f46 0%, #047857 50%, #10b981 100%); color: white;">
             <div class="container">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;" data-aos="fade-up">
+                <div class="partner-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;" data-aos="fade-up">
                     <div>
                         <span style="display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 16px;">🤝 Партнерська програма</span>
                         <h2 style="font-size: clamp(28px, 4vw, 40px); margin-bottom: 20px; font-family: 'Space Grotesk', sans-serif;">Заробляйте з AIntento</h2>
@@ -1266,7 +1297,7 @@
                             Без обмежень за кількістю рефералів.
                         </p>
                         
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
+                        <div class="partner-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px;">
                             <div style="background: rgba(255,255,255,0.15); padding: 20px 16px; border-radius: 12px; text-align: center;">
                                 <div style="font-size: 32px; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">15%</div>
                                 <div style="font-size: 13px; opacity: 0.9;">від кожного платежу</div>

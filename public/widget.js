@@ -1171,14 +1171,15 @@
                 const emailMatch = contactsText.match(/(?:E-mail[:\s]*|Email[:\s]*)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
                 if (emailMatch) email = emailMatch[1];
                 
-                // Extract Instagram (@username or instagram.com/username or "Instagram: username")
-                const igMatch = contactsText.match(/Instagram[:\s]*@?([a-zA-Z0-9_\.]+)/i) 
-                    || contactsText.match(/instagram\.com\/([a-zA-Z0-9_\.]+)/i);
+                // Extract Instagram (@username or instagram.com/username)
+                // Stop at space, parenthesis, or newline
+                const igMatch = contactsText.match(/instagram\.com\/([a-zA-Z0-9_\.]+)/i)
+                    || contactsText.match(/Instagram[:\s]*@?([a-zA-Z0-9_\.]+?)(?:\s|\(|$)/i);
                 if (igMatch) instagram = igMatch[1];
                 
                 // Extract Telegram (t.me/username or "Telegram: @username")
-                const tgMatch = contactsText.match(/Telegram[:\s]*@?([a-zA-Z0-9_]+)/i) 
-                    || contactsText.match(/t\.me\/([a-zA-Z0-9_]+)/i);
+                const tgMatch = contactsText.match(/t\.me\/([a-zA-Z0-9_]+)/i)
+                    || contactsText.match(/Telegram[:\s]*@?([a-zA-Z0-9_]+?)(?:\s|\(|$)/i);
                 if (tgMatch) telegram = tgMatch[1];
             }
             
@@ -2096,35 +2097,22 @@
             return '<a href="tel:' + cleanPhone + '" style="color: inherit; text-decoration: underline;">' + match + '</a>';
         });
         
-        // Email addresses
-        html = html.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, 
-            '<a href="mailto:$1" style="color: inherit; text-decoration: underline;">$1</a>');
-        
-        // Instagram: "Instagram: username" or "@username" (when preceded by Instagram mention)
-        html = html.replace(/Instagram:\s*@?([a-zA-Z0-9_\.]+)/gi, 
-            'Instagram: <a href="https://instagram.com/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
-        html = html.replace(/📸\s*Instagram:\s*@?([a-zA-Z0-9_\.]+)/gi, 
-            '📸 Instagram: <a href="https://instagram.com/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
-        
-        // Telegram: "Telegram: username" or "t.me/username"
-        html = html.replace(/Telegram:\s*@?([a-zA-Z0-9_]+)/gi, 
-            'Telegram: <a href="https://t.me/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
-        html = html.replace(/💬\s*Telegram:\s*@?([a-zA-Z0-9_]+)/gi, 
-            '💬 Telegram: <a href="https://t.me/$1" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">@$1</a>');
-        
-        // Address with city: "м. Київ, вул. XXX" -> Google Maps link
-        // Match Ukrainian address patterns
-        html = html.replace(/(м\.\s*[А-Яа-яІіЇїЄєҐґ']+,\s*вул\.\s*[А-Яа-яІіЇїЄєҐґ'\s]+\d*[а-яА-Я]?)/g, function(match) {
-            const encodedAddress = encodeURIComponent(match);
-            return '<a href="https://www.google.com/maps/search/?api=1&query=' + encodedAddress + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + match + '</a>';
+        // Email addresses (skip if already inside a link - check for placeholder)
+        html = html.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, function(match) {
+            // Don't linkify if it looks like it's part of a placeholder
+            if (match.includes('PLACEHOLDER')) return match;
+            return '<a href="mailto:' + match + '" style="color: inherit; text-decoration: underline;">' + match + '</a>';
         });
         
-        // Also match "Адреса: м. Київ..." pattern
-        html = html.replace(/Адреса:\s*(м\.\s*[^<\n]+)/gi, function(match, address) {
-            // Skip if already linkified
-            if (match.includes('href=')) return match;
-            const encodedAddress = encodeURIComponent(address.trim());
-            return 'Адреса: <a href="https://www.google.com/maps/search/?api=1&query=' + encodedAddress + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + address + '</a>';
+        // NOTE: Instagram and Telegram auto-linkify removed - buildStoreInfo() creates proper markdown links
+        // which are converted via the [text](url) pattern above
+        
+        // Address with city: "м. Київ, вул. XXX" -> Google Maps link
+        // Match Ukrainian address patterns (skip if already has placeholder)
+        html = html.replace(/(м\.\s*[А-Яа-яІіЇїЄєҐґ']+,\s*вул\.\s*[А-Яа-яІіЇїЄєҐґ'\s]+\d*[а-яА-Я]?)/g, function(match) {
+            if (match.includes('PLACEHOLDER')) return match;
+            const encodedAddress = encodeURIComponent(match);
+            return '<a href="https://www.google.com/maps/search/?api=1&query=' + encodedAddress + '" target="_blank" rel="noopener" style="color: inherit; text-decoration: underline;">' + match + '</a>';
         });
         
         // Newlines to <br> (preserve pre-wrap behavior for multiple newlines)

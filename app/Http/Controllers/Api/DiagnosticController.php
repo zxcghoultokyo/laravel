@@ -5086,4 +5086,81 @@ class DiagnosticController extends Controller
             ],
         ];
     }
+    
+    /**
+     * POST /api/diagnostic/rebuild-categories
+     * Rebuild categories from products for a specific tenant or all tenants
+     */
+    public function rebuildCategories(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $tenantId = $request->input('tenant_id');
+            $service = app(\App\Services\Catalog\CategoryIndexService::class);
+            
+            $beforeCounts = [];
+            $afterCounts = [];
+            
+            if ($tenantId) {
+                // Rebuild for specific tenant
+                $beforeCounts[$tenantId] = \App\Models\Category::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->count();
+                    
+                $service->rebuildForTenant((int) $tenantId);
+                
+                $afterCounts[$tenantId] = \App\Models\Category::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->count();
+                    
+                return response()->json([
+                    'success' => true,
+                    'message' => "Categories rebuilt for tenant {$tenantId}",
+                    'tenant_id' => (int) $tenantId,
+                    'before_count' => $beforeCounts[$tenantId],
+                    'after_count' => $afterCounts[$tenantId],
+                ]);
+            } else {
+                // Rebuild for all tenants
+                $tenantIds = \App\Models\Product::distinct()->pluck('tenant_id')->filter()->toArray();
+                
+                foreach ($tenantIds as $tid) {
+                    $beforeCounts[$tid] = \App\Models\Category::withoutGlobalScopes()
+                        ->where('tenant_id', $tid)
+                        ->count();
+                }
+                
+                $service->rebuild();
+                
+                foreach ($tenantIds as $tid) {
+                    $afterCounts[$tid] = \App\Models\Category::withoutGlobalScopes()
+                        ->where('tenant_id', $tid)
+                        ->count();
+                }
+                
+                $totalBefore = array_sum($beforeCounts);
+                $totalAfter = array_sum($afterCounts);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => "Categories rebuilt for " . count($tenantIds) . " tenants",
+                    'tenants_processed' => $tenantIds,
+                    'before_counts' => $beforeCounts,
+                    'after_counts' => $afterCounts,
+                    'total_before' => $totalBefore,
+                    'total_after' => $totalAfter,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ], 500);
+        }
+    }
 }

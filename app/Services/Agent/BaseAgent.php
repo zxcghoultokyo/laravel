@@ -1285,14 +1285,18 @@ PROMPT;
             $recommendation = 'L/L';
         }
 
-        return [
+        $result = [
+            'status' => 'success',
+            'message' => "Для параметрів (зріст: {$height} см, вага: {$weight} кг) рекомендований розмір ECWCS: {$recommendation}",
             'product' => $productTitle,
             'recommended_size' => $recommendation ?? 'L/R',
             'available_sizes' => $availableSizes,
             'warnings' => $warnings,
-            'estimated_chest' => $estimatedChest ? "~{$estimatedChest} см" : null,
+            'estimated_chest' => $estimatedChest ? "~{$estimatedChest} см (оцінка за вагою)" : null,
             'note' => 'Американський/тактичний крій часто великомірить. При вазі 100+ кг рекомендуємо XL або XXL.',
         ];
+        
+        return $result;
     }
 
     // ============================================================

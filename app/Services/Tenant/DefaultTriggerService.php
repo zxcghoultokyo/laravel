@@ -43,7 +43,7 @@ class DefaultTriggerService
                     'page_type' => 'product',
                     'min_time_on_site' => 5,
                 ],
-                'message' => "⏳ Зачекайте!\n\nЦей товар переглядають ще 3 покупці. Допоможу швидко оформити замовлення!",
+                'message' => "⏳ Зачекайте!\n\nЦей товар переглядають ще 3 покупці. Допоможу з вибором!",
                 'button_text' => 'Допоможіть обрати',
                 'icon' => '⏳',
                 'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,

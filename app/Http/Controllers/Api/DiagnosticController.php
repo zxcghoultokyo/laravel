@@ -1127,9 +1127,10 @@ class DiagnosticController extends Controller
         }
 
         // API config
-        $apiKey = config('services.openai.api_key');
-        $baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
-        $model = config('services.openai.model', 'gpt-4.1-mini');
+        $config = config('services.openai', []);
+        $apiKey = $config['key'] ?? null;
+        $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
+        $model = 'gpt-4o-mini'; // Same as ai-test-one
 
         if (empty($apiKey)) {
             return response()->json(['error' => 'OpenAI API key not configured'], 500);

@@ -142,32 +142,51 @@ class FunctionCallingAgent extends BaseAgent
 
         // Add conversation history if available
         $history = $context['history'] ?? [];
+        $sessionId = $context['session_id'] ?? null;
 
         // Check if this is a fresh/new query (not a follow-up)
         $isFreshQuery = $this->isFreshQuery($message, $history);
         $conversationContext = $isFreshQuery ? '' : $this->extractConversationContext($history);
+        
+        // Load detailed product info for follow-up questions
+        $productDetails = $isFreshQuery ? '' : $this->loadRecentProductDetails($sessionId);
 
         Log::info('FunctionCallingAgent: extracted context', [
             'context' => $conversationContext,
             'history_count' => count($history),
             'is_trigger' => $isTriggerQuery,
             'is_fresh_query' => $isFreshQuery,
+            'has_product_details' => !empty($productDetails),
         ]);
 
-        if ($conversationContext) {
-            $messages[] = [
-                'role' => 'system',
-                'content' => <<<CONTEXT
-=== КОНТЕКСТ ПОПЕРЕДНЬОЇ РОЗМОВИ ===
-{$conversationContext}
-
+        if ($conversationContext || $productDetails) {
+            $contextContent = "=== КОНТЕКСТ ПОПЕРЕДНЬОЇ РОЗМОВИ ===\n";
+            
+            if ($conversationContext) {
+                $contextContent .= "{$conversationContext}\n\n";
+            }
+            
+            if ($productDetails) {
+                $contextContent .= "=== ДЕТАЛЬНА ІНФОРМАЦІЯ ПРО ПОКАЗАНІ ТОВАРИ ===\n";
+                $contextContent .= "Використовуй ці дані для відповідей на питання про характеристики, розміри, опис товарів:\n\n";
+                $contextContent .= "{$productDetails}\n\n";
+                $contextContent .= "ВАЖЛИВО: Якщо користувач питає про розміри, характеристики, опис — ВІДПОВІДАЙ на основі цих даних!\n";
+                $contextContent .= "НЕ кажи \"не знаю\" або \"немає інформації\" якщо дані є вище!\n\n";
+            }
+            
+            $contextContent .= <<<CONTEXT
 ПРАВИЛА ВИКОРИСТАННЯ КОНТЕКСТУ:
 1. НЕ питай "що ви шукаєте" якщо в контексті вже є категорія товару!
 2. Якщо користувач уточнює (розмір, колір, бренд) — КОМБІНУЙ з попереднім контекстом!
 3. "Ще" або "інші" = показати НОВІ товари тієї ж категорії (exclude_shown=true)
 4. ПОВТОРНИЙ ЗАПИТ (та сама категорія, наприклад "футболка" знову) = ПОКАЗУЙ ВСІ товари (exclude_shown=false)!
 5. Короткі слова типу "так", "ні", "добре" — це підтвердження, не новий запит!
-CONTEXT
+6. Якщо питають про РОЗМІРИ/ХАРАКТЕРИСТИКИ показаних товарів — використовуй ДЕТАЛЬНУ ІНФОРМАЦІЮ вище!
+CONTEXT;
+            
+            $messages[] = [
+                'role' => 'system',
+                'content' => $contextContent,
             ];
         }
 

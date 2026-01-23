@@ -1878,6 +1878,83 @@ PROMPT;
     }
 
     /**
+     * Load detailed product info from recent assistant messages for follow-up questions.
+     * Returns formatted string with product details (description, attributes, sizes).
+     */
+    protected function loadRecentProductDetails(?string $sessionId): string
+    {
+        if (!$sessionId) return '';
+
+        try {
+            $session = ChatSession::where('session_id', $sessionId)->first();
+            if (!$session) return '';
+
+            // Get last 3 assistant messages with product details
+            $messages = ChatMessage::where('chat_session_id', $session->id)
+                ->where('role', 'assistant')
+                ->orderBy('created_at', 'desc')
+                ->limit(3)
+                ->get();
+
+            $allDetails = [];
+            foreach ($messages as $msg) {
+                $meta = $msg->meta ?? [];
+                if (!empty($meta['product_details'])) {
+                    $allDetails = array_merge($allDetails, $meta['product_details']);
+                }
+            }
+
+            if (empty($allDetails)) {
+                return '';
+            }
+
+            // Format for GPT context - only take last 5 products to not bloat context
+            $formatted = [];
+            $count = 0;
+            foreach ($allDetails as $id => $detail) {
+                if ($count >= 5) break;
+                
+                $lines = [];
+                $lines[] = "- **{$detail['title']}** (арт. {$detail['article']})";
+                
+                if (!empty($detail['price'])) {
+                    $lines[] = "  Ціна: {$detail['price']} грн";
+                }
+                
+                if (!empty($detail['brand'])) {
+                    $lines[] = "  Бренд: {$detail['brand']}";
+                }
+                
+                if (!empty($detail['sizes'])) {
+                    $lines[] = "  Доступні розміри: " . implode(', ', $detail['sizes']);
+                }
+                
+                if (!empty($detail['attributes'])) {
+                    $attrStr = [];
+                    foreach ($detail['attributes'] as $name => $value) {
+                        $attrStr[] = "{$name}: {$value}";
+                    }
+                    if ($attrStr) {
+                        $lines[] = "  Характеристики: " . implode('; ', array_slice($attrStr, 0, 8));
+                    }
+                }
+                
+                if (!empty($detail['description'])) {
+                    $lines[] = "  Опис: " . mb_substr($detail['description'], 0, 200);
+                }
+                
+                $formatted[] = implode("\n", $lines);
+                $count++;
+            }
+
+            return implode("\n\n", $formatted);
+        } catch (\Throwable $e) {
+            Log::warning('BaseAgent: failed to load product details', ['error' => $e->getMessage()]);
+            return '';
+        }
+    }
+
+    /**
      * Log user message to DB.
      */
     protected function logUserMessage(?string $sessionId, string $message): void
@@ -1935,6 +2012,9 @@ PROMPT;
                 $content .= "\n[Показані товари: " . implode(', ', $productMarkers) . "]";
             }
 
+            // Build detailed product info for follow-up questions
+            $productDetails = $this->buildProductDetailsForStorage($products);
+
             ChatMessage::create([
                 'chat_session_id' => $session->id,
                 'role' => 'assistant',
@@ -1943,6 +2023,7 @@ PROMPT;
                     'intent' => $intent,
                     'product_ids' => array_column($products, 'id'),
                     'product_articles' => array_column($products, 'article'),
+                    'product_details' => $productDetails, // Full details for follow-up questions
                 ],
             ]);
             
@@ -1954,6 +2035,148 @@ PROMPT;
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to log assistant message', ['error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Build detailed product info for storage in meta.
+     * Includes description, attributes, sizes, variants - everything GPT might need.
+     */
+    protected function buildProductDetailsForStorage(array $products): array
+    {
+        if (empty($products)) {
+            return [];
+        }
+
+        $productIds = array_column($products, 'id');
+        
+        try {
+            // Load full product data from DB
+            $dbProducts = Product::whereIn('id', $productIds)->get()->keyBy('id');
+            
+            $details = [];
+            foreach ($products as $p) {
+                $id = $p['id'] ?? null;
+                if (!$id) continue;
+                
+                $dbProduct = $dbProducts->get($id);
+                if (!$dbProduct) continue;
+                
+                // Extract description and attributes from raw
+                $raw = $dbProduct->raw ?? [];
+                $parentRaw = [];
+                
+                // Try to get parent raw if this is a variant
+                if ($dbProduct->parent_article) {
+                    $parent = Product::where('article', $dbProduct->parent_article)->first();
+                    $parentRaw = $parent?->raw ?? [];
+                }
+                
+                $description = \App\Support\ProductRawExtractor::description($raw, 'ua', $parentRaw);
+                $attributes = \App\Support\ProductRawExtractor::attributes($raw, 'ua', $parentRaw);
+                
+                // Extract available sizes/variants - also get current product size from DB
+                $sizes = $this->extractSizesFromProduct($dbProduct);
+                
+                $details[$id] = [
+                    'title' => $p['title'] ?? $dbProduct->title,
+                    'article' => $p['article'] ?? $dbProduct->article,
+                    'price' => $p['price'] ?? $dbProduct->price,
+                    'brand' => $p['brand'] ?? $dbProduct->brand,
+                    'description' => mb_substr($description, 0, 500), // Limit to 500 chars
+                    'attributes' => array_slice($attributes, 0, 15), // Max 15 attributes
+                    'sizes' => $sizes,
+                    'category' => $dbProduct->category_path,
+                ];
+            }
+            
+            return $details;
+        } catch (\Throwable $e) {
+            Log::warning('BaseAgent: failed to build product details', ['error' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /**
+     * Extract available sizes from product - checks DB column, raw data, and sibling products.
+     */
+    protected function extractSizesFromProduct(Product $product): array
+    {
+        $sizes = [];
+        $raw = $product->raw ?? [];
+        
+        // 1. First check the product's own size column
+        if (!empty($product->size)) {
+            $sizes[] = $product->size;
+        }
+        
+        // 2. Check variants array in raw
+        if (!empty($raw['variants']) && is_array($raw['variants'])) {
+            foreach ($raw['variants'] as $variant) {
+                $size = $variant['size'] ?? ($variant['select']['size'] ?? null);
+                if ($size && is_string($size)) {
+                    $sizes[] = $size;
+                }
+            }
+        }
+        
+        // 3. Check select.size in raw
+        if (!empty($raw['select']['size'])) {
+            $sizeData = $raw['select']['size'];
+            if (is_string($sizeData)) {
+                $sizes[] = $sizeData;
+            } elseif (is_array($sizeData)) {
+                foreach ($sizeData as $s) {
+                    if (is_string($s)) {
+                        $sizes[] = $s;
+                    } elseif (is_array($s) && isset($s['value'])) {
+                        $sizes[] = $s['value'];
+                    }
+                }
+            }
+        }
+        
+        // 4. Check characteristics.size in raw
+        if (!empty($raw['characteristics']['size'])) {
+            $sizeChar = $raw['characteristics']['size'];
+            if (is_string($sizeChar)) {
+                $sizes[] = $sizeChar;
+            } elseif (is_array($sizeChar) && isset($sizeChar['value'])) {
+                $val = $sizeChar['value'];
+                if (is_string($val)) {
+                    $sizes[] = $val;
+                } elseif (is_array($val)) {
+                    $sizes = array_merge($sizes, array_filter($val, 'is_string'));
+                }
+            }
+        }
+        
+        // 5. Look for sibling products with same parent_article
+        if (!empty($product->parent_article)) {
+            $siblingsSizes = Product::where('parent_article', $product->parent_article)
+                ->whereNotNull('size')
+                ->where('size', '!=', '')
+                ->limit(20)
+                ->pluck('size')
+                ->filter()
+                ->toArray();
+            $sizes = array_merge($sizes, $siblingsSizes);
+        }
+        
+        // 6. If no parent_article, look for products with SAME title (size variants often have identical titles)
+        if (empty($product->parent_article) && count(array_unique($sizes)) <= 1) {
+            $titleSiblings = Product::where('title', $product->title)
+                ->where('id', '!=', $product->id)
+                ->where('tenant_id', $product->tenant_id)
+                ->whereNotNull('size')
+                ->where('size', '!=', '')
+                ->limit(20)
+                ->pluck('size')
+                ->filter()
+                ->toArray();
+            $sizes = array_merge($sizes, $titleSiblings);
+        }
+        
+        return array_values(array_unique(array_filter($sizes)));
     }
 
     /**

@@ -81,7 +81,11 @@ class ProductDetailsTool
                 $parentArt = $sibling->parent_article;
                 
                 // Prefer DB size field, then try raw, then parse from title
+                // But validate that DB size looks like a real size (not title)
                 $size = $sibling->size;
+                if ($size && !$this->isValidSize($size, $sibling->title)) {
+                    $size = null; // DB size is probably title, not actual size
+                }
                 if (!$size) {
                     $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
                     $size = $this->extractSize($sibRaw);
@@ -145,7 +149,11 @@ class ProductDetailsTool
             }
             
             // Extract size: prefer DB field, then try raw fields, then parse from title
+            // But validate that DB size looks like a real size (not title)
             $currentSize = $product->size;
+            if ($currentSize && !$this->isValidSize($currentSize, $title)) {
+                $currentSize = null; // DB size is probably title, not actual size
+            }
             if (!$currentSize) {
                 $currentSize = $this->extractSize($raw);
             }
@@ -447,5 +455,45 @@ class ProductDetailsTool
         }
         
         return null;
+    }
+    
+    /**
+     * Check if size value is a valid size (not just a product title).
+     * Returns false if size looks like it's actually the product title.
+     */
+    protected function isValidSize(?string $size, ?string $title): bool
+    {
+        if (!$size) {
+            return false;
+        }
+        
+        // If size equals title (case insensitive), it's not a real size
+        if ($title && mb_strtolower(trim($size)) === mb_strtolower(trim($title))) {
+            return false;
+        }
+        
+        // If size is too long (>20 chars), probably not a real size
+        if (mb_strlen($size) > 20) {
+            return false;
+        }
+        
+        // Valid sizes usually match these patterns
+        $validPatterns = [
+            '/^(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)$/i',      // Simple sizes
+            '/^(XXS|XS|S|M|L|XL|XXL|XXXL|2XL|3XL|4XL|5XL)[-\/]/i',   // Compound sizes
+            '/^\d{2}(\.\d)?$/',                                       // Numeric (shoes)
+            '/^US\s/i',                                               // US format
+            '/^EU\s/i',                                               // EU format
+            '/^[SMLX]{1,4}[-\/][SMLR]$/i',                           // S/L, M/R patterns
+        ];
+        
+        foreach ($validPatterns as $pattern) {
+            if (preg_match($pattern, trim($size))) {
+                return true;
+            }
+        }
+        
+        // If none of the patterns match but it's short, still might be valid
+        return mb_strlen($size) <= 10;
     }
 }

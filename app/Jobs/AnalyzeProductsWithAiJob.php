@@ -310,9 +310,19 @@ PROMPT;
         $lines = [];
         foreach ($chars as $key => $value) {
             if (is_array($value)) {
-                $value = implode(', ', $value);
+                // Handle nested structures like {"id": 1, "value": {"ua": "Text"}}
+                if (isset($value['value'])) {
+                    $value = is_array($value['value']) 
+                        ? ($value['value']['ua'] ?? $value['value']['uk'] ?? reset($value['value']) ?: '')
+                        : $value['value'];
+                } else {
+                    // Try to flatten simple arrays
+                    $value = implode(', ', array_filter($value, 'is_string'));
+                }
             }
-            $lines[] = "{$key}: {$value}";
+            if (is_string($value) && $value !== '') {
+                $lines[] = "{$key}: {$value}";
+            }
         }
         return implode('; ', array_slice($lines, 0, 20));
     }

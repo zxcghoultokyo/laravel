@@ -271,7 +271,9 @@ class IncrementalProductSyncJob implements ShouldQueue
                     'parent', 'images', 'slug', 'link', 'presence', 'quantity',
                     'display_in_showcase', 'popularity', 'color', 'brand',
                     'description', 'characteristics', 'short_description',
-                    'select', 'params', 'mod_title', 'Rozmir', 'Kolir', 'Dovzhina',
+                    'select', 'params', 'mod_title',
+                    'Rozmir', 'Kolir', 'Dovzhina',  // uppercase (ATK)
+                    'rozmir', 'kolir', 'dovzhina',  // lowercase (demo shops)
                     'seo_title', 'seo_keywords', 'seo_description',
                     'we_recommended', 'icons',
                 ],

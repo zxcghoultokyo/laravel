@@ -625,12 +625,12 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'get_order_status',
-                    'description' => 'Перевірити статус замовлення за номером або телефоном.',
+                    'description' => 'Перевірити статус ІСНУЮЧОГО замовлення. Використовуй ТІЛЬКИ коли клієнт питає "де моє замовлення", "статус замовлення №123". НЕ використовуй для нових замовлень або коли клієнт просто надсилає номер телефону!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
                             'order_id' => ['type' => 'string', 'description' => 'Номер замовлення'],
-                            'phone' => ['type' => 'string', 'description' => 'Телефон покупця'],
+                            'phone' => ['type' => 'string', 'description' => 'Телефон для пошуку замовлень клієнта (якщо клієнт хоче перевірити статус)'],
                         ],
                     ],
                 ],
@@ -982,17 +982,29 @@ PROMPT;
         $orderId = $args['order_id'] ?? null;
         $phone = $args['phone'] ?? null;
 
-        if ($orderId) {
-            $order = $this->orderSearchService->findByOrderId($orderId);
-            if ($order) return ['order' => $order];
+        // Check if order search is available
+        if (!$this->orderSearchService->isAvailable()) {
+            return ['error' => 'Пошук замовлень тимчасово недоступний.'];
         }
 
-        if ($phone) {
-            $orders = $this->orderSearchService->findByPhone($phone);
-            if (!empty($orders)) return ['orders' => $orders, 'count' => count($orders)];
-        }
+        try {
+            $result = $this->orderSearchService->search([
+                'order_id' => $orderId,
+                'phone' => $phone,
+                'limit' => 5,
+            ]);
 
-        return ['error' => 'Замовлення не знайдено. Перевірте номер або телефон.'];
+            if (!empty($result['orders'])) {
+                return $result['total'] === 1 
+                    ? ['order' => $result['orders'][0]]
+                    : ['orders' => $result['orders'], 'count' => $result['total']];
+            }
+
+            return ['error' => 'Замовлення не знайдено. Перевірте номер або телефон.'];
+        } catch (\Exception $e) {
+            Log::error('toolGetOrderStatus error', ['error' => $e->getMessage()]);
+            return ['error' => 'Не вдалося перевірити замовлення. Спробуйте пізніше.'];
+        }
     }
 
     /**

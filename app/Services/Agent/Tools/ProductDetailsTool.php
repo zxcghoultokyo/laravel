@@ -88,7 +88,7 @@ class ProductDetailsTool
                 }
                 if (!$size) {
                     $sibRaw = is_array($sibling->raw ?? null) ? $sibling->raw : (array) ($sibling->raw ?? []);
-                    $size = $this->extractSize($sibRaw);
+                    $size = $this->extractSize($sibRaw, $sibling->title);
                 }
                 if (!$size && $sibling->title) {
                     $size = $this->parseSizeFromTitle($sibling->title);
@@ -155,7 +155,7 @@ class ProductDetailsTool
                 $currentSize = null; // DB size is probably title, not actual size
             }
             if (!$currentSize) {
-                $currentSize = $this->extractSize($raw);
+                $currentSize = $this->extractSize($raw, $title);
             }
             if (!$currentSize) {
                 $currentSize = $this->parseSizeFromTitle($title);
@@ -351,12 +351,23 @@ class ProductDetailsTool
      * Extract size from raw product data.
      * Horoshop stores size in various places: Rozmir (top-level), select.size, params.size, characteristics.size
      */
-    protected function extractSize(array $raw): ?string
+    protected function extractSize(array $raw, ?string $title = null): ?string
     {
         // 1. Try Rozmir at top level (Horoshop custom attribute - most common!)
         // Format: {"id": 29, "value": {"ua": "S/S"}}
         if (!empty($raw['Rozmir']['value'])) {
             $rozmir = $raw['Rozmir']['value'];
+            $size = is_array($rozmir) 
+                ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
+                : $rozmir;
+            if (is_string($size) && trim($size) !== '') {
+                return trim($size);
+            }
+        }
+        
+        // 1b. Try rozmir with lowercase (some Horoshop stores use lowercase)
+        if (!empty($raw['rozmir']['value'])) {
+            $rozmir = $raw['rozmir']['value'];
             $size = is_array($rozmir) 
                 ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
                 : $rozmir;
@@ -412,13 +423,23 @@ class ProductDetailsTool
             return is_string($raw['size']) ? trim($raw['size']) : null;
         }
         
-        // 7. Try mod_title (Horoshop modification title)
+        // 7. Try mod_title (Horoshop modification title) - but ONLY if different from product title
+        // Some stores set mod_title = title when there's no actual modification
         if (!empty($raw['mod_title'])) {
             $modTitle = is_array($raw['mod_title']) 
                 ? ($raw['mod_title']['ua'] ?? $raw['mod_title']['ru'] ?? reset($raw['mod_title']))
                 : $raw['mod_title'];
             if (is_string($modTitle) && trim($modTitle) !== '') {
-                return trim($modTitle);
+                $modTitleTrimmed = trim($modTitle);
+                // Skip if mod_title equals the product title (not a real size/variant)
+                if ($title && mb_strtolower($modTitleTrimmed) === mb_strtolower(trim($title))) {
+                    // mod_title is same as title, not useful as size
+                } else {
+                    // Additional check: if mod_title is longer than 20 chars, it's probably not a size
+                    if (mb_strlen($modTitleTrimmed) <= 20) {
+                        return $modTitleTrimmed;
+                    }
+                }
             }
         }
         

@@ -1720,6 +1720,12 @@ PROMPT;
                 'role' => 'user',
                 'content' => $message,
             ]);
+            
+            // Update last_message_at for proper sorting in dashboard
+            $session->update([
+                'last_message_at' => now(),
+                'messages_count' => ($session->messages_count ?? 0) + 1,
+            ]);
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to log user message', ['error' => $e->getMessage()]);
         }
@@ -1752,6 +1758,12 @@ PROMPT;
                     'product_ids' => array_column($products, 'id'),
                     'product_articles' => array_column($products, 'article'),
                 ],
+            ]);
+            
+            // Update last_message_at for proper sorting in dashboard
+            $session->update([
+                'last_message_at' => now(),
+                'messages_count' => ($session->messages_count ?? 0) + 1,
             ]);
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to log assistant message', ['error' => $e->getMessage()]);

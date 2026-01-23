@@ -161,6 +161,10 @@ class AnalyticsController extends Controller
                 
                 // Auto-create conversions for add_to_cart and checkout_submit events
                 $this->createConversionsFromEvents($events);
+                
+                // Auto-create ChatSession for message/quick_action events
+                // This ensures analytics links work even for quick actions that don't hit the agent
+                $this->ensureChatSessionsExist($events);
             }
 
         } catch (\Throwable $e) {
@@ -707,6 +711,73 @@ class AnalyticsController extends Controller
                 'order_id' => $orderId,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Ensure ChatSession records exist for message/quick_action events.
+     * This allows analytics links to work even for interactions that don't hit the agent.
+     */
+    private function ensureChatSessionsExist(array $events): void
+    {
+        $sessionsToCreate = [];
+        
+        foreach ($events as $event) {
+            $eventType = $event['event_type'] ?? '';
+            
+            // Only create sessions for chat interaction events
+            if (!in_array($eventType, ['message', 'quick_action_click', 'session_start'])) {
+                continue;
+            }
+            
+            $sessionId = $event['session_id'] ?? '';
+            if (empty($sessionId) || isset($sessionsToCreate[$sessionId])) {
+                continue;
+            }
+            
+            // Resolve tenant_id
+            $tenantId = $event['tenant_id'] ?? null;
+            if (!$tenantId && !empty($event['merchant_id'])) {
+                $tenant = DB::table('tenants')->where('slug', $event['merchant_id'])->first();
+                if ($tenant) {
+                    $tenantId = $tenant->id;
+                } else {
+                    $widgetSettings = DB::table('widget_settings')
+                        ->where('api_token', $event['merchant_id'])
+                        ->first();
+                    if ($widgetSettings) {
+                        $tenantId = $widgetSettings->tenant_id;
+                    }
+                }
+            }
+            
+            $sessionsToCreate[$sessionId] = [
+                'session_id' => $sessionId,
+                'tenant_id' => $tenantId,
+                'status' => 'open',
+                'started_at' => now(),
+                'last_message_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+        
+        if (empty($sessionsToCreate)) {
+            return;
+        }
+        
+        // Insert only sessions that don't exist yet
+        foreach ($sessionsToCreate as $sessionId => $data) {
+            try {
+                $exists = DB::table('chat_sessions')->where('session_id', $sessionId)->exists();
+                if (!$exists) {
+                    DB::table('chat_sessions')->insert($data);
+                    Log::debug('ChatSession created from analytics event', ['session_id' => $sessionId]);
+                }
+            } catch (\Throwable $e) {
+                // Ignore duplicate key errors (race condition)
+                Log::debug('ChatSession creation skipped', ['session_id' => $sessionId, 'reason' => $e->getMessage()]);
+            }
         }
     }
 }

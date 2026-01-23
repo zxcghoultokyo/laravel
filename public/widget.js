@@ -1620,7 +1620,8 @@
             
             const textSpan = element.querySelector('.streaming-text');
             if (textSpan) {
-                textSpan.textContent = displayText;
+                // Use parseMarkdown to format links and other markdown
+                textSpan.innerHTML = parseMarkdown(displayText);
             }
             
             // Only hide if truly empty or just JSON garbage

@@ -1886,11 +1886,15 @@ PROMPT;
         if (!$sessionId) return '';
 
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope - sessions are identified by session_id
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)->first();
             if (!$session) return '';
 
             // Get last 3 assistant messages with product details
-            $messages = ChatMessage::where('chat_session_id', $session->id)
+            // Also bypass TenantScope for ChatMessage query
+            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
                 ->where('role', 'assistant')
                 ->orderBy('created_at', 'desc')
                 ->limit(3)

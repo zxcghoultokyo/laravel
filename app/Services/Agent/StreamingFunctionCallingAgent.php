@@ -288,13 +288,17 @@ CONTEXT;
             // Parse the collected response
             $structured = $this->parseStructuredResponse($collectedText, $allProducts);
 
-            $responseText = $structured['intro'] ?? $collectedText;
+            // Personalize intro text
+            $introText = $structured['intro'] ?? '';
+            $introText = $this->personalizeIntro($introText, $message, $allProducts);
+            
+            $responseText = $introText ?: $collectedText;
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
 
             // Send intro text with typing effect
-            if (!empty($structured['intro'])) {
-                $introChunks = mb_str_split($structured['intro'], 3);
+            if (!empty($introText)) {
+                $introChunks = mb_str_split($introText, 3);
                 foreach ($introChunks as $chunk) {
                     yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
                     usleep(10000);
@@ -488,5 +492,97 @@ CONTEXT;
         }
 
         yield ['type' => 'done', 'data' => ['session_id' => null]];
+    }
+
+    /**
+     * Personalize intro text based on user query context.
+     * Replaces generic "Ось що я знайшов" with contextual intro.
+     */
+    private function personalizeIntro(string $intro, string $userMessage, array $products): string
+    {
+        // Check if intro is generic
+        $genericPatterns = [
+            '/^ось що я знайшов/ui',
+            '/^ось що я знайшов за вашим запитом/ui',
+            '/^here\'?s what i found/ui',
+            '/^ось кілька варіантів/ui',
+        ];
+        
+        $isGeneric = empty(trim($intro));
+        if (!$isGeneric) {
+            foreach ($genericPatterns as $pattern) {
+                if (preg_match($pattern, trim($intro))) {
+                    $isGeneric = true;
+                    break;
+                }
+            }
+        }
+        
+        // If not generic, keep original
+        if (!$isGeneric) {
+            return $intro;
+        }
+        
+        // Try to extract category from user message
+        $lowerMsg = mb_strtolower(trim($userMessage));
+        
+        // Check for follow-up patterns
+        if (preg_match('/^(а є |є )?дешевш/ui', $lowerMsg)) {
+            return 'Ось дешевші варіанти:';
+        }
+        if (preg_match('/^(а є |є )?дорожч/ui', $lowerMsg)) {
+            return 'Ось преміум варіанти:';
+        }
+        if (preg_match('/покажи ще|ще варіант|інші/ui', $lowerMsg)) {
+            return 'Ось ще варіанти:';
+        }
+        if (preg_match('/новинк|нов[іе] надходження|що нового/ui', $lowerMsg)) {
+            return 'Ось новинки:';
+        }
+        
+        // Extract color
+        $colors = ['олив', 'чорн', 'біл', 'мультикам', 'піксель', 'коричнев', 'coyote', 'койот', 'ranger green'];
+        foreach ($colors as $color) {
+            if (mb_stripos($lowerMsg, $color) !== false) {
+                $colorName = mb_ucfirst($color);
+                return "Ось варіанти в кольорі {$colorName}:";
+            }
+        }
+        
+        // Extract category from products or message
+        $categoryPatterns = [
+            'куртк' => 'куртки',
+            'берц' => 'берці',
+            'штан' => 'штани',
+            'футболк' => 'футболки',
+            'навушник' => 'навушники',
+            'шолом' => 'шоломи',
+            'плитонос' => 'плитоноски',
+            'рюкзак' => 'рюкзаки',
+            'підсум' => 'підсумки',
+            'термобіл' => 'термобілизна',
+            'шевр' => 'шеврони',
+            'бронежилет' => 'бронежилети',
+            'тактич' => 'тактичне спорядження',
+        ];
+        
+        foreach ($categoryPatterns as $pattern => $category) {
+            if (mb_stripos($lowerMsg, $pattern) !== false) {
+                return "Ось {$category}:";
+            }
+        }
+        
+        // Try to get category from first product
+        if (!empty($products[0]['category_path'])) {
+            $categoryPath = $products[0]['category_path'];
+            $parts = explode(' > ', $categoryPath);
+            $lastCategory = end($parts);
+            if ($lastCategory) {
+                return "Ось {$lastCategory}:";
+            }
+        }
+        
+        // Default fallback - still better than generic
+        return 'Ось товари:';
     }
 }

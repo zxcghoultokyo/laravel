@@ -2202,6 +2202,7 @@ PROMPT;
 
     /**
      * Load conversation history from DB.
+     * Appends [Показані товари: ...] marker to assistant messages for context.
      */
     protected function loadConversationHistory(?string $sessionId): array
     {
@@ -2216,10 +2217,28 @@ PROMPT;
                 ->take(20)
                 ->get();
 
-            return $messages->map(fn($m) => [
-                'role' => $m->role,
-                'content' => $m->content,
-            ])->toArray();
+            return $messages->map(function($m) {
+                $content = $m->content;
+                
+                // For assistant messages, append shown products marker from meta
+                if ($m->role === 'assistant' && !empty($m->meta['products'])) {
+                    $productTitles = array_map(
+                        fn($p) => $p['title'] ?? 'Товар',
+                        array_slice($m->meta['products'], 0, 5) // Limit to 5 titles
+                    );
+                    $productList = implode(', ', $productTitles);
+                    
+                    // Only add marker if not already present
+                    if (strpos($content, '[Показані товари:') === false) {
+                        $content .= "\n[Показані товари: {$productList}]";
+                    }
+                }
+                
+                return [
+                    'role' => $m->role,
+                    'content' => $content,
+                ];
+            })->toArray();
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to load history', ['error' => $e->getMessage()]);
             return [];

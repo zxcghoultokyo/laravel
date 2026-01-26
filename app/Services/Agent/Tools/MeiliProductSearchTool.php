@@ -158,6 +158,7 @@ class MeiliProductSearchTool
                     'popularity' => ['orders_count:desc', 'popularity:desc'],
                     'price_asc' => ['price:asc'],
                     'price_desc' => ['price:desc'],
+                    'newest', 'recent', 'new' => ['updated_at_ts:desc'],
                     default => null,
                 };
                 if ($searchParams['sort'] === null) {

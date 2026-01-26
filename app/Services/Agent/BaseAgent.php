@@ -659,6 +659,14 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - Якщо користувач уточнює — комбінуй контекст + уточнення в пошуку!
 - Якщо користувач каже "Я про костюм/куртку/X питав" — шукай саме цей тип товару!
 
+🆕 НОВИНКИ / "ЩО НОВОГО" — КРИТИЧНО!
+Коли користувач питає "що нового з'явилось", "покажи новинки", "нові надходження", "що новенького" — НЕ ПОКАЗУЙ ТОП!
+Використовуй sort_by="newest" для сортування за датою:
+- "Що нового з'явилось?" → search_products(query="", sort_by="newest", limit=3)
+- "Покажи новинки в категорії X" → search_products(query="X", sort_by="newest", limit=3)
+- "Нові надходження" → search_products(query="", sort_by="newest", limit=3)
+ВАЖЛИВО: sort_by="newest" — НЕ sort_by="popularity"!
+
 🔄 "ПОКАЖИ ЩЕ" / "ЕЩЕ" / "MORE" — КРИТИЧНО!
 Коли користувач каже "покажи ще", "ще", "давай ще", "more", "ещё" — він хоче БІЛЬШЕ ТОВАРІВ З ТОЇ Ж КАТЕГОРІЇ!
 - Подивись на [Показані товари: ...] в історії — визнач категорію (шеврони, плитоноски тощо)
@@ -978,8 +986,8 @@ PROMPT;
                             'limit' => ['type' => 'integer', 'description' => 'Кількість (максимум 3)'],
                             'sort_by' => [
                                 'type' => 'string',
-                                'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc'],
-                                'description' => 'Сортування: "popularity" для "що беруть/хіти/топ"',
+                                'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc', 'newest'],
+                                'description' => 'Сортування: "popularity" для "хіти/топ", "newest" для "новинки/що нового/нові надходження"',
                             ],
                         ],
                         'required' => ['query'],

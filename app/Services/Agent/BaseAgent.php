@@ -1207,7 +1207,6 @@ PROMPT;
         }
 
         // Check if gender attribute was requested but not found in results
-        $genderNote = null;
         $queryLower = mb_strtolower($query);
         $genderKeywords = ['жіноча', 'жіночий', 'жіночі', 'women', 'female', 'чоловіча', 'чоловічий', 'men', 'male', 'дитяча', 'дитячий', 'kids', 'children'];
         $requestedGender = null;
@@ -1222,21 +1221,25 @@ PROMPT;
             $foundInResults = false;
             foreach ($results as $p) {
                 $titleLower = mb_strtolower($p['title'] ?? '');
-                if (str_contains($titleLower, $requestedGender)) {
+                $descLower = mb_strtolower($p['description'] ?? '');
+                if (str_contains($titleLower, $requestedGender) || str_contains($descLower, $requestedGender)) {
                     $foundInResults = true;
                     break;
                 }
             }
             if (!$foundInResults) {
-                $genderNote = "УВАГА: запит містив '{$requestedGender}', але в результатах немає товарів з цим словом у назві. Чесно повідом користувача що такого варіанту немає, але є універсальні товари.";
+                // Return empty results with message so GPT knows to say "not found"
+                Log::info('Gender attribute not found in results', ['requested' => $requestedGender, 'query' => $query]);
+                return [
+                    'products' => [], 
+                    'count' => 0, 
+                    'query' => $query,
+                    'message' => "На жаль, '{$requestedGender}' варіанту цього товару немає в асортименті. Є універсальні варіанти - запропонуй їх користувачу."
+                ];
             }
         }
 
-        $response = ['products' => $results, 'count' => count($results), 'query' => $query];
-        if ($genderNote) {
-            $response['note'] = $genderNote;
-        }
-        return $response;
+        return ['products' => $results, 'count' => count($results), 'query' => $query];
     }
 
     /**

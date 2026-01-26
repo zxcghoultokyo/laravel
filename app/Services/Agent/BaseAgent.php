@@ -251,13 +251,18 @@ abstract class BaseAgent
                 return null;
             }
             
-            // Get last assistant message with products
+            // Get last assistant message with non-empty products array
+            // Note: whereNotNull doesn't work for empty arrays, so we filter in PHP
             $lastMessage = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('chat_session_id', $session->id)
                 ->where('role', 'assistant')
-                ->whereNotNull('meta->products')
                 ->orderBy('created_at', 'desc')
-                ->first();
+                ->limit(10) // Check last 10 messages
+                ->get()
+                ->first(function ($msg) {
+                    $products = $msg->meta['products'] ?? [];
+                    return !empty($products);
+                });
                 
             if (!$lastMessage) {
                 return null;

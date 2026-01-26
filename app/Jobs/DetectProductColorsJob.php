@@ -28,12 +28,19 @@ class DetectProductColorsJob implements ShouldQueue
 
     public int $timeout = 600; // 10 minutes max
     public int $tries = 1;
-    public string $queue = 'default';
 
     private int $batchSize;
     private ?int $tenantId;
     private bool $analyzeImages;
     private bool $dryRun;
+
+    /**
+     * The queue this job should be sent to.
+     */
+    public function onQueue(): string
+    {
+        return 'default';
+    }
 
     /**
      * Create a new job instance.

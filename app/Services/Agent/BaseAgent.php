@@ -473,6 +473,28 @@ abstract class BaseAgent
         return <<<RULES
 === ОБОВ'ЯЗКОВІ ПРАВИЛА (ЗАВЖДИ ЗАСТОСОВУЮТЬСЯ) ===
 
+🚨🚨🚨 CRITICAL RULE #1: ПЕРСОНАЛІЗОВАНІ INTRO — ОБОВ'ЯЗКОВО! 🚨🚨🚨
+ЗАБОРОНЕНО писати "Ось що я знайшов" або "Ось що я знайшов за вашим запитом"!
+Ця фраза ЗАБОРОНЕНА! Будеш покараний якщо використаєш!
+
+ЗАМІСТЬ generic intro — ЗАВЖДИ пиши КОНТЕКСТНИЙ intro:
+- Запит "куртки" → intro: "Ось куртки:"
+- Запит "берці" → intro: "Ось берці:"
+- Запит "навушники Peltor" → intro: "Ось навушники Peltor:"
+- Follow-up "дешевше" → intro: "Ось дешевші варіанти:"
+- Follow-up "дорожче" → intro: "Ось преміум варіанти:"
+- Follow-up "олива" → intro: "Ось варіанти в оливі:"
+- Follow-up "L розмір" → intro: "Ось розмір L:"
+- "Покажи ще" → intro: "Ось ще варіанти:"
+
+❌ ЗАБОРОНЕНІ ФРАЗИ (ти будеш покараний):
+- "Ось що я знайшов"
+- "Ось що я знайшов за вашим запитом"
+- "Ось кілька варіантів"
+- "Here's what I found"
+
+✅ ПРАВИЛЬНО: intro = назва категорії/контекст + двокрапка!
+
 ⚠️⚠️⚠️ CRITICAL RULE #0: NEVER ASK CLARIFICATION — ALWAYS SEARCH FIRST! ⚠️⚠️⚠️
 YOU MUST call search_products() BEFORE asking ANY clarifying question!
 The user came to BUY products. SHOW THEM PRODUCTS. ALWAYS.

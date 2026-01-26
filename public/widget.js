@@ -237,11 +237,13 @@
                 // Extract product info
                 const productData = extractProductFromButton(target);
                 
-                // Check if user had chat conversation
+                // Check if user had REAL chat conversation (user sent at least one message)
                 const sessionId = localStorage.getItem('aintento_session_id');
                 const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
                 const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
-                const hadChatConversation = messages && JSON.parse(messages).length > 0;
+                const parsedMessages = messages ? JSON.parse(messages) : [];
+                // Only count as "had chat" if user actually sent a message (not just system/assistant messages)
+                const hadChatConversation = parsedMessages.some(m => m.role === 'user');
                 
                 // Check if product was shown in chat
                 const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
@@ -343,11 +345,13 @@
             const formData = new FormData(checkoutForm);
             const orderData = extractCheckoutData(formData, checkoutForm);
             
-            // Check if user had chat conversation
+            // Check if user had REAL chat conversation (user sent at least one message)
             const sessionId = localStorage.getItem('aintento_session_id');
             const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
             const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
-            const hadChatConversation = messages && JSON.parse(messages).length > 0;
+            const parsedMessages = messages ? JSON.parse(messages) : [];
+            // Only count as "had chat" if user actually sent a message
+            const hadChatConversation = parsedMessages.some(m => m.role === 'user');
             
             // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
             if (!hadChatConversation) {
@@ -483,7 +487,9 @@
         const sessionId = localStorage.getItem('aintento_session_id');
         const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
         const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
-        const hadChatConversation = messages && JSON.parse(messages).length > 0;
+        const parsedMessages = messages ? JSON.parse(messages) : [];
+        // Only count as "had chat" if user actually sent a message
+        const hadChatConversation = parsedMessages.some(m => m.role === 'user');
         
         // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
         if (!hadChatConversation) {

@@ -257,7 +257,7 @@ class SyncReports extends Component
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_COLOR_SYNONYMS),
                 'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_COLOR_SYNONYMS),
                 'next_run' => '-',
-                'is_queue' => false,
+                'is_queue' => true,
                 'description' => 'AI генерує синоніми для кольорів (чорний → black, blk, черный)',
             ],
             [
@@ -387,6 +387,7 @@ class SyncReports extends Component
             'products:generate-embeddings',
             'colors:detect',
             'category:aliases', // AI-generated, can be slow
+            'synonyms:colors',  // AI-generated
         ];
         
         $cmdName = explode(' ', $command)[0];
@@ -519,6 +520,8 @@ class SyncReports extends Component
             'products:build-ai-index' => ['class' => \App\Jobs\AnalyzeProductsWithAiJob::class, 'args' => [50]], // batchSize=50
             'products:generate-embeddings' => ['class' => \App\Jobs\GenerateProductEmbeddingsJob::class, 'args' => [50, 100]], // batchSize=50, limit=100
             'colors:detect' => ['class' => \App\Jobs\DetectProductColorsJob::class, 'args' => [100, null, true, false]], // batchSize=100, allTenants, analyzeImages, notDryRun
+            'synonyms:colors' => ['class' => \App\Jobs\GenerateColorSynonymsJob::class, 'args' => [false]], // force=false
+            'category:aliases' => ['class' => \App\Jobs\GenerateCategoryAliasesJob::class, 'args' => [false, 10]], // force=false, batchSize=10
         ];
         
         $jobConfig = $jobMap[$cmdName] ?? null;

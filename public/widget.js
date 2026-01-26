@@ -3922,6 +3922,38 @@
             return null;
         },
         
+        // Validate if detected category is a real product category (not store name/slogan)
+        isValidCategory: function(category) {
+            if (!category) return false;
+            
+            const lower = category.toLowerCase();
+            
+            // Too long = likely store description, not category
+            if (category.length > 60) return false;
+            
+            // Contains marketing phrases - not a category
+            const invalidPhrases = [
+                'для професіоналів',
+                'для патріотів',
+                'для україн',
+                'зсу',
+                'найкращ',
+                'безкоштовн',
+                'доставк',
+                'знижк',
+                'акці'
+            ];
+            if (invalidPhrases.some(phrase => lower.includes(phrase))) {
+                return false;
+            }
+            
+            // Contains too many words (4+) - likely description
+            const words = category.trim().split(/\s+/);
+            if (words.length >= 5) return false;
+            
+            return true;
+        },
+        
         // Detect current product name from product page
         detectCurrentProduct: function() {
             const pageType = this.detectPageType();
@@ -4178,11 +4210,12 @@
                 
                 // Build contextual message based on trigger type and context
                 const pageType = context.pageType || this.detectPageType();
-                const category = context.category || this.detectCurrentCategory();
+                const rawCategory = context.category || this.detectCurrentCategory();
+                const category = this.isValidCategory(rawCategory) ? rawCategory : null;
                 const product = context.product || this.detectCurrentProduct();
                 let message = '';
                 
-                log('ProactiveTriggers: Building message for', { pageType, category, product, rule_type: rule.type });
+                log('ProactiveTriggers: Building message for', { pageType, rawCategory, category, product, rule_type: rule.type });
                 
                 // Build message based on trigger type
                 switch (rule.type) {
@@ -4193,6 +4226,9 @@
                         } else if (pageType === 'category' && category) {
                             // User was leaving category - show bestsellers
                             message = `Покажи топ товари в категорії "${category}"`;
+                        } else {
+                            // Fallback: generic top products without category
+                            message = 'Покажи топ товари';
                         }
                         break;
                         
@@ -4203,6 +4239,9 @@
                         } else if (pageType === 'category' && category) {
                             // Long time in category - show bestsellers
                             message = `Покажи найпопулярніші товари в "${category}"`;
+                        } else {
+                            // Fallback: generic recommendation
+                            message = 'Покажи найпопулярніші товари';
                         }
                         break;
                         

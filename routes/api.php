@@ -159,6 +159,7 @@ Route::prefix('diagnostic')->group(function () {
     // Order investigation
     Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);
     Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
+    Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

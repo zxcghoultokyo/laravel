@@ -5445,4 +5445,79 @@ class DiagnosticController extends Controller
                 : 'No actual chat found, removed attribution',
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/cleanup-false-chat-events
+     * Remove add_to_cart events where had_chat=true but no actual chat session exists
+     */
+    public function cleanupFalseChatEvents(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $dryRun = $request->query('dry_run', 'true') === 'true';
+        $tenantId = $request->query('tenant_id');
+
+        // Find add_to_cart events with had_chat_conversation = true
+        $query = DB::table('chat_events')
+            ->whereIn('event_type', ['add_to_cart', 'checkout_success', 'checkout_submit'])
+            ->where(function($q) {
+                $q->where('metadata', 'like', '%"had_chat_conversation":true%')
+                  ->orWhere('metadata', 'like', '%"had_chat":true%');
+            });
+
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        $events = $query->get();
+
+        $falseEvents = [];
+        foreach ($events as $event) {
+            // Check if chat session actually exists and has messages
+            $hasActualChat = false;
+            
+            $chatSession = DB::table('chat_sessions')
+                ->where('session_id', $event->session_id)
+                ->first();
+            
+            if ($chatSession) {
+                $userMessages = DB::table('chat_messages')
+                    ->where('chat_session_id', $chatSession->id)
+                    ->where('role', 'user')
+                    ->count();
+                $hasActualChat = $userMessages > 0;
+            }
+
+            if (!$hasActualChat) {
+                $falseEvents[] = [
+                    'id' => $event->id,
+                    'session_id' => $event->session_id,
+                    'event_type' => $event->event_type,
+                    'product_article' => $event->product_article,
+                    'created_at' => $event->created_at,
+                    'has_chat_session' => (bool) $chatSession,
+                    'reason' => $chatSession ? 'No user messages in chat' : 'Chat session not found',
+                ];
+            }
+        }
+
+        $deletedCount = 0;
+        if (!$dryRun && count($falseEvents) > 0) {
+            $idsToDelete = array_column($falseEvents, 'id');
+            $deletedCount = DB::table('chat_events')
+                ->whereIn('id', $idsToDelete)
+                ->delete();
+        }
+
+        return response()->json([
+            'dry_run' => $dryRun,
+            'total_events_checked' => $events->count(),
+            'false_events_found' => count($falseEvents),
+            'events_deleted' => $deletedCount,
+            'false_events' => $falseEvents,
+            'hint' => $dryRun ? 'Add ?dry_run=false to actually delete events' : 'Events deleted',
+        ]);
+    }
 }

@@ -447,12 +447,16 @@ CONTEXT;
 
     /**
      * Call GPT with tools (non-streaming for tool detection).
+     * Includes retry logic for transient failures.
      */
-    private function callGptWithTools(array $messages): ?array
+    private function callGptWithTools(array $messages, int $retryCount = 0): ?array
     {
+        $maxRetries = 2;
+        
         try {
             $response = Http::withToken($this->apiKey)
-                ->timeout(30)
+                ->timeout(45)
+                ->connectTimeout(10)
                 ->post($this->baseUrl . '/chat/completions', [
                     'model' => $this->model,
                     'messages' => $messages,
@@ -465,14 +469,45 @@ CONTEXT;
 
             if (isset($data['error'])) {
                 Log::error('StreamingAgent: OpenAI error', ['error' => $data['error']]);
+                
+                // Retry on rate limit or server errors
+                if ($retryCount < $maxRetries && $this->isRetryableError($data['error'])) {
+                    Log::info('StreamingAgent: retrying after error', ['retry' => $retryCount + 1]);
+                    usleep(500000 * ($retryCount + 1)); // 0.5s, 1s backoff
+                    return $this->callGptWithTools($messages, $retryCount + 1);
+                }
+                
                 return null;
             }
 
             return $data;
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::warning('StreamingAgent: connection timeout', ['error' => $e->getMessage(), 'retry' => $retryCount]);
+            
+            if ($retryCount < $maxRetries) {
+                usleep(500000 * ($retryCount + 1));
+                return $this->callGptWithTools($messages, $retryCount + 1);
+            }
+            
+            return null;
         } catch (\Throwable $e) {
             Log::error('StreamingAgent: API error', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+    
+    /**
+     * Check if error is retryable (rate limit, server error).
+     */
+    private function isRetryableError($error): bool
+    {
+        if (is_array($error)) {
+            $type = $error['type'] ?? '';
+            $code = $error['code'] ?? '';
+            return in_array($type, ['rate_limit_error', 'server_error', 'timeout'])
+                || in_array($code, ['rate_limit_exceeded', '429', '500', '502', '503']);
+        }
+        return false;
     }
 
     /**

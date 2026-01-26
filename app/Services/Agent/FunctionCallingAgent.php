@@ -304,21 +304,25 @@ CONTEXT;
     /**
      * Call OpenAI with function calling.
      */
-    private function callGptWithTools(array $messages): ?array
+    private function callGptWithTools(array $messages, int $retryCount = 0): ?array
     {
         if (empty($this->apiKey)) {
             Log::warning('FunctionCallingAgent: no API key');
             return null;
         }
 
+        $maxRetries = 2;
+        
         try {
             Log::info('FunctionCallingAgent: calling OpenAI', [
                 'model' => $this->model,
                 'messages_count' => count($messages),
+                'retry' => $retryCount,
             ]);
 
             $response = Http::withToken($this->apiKey)
-                ->timeout(30)
+                ->timeout(45) // Increased from 30 to 45 seconds
+                ->connectTimeout(10) // Add connect timeout
                 ->post($this->baseUrl . '/chat/completions', [
                     'model' => $this->model,
                     'messages' => $messages,
@@ -337,14 +341,45 @@ CONTEXT;
 
             if (isset($data['error'])) {
                 Log::error('FunctionCallingAgent: OpenAI error', ['error' => $data['error']]);
+                
+                // Retry on rate limit or server errors
+                if ($retryCount < $maxRetries && $this->isRetryableError($data['error'])) {
+                    Log::info('FunctionCallingAgent: retrying after error', ['retry' => $retryCount + 1]);
+                    usleep(500000 * ($retryCount + 1)); // 0.5s, 1s delay
+                    return $this->callGptWithTools($messages, $retryCount + 1);
+                }
+                
                 return null;
             }
 
             return $data;
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('FunctionCallingAgent: Connection timeout', ['error' => $e->getMessage()]);
+            
+            // Retry on connection timeouts
+            if ($retryCount < $maxRetries) {
+                Log::info('FunctionCallingAgent: retrying after timeout', ['retry' => $retryCount + 1]);
+                usleep(500000 * ($retryCount + 1)); // 0.5s, 1s delay
+                return $this->callGptWithTools($messages, $retryCount + 1);
+            }
+            
+            return null;
         } catch (\Throwable $e) {
             Log::error('FunctionCallingAgent: API error', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    /**
+     * Check if error is retryable.
+     */
+    private function isRetryableError(array $error): bool
+    {
+        $retryableCodes = ['rate_limit_exceeded', 'server_error', 'timeout', 'overloaded'];
+        $errorType = $error['type'] ?? '';
+        $errorCode = $error['code'] ?? '';
+        
+        return in_array($errorType, $retryableCodes) || in_array($errorCode, $retryableCodes);
     }
 
     /**
@@ -419,6 +454,28 @@ CONTEXT;
 
         // Get final response from GPT
         $finalResponse = $this->callGptWithTools($messages);
+        
+        // Handle GPT failure - return products with basic intro
+        if ($finalResponse === null) {
+            Log::warning('GPT final response failed, returning products with basic intro', [
+                'products_count' => count($products),
+            ]);
+            $products = $this->dedupeProducts($products);
+            $intro = $this->personalizeIntro('', $originalMessage, $products);
+            return [
+                'message' => $intro ?: 'Ось результати пошуку:',
+                'products' => array_slice($products, 0, 5),
+                'messages' => [],
+                'meta' => [
+                    'intent' => 'product_search',
+                    'agent' => 'function_calling',
+                    'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
+                    'products_found' => count($products),
+                    'gpt_final_failed' => true,
+                ],
+            ];
+        }
+        
         $responseText = $finalResponse['choices'][0]['message']['content'] ?? '';
 
         // Dedupe products

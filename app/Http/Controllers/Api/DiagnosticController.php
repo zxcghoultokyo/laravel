@@ -5459,13 +5459,9 @@ class DiagnosticController extends Controller
         $dryRun = $request->query('dry_run', 'true') === 'true';
         $tenantId = $request->query('tenant_id');
 
-        // Find add_to_cart events with had_chat_conversation = true
+        // Find all add_to_cart/checkout events
         $query = DB::table('chat_events')
-            ->whereIn('event_type', ['add_to_cart', 'checkout_success', 'checkout_submit'])
-            ->where(function($q) {
-                $q->where('metadata', 'like', '%"had_chat_conversation":true%')
-                  ->orWhere('metadata', 'like', '%"had_chat":true%');
-            });
+            ->whereIn('event_type', ['add_to_cart', 'checkout_success', 'checkout_submit']);
 
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
@@ -5475,7 +5471,15 @@ class DiagnosticController extends Controller
 
         $falseEvents = [];
         foreach ($events as $event) {
-            // Check if chat session actually exists and has messages
+            $meta = json_decode($event->metadata ?? '{}', true);
+            $hadChatInMeta = $meta['had_chat_conversation'] ?? false;
+            
+            // Skip events that don't claim to have had chat
+            if (!$hadChatInMeta) {
+                continue;
+            }
+            
+            // Check if chat session actually exists and has user messages
             $hasActualChat = false;
             
             $chatSession = DB::table('chat_sessions')

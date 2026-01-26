@@ -48,6 +48,26 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Log user message to DB
         $this->logUserMessage($sessionId, $message);
 
+        // PRE-PROCESS: Handle follow-up questions about previously shown products
+        $followUpResult = $this->handleFollowUpQuestion($message, $sessionId);
+        if ($followUpResult) {
+            Log::info('StreamingAgent: follow-up question handled directly', [
+                'message' => $message,
+                'type' => $followUpResult['meta']['follow_up_type'] ?? null,
+            ]);
+            
+            // Stream the text response
+            if (!empty($followUpResult['message'])) {
+                yield ['type' => 'text', 'data' => ['text' => $followUpResult['message']]];
+            }
+            
+            // Log assistant response
+            $this->logAssistantMessage($sessionId, $followUpResult['message'], [], $followUpResult['meta']['follow_up_type'] ?? 'follow_up');
+            
+            yield ['type' => 'done', 'data' => ['meta' => $followUpResult['meta'] ?? []]];
+            return;
+        }
+
         // PRE-PROCESS: Handle implicit queries directly
         $implicitResult = $this->handleImplicitQuery($message, $sessionId);
         if ($implicitResult) {

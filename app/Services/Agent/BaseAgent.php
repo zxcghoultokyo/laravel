@@ -162,6 +162,273 @@ abstract class BaseAgent
     }
 
     // ============================================================
+    // FOLLOW-UP QUESTION HANDLER
+    // ============================================================
+
+    /**
+     * Handle follow-up questions about previously shown products.
+     * These questions should NOT trigger search, but answer from context.
+     * 
+     * Examples: "це оригінал?", "а знижки є?", "які розміри?"
+     */
+    protected function handleFollowUpQuestion(string $message, ?string $sessionId): ?array
+    {
+        $lower = mb_strtolower(trim($message));
+        
+        // Follow-up patterns that should NOT trigger search
+        $followUpPatterns = [
+            'original' => '/^(це|а це|воно?|він|вона)?\s*(оригінал|оригінальн|не підробка|справжн)/ui',
+            'discount' => '/^(а\s+)?(знижк|скидк|discount|sale|акці|дешевш)/ui',
+            'sizes' => '/^(які|а які|які є|є ще|які ще)\s*(розмір|размер|size)/ui',
+            'material' => '/^(з\s+якого|який)\s*(матеріал|тканин)/ui',
+            'included' => '/^(що\s+входить|що\s+в\s+комплект|комплектац)/ui',
+            'warranty' => '/^(гарант|warranty)/ui',
+            'delivery' => '/^(доставк|delivery|як\s+отримати)/ui',
+        ];
+        
+        $matchedType = null;
+        foreach ($followUpPatterns as $type => $pattern) {
+            if (preg_match($pattern, $lower)) {
+                $matchedType = $type;
+                break;
+            }
+        }
+        
+        if (!$matchedType) {
+            return null;
+        }
+        
+        Log::info('BaseAgent: detected follow-up question', [
+            'message' => $message,
+            'type' => $matchedType,
+            'session_id' => $sessionId,
+        ]);
+        
+        // Load last shown product from session
+        $lastProduct = $this->loadLastShownProduct($sessionId);
+        
+        if (!$lastProduct) {
+            Log::info('BaseAgent: no product context for follow-up', ['session_id' => $sessionId]);
+            return null; // Let GPT handle - maybe it has context
+        }
+        
+        // Generate response based on question type
+        $response = $this->generateFollowUpResponse($matchedType, $lastProduct);
+        
+        if (!$response) {
+            return null;
+        }
+        
+        return [
+            'message' => $response,
+            'products' => [],
+            'messages' => [['type' => 'text', 'content' => $response]],
+            'meta' => [
+                'intent' => 'follow_up',
+                'agent' => 'function_calling',
+                'source' => 'follow_up_handler',
+                'follow_up_type' => $matchedType,
+                'product_article' => $lastProduct['article'] ?? null,
+            ],
+        ];
+    }
+
+    /**
+     * Load last shown product details from session history.
+     */
+    protected function loadLastShownProduct(?string $sessionId): ?array
+    {
+        if (!$sessionId) {
+            return null;
+        }
+        
+        try {
+            $session = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)
+                ->first();
+                
+            if (!$session) {
+                return null;
+            }
+            
+            // Get last assistant message with products
+            $lastMessage = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
+                ->where('role', 'assistant')
+                ->whereNotNull('meta->products')
+                ->orderBy('created_at', 'desc')
+                ->first();
+                
+            if (!$lastMessage) {
+                return null;
+            }
+            
+            $meta = $lastMessage->meta ?? [];
+            $products = $meta['products'] ?? [];
+            
+            if (empty($products)) {
+                return null;
+            }
+            
+            // Get the first product shown
+            $productInfo = $products[0];
+            $productId = $productInfo['id'] ?? null;
+            
+            if (!$productId) {
+                return $productInfo; // Return basic info if no ID
+            }
+            
+            // Load full product from DB for details
+            $product = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->find($productId);
+                
+            if (!$product) {
+                return $productInfo;
+            }
+            
+            // Combine API info with DB details
+            return [
+                'id' => $product->id,
+                'title' => $product->title ?? $productInfo['title'] ?? '',
+                'article' => $product->article ?? $productInfo['article'] ?? '',
+                'brand' => $product->brand ?? null,
+                'price' => $product->price ?? $productInfo['price'] ?? '',
+                'price_old' => $product->price_old ?? null,
+                'description' => $this->extractDescription($product),
+                'attributes' => $this->extractAttributes($product),
+                'sizes' => $this->extractSizes($product),
+                'in_stock' => $product->in_stock ?? true,
+            ];
+        } catch (\Throwable $e) {
+            Log::error('BaseAgent: failed to load last product', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+    
+    /**
+     * Extract product description from raw field.
+     */
+    protected function extractDescription(\App\Models\Product $product): string
+    {
+        $raw = $product->raw ?? [];
+        return $raw['description'] ?? $raw['full_description'] ?? '';
+    }
+    
+    /**
+     * Extract product attributes/characteristics from raw field.
+     */
+    protected function extractAttributes(\App\Models\Product $product): array
+    {
+        $raw = $product->raw ?? [];
+        return $raw['characteristics'] ?? $raw['attributes'] ?? [];
+    }
+    
+    /**
+     * Extract available sizes from product.
+     */
+    protected function extractSizes(\App\Models\Product $product): array
+    {
+        $raw = $product->raw ?? [];
+        
+        // Try different possible formats
+        if (!empty($raw['variants'])) {
+            return array_unique(array_filter(array_column($raw['variants'], 'size')));
+        }
+        
+        if (!empty($raw['sizes'])) {
+            return $raw['sizes'];
+        }
+        
+        // Check if product itself has size
+        if (!empty($product->size) && $product->size !== '-') {
+            return [$product->size];
+        }
+        
+        return [];
+    }
+    
+    /**
+     * Generate response for follow-up question based on product data.
+     */
+    protected function generateFollowUpResponse(string $type, array $product): ?string
+    {
+        $title = $product['title'] ?? 'цей товар';
+        $brand = $product['brand'] ?? null;
+        $price = $product['price'] ?? null;
+        $priceOld = $product['price_old'] ?? null;
+        $sizes = $product['sizes'] ?? [];
+        $description = $product['description'] ?? '';
+        $attributes = $product['attributes'] ?? [];
+        
+        switch ($type) {
+            case 'original':
+                if ($brand) {
+                    // Known original brands
+                    $originalBrands = ['CAT', 'NAR', 'Mechanix', '5.11', 'Oakley', 'Crye', 'Magpul', 'QuikClot', 'HyFin', 'ECWCS'];
+                    $isLikelyOriginal = false;
+                    foreach ($originalBrands as $origBrand) {
+                        if (stripos($brand, $origBrand) !== false || stripos($title, $origBrand) !== false) {
+                            $isLikelyOriginal = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($isLikelyOriginal) {
+                        return "Так, {$title} є оригінальним продуктом бренду {$brand}.";
+                    }
+                    return "Це товар бренду {$brand}. Якщо потрібно уточнити оригінальність — зателефонуйте: {$this->getShopPhone()}";
+                }
+                return "Щодо оригінальності товару — зверніться до менеджера: {$this->getShopPhone()}";
+                
+            case 'discount':
+                if ($priceOld && floatval($priceOld) > floatval($price)) {
+                    $discount = round((floatval($priceOld) - floatval($price)) / floatval($priceOld) * 100);
+                    return "Так, на цей товар діє знижка {$discount}%! Стара ціна: {$priceOld} грн, нова: {$price} грн.";
+                }
+                return "На даний момент знижок на цей товар немає. Ціна: {$price} грн.";
+                
+            case 'sizes':
+                if (!empty($sizes)) {
+                    $sizeList = implode(', ', $sizes);
+                    return "Є такі розміри: {$sizeList}. Який вам потрібен?";
+                }
+                return "Щодо наявних розмірів — уточніть у менеджера: {$this->getShopPhone()}";
+                
+            case 'material':
+                // Try to find material in description or attributes
+                foreach ($attributes as $key => $value) {
+                    $keyLower = mb_strtolower($key);
+                    if (strpos($keyLower, 'матеріал') !== false || strpos($keyLower, 'тканин') !== false) {
+                        return "Матеріал: {$value}";
+                    }
+                }
+                // Search in description
+                if (preg_match('/матеріал[:\s]+([^.]+)/ui', $description, $m)) {
+                    return "Матеріал: {$m[1]}";
+                }
+                return "Детальну інформацію про матеріал можна уточнити на сайті або зателефонувати: {$this->getShopPhone()}";
+                
+            case 'included':
+                if (preg_match('/комплект[:\s]+([^.]+)/ui', $description, $m)) {
+                    return "В комплект входить: {$m[1]}";
+                }
+                if (preg_match('/включа[єе][:\s]+([^.]+)/ui', $description, $m)) {
+                    return "В комплект входить: {$m[1]}";
+                }
+                return "Детальну інформацію про комплектацію дивіться на сайті або зверніться до менеджера: {$this->getShopPhone()}";
+                
+            case 'warranty':
+                return "Інформацію про гарантію уточнюйте у менеджера: {$this->getShopPhone()}";
+                
+            case 'delivery':
+                return "Доставка здійснюється Новою Поштою. Для уточнення деталей зверніться: {$this->getShopPhone()}";
+                
+            default:
+                return null;
+        }
+    }
+
+    // ============================================================
     // SYSTEM PROMPT
     // ============================================================
 

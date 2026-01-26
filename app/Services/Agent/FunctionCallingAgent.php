@@ -38,6 +38,20 @@ class FunctionCallingAgent extends BaseAgent
 
         Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId, 'tenant_id' => $tenantId]);
 
+        // PRE-PROCESS: Handle follow-up questions about previously shown products
+        // These should NOT trigger search, but answer from context
+        $followUpResult = $this->handleFollowUpQuestion($message, $sessionId);
+        if ($followUpResult) {
+            // Log and save to DB
+            $this->logAssistantMessage(
+                $sessionId, 
+                $followUpResult['message'], 
+                $followUpResult['products'], 
+                $followUpResult['meta']['follow_up_type'] ?? 'follow_up'
+            );
+            return $followUpResult;
+        }
+
         // PRE-PROCESS: Detect implicit queries and search directly
         $implicitSearchResult = $this->handleImplicitQuery($message, $sessionId);
         if ($implicitSearchResult) {

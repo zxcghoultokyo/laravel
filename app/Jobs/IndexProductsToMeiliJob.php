@@ -164,6 +164,10 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     // Рюкзаки
                     'рюкзак' => ['backpack', 'ранець', 'наплічник'],
                     'backpack' => ['рюкзак', 'ранець'],
+                    // Термобілизна
+                    'термобілизна' => ['термуха', 'thermal underwear', 'base layer', 'кальсони', 'подштанники', 'термобілізна', 'level 1', 'level 2'],
+                    'термуха' => ['термобілизна', 'thermal underwear', 'base layer', 'термобілізна'],
+                    'thermal' => ['термо', 'термобілизна', 'термуха'],
                     // Бренди з варіантами написання
                     'ops-core' => ['ops core', 'opscore', 'опс-кор', 'опскор'],
                     'crye precision' => ['crye', 'край', 'край прецішн'],

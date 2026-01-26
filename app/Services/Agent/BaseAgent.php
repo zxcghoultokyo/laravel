@@ -209,6 +209,9 @@ IF USER SAYS ANYTHING that IMPLIES a product need → SEARCH IMMEDIATELY:
 - "something to write" → search_products("pen OR ручка")
 - "head protection" → search_products("helmet OR шолом")
 - "stay warm" → search_products("jacket OR куртка")
+- "термуха", "термо білизна", "термобілизна" → search_products("термобілизна OR термо OR Level 1 OR Level 2")
+- "жіноча термуха" → search_products("термобілизна жіноча OR термо жіноча")
+- "чоловіча термобілизна" → search_products("термобілизна чоловіча OR термо OR Level 1")
 
 BANNED RESPONSES (you will be penalized):
 ❌ "Could you clarify what you mean?"

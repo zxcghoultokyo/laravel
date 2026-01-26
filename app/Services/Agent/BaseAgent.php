@@ -1206,7 +1206,37 @@ PROMPT;
             if (!empty($cards)) $results = $cards;
         }
 
-        return ['products' => $results, 'count' => count($results), 'query' => $query];
+        // Check if gender attribute was requested but not found in results
+        $genderNote = null;
+        $queryLower = mb_strtolower($query);
+        $genderKeywords = ['жіноча', 'жіночий', 'жіночі', 'women', 'female', 'чоловіча', 'чоловічий', 'men', 'male', 'дитяча', 'дитячий', 'kids', 'children'];
+        $requestedGender = null;
+        foreach ($genderKeywords as $keyword) {
+            if (str_contains($queryLower, $keyword)) {
+                $requestedGender = $keyword;
+                break;
+            }
+        }
+        
+        if ($requestedGender && !empty($results)) {
+            $foundInResults = false;
+            foreach ($results as $p) {
+                $titleLower = mb_strtolower($p['title'] ?? '');
+                if (str_contains($titleLower, $requestedGender)) {
+                    $foundInResults = true;
+                    break;
+                }
+            }
+            if (!$foundInResults) {
+                $genderNote = "УВАГА: запит містив '{$requestedGender}', але в результатах немає товарів з цим словом у назві. Чесно повідом користувача що такого варіанту немає, але є універсальні товари.";
+            }
+        }
+
+        $response = ['products' => $results, 'count' => count($results), 'query' => $query];
+        if ($genderNote) {
+            $response['note'] = $genderNote;
+        }
+        return $response;
     }
 
     /**

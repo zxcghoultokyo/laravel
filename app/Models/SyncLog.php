@@ -42,6 +42,8 @@ class SyncLog extends Model
     public const TYPE_STATS = 'stats';
     public const TYPE_BRANDS = 'brands';
     public const TYPE_COLOR_DETECTION = 'color_detection';
+    public const TYPE_COLOR_SYNONYMS = 'color_synonyms';
+    public const TYPE_CATEGORY_ALIASES = 'category_aliases';
 
     // Statuses
     public const STATUS_RUNNING = 'running';

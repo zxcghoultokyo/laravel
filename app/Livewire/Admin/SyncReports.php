@@ -250,6 +250,36 @@ class SyncReports extends Component
                 'is_queue' => true,
                 'description' => 'Автоматично визначає кольори товарів з фото та опису',
             ],
+            [
+                'name' => '🎨 Синоніми кольорів',
+                'command' => 'synonyms:colors',
+                'schedule' => 'Ручний запуск',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_COLOR_SYNONYMS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_COLOR_SYNONYMS),
+                'next_run' => '-',
+                'is_queue' => false,
+                'description' => 'AI генерує синоніми для кольорів (чорний → black, blk, черный)',
+            ],
+            [
+                'name' => '📂 Категорії (rebuild)',
+                'command' => 'category:rebuild',
+                'schedule' => 'Після імпорту товарів',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_CATEGORIES),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_CATEGORIES),
+                'next_run' => '-',
+                'is_queue' => false,
+                'description' => 'Перебудовує дерево категорій з товарів',
+            ],
+            [
+                'name' => '🏷️ Аліаси категорій (AI)',
+                'command' => 'category:aliases',
+                'schedule' => 'Ручний запуск',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_CATEGORY_ALIASES),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_CATEGORY_ALIASES),
+                'next_run' => '-',
+                'is_queue' => true,
+                'description' => 'AI генерує аліаси категорій (плитоноски → броник, plate carrier)',
+            ],
         ];
     }
 
@@ -337,6 +367,9 @@ class SyncReports extends Component
             'products:update-orders-count' => SyncLog::TYPE_STATS,
             'products:generate-embeddings' => SyncLog::TYPE_EMBEDDINGS,
             'colors:detect' => SyncLog::TYPE_COLOR_DETECTION,
+            'synonyms:colors' => SyncLog::TYPE_COLOR_SYNONYMS,
+            'category:rebuild' => SyncLog::TYPE_CATEGORIES,
+            'category:aliases' => SyncLog::TYPE_CATEGORY_ALIASES,
         ];
         
         $cmdName = explode(' ', $command)[0];
@@ -353,6 +386,7 @@ class SyncReports extends Component
             'products:build-ai-index',
             'products:generate-embeddings',
             'colors:detect',
+            'category:aliases', // AI-generated, can be slow
         ];
         
         $cmdName = explode(' ', $command)[0];

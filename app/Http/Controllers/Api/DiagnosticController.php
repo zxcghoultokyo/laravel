@@ -5524,4 +5524,107 @@ class DiagnosticController extends Controller
             'hint' => $dryRun ? 'Add ?dry_run=false to actually delete events' : 'Events deleted',
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/color-synonyms
+     * Show color synonyms statistics and data
+     */
+    public function colorSynonyms(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $synonyms = DB::table('color_synonyms')
+                ->select('color_group', DB::raw('COUNT(*) as synonyms_count'))
+                ->groupBy('color_group')
+                ->orderByDesc('synonyms_count')
+                ->get();
+
+            $allSynonyms = DB::table('color_synonyms')
+                ->orderBy('color_group')
+                ->orderByDesc('is_primary')
+                ->get()
+                ->groupBy('color_group')
+                ->map(function ($items) {
+                    return $items->pluck('synonym')->toArray();
+                });
+
+            $totalGroups = $synonyms->count();
+            $totalSynonyms = DB::table('color_synonyms')->count();
+
+            return response()->json([
+                'total_groups' => $totalGroups,
+                'total_synonyms' => $totalSynonyms,
+                'groups_summary' => $synonyms->toArray(),
+                'all_synonyms' => $allSynonyms->toArray(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'hint' => 'Table may not exist. Run: php artisan synonyms:colors',
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/diagnostic/category-aliases
+     * Show category aliases statistics and data
+     */
+    public function categoryAliases(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $aliases = DB::table('category_aliases as ca')
+                ->join('categories as c', 'ca.category_id', '=', 'c.id')
+                ->select(
+                    'c.path',
+                    'ca.source',
+                    DB::raw('COUNT(*) as aliases_count'),
+                    DB::raw('AVG(ca.weight) as avg_weight')
+                )
+                ->where('ca.is_active', true)
+                ->groupBy('c.path', 'ca.source')
+                ->orderBy('c.path')
+                ->get();
+
+            $totalCategories = DB::table('categories')->count();
+            $totalAliases = DB::table('category_aliases')->count();
+            $aiGenerated = DB::table('category_aliases')->where('source', 'ai_generated')->count();
+
+            // Sample aliases for top categories
+            $topCategories = DB::table('categories')
+                ->orderByDesc('products_count')
+                ->limit(10)
+                ->pluck('id', 'path');
+
+            $sampleAliases = [];
+            foreach ($topCategories as $path => $catId) {
+                $sampleAliases[$path] = DB::table('category_aliases')
+                    ->where('category_id', $catId)
+                    ->where('is_active', true)
+                    ->orderByDesc('weight')
+                    ->limit(10)
+                    ->pluck('phrase')
+                    ->toArray();
+            }
+
+            return response()->json([
+                'total_categories' => $totalCategories,
+                'total_aliases' => $totalAliases,
+                'ai_generated' => $aiGenerated,
+                'by_source' => $aliases->groupBy('source')->map(fn($items) => $items->sum('aliases_count')),
+                'sample_aliases' => $sampleAliases,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'hint' => 'Tables may not exist. Run: php artisan category:rebuild && php artisan category:aliases',
+            ], 500);
+        }
+    }
 }

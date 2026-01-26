@@ -160,6 +160,10 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);
     Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
     Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
+    
+    // Synonyms & Aliases
+    Route::get('/color-synonyms', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorSynonyms']);
+    Route::get('/category-aliases', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryAliases']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

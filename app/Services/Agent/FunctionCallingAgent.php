@@ -405,7 +405,7 @@ CONTEXT;
         // Generate outro for trigger queries if needed (pass GPT response to avoid duplication)
         $outro = $structuredResponse['outro'] ?? null;
         if ($isTriggerQuery && !empty($products) && empty($outro)) {
-            $outro = $this->generateTriggerOutro($products, $responseText);
+            $outro = $this->generateTriggerOutro($products, $responseText, $originalMessage);
             if (!empty($structuredResponse['messages'])) {
                 $structuredResponse['messages'][] = ['type' => 'text', 'content' => $outro];
             }

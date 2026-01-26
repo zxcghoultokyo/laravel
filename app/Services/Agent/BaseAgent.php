@@ -351,6 +351,23 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 
 {$priceContext}
 
+� FOLLOW-UP ПИТАННЯ ПРО ПОПЕРЕДНІЙ ТОВАР — КРИТИЧНО!
+Якщо користувач питає про ХАРАКТЕРИСТИКУ раніше показаного товару — НЕ ШУКАЙ НОВІ!
+Дивись в історію на [Показані товари: ...] та відповідай на основі того товару!
+
+ПРИКЛАДИ FOLLOW-UP (НЕ шукай, ВІДПОВІДАЙ):
+- "це оригінал?" → дивись бренд/виробника в попередньому товарі та кажи "Так, це оригінал [бренд]" або "Це якісна репліка"
+- "а знижки є?" → кажи "На даний момент знижок на цей товар немає. Ціна: [price]"
+- "які розміри?" → кажи розміри з попереднього товару або "Є розміри: [sizes]"
+- "що входить у комплект?" → опиши склад з опису товару
+- "з якого матеріалу?" → подивись опис товару
+- "на який зріст?" → дивись характеристики або рекомендуй recommend_size
+
+❓ ПИТАННЯ ПРО ЧАТ — СПЕЦІАЛЬНА ОБРОБКА:
+- "а я зараз де?" / "це онлайн чат?" / "я де?" → "Так, це онлайн-чат магазину. Я можу допомогти з вибором товарів"
+- "хто ти?" / "ти бот?" → "Я AI-помічник магазину, допомагаю з вибором товарів та консультую"
+- "з ким я говорю?" → "Я AI-консультант, допоможу підібрати товар!"
+
 🚨 УТОЧНЮЮЧІ ПИТАННЯ — ЗАВЖДИ ВИКЛИКАЙ search_products!
 Якщо користувач пише коротке слово/назву що уточнює попередній контекст — ЦЕ КОМАНДА НА ПОШУК!
 Приклади:
@@ -368,6 +385,7 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - Якщо обговорювали товар — ПАМ'ЯТАЙ через всю розмову
 - В історії є маркери [Показані товари: ...] — використовуй їх!
 - Якщо користувач уточнює — комбінуй контекст + уточнення в пошуку!
+- Якщо користувач каже "Я про костюм/куртку/X питав" — шукай саме цей тип товару!
 
 🔄 "ПОКАЖИ ЩЕ" / "ЕЩЕ" / "MORE" — КРИТИЧНО!
 Коли користувач каже "покажи ще", "ще", "давай ще", "more", "ещё" — він хоче БІЛЬШЕ ТОВАРІВ З ТОЇ Ж КАТЕГОРІЇ!
@@ -1470,13 +1488,32 @@ PROMPT;
     /**
      * Generate CTA outro for trigger queries.
      * Now checks if GPT already included a size question to avoid duplication.
+     * Also detects "top products in category" queries to avoid irrelevant size/color questions.
      */
-    protected function generateTriggerOutro(array $products, string $gptResponse = ''): string
+    protected function generateTriggerOutro(array $products, string $gptResponse = '', string $originalQuery = ''): string
     {
         if (empty($products)) return 'Є питання? Допоможу з вибором!';
 
+        // For "top products in category" queries, don't ask about size/color - products are diverse!
+        $lowerQuery = mb_strtolower($originalQuery);
+        $isTopProductsQuery = str_contains($lowerQuery, 'топ товари') 
+            || str_contains($lowerQuery, 'популярні товари')
+            || str_contains($lowerQuery, 'top products');
+
         $firstProduct = $products[0];
         $quantity = $firstProduct['quantity'] ?? 0;
+
+        // Check if GPT already asked about size/color to avoid duplication
+        $lowerResponse = mb_strtolower($gptResponse);
+        $alreadyAskedSize = str_contains($lowerResponse, 'розмір') || str_contains($lowerResponse, 'size');
+        $alreadyAskedColor = str_contains($lowerResponse, 'колір') || str_contains($lowerResponse, 'color');
+        $alreadyAskedGeneric = str_contains($lowerResponse, 'цікавить щось конкретне')
+            || str_contains($lowerResponse, 'є питання');
+
+        // For diverse product queries (top products), use generic CTA
+        if ($isTopProductsQuery || $alreadyAskedGeneric) {
+            return 'Цікавить щось конкретне? Допоможу підібрати!';
+        }
 
         $hasMultipleSizes = false;
         $hasMultipleColors = false;
@@ -1485,11 +1522,6 @@ PROMPT;
             if (!empty($p['size_variants']) && count($p['size_variants']) > 1) $hasMultipleSizes = true;
             if (!empty($p['color_variants']) && count($p['color_variants']) > 1) $hasMultipleColors = true;
         }
-
-        // Check if GPT already asked about size/color to avoid duplication
-        $lowerResponse = mb_strtolower($gptResponse);
-        $alreadyAskedSize = str_contains($lowerResponse, 'розмір') || str_contains($lowerResponse, 'size');
-        $alreadyAskedColor = str_contains($lowerResponse, 'колір') || str_contains($lowerResponse, 'color');
 
         if ($hasMultipleSizes && !$alreadyAskedSize) {
             return 'Який розмір/варіант вам потрібен? Допоможу підібрати!';

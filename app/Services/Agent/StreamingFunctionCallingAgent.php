@@ -281,7 +281,7 @@ CONTEXT;
             // Generate outro for trigger queries if needed (pass responseText to avoid duplication)
             $outro = $structured['outro'] ?? null;
             if ($isTriggerQuery && !empty($allProducts) && empty($outro)) {
-                $outro = $this->generateTriggerOutro($allProducts, $responseText);
+                $outro = $this->generateTriggerOutro($allProducts, $responseText, $message);
             }
 
             if (!empty($outro)) {

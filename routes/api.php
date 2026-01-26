@@ -155,6 +155,10 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/seed-triggers', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTriggers']);
     Route::post('/seed-test-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTestData']);
     Route::post('/fix-messages-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixMessagesTenant']);
+    
+    // Order investigation
+    Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);
+    Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

@@ -5247,4 +5247,202 @@ class DiagnosticController extends Controller
             ]);
         }
     }
+
+    /**
+     * GET /api/diagnostic/order/{orderId}
+     * Find order by order_id and check chat events
+     */
+    public function findOrder(Request $request, $orderId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $order = DB::table('orders')->where('order_id', $orderId)->first();
+        
+        if (!$order) {
+            return response()->json([
+                'error' => 'Order not found',
+                'order_id' => $orderId,
+            ], 404);
+        }
+
+        // Get order items
+        $items = DB::table('order_items')
+            ->where('order_id', $order->id)
+            ->get()
+            ->map(fn($item) => [
+                'article' => $item->article,
+                'title' => $item->title,
+                'price' => $item->price,
+                'quantity' => $item->quantity,
+            ]);
+
+        // Check for chat session
+        $chatSession = null;
+        $chatMessages = [];
+        if ($order->session_id) {
+            $chatSession = DB::table('chat_sessions')
+                ->where('session_id', $order->session_id)
+                ->first();
+            
+            if ($chatSession) {
+                $chatMessages = DB::table('chat_messages')
+                    ->where('chat_session_id', $chatSession->id)
+                    ->orderBy('created_at')
+                    ->get()
+                    ->map(fn($m) => [
+                        'role' => $m->role,
+                        'content' => mb_substr($m->content, 0, 200),
+                        'created_at' => $m->created_at,
+                    ]);
+            }
+        }
+
+        // Check for chat events related to this session
+        $chatEvents = [];
+        if ($order->session_id) {
+            $chatEvents = DB::table('chat_events')
+                ->where('session_id', $order->session_id)
+                ->orderBy('created_at')
+                ->get()
+                ->map(fn($e) => [
+                    'type' => $e->event_type,
+                    'product_article' => $e->product_article,
+                    'created_at' => $e->created_at,
+                ]);
+        }
+
+        // Check add_to_cart events by phone or around order time
+        $cartEventsByPhone = [];
+        if ($order->customer_phone) {
+            // Normalize phone for search
+            $phone = preg_replace('/[^0-9]/', '', $order->customer_phone);
+            $phoneShort = substr($phone, -10); // last 10 digits
+            
+            $cartEventsByPhone = DB::table('chat_events')
+                ->where('event_type', 'add_to_cart')
+                ->where(function($q) use ($phone, $phoneShort, $order) {
+                    $q->where('metadata', 'like', '%' . $phoneShort . '%')
+                      ->orWhere('metadata', 'like', '%' . ($order->customer_name ?? 'NO_MATCH') . '%');
+                })
+                ->orderByDesc('created_at')
+                ->limit(20)
+                ->get();
+        }
+
+        // Find add_to_cart events around order time (±2 hours)
+        $orderTime = $order->ordered_at ?? $order->created_at;
+        $cartEventsAroundTime = DB::table('chat_events')
+            ->where('event_type', 'add_to_cart')
+            ->whereBetween('created_at', [
+                date('Y-m-d H:i:s', strtotime($orderTime) - 7200),
+                date('Y-m-d H:i:s', strtotime($orderTime) + 7200),
+            ])
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn($e) => [
+                'id' => $e->id,
+                'session_id' => $e->session_id,
+                'product_article' => $e->product_article,
+                'metadata' => json_decode($e->metadata ?? '{}', true),
+                'created_at' => $e->created_at,
+            ]);
+
+        return response()->json([
+            'order' => [
+                'id' => $order->id,
+                'order_id' => $order->order_id,
+                'tenant_id' => $order->tenant_id,
+                'session_id' => $order->session_id,
+                'had_chat' => (bool) $order->had_chat,
+                'products_from_chat' => $order->products_from_chat,
+                'customer_name' => $order->customer_name,
+                'customer_phone' => $order->customer_phone,
+                'customer_city' => $order->customer_city,
+                'total_sum' => $order->total_sum,
+                'ordered_at' => $order->ordered_at,
+                'created_at' => $order->created_at,
+            ],
+            'items' => $items,
+            'chat_session' => $chatSession ? [
+                'id' => $chatSession->id,
+                'session_id' => $chatSession->session_id,
+                'messages_count' => count($chatMessages),
+            ] : null,
+            'chat_messages' => $chatMessages,
+            'chat_events_for_session' => $chatEvents,
+            'cart_events_around_order_time' => $cartEventsAroundTime,
+            'analysis' => [
+                'has_session_id' => !empty($order->session_id),
+                'has_chat_session' => !empty($chatSession),
+                'has_chat_messages' => count($chatMessages) > 0,
+                'had_actual_chat' => count($chatMessages) > 0,
+                'should_count_in_funnel' => count($chatMessages) > 0,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/fix-order-chat/{orderId}
+     * Fix order chat attribution
+     */
+    public function fixOrderChat(Request $request, $orderId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $order = DB::table('orders')->where('order_id', $orderId)->first();
+        
+        if (!$order) {
+            return response()->json([
+                'error' => 'Order not found',
+                'order_id' => $orderId,
+            ], 404);
+        }
+
+        // Check if there was actual chat
+        $hadActualChat = false;
+        if ($order->session_id) {
+            $chatSession = DB::table('chat_sessions')
+                ->where('session_id', $order->session_id)
+                ->first();
+            
+            if ($chatSession) {
+                $messagesCount = DB::table('chat_messages')
+                    ->where('chat_session_id', $chatSession->id)
+                    ->count();
+                $hadActualChat = $messagesCount > 0;
+            }
+        }
+
+        // Update order
+        $updated = DB::table('orders')
+            ->where('id', $order->id)
+            ->update([
+                'had_chat' => $hadActualChat,
+                'products_from_chat' => $hadActualChat ? $order->products_from_chat : 0,
+            ]);
+
+        // Delete related cart events if no actual chat
+        $deletedEvents = 0;
+        if (!$hadActualChat && $order->session_id) {
+            $deletedEvents = DB::table('chat_events')
+                ->where('session_id', $order->session_id)
+                ->whereIn('event_type', ['add_to_cart', 'checkout_success', 'checkout_submit'])
+                ->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'order_id' => $orderId,
+            'had_actual_chat' => $hadActualChat,
+            'order_updated' => $updated > 0,
+            'events_deleted' => $deletedEvents,
+            'message' => $hadActualChat 
+                ? 'Order had actual chat conversation, kept attribution' 
+                : 'No actual chat found, removed attribution',
+        ]);
+    }
 }

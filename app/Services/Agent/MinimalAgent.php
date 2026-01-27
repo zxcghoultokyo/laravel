@@ -73,32 +73,47 @@ class MinimalAgent
         Log::info('MinimalAgent: processing', [
             'message' => $message,
             'session_id' => $sessionId,
+            'tenant_id' => $tenantId,
             'is_trigger' => $isTrigger,
+            'has_api_key' => !empty($this->apiKey),
         ]);
 
-        // Load shown product IDs for "покажи ще" handling
-        $this->shownProductIds = $this->loadShownProductIds($sessionId);
+        try {
+            // Load shown product IDs for "покажи ще" handling
+            $this->shownProductIds = $this->loadShownProductIds($sessionId);
 
-        // Load conversation history
-        $history = $this->loadHistory($sessionId);
+            // Load conversation history
+            $history = $this->loadHistory($sessionId);
 
-        // Build messages
-        $messages = $this->buildMessages($message, $history, $isTrigger, $context);
+            // Build messages
+            $messages = $this->buildMessages($message, $history, $isTrigger, $context);
 
-        // Call GPT
-        $response = $this->callGpt($messages);
+            // Call GPT
+            $response = $this->callGpt($messages);
 
-        if (!$response) {
+            if (!$response) {
+                Log::warning('MinimalAgent: GPT returned null, using fallback');
+                return $this->fallbackSearch($message);
+            }
+
+            // Process response
+            $result = $this->processResponse($response, $message, $sessionId);
+
+            // Save to history (non-critical, don't fail on error)
+            try {
+                $this->saveToHistory($sessionId, $message, $result);
+            } catch (\Throwable $e) {
+                Log::warning('MinimalAgent: failed to save history', ['error' => $e->getMessage()]);
+            }
+
+            return $result;
+        } catch (\Throwable $e) {
+            Log::error('MinimalAgent: exception in handle()', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return $this->fallbackSearch($message);
         }
-
-        // Process response
-        $result = $this->processResponse($response, $message, $sessionId);
-
-        // Save to history
-        $this->saveToHistory($sessionId, $message, $result);
-
-        return $result;
     }
 
     /**

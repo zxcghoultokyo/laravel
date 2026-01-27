@@ -1961,6 +1961,126 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/reset-tenant/{tenantId}
+     * Reset tenant data for re-onboarding (keeps tenant, user, widget_settings)
+     */
+    public function resetTenant(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        $dryRun = $request->boolean('dry_run', true);
+
+        // Collect all related data counts (excluding tenant, user, widget_settings)
+        $stats = [
+            'tenant' => [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'domain' => $tenant->domain,
+                'note' => '✅ WILL BE KEPT',
+            ],
+            'products' => DB::table('products')->where('tenant_id', $tenantId)->count(),
+            'product_ai_index' => DB::table('product_ai_index')
+                ->whereIn('product_id', function ($q) use ($tenantId) {
+                    $q->select('id')->from('products')->where('tenant_id', $tenantId);
+                })->count(),
+            'categories' => DB::table('categories')->where('tenant_id', $tenantId)->count(),
+            'brands' => DB::table('brands')->where('tenant_id', $tenantId)->count(),
+            'chat_sessions' => DB::table('chat_sessions')->where('tenant_id', $tenantId)->count(),
+            'chat_messages' => DB::table('chat_messages')
+                ->whereIn('chat_session_id', function ($q) use ($tenantId) {
+                    $q->select('id')->from('chat_sessions')->where('tenant_id', $tenantId);
+                })->count(),
+            'onboarding_progress' => DB::table('tenant_onboarding_progress')->where('tenant_id', $tenantId)->count(),
+            'sync_logs' => DB::table('sync_logs')->where('tenant_id', $tenantId)->count(),
+            'will_keep' => [
+                'tenant' => '✅',
+                'users' => DB::table('users')->where('tenant_id', $tenantId)->count(),
+                'widget_settings' => DB::table('widget_settings')->where('tenant_id', $tenantId)->count(),
+            ],
+        ];
+
+        if ($dryRun) {
+            return response()->json([
+                'dry_run' => true,
+                'tenant_id' => $tenantId,
+                'will_delete' => $stats,
+                'note' => '⚠️ Set dry_run=false to reset tenant data. Tenant/user/widget will be KEPT.',
+            ]);
+        }
+
+        // Delete in correct order (respect foreign keys)
+        $deleted = [];
+
+        // 1. Chat messages (FK to chat_sessions)
+        $deleted['chat_messages'] = DB::table('chat_messages')
+            ->whereIn('chat_session_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('chat_sessions')->where('tenant_id', $tenantId);
+            })->delete();
+
+        // 2. Chat sessions
+        $deleted['chat_sessions'] = DB::table('chat_sessions')->where('tenant_id', $tenantId)->delete();
+
+        // 3. Product AI index (FK to products)
+        $deleted['product_ai_index'] = DB::table('product_ai_index')
+            ->whereIn('product_id', function ($q) use ($tenantId) {
+                $q->select('id')->from('products')->where('tenant_id', $tenantId);
+            })->delete();
+
+        // 4. Products
+        $deleted['products'] = DB::table('products')->where('tenant_id', $tenantId)->delete();
+
+        // 5. Categories
+        $deleted['categories'] = DB::table('categories')->where('tenant_id', $tenantId)->delete();
+
+        // 6. Brands
+        $deleted['brands'] = DB::table('brands')->where('tenant_id', $tenantId)->delete();
+
+        // 7. Onboarding progress
+        $deleted['onboarding_progress'] = DB::table('tenant_onboarding_progress')->where('tenant_id', $tenantId)->delete();
+
+        // 8. Sync logs
+        $deleted['sync_logs'] = DB::table('sync_logs')->where('tenant_id', $tenantId)->delete();
+
+        // 9. Reset tenant fields for re-onboarding
+        $tenant->update([
+            'last_sync_at' => null,
+            'onboarding_completed_at' => null,
+            'platform' => null,
+            'platform_credentials' => null,
+        ]);
+
+        // 10. Delete from Meilisearch
+        try {
+            $client = new \Meilisearch\Client(
+                config('meilisearch.host'),
+                config('meilisearch.key')
+            );
+            $index = $client->index(config('meilisearch.index', 'products'));
+            // Delete all docs for this tenant
+            $index->deleteDocuments(['filter' => "tenant_id = {$tenantId}"]);
+            $deleted['meilisearch'] = 'Deleted docs with tenant_id=' . $tenantId;
+        } catch (\Throwable $e) {
+            $deleted['meilisearch_error'] = $e->getMessage();
+        }
+
+        return response()->json([
+            'dry_run' => false,
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'deleted' => $deleted,
+            'kept' => ['tenant', 'users', 'widget_settings'],
+            'message' => '🔄 Tenant reset complete! Ready for re-onboarding.',
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/chat-sessions
      * List recent chat sessions
      */

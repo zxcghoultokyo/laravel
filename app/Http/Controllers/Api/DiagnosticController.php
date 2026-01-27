@@ -5839,4 +5839,40 @@ class DiagnosticController extends Controller
             ],
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/categories-by-tenant
+     * List categories grouped by tenant
+     */
+    public function categoriesByTenant(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id');
+
+        // Get category counts by tenant
+        $query = DB::table('categories')
+            ->select('tenant_id', DB::raw('COUNT(*) as count'))
+            ->groupBy('tenant_id');
+        
+        $byTenant = $query->get()->pluck('count', 'tenant_id')->toArray();
+
+        // Get categories for specific tenant if requested
+        $categories = null;
+        if ($tenantId !== null) {
+            $categories = DB::table('categories')
+                ->where('tenant_id', $tenantId)
+                ->select('id', 'path', 'products_count', 'is_active')
+                ->orderBy('path')
+                ->get();
+        }
+
+        return response()->json([
+            'total' => array_sum($byTenant),
+            'by_tenant' => $byTenant,
+            'categories' => $categories,
+        ]);
+    }
 }

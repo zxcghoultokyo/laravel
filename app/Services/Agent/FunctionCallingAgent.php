@@ -619,12 +619,20 @@ CONTEXT;
      */
     private function extractLastCategoryFromMessages(array $messages): ?string
     {
-        // Scan messages in reverse to find last shown products
+        $foundCategory = null;
+        
+        // Scan messages in reverse to find last mentioned category
         foreach (array_reverse($messages) as $msg) {
             $content = $msg['content'] ?? '';
+            $role = $msg['role'] ?? '';
             
-            // Look for [Показані товари: ...] marker
-            if (preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
+            // Skip system messages and current user message (last in array)
+            if ($role === 'system') {
+                continue;
+            }
+            
+            // Look for [Показані товари: ...] marker in assistant messages
+            if ($role === 'assistant' && preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
                 $productText = $matches[1];
                 
                 // Extract category keywords from product text
@@ -646,7 +654,7 @@ CONTEXT;
                 
                 foreach ($categoryKeywords as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $productText)) {
-                        Log::info('FunctionCallingAgent: extracted category from history', [
+                        Log::info('FunctionCallingAgent: extracted category from [Показані товари]', [
                             'category' => $category,
                             'from' => mb_substr($productText, 0, 100),
                         ]);
@@ -655,12 +663,14 @@ CONTEXT;
                 }
             }
             
-            // Also check user messages for explicit product mentions
-            if (($msg['role'] ?? '') === 'user') {
+            // Check user messages for explicit product mentions (but not current message)
+            // We check ALL user messages and take the most recent category found
+            if ($role === 'user' && $foundCategory === null) {
                 $lowerContent = mb_strtolower($content);
                 $userCategoryPatterns = [
                     'peltor|пелтор' => 'навушники Peltor',
                     'earmor' => 'навушники Earmor',
+                    'comtac' => 'навушники',
                     'навушник' => 'навушники',
                     'куртк' => 'куртки',
                     'берц' => 'берці',
@@ -668,17 +678,24 @@ CONTEXT;
                     'шолом' => 'шоломи',
                     'плитонос' => 'плитоноски',
                     'рюкзак' => 'рюкзаки',
+                    'підсум' => 'підсумки',
                 ];
                 
                 foreach ($userCategoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $lowerContent)) {
-                        return $category;
+                        $foundCategory = $category;
+                        Log::info('FunctionCallingAgent: extracted category from user message', [
+                            'category' => $category,
+                            'user_message' => mb_substr($content, 0, 100),
+                        ]);
+                        // Don't return yet - keep looking for [Показані товари] which has priority
+                        break;
                     }
                 }
             }
         }
         
-        return null;
+        return $foundCategory;
     }
     
     /**

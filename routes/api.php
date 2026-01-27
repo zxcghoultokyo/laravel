@@ -33,6 +33,17 @@ Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle']
 Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::class, 'stream'])
     ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
 
+// ============================================
+// EXPERIMENTAL: Chat V2 with MinimalAgent
+// A/B test endpoint - мінімальний промпт
+// ============================================
+Route::post('/chat/v2', [\App\Http\Controllers\Api\ChatV2Controller::class, 'handle'])
+    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
+
+// Compare V1 vs V2 responses (for debugging)
+Route::post('/chat/compare', [\App\Http\Controllers\Api\ChatV2Controller::class, 'compare'])
+    ->middleware(['widget.cors', 'tenant']);
+
 // Clear chat session (delete from DB and cache)
 Route::delete('/chat/session/{sessionId}', [\App\Http\Controllers\Api\ChatController::class, 'clearSession'])
     ->middleware(['widget.cors', 'tenant']);

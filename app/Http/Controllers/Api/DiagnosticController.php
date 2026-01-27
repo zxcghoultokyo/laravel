@@ -256,18 +256,28 @@ class DiagnosticController extends Controller
 
         $query = $request->query('q', '');
         $limit = min((int) $request->query('limit', 20), 100);
+        $tenantId = $request->query('tenant_id');
 
         if (!$query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
         // Use withoutGlobalScope to see all products including those with NULL tenant_id
-        $products = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
-            ->where('in_stock', true)
+        $productsQuery = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('in_stock', true);
+        
+        // Filter by tenant_id if provided
+        if ($tenantId !== null) {
+            $productsQuery->where('tenant_id', (int) $tenantId);
+        }
+        
+        $products = $productsQuery
             ->where(function ($q) use ($query) {
-                $q->where('title', 'like', "%{$query}%")
-                  ->orWhere('search_index', 'like', "%{$query}%")
-                  ->orWhere('category_path', 'like', "%{$query}%");
+                if ($query !== '*') {
+                    $q->where('title', 'like', "%{$query}%")
+                      ->orWhere('search_index', 'like', "%{$query}%")
+                      ->orWhere('category_path', 'like', "%{$query}%");
+                }
             })
             ->limit($limit)
             ->get(['id', 'article', 'title', 'price', 'category_path', 'color', 'size', 'brand', 'in_stock', 'tenant_id', 'images', 'raw']);

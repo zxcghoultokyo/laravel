@@ -131,48 +131,58 @@ class ChatV2Controller extends Controller
      */
     public function compare(Request $request)
     {
-        $message = $request->input('message', '');
-        $sessionId = $request->input('session_id', 'compare_' . Str::random(8));
-        $tenantId = $request->input('tenant_id');
+        try {
+            $message = $request->input('message', '');
+            $sessionId = $request->input('session_id', 'compare_' . Str::random(8));
+            $tenantId = $request->input('tenant_id');
 
-        // Run v1
-        $v1Start = microtime(true);
-        $v1Response = app(\App\Services\Chat\ChatService::class)->handleMessage($message, $sessionId . '_v1');
-        $v1Time = (int) ((microtime(true) - $v1Start) * 1000);
+            // Run v1
+            $v1Start = microtime(true);
+            $v1Response = app(\App\Services\Chat\ChatService::class)->handleMessage($message, $sessionId . '_v1');
+            $v1Time = (int) ((microtime(true) - $v1Start) * 1000);
 
-        // Run v2
-        $v2Start = microtime(true);
-        $searchTool = app(MeiliProductSearchTool::class);
-        $detailsTool = app(ProductDetailsTool::class);
-        if ($tenantId) $searchTool->setTenantId($tenantId);
-        
-        $agent = new MinimalAgent($searchTool, $detailsTool);
-        $v2Response = $agent->handle($message, [
-            'session_id' => $sessionId . '_v2',
-            'tenant_id' => $tenantId,
-        ]);
-        $v2Time = (int) ((microtime(true) - $v2Start) * 1000);
+            // Run v2
+            $v2Start = microtime(true);
+            $searchTool = app(MeiliProductSearchTool::class);
+            $detailsTool = app(ProductDetailsTool::class);
+            
+            $agent = new MinimalAgent($searchTool, $detailsTool);
+            if ($tenantId) {
+                $agent->setTenantId($tenantId);
+            }
+            
+            $v2Response = $agent->handle($message, [
+                'session_id' => $sessionId . '_v2',
+                'tenant_id' => $tenantId,
+            ]);
+            $v2Time = (int) ((microtime(true) - $v2Start) * 1000);
 
-        return response()->json([
-            'message' => $message,
-            'v1' => [
-                'text' => $v1Response['text'] ?? $v1Response['message'] ?? '',
-                'products' => array_map(fn($p) => [
-                    'title' => $p['title'] ?? '',
-                    'price' => $p['price'] ?? 0,
-                    'article' => $p['article'] ?? '',
-                ], $v1Response['products'] ?? []),
-                'response_time_ms' => $v1Time,
-            ],
-            'v2' => [
-                'text' => $v2Response['message'] ?? '',
-                'products' => array_map(fn($p) => [
-                    'title' => $p['title'] ?? '',
-                    'price' => $p['price'] ?? 0,
-                    'article' => $p['article'] ?? '',
-                ], $v2Response['products'] ?? []),
-                'response_time_ms' => $v2Time,
-            ],
-        ]);
+            return response()->json([
+                'message' => $message,
+                'v1' => [
+                    'text' => $v1Response['text'] ?? $v1Response['message'] ?? '',
+                    'products' => array_map(fn($p) => [
+                        'title' => $p['title'] ?? '',
+                        'price' => $p['price'] ?? 0,
+                        'article' => $p['article'] ?? '',
+                    ], $v1Response['products'] ?? []),
+                    'response_time_ms' => $v1Time,
+                ],
+                'v2' => [
+                    'text' => $v2Response['message'] ?? '',
+                    'products' => array_map(fn($p) => [
+                        'title' => $p['title'] ?? '',
+                        'price' => $p['price'] ?? 0,
+                        'article' => $p['article'] ?? '',
+                    ], $v2Response['products'] ?? []),
+                    'response_time_ms' => $v2Time,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ], 500);
+        }
     }
 }

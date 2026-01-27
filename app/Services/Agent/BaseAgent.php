@@ -705,6 +705,19 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - plate carrier → search_products(query="plate carrier OR плитоноска")
 - boots → search_products(query="boots OR берці OR черевики")
 
+🎯 БРЕНДИ/МОДЕЛІ — ПОШУК ЗА БРЕНДОМ, НЕ КАТЕГОРІЄЮ!
+Якщо в запиті є БРЕНД або МОДЕЛЬ (Aegis, Crye, Ops-Core, M-TAC...) — шукай ЗА БРЕНДОМ!
+НЕ додавай загальні слова (пластини, куртка, шолом) — вони псують релевантність!
+
+Приклади:
+- "пластини Aegis III++" → search_products("Aegis III++") — НЕ "пластини Aegis"!
+- "шолом Ops-Core" → search_products("Ops-Core") — НЕ "шолом Ops-Core"!
+- "куртка Crye" → search_products("Crye куртка") — бренд+категорія OK
+- "бронеплити ESBI" → search_products("ESBI") — НЕ "бронеплити ESBI"!
+- "навушники Peltor" → search_products("Peltor") — НЕ "навушники Peltor"!
+
+ЧОМУ: Загальні слова ("пластини", "шолом") знаходять багато нерелевантних товарів і псують ранжування!
+
 {$priceContext}
 
 � FOLLOW-UP ПИТАННЯ ПРО ПОПЕРЕДНІЙ ТОВАР — КРИТИЧНО!

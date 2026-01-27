@@ -456,11 +456,11 @@ CONTEXT;
 
     /**
      * Call GPT with tools (non-streaming for tool detection).
-     * Includes retry logic for transient failures.
+     * Includes retry logic with exponential backoff for rate limits.
      */
     private function callGptWithTools(array $messages, int $retryCount = 0): ?array
     {
-        $maxRetries = 2;
+        $maxRetries = 3; // Increased from 2 for better rate limit handling
         
         try {
             $response = Http::withToken($this->apiKey)
@@ -479,10 +479,16 @@ CONTEXT;
             if (isset($data['error'])) {
                 Log::error('StreamingAgent: OpenAI error', ['error' => $data['error']]);
                 
-                // Retry on rate limit or server errors
+                // Retry on rate limit or server errors with exponential backoff
                 if ($retryCount < $maxRetries && $this->isRetryableError($data['error'])) {
-                    Log::info('StreamingAgent: retrying after error', ['retry' => $retryCount + 1]);
-                    usleep(500000 * ($retryCount + 1)); // 0.5s, 1s backoff
+                    // Exponential backoff: 1s, 2s, 4s
+                    $delay = (int) pow(2, $retryCount) * 1000000; // microseconds
+                    Log::info('StreamingAgent: retrying after error', [
+                        'retry' => $retryCount + 1,
+                        'delay_ms' => $delay / 1000,
+                        'error_type' => $data['error']['type'] ?? 'unknown',
+                    ]);
+                    usleep($delay);
                     return $this->callGptWithTools($messages, $retryCount + 1);
                 }
                 
@@ -494,7 +500,8 @@ CONTEXT;
             Log::warning('StreamingAgent: connection timeout', ['error' => $e->getMessage(), 'retry' => $retryCount]);
             
             if ($retryCount < $maxRetries) {
-                usleep(500000 * ($retryCount + 1));
+                $delay = (int) pow(2, $retryCount) * 1000000;
+                usleep($delay);
                 return $this->callGptWithTools($messages, $retryCount + 1);
             }
             

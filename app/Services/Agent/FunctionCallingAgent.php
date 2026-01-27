@@ -303,6 +303,7 @@ CONTEXT;
 
     /**
      * Call OpenAI with function calling.
+     * Includes retry logic with exponential backoff for rate limits.
      */
     private function callGptWithTools(array $messages, int $retryCount = 0): ?array
     {
@@ -311,7 +312,7 @@ CONTEXT;
             return null;
         }
 
-        $maxRetries = 2;
+        $maxRetries = 3; // Increased from 2 for better rate limit handling
         
         try {
             Log::info('FunctionCallingAgent: calling OpenAI', [
@@ -342,10 +343,16 @@ CONTEXT;
             if (isset($data['error'])) {
                 Log::error('FunctionCallingAgent: OpenAI error', ['error' => $data['error']]);
                 
-                // Retry on rate limit or server errors
+                // Retry on rate limit or server errors with exponential backoff
                 if ($retryCount < $maxRetries && $this->isRetryableError($data['error'])) {
-                    Log::info('FunctionCallingAgent: retrying after error', ['retry' => $retryCount + 1]);
-                    usleep(500000 * ($retryCount + 1)); // 0.5s, 1s delay
+                    // Exponential backoff: 1s, 2s, 4s
+                    $delay = (int) pow(2, $retryCount) * 1000000; // microseconds
+                    Log::info('FunctionCallingAgent: retrying after error', [
+                        'retry' => $retryCount + 1,
+                        'delay_ms' => $delay / 1000,
+                        'error_type' => $data['error']['type'] ?? 'unknown',
+                    ]);
+                    usleep($delay);
                     return $this->callGptWithTools($messages, $retryCount + 1);
                 }
                 

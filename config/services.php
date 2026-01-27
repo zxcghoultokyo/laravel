@@ -32,9 +32,11 @@ return [
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
         
         // Різні моделі для різних задач
-        'model'         => env('OPENAI_MODEL', 'gpt-4.1'),           // Основна модель (чат, класифікація)
-        'model_chat'    => env('OPENAI_MODEL_CHAT', 'gpt-5.1'),      // Для чату з користувачами (якість)
-        'model_analyze' => env('OPENAI_MODEL_ANALYZE', 'gpt-4o-mini'), // Для аналізу товарів (дешева, високі ліміти)
+        // gpt-4o - найкращий баланс ціна/якість/швидкість, високі rate limits (10K+ RPM)
+        // gpt-4o-mini - найдешевший, найвищі ліміти (30K+ RPM), для масових операцій
+        'model'         => env('OPENAI_MODEL', 'gpt-4o'),             // Основна модель для чату
+        'model_chat'    => env('OPENAI_MODEL_CHAT', 'gpt-4o'),        // Для чату з користувачами
+        'model_analyze' => env('OPENAI_MODEL_ANALYZE', 'gpt-4o-mini'), // Для аналізу товарів
         'model_rerank'  => env('OPENAI_MODEL_RERANK', 'gpt-4o-mini'),  // Для ререйнку результатів
         
         // New function calling agent (enabled by default for testing)

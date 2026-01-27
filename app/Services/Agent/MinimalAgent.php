@@ -123,9 +123,12 @@ class MinimalAgent
     {
         $shopName = $context['shop_name'] ?? 'магазин';
         $shopPhone = $context['shop_phone'] ?? '';
+        $shopDescription = $context['shop_description'] ?? '';
+        
+        $shopInfo = $shopDescription ? " ({$shopDescription})" : '';
         
         $basePrompt = <<<PROMPT
-Ти продавець інтернет-магазину "{$shopName}" (тактичне спорядження, військове обладнання).
+Ти продавець інтернет-магазину "{$shopName}"{$shopInfo}.
 
 ІНСТРУМЕНТИ:
 - search_products(query, filters) — пошук товарів. Результати вже відсортовані за релевантністю.

@@ -51,6 +51,18 @@
         </div>
     </div>
 
+    {{-- Onboarding Progress Banner (show while sync is in progress) --}}
+    @php
+        $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+        $isOnboardingInProgress = $onboardingProgress && $onboardingProgress->status !== 'completed' && $onboardingProgress->status !== 'failed';
+    @endphp
+    
+    @if($isOnboardingInProgress)
+        <div class="mb-6">
+            <livewire:onboarding-progress />
+        </div>
+    @endif
+
     <!-- Flash Messages -->
     @if(session()->has('success'))
         <div class="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">

@@ -1,61 +1,46 @@
 <!-- Step 3: Sync Products -->
-{{-- Updated: force recompile --}}
+{{-- Non-blocking: user can continue while sync runs in background --}}
 <div class="text-center mb-8">
-    <h3 class="text-2xl font-bold text-gray-900">Синхронізація товарів</h3>
-    <p class="mt-2 text-gray-600">Імпортуємо каталог та налаштовуємо пошук</p>
+    <h3 class="text-2xl font-bold text-gray-900">Налаштування магазину</h3>
+    <p class="mt-2 text-gray-600">Синхронізація, AI-аналіз та індексація йдуть у фоні</p>
 </div>
 
 <div class="max-w-lg mx-auto">
+    @php
+        $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+    @endphp
+    
+    {{-- Always show progress component - it handles all states --}}
+    <livewire:onboarding-progress :compact="false" />
+    
     @if($productsCount > 0)
-        {{-- Already synced - show compact progress or success --}}
-        @php
-            $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
-        @endphp
-        
-        @if($onboardingProgress && $onboardingProgress->status === 'in_progress')
-            {{-- Onboarding in progress - show detailed progress --}}
-            <livewire:onboarding-progress :compact="false" />
-        @else
-            {{-- Sync completed --}}
-            <div id="sync-status" class="p-6 bg-gray-50 rounded-xl text-center">
-                <div class="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
-                    <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
+        {{-- Show stats if we have products --}}
+        <div class="mt-6 p-4 bg-gray-50 rounded-xl">
+            <div class="grid grid-cols-2 gap-4 text-center">
+                <div class="p-3 bg-white rounded-lg">
+                    <p class="text-2xl font-bold text-gray-900">{{ number_format($productsCount) }}</p>
+                    <p class="text-sm text-gray-500">товарів</p>
                 </div>
-                <h4 class="font-semibold text-lg text-green-700">Синхронізовано!</h4>
-                <div class="mt-4 grid grid-cols-2 gap-4 text-left">
-                    <div class="p-3 bg-white rounded-lg">
-                        <p class="text-2xl font-bold text-gray-900">{{ number_format($productsCount) }}</p>
-                        <p class="text-sm text-gray-500">товарів</p>
-                    </div>
-                    <div class="p-3 bg-white rounded-lg">
-                        <p class="text-2xl font-bold text-gray-900">{{ $categoriesCount }}</p>
-                        <p class="text-sm text-gray-500">категорій</p>
-                    </div>
+                <div class="p-3 bg-white rounded-lg">
+                    <p class="text-2xl font-bold text-gray-900">{{ $categoriesCount }}</p>
+                    <p class="text-sm text-gray-500">категорій</p>
                 </div>
-                
-                @if($onboardingProgress && $onboardingProgress->status === 'completed')
-                    <div class="mt-4 p-3 bg-green-50 rounded-lg">
-                        <p class="text-sm text-green-700">
-                            ✅ AI-аналіз та індексація завершені
-                        </p>
-                    </div>
-                @endif
             </div>
-        @endif
-    @else
-        {{-- No products yet - show onboarding progress component --}}
-        <livewire:onboarding-progress :compact="false" />
-    @endif
-
-    @if($tenant->platform === 'manual')
-        <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p class="text-yellow-800 text-sm">
-                <strong>Ручний режим:</strong> Ви зможете додати товари пізніше через панель адміністратора або завантажити CSV файл.
-            </p>
         </div>
     @endif
+    
+    {{-- Info box about background processing --}}
+    <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div class="flex items-start gap-3">
+            <svg class="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p class="text-blue-800 text-sm">
+                <strong>Не чекайте!</strong> Процес триває у фоні. Ви можете продовжити налаштування — 
+                прогрес буде видно на дашборді.
+            </p>
+        </div>
+    </div>
 </div>
 
 <form method="POST" action="{{ route('onboarding.step3.save') }}" id="step3-form">
@@ -68,32 +53,22 @@
             Назад
         </a>
         @php
-            $canContinue = $productsCount > 0 || $tenant->platform === 'manual';
             $onboardingProgress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
             $onboardingInProgress = $onboardingProgress && $onboardingProgress->status === 'in_progress';
+            // User can ALWAYS continue - sync runs in background, don't block the wizard!
         @endphp
-        <x-primary-button id="continue-btn" :disabled="!$canContinue || $onboardingInProgress">
+        <x-primary-button id="continue-btn">
             @if($onboardingInProgress)
-                <svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-                Зачекайте...
+                Продовжити
+                <span class="ml-2 text-xs opacity-75">(sync у фоні)</span>
             @else
                 Продовжити
-                <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
             @endif
+            <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
         </x-primary-button>
     </div>
 </form>
 
-@if($onboardingInProgress ?? false)
-    {{-- Auto-refresh page while onboarding in progress --}}
-    <script>
-        setTimeout(function() {
-            window.location.reload();
-        }, 5000);
-    </script>
-@endif
+{{-- No auto-refresh needed - Livewire handles polling, user can continue anytime --}}

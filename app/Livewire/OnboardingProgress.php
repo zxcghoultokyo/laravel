@@ -46,10 +46,26 @@ class OnboardingProgress extends Component
             $this->progress = $progressModel->toProgressArray();
             $this->showStartButton = false;
         } else {
-            // Check if tenant has products already (manual import or previous onboarding)
+            // Check if tenant has products OR onboarding already started
             $hasProducts = $tenant->products()->count() > 0;
-            $this->showStartButton = !$hasProducts;
+            $hasCredentials = !empty($tenant->platform_credentials);
+            
+            // Only show start button if credentials set but no progress yet
+            // (normally OnboardTenantJob is dispatched right after saveStep2)
+            $this->showStartButton = $hasCredentials && !$hasProducts;
             $this->progress = null;
+            
+            // If credentials set but no progress record, job might be queued - show waiting state
+            if ($hasCredentials && !$hasProducts) {
+                $this->progress = [
+                    'status' => 'pending',
+                    'overall_percent' => 0,
+                    'current_step_detail' => 'Очікування черги...',
+                    'steps' => [],
+                    'error_message' => null,
+                ];
+                $this->showStartButton = false; // Job is already dispatched in saveStep2
+            }
         }
     }
 
@@ -76,11 +92,11 @@ class OnboardingProgress extends Component
     }
 
     /**
-     * Polling to refresh progress every 3 seconds while in progress
+     * Polling to refresh progress every 3 seconds while in progress or pending
      */
     public function getPollingInterval(): ?int
     {
-        if ($this->progress && $this->progress['status'] === 'in_progress') {
+        if ($this->progress && in_array($this->progress['status'], ['in_progress', 'pending'])) {
             return 3000; // 3 seconds
         }
         return null;

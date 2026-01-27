@@ -177,6 +177,10 @@ class OnboardingController extends Controller
                 'platform_credentials' => $credentials,
                 'domain' => $credentials['domain'],
             ]);
+
+            // 🚀 Start background onboarding immediately after credentials saved
+            // This is NON-BLOCKING - user continues through wizard while sync runs
+            \App\Jobs\OnboardTenantJob::dispatch($tenant->id)->onQueue('default');
         }
 
         return redirect()->route('onboarding.step3');
@@ -233,64 +237,8 @@ class OnboardingController extends Controller
         ]);
     }
 
-    /**
-     * Step 3: Start sync job.
-     */
-    public function startSync(Request $request): JsonResponse
-    {
-        $tenant = $this->tenant();
-        
-        if ($tenant->platform === 'horoshop') {
-            // Set sync running flag
-            \Illuminate\Support\Facades\Cache::put("sync_running_{$tenant->id}", true, 3600);
-            
-            // Use dispatchSync for immediate execution (no queue required)
-            // This is blocking but ensures sync works even without queue worker
-            try {
-                SyncHoroshopProductsJob::dispatchSync($tenant->id);
-                
-                return response()->json([
-                    'status' => 'completed',
-                    'message' => 'Синхронізація завершена',
-                    'products' => $tenant->products()->count(),
-                ]);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Cache::forget("sync_running_{$tenant->id}");
-                \Illuminate\Support\Facades\Log::error('Onboarding sync failed', [
-                    'tenant_id' => $tenant->id,
-                    'error' => $e->getMessage(),
-                ]);
-                
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Помилка синхронізації: ' . $e->getMessage(),
-                ], 500);
-            }
-        }
-        
-        return response()->json([
-            'status' => 'skip',
-            'message' => 'Пропущено (ручний режим)',
-        ]);
-    }
-
-    /**
-     * Step 3: Check sync status.
-     */
-    public function syncStatus(): JsonResponse
-    {
-        $tenant = $this->tenant();
-        
-        $productsCount = $tenant->products()->count();
-        $categoriesCount = $tenant->products()->distinct('category_path')->count('category_path');
-        
-        return response()->json([
-            'products' => $productsCount,
-            'categories' => $categoriesCount,
-            'completed' => $productsCount > 0,
-            'lastSync' => $tenant->last_sync_at?->diffForHumans(),
-        ]);
-    }
+    // NOTE: startSync() and syncStatus() removed - OnboardTenantJob handles everything async
+    // Progress is tracked via TenantOnboardingProgress model and Livewire component
 
     /**
      * Step 3: Proceed to next step.

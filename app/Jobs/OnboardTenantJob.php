@@ -327,7 +327,7 @@ class OnboardTenantJob implements ShouldQueue
         $stuckCounter = 0;
 
         while ((time() - $startTime) < $maxWaitSeconds) {
-            sleep(5); // Check every 5 seconds
+            sleep(10); // Check every 10 seconds (AI batches take ~15-20s)
 
             // Count current progress
             $enrichedCount = \App\Models\ProductAiIndex::whereHas('product', function ($q) {
@@ -354,10 +354,10 @@ class OnboardTenantJob implements ShouldQueue
                 break;
             }
 
-            // Check if stuck (no progress for 60 seconds)
+            // Check if stuck (no progress for 2 minutes - AI batches can pause between runs)
             if ($enrichedCount === $lastProcessed) {
                 $stuckCounter++;
-                if ($stuckCounter >= 12) { // 12 * 5 sec = 60 seconds
+                if ($stuckCounter >= 12) { // 12 * 10 sec = 120 seconds (2 minutes)
                     Log::warning('OnboardTenantJob: AI enrichment appears stuck, continuing', [
                         'tenant_id' => $this->tenantId,
                         'enriched' => $enrichedCount,

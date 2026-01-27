@@ -36,6 +36,7 @@ class ChatV2Controller extends Controller
             $message = trim($request->input('message', ''));
             $sessionId = $request->input('session_id');
             $tenantId = $request->input('tenant_id');
+            $tenantDomain = $request->input('tenant_domain');
             $isTrigger = (bool) $request->input('is_trigger', false);
 
             if (empty($message)) {
@@ -54,16 +55,22 @@ class ChatV2Controller extends Controller
                 ], 400);
             }
 
-            // Resolve tenant
+            // Resolve tenant - support multiple ways
             $tenant = null;
             if ($tenantId) {
                 $tenant = Tenant::find($tenantId);
+            } elseif ($tenantDomain) {
+                // Support contractor.kiev.ua format
+                $tenant = Tenant::where('domain', $tenantDomain)->first();
             }
+            
+            // Final tenant ID for filtering
+            $resolvedTenantId = $tenant?->id;
 
             // Build context
             $context = [
                 'session_id' => $sessionId,
-                'tenant_id' => $tenantId,
+                'tenant_id' => $resolvedTenantId,
                 'is_trigger' => $isTrigger,
                 'shop_name' => $tenant?->name ?? 'магазин',
                 'shop_phone' => $tenant?->phone ?? '',
@@ -75,8 +82,8 @@ class ChatV2Controller extends Controller
 
             $agent = new MinimalAgent($searchTool, $detailsTool);
             
-            if ($tenantId) {
-                $agent->setTenantId($tenantId);
+            if ($resolvedTenantId) {
+                $agent->setTenantId($resolvedTenantId);
             }
 
             // Process
@@ -135,6 +142,16 @@ class ChatV2Controller extends Controller
             $message = $request->input('message', '');
             $sessionId = $request->input('session_id', 'compare_' . Str::random(8));
             $tenantId = $request->input('tenant_id');
+            $tenantDomain = $request->input('tenant_domain');
+
+            // Resolve tenant
+            $tenant = null;
+            if ($tenantId) {
+                $tenant = Tenant::find($tenantId);
+            } elseif ($tenantDomain) {
+                $tenant = Tenant::where('domain', $tenantDomain)->first();
+            }
+            $resolvedTenantId = $tenant?->id;
 
             // Run v1
             $v1Start = microtime(true);
@@ -147,13 +164,13 @@ class ChatV2Controller extends Controller
             $detailsTool = app(ProductDetailsTool::class);
             
             $agent = new MinimalAgent($searchTool, $detailsTool);
-            if ($tenantId) {
-                $agent->setTenantId($tenantId);
+            if ($resolvedTenantId) {
+                $agent->setTenantId($resolvedTenantId);
             }
             
             $v2Response = $agent->handle($message, [
                 'session_id' => $sessionId . '_v2',
-                'tenant_id' => $tenantId,
+                'tenant_id' => $resolvedTenantId,
             ]);
             $v2Time = (int) ((microtime(true) - $v2Start) * 1000);
 

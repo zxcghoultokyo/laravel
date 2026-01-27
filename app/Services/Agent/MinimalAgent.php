@@ -398,14 +398,12 @@ TRIGGER;
                 if (isset($args['max_price'])) $filters['price_max'] = $args['max_price'];
                 if (isset($args['in_stock'])) $filters['in_stock'] = $args['in_stock'];
                 
-                $sort = match ($args['sort'] ?? 'popularity') {
-                    'price_asc' => 'price:asc',
-                    'price_desc' => 'price:desc',
-                    'newest' => 'updated_at_ts:desc',
-                    default => null, // Use Meilisearch ranking
-                };
+                // sort_by goes into filters - MeiliProductSearchTool expects it there
+                if (isset($args['sort']) && $args['sort'] !== 'popularity') {
+                    $filters['sort_by'] = $args['sort'];
+                }
 
-                $result = $this->searchTool->search($query, 15, $filters, $sort);
+                $result = $this->searchTool->search($query, $filters, 15);
                 
                 // Filter out excluded IDs
                 if (!empty($args['exclude_ids']) && !empty($result['products'])) {
@@ -502,7 +500,12 @@ TRIGGER;
      */
     private function fallbackSearch(string $message): array
     {
-        $result = $this->searchTool->search($message, 5);
+        $filters = [];
+        if ($this->tenantId) {
+            $filters['tenant_id'] = $this->tenantId;
+        }
+        
+        $result = $this->searchTool->search($message, $filters, 5);
         
         return [
             'message' => 'Ось що знайшов:',

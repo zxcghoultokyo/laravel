@@ -403,20 +403,26 @@ TRIGGER;
                     $filters['sort_by'] = $args['sort'];
                 }
 
-                $result = $this->searchTool->search($query, $filters, 15);
+                // searchTool->search returns array of products directly, NOT ['products' => [...]]
+                $products = $this->searchTool->search($query, $filters, 15);
                 
                 // Filter out excluded IDs
-                if (!empty($args['exclude_ids']) && !empty($result['products'])) {
+                if (!empty($args['exclude_ids']) && !empty($products)) {
                     $excludeIds = array_map('intval', $args['exclude_ids']);
-                    $result['products'] = array_values(array_filter(
-                        $result['products'],
+                    $products = array_values(array_filter(
+                        $products,
                         fn($p) => !in_array((int)($p['id'] ?? 0), $excludeIds)
                     ));
-                    $result['count'] = count($result['products']);
                 }
 
+                // Return in expected format
+                $result = [
+                    'products' => $products,
+                    'count' => count($products),
+                ];
+
                 // Add ranking info for GPT
-                if (!empty($result['products'])) {
+                if (!empty($products)) {
                     $result['note'] = 'Товари відсортовані за популярністю (продажі + перегляди). Перші = найкращі.';
                 }
 
@@ -505,11 +511,12 @@ TRIGGER;
             $filters['tenant_id'] = $this->tenantId;
         }
         
-        $result = $this->searchTool->search($message, $filters, 5);
+        // searchTool->search returns array of products directly
+        $products = $this->searchTool->search($message, $filters, 5);
         
         return [
             'message' => 'Ось що знайшов:',
-            'products' => $result['products'] ?? [],
+            'products' => $products,
             'meta' => ['agent' => 'minimal', 'fallback' => true],
         ];
     }

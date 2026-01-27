@@ -42,6 +42,22 @@ class CategoryIndexService
     public function rebuildForTenant(?int $tenantId): void
     {
         DB::transaction(function () use ($tenantId) {
+            // First, delete all existing categories for this tenant
+            if ($tenantId) {
+                // Delete aliases first (foreign key constraint)
+                DB::table('category_aliases')
+                    ->whereIn('category_id', function ($q) use ($tenantId) {
+                        $q->select('id')->from('categories')->where('tenant_id', $tenantId);
+                    })
+                    ->delete();
+                
+                DB::table('categories')->where('tenant_id', $tenantId)->delete();
+                
+                Log::info('CategoryIndexService: deleted old categories for tenant', [
+                    'tenant_id' => $tenantId,
+                ]);
+            }
+            
             $query = DB::table('products')
                 ->whereNotNull('category_path')
                 ->where('category_path', '!=', '');

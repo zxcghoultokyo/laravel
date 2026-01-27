@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('domain')->unique();
             $table->string('primary_color')->default('#2563eb');
             $table->string('text_color')->default('#ffffff');
-            $table->string('position')->default('right'); // left, right
+            $table->string('position')->default('bottom-right'); // bottom-right, bottom-left
             $table->string('start_state')->default('closed'); // open, closed
             $table->integer('border_radius')->default(12);
             $table->string('logo_url')->nullable();

@@ -118,7 +118,7 @@
         return {
             primary_color: '#2563eb',
             text_color: '#ffffff',
-            position: 'right',
+            position: 'bottom-right',
             border_radius: 12,
             font_family: null,
             show_shadow: true,
@@ -841,7 +841,7 @@
             <div class="aintento-widget" style="
                 position: fixed;
                 bottom: 20px;
-                ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                ${(s.position || '').includes('right') ? 'right: 20px;' : 'left: 20px;'}
                 z-index: 9999;
                 font-family: ${s.font_family || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"};
             ">
@@ -851,7 +851,7 @@
                     opacity: 0;
                     position: absolute;
                     bottom: 70px;
-                    ${s.position === 'right' ? 'right: 0;' : 'left: 0;'}
+                    ${(s.position || '').includes('right') ? 'right: 0;' : 'left: 0;'}
                     background: white;
                     padding: 12px 16px;
                     border-radius: 16px;
@@ -875,7 +875,7 @@
                     <svg style="
                         position: absolute;
                         bottom: -10px;
-                        ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                        ${(s.position || '').includes('right') ? 'right: 20px;' : 'left: 20px;'}
                         width: 20px;
                         height: 12px;
                         filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
@@ -924,7 +924,7 @@
                     display: none;
                     position: fixed;
                     bottom: 90px;
-                    ${s.position === 'right' ? 'right: 20px;' : 'left: 20px;'}
+                    ${(s.position || '').includes('right') ? 'right: 20px;' : 'left: 20px;'}
                     width: min(400px, calc(100vw - 40px));
                     max-width: 400px;
                     height: min(600px, calc(100vh - 120px));

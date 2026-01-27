@@ -1118,9 +1118,8 @@
         // Handle quick action click
         function handleQuickAction(action) {
             if (action === 'store_info') {
-                // Build store info from settings
-                const storeInfo = buildStoreInfo(settings);
-                addMessage(messages, storeInfo, 'assistant', state.sessionId, true);
+                // Send to bot instead of static content - bot has full context
+                sendMessage('Розкажи про магазин');
             } else if (action === 'top_products') {
                 // Send "Покажи топ товари" to backend to get popular products
                 sendMessage('покажи топ товари');
@@ -2009,8 +2008,18 @@
         }
 
         quickActionsBar.innerHTML = '';
-        quickActionsBar.style.display = 'flex';
-        quickActionsBar.style.gap = '8px';
+        quickActionsBar.style.cssText = `
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        `;
 
         quickActions.forEach(qa => {
             const btn = document.createElement('button');

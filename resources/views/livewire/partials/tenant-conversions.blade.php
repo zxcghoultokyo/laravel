@@ -648,4 +648,134 @@
             </div>
         </div>
     @endif
+
+    {{-- Session Detail Modal (shows when viewing session from Orders tab) --}}
+    @if($selectedConversionSession && $conversionsActiveTab === 'orders')
+        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="session-modal" role="dialog" aria-modal="true">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                {{-- Background overlay --}}
+                <div wire:click="closeConversionSession" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+                {{-- Modal panel --}}
+                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+                    <div class="bg-white">
+                        <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                            <h2 class="font-semibold text-gray-700">🔍 Деталі сесії</h2>
+                            <button wire:click="closeConversionSession" class="text-gray-400 hover:text-gray-600">✕</button>
+                        </div>
+                        <div class="p-4 max-h-[70vh] overflow-y-auto">
+                            {{-- Session Info --}}
+                            <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                                <div class="font-mono text-xs text-gray-700 break-all">{{ $selectedConversionSession['session_id'] }}</div>
+                                @if($selectedConversionSession['created_at'])
+                                    <div class="text-xs text-gray-500 mt-2">Почато: {{ \Carbon\Carbon::parse($selectedConversionSession['created_at'])->format('d.m.Y H:i') }}</div>
+                                @endif
+                                @if($selectedConversionSession['utm'] ?? null)
+                                    <div class="text-xs mt-2">
+                                        UTM: 
+                                        <span class="text-blue-600">{{ $selectedConversionSession['utm']['utm_source'] }}</span>
+                                        @if($selectedConversionSession['utm']['utm_campaign'])
+                                            / 
+                                            <span class="text-purple-600">{{ $selectedConversionSession['utm']['utm_campaign'] }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </div>
+
+                            {{-- Checkouts/Orders --}}
+                            @if(count($selectedConversionSession['checkouts'] ?? []) > 0)
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-2">✅ Замовлення ({{ count($selectedConversionSession['checkouts']) }})</h3>
+                                    <div class="space-y-2">
+                                        @foreach($selectedConversionSession['checkouts'] as $idx => $checkout)
+                                            <div class="p-3 bg-green-50 rounded border border-green-100">
+                                                <div class="flex justify-between items-start">
+                                                    <div>
+                                                        @if($checkout['order_id'] ?? null)
+                                                            <span class="font-medium text-gray-900">Замовлення #{{ $checkout['order_id'] }}</span>
+                                                        @else
+                                                            <span class="font-medium text-gray-900">Checkout #{{ $idx + 1 }}</span>
+                                                        @endif
+                                                        @if($checkout['status_label'] ?? null)
+                                                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full {{ ($checkout['status'] ?? '') === 'delivered' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700' }}">
+                                                                {{ $checkout['status_label'] }}
+                                                            </span>
+                                                        @endif
+                                                    </div>
+                                                    @if($checkout['order_total'] ?? null)
+                                                        <span class="font-bold text-green-600">{{ number_format($checkout['order_total'], 0) }} ₴</span>
+                                                    @endif
+                                                </div>
+                                                @if($checkout['customer_name'] ?? null)
+                                                    <div class="text-sm text-gray-600 mt-1">👤 {{ $checkout['customer_name'] }}</div>
+                                                @endif
+                                                <div class="text-xs text-gray-400 mt-1">{{ \Carbon\Carbon::parse($checkout['created_at'])->format('d.m.Y H:i') }}</div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- Chat messages --}}
+                            @if(count($selectedConversionSession['messages']) > 0)
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-2">💬 Діалог ({{ count($selectedConversionSession['messages']) }} повідомлень)</h3>
+                                    <div class="space-y-2 max-h-60 overflow-y-auto border rounded p-2 bg-white">
+                                        @foreach($selectedConversionSession['messages'] as $msg)
+                                            <div class="text-sm {{ $msg['role'] === 'user' ? 'text-blue-800 bg-blue-50' : 'text-gray-700 bg-gray-50' }} p-2 rounded">
+                                                <span class="font-semibold">{{ $msg['role'] === 'user' ? '👤' : '🤖' }}</span>
+                                                {{ Str::limit($msg['content'], 200) }}
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- Products shown --}}
+                            @if(count($selectedConversionSession['products_shown']) > 0)
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-2">👁️ Показані товари ({{ count($selectedConversionSession['products_shown']) }})</h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach($selectedConversionSession['products_shown'] as $product)
+                                            <span class="px-2 py-1 bg-gray-100 rounded text-xs">
+                                                {{ Str::limit($product['title'] ?? $product['article'] ?? '?', 30) }}
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- Products clicked --}}
+                            @if(count($selectedConversionSession['products_clicked']) > 0)
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-2">👆 Клікнув на товари ({{ count($selectedConversionSession['products_clicked']) }})</h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach($selectedConversionSession['products_clicked'] as $product)
+                                            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                                                {{ Str::limit($product['title'] ?? $product['article'] ?? '?', 30) }}
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+
+                            {{-- Added to cart --}}
+                            @if(count($selectedConversionSession['added_to_cart']) > 0)
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-semibold text-gray-600 mb-2">🛒 Додано в кошик ({{ count($selectedConversionSession['added_to_cart']) }})</h3>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach($selectedConversionSession['added_to_cart'] as $product)
+                                            <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                                                {{ Str::limit($product['title'] ?? $product['article'] ?? '?', 30) }}
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

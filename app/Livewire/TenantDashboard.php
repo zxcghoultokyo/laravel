@@ -577,17 +577,12 @@ class TenantDashboard extends Component
                 ->where('created_at', '>=', $startDate)
                 ->count(),
             
-            // Products
-            'products_count' => $tenant->products()->withoutGlobalScope(TenantScope::class)->count(),
-            'products_in_stock' => $tenant->products()->withoutGlobalScope(TenantScope::class)->where('in_stock', true)->count(),
+            // Products - use direct DB query to avoid scope issues
+            'products_count' => DB::table('products')->where('tenant_id', $tenant->id)->count(),
+            'products_in_stock' => DB::table('products')->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
             
-            // Categories - count unique category paths
-            'categories_count' => $tenant->products()
-                ->withoutGlobalScope(TenantScope::class)
-                ->whereNotNull('category_path')
-                ->where('category_path', '!=', '')
-                ->selectRaw('COUNT(DISTINCT category_path) as cnt')
-                ->value('cnt') ?? 0,
+            // Categories - count from categories table
+            'categories_count' => DB::table('categories')->where('tenant_id', $tenant->id)->count(),
             
             // Plan
             'plan' => $tenant->plan,

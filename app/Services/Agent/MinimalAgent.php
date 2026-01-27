@@ -36,7 +36,7 @@ class MinimalAgent
         $this->apiKey = $config['key'] ?? '';
         $this->baseUrl = $config['base_url'] ?? 'https://api.openai.com/v1';
         $this->model = $config['model'] ?? 'gpt-4o';
-        $this->tenantContext = $tenantContext ?? app(TenantContext::class);
+        $this->tenantContext = $tenantContext;
     }
 
     /**
@@ -45,8 +45,13 @@ class MinimalAgent
     public function setTenantId(?int $tenantId): self
     {
         $this->tenantId = $tenantId;
-        if ($tenantId) {
-            $this->tenantContext->setTenantId($tenantId);
+        // Set tenant context if available
+        if ($tenantId && $this->tenantContext) {
+            try {
+                $this->tenantContext->setTenantId($tenantId);
+            } catch (\Throwable $e) {
+                Log::warning('MinimalAgent: failed to set tenant context', ['error' => $e->getMessage()]);
+            }
         }
         return $this;
     }
@@ -368,6 +373,11 @@ TRIGGER;
             case 'search_products':
                 $query = $args['query'] ?? '';
                 $filters = [];
+                
+                // Add tenant_id to filters
+                if ($this->tenantId) {
+                    $filters['tenant_id'] = $this->tenantId;
+                }
                 
                 if (isset($args['min_price'])) $filters['price_min'] = $args['min_price'];
                 if (isset($args['max_price'])) $filters['price_max'] = $args['max_price'];

@@ -96,13 +96,12 @@ class OnboardTenantJob implements ShouldQueue
      */
     protected function syncProducts(Tenant $tenant): void
     {
-        $widgetSettings = $tenant->widgetSettings;
-        
-        // Check if Horoshop is configured
-        if (!$widgetSettings || empty($widgetSettings->platform_credentials)) {
+        // Check if Horoshop is configured (credentials are stored on Tenant, not WidgetSettings)
+        if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
             $this->progress->updateStep('horoshop_sync', 'completed', 100, 'Horoshop не налаштований, пропускаємо');
             Log::info('OnboardTenantJob: Horoshop not configured, skipping sync', [
                 'tenant_id' => $this->tenantId,
+                'platform' => $tenant->platform,
             ]);
             return;
         }

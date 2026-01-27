@@ -1,7 +1,7 @@
 <div class="max-w-4xl mx-auto">
     <div class="mb-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">🚿 Генератор тестових товарів</h1>
-        <p class="mt-2 text-gray-600 dark:text-gray-400">Генерація CSV файлу з тестовими товарами сантехніки для імпорту в Horoshop</p>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">� Генератор тестових товарів</h1>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">Генерація CSV файлу з тестовими товарами для імпорту в Horoshop</p>
     </div>
 
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
@@ -28,16 +28,53 @@
                     Тип магазину
                 </label>
                 <select 
-                    wire:model="shopType"
+                    wire:model.live="shopType"
                     class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
-                    <option value="plumbing">🚿 Сантехніка</option>
+                    <option value="plumbing">🚿 Сантехніка (30 категорій)</option>
+                    <option value="cosmetics">💄 Косметика та мода (20 категорій)</option>
                 </select>
-                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Поки що доступна тільки сантехніка</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Оберіть тип магазину для генерації відповідних товарів</p>
             </div>
         </div>
     </div>
 
+    @if($shopType === 'cosmetics')
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">💄 Категорії товарів - Косметика та мода (20 категорій)</h2>
+        
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div class="p-3 bg-pink-50 dark:bg-pink-900/30 rounded-lg text-sm">
+                <span class="font-medium text-pink-700 dark:text-pink-300">💇 Догляд за волоссям</span>
+                <p class="text-pink-600 dark:text-pink-400 text-xs mt-1">Шампуні, лаки, бальзами</p>
+            </div>
+            <div class="p-3 bg-rose-50 dark:bg-rose-900/30 rounded-lg text-sm">
+                <span class="font-medium text-rose-700 dark:text-rose-300">✨ Догляд за обличчям</span>
+                <p class="text-rose-600 dark:text-rose-400 text-xs mt-1">Креми, сироватки, тоніки</p>
+            </div>
+            <div class="p-3 bg-purple-50 dark:bg-purple-900/30 rounded-lg text-sm">
+                <span class="font-medium text-purple-700 dark:text-purple-300">🧴 Догляд за тілом</span>
+                <p class="text-purple-600 dark:text-purple-400 text-xs mt-1">Молочко, солі, гелі</p>
+            </div>
+            <div class="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg text-sm">
+                <span class="font-medium text-blue-700 dark:text-blue-300">👗 Жіночий одяг</span>
+                <p class="text-blue-600 dark:text-blue-400 text-xs mt-1">Сукні, блузки</p>
+            </div>
+            <div class="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-sm">
+                <span class="font-medium text-indigo-700 dark:text-indigo-300">👔 Чоловічий одяг</span>
+                <p class="text-indigo-600 dark:text-indigo-400 text-xs mt-1">Сорочки, штани</p>
+            </div>
+            <div class="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg text-sm">
+                <span class="font-medium text-amber-700 dark:text-amber-300">👟 Взуття</span>
+                <p class="text-amber-600 dark:text-amber-400 text-xs mt-1">Кросівки, туфлі</p>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-sm">
+                <span class="font-medium text-slate-700 dark:text-slate-300">📱 Електроніка</span>
+                <p class="text-slate-600 dark:text-slate-400 text-xs mt-1">Телефони, аксесуари</p>
+            </div>
+        </div>
+    </div>
+    @else
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">📦 Категорії товарів (30 категорій)</h2>
         
@@ -92,6 +129,7 @@
             </div>
         </div>
     </div>
+    @endif
 
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">📄 Формат CSV для Horoshop</h2>

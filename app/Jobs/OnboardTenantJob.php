@@ -238,12 +238,24 @@ class OnboardTenantJob implements ShouldQueue
             ['total' => $productsWithoutAi, 'processed' => 0]
         );
 
-        // Process ALL products in batches of 50
+        // For large catalogs, use async processing with progress polling
+        // For small catalogs (< 200), use sync processing for faster completion
+        if ($productsWithoutAi > 200) {
+            $this->runAiEnrichmentAsync($productsWithoutAi);
+        } else {
+            $this->runAiEnrichmentSync($productsWithoutAi);
+        }
+    }
+
+    /**
+     * Run AI enrichment synchronously (for small catalogs < 200 products)
+     */
+    protected function runAiEnrichmentSync(int $productsWithoutAi): void
+    {
         $batchSize = 50;
         $processed = 0;
-        $offset = 0;
 
-        while ($processed < $productsWithoutAi) {
+        while (true) {
             // Get batch of products without AI index
             $products = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('tenant_id', $this->tenantId)
@@ -258,39 +270,115 @@ class OnboardTenantJob implements ShouldQueue
                 break;
             }
 
-            // Run enrichment synchronously for each batch (singleBatchOnly=true to prevent auto-dispatch)
+            // Run enrichment synchronously (singleBatchOnly=true)
             try {
                 AnalyzeProductsWithAiJob::dispatchSync(
                     batchSize: $products->count(),
                     offset: 0,
                     forceReanalyze: false,
                     tenantId: $this->tenantId,
-                    singleBatchOnly: true  // Don't auto-dispatch next batch, we control the loop
+                    singleBatchOnly: true
                 );
             } catch (\Throwable $e) {
                 Log::warning('OnboardTenantJob: AI batch failed, continuing', [
                     'error' => $e->getMessage(),
-                    'batch' => $offset,
                 ]);
             }
 
             $processed += $products->count();
             $percent = min(95, (int) round($processed / $productsWithoutAi * 100));
             
-            // Update progress with details
             $detail = $this->getAiEnrichmentDetail($processed, $productsWithoutAi);
             $this->progress->updateStep('ai_enrichment', 'in_progress', $percent, $detail, [
                 'total' => $productsWithoutAi,
                 'processed' => $processed,
             ]);
 
-            $offset += $batchSize;
-            
-            // Small delay between batches to avoid rate limits
-            usleep(500000); // 0.5 second
+            usleep(500000); // 0.5 second delay
         }
 
-        // Final count
+        $this->finalizeAiEnrichment($productsWithoutAi);
+    }
+
+    /**
+     * Run AI enrichment asynchronously (for large catalogs 200+ products)
+     * Dispatches batches to queue and polls for completion
+     */
+    protected function runAiEnrichmentAsync(int $productsWithoutAi): void
+    {
+        Log::info('OnboardTenantJob: Using async AI enrichment for large catalog', [
+            'tenant_id' => $this->tenantId,
+            'products_count' => $productsWithoutAi,
+        ]);
+
+        // Dispatch first batch - it will auto-dispatch subsequent batches
+        AnalyzeProductsWithAiJob::dispatch(
+            batchSize: 50,
+            offset: 0,
+            forceReanalyze: false,
+            tenantId: $this->tenantId,
+            singleBatchOnly: false  // Allow auto-dispatch of next batches
+        );
+
+        // Poll for completion with progress updates
+        $maxWaitSeconds = 1800; // 30 minutes max wait
+        $startTime = time();
+        $lastProcessed = 0;
+        $stuckCounter = 0;
+
+        while ((time() - $startTime) < $maxWaitSeconds) {
+            sleep(5); // Check every 5 seconds
+
+            // Count current progress
+            $enrichedCount = \App\Models\ProductAiIndex::whereHas('product', function ($q) {
+                $q->withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $this->tenantId);
+            })->count();
+
+            $percent = min(95, (int) round($enrichedCount / $productsWithoutAi * 100));
+            $detail = $this->getAiEnrichmentDetail($enrichedCount, $productsWithoutAi);
+            
+            $this->progress->updateStep('ai_enrichment', 'in_progress', $percent, $detail, [
+                'total' => $productsWithoutAi,
+                'processed' => $enrichedCount,
+            ]);
+
+            // Check if done (95%+ coverage is good enough)
+            $remaining = $productsWithoutAi - $enrichedCount;
+            if ($remaining <= 0 || $percent >= 95) {
+                Log::info('OnboardTenantJob: AI enrichment completed', [
+                    'tenant_id' => $this->tenantId,
+                    'enriched' => $enrichedCount,
+                    'total' => $productsWithoutAi,
+                ]);
+                break;
+            }
+
+            // Check if stuck (no progress for 60 seconds)
+            if ($enrichedCount === $lastProcessed) {
+                $stuckCounter++;
+                if ($stuckCounter >= 12) { // 12 * 5 sec = 60 seconds
+                    Log::warning('OnboardTenantJob: AI enrichment appears stuck, continuing', [
+                        'tenant_id' => $this->tenantId,
+                        'enriched' => $enrichedCount,
+                        'total' => $productsWithoutAi,
+                    ]);
+                    break;
+                }
+            } else {
+                $stuckCounter = 0;
+                $lastProcessed = $enrichedCount;
+            }
+        }
+
+        $this->finalizeAiEnrichment($productsWithoutAi);
+    }
+
+    /**
+     * Finalize AI enrichment step
+     */
+    protected function finalizeAiEnrichment(int $originalCount): void
+    {
         $enrichedCount = \App\Models\ProductAiIndex::whereHas('product', function ($q) {
             $q->withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('tenant_id', $this->tenantId);
@@ -298,7 +386,7 @@ class OnboardTenantJob implements ShouldQueue
 
         $this->progress->updateStep('ai_enrichment', 'completed', 100,
             "AI аналіз завершено: {$enrichedCount} товарів оброблено",
-            ['total' => $productsWithoutAi, 'processed' => $processed, 'enriched' => $enrichedCount]
+            ['total' => $originalCount, 'processed' => $enrichedCount, 'enriched' => $enrichedCount]
         );
     }
 

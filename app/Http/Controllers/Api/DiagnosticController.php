@@ -375,6 +375,7 @@ class DiagnosticController extends Controller
         $query = $request->query('q', '');
         $limit = min((int) $request->query('limit', 20), 100);
         $filter = $request->query('filter', '');
+        $tenantId = $request->query('tenant_id');
 
         if (!$query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
@@ -389,11 +390,18 @@ class DiagnosticController extends Controller
                 'attributesToRetrieve' => ['id', 'article', 'title', 'price', 'category_path', 'color', 'color_norm', 'size', 'brand', 'in_stock', 'ai_product_type', 'tenant_id', 'ai_keywords', 'ai_slang', 'search_index'],
             ];
 
-            if ($filter) {
-                $searchParams['filter'] = $filter;
-            } else {
-                $searchParams['filter'] = 'in_stock = true';
+            // Build filter
+            $filterParts = ['in_stock = true'];
+            
+            if ($tenantId) {
+                $filterParts[] = "tenant_id = {$tenantId}";
             }
+            
+            if ($filter) {
+                $filterParts[] = $filter;
+            }
+            
+            $searchParams['filter'] = implode(' AND ', $filterParts);
 
             $result = $index->search($query, $searchParams);
             $hits = $result->getHits();

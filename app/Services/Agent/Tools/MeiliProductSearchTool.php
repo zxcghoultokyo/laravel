@@ -146,6 +146,7 @@ class MeiliProductSearchTool
                     'popularity',
                     'orders_count',
                     'ai_product_type',
+                    'ai_keywords',
                     'display_in_showcase',
                     'brand',
                 ],

@@ -2360,11 +2360,11 @@ PROMPT;
                 return '';
             }
 
-            // Format for GPT context - only take last 5 products to not bloat context
+            // Format for GPT context - only take last 3 products to reduce token usage
             $formatted = [];
             $count = 0;
             foreach ($allDetails as $id => $detail) {
-                if ($count >= 5) break;
+                if ($count >= 3) break;
                 
                 $lines = [];
                 $lines[] = "- **{$detail['title']}** (арт. {$detail['article']})";
@@ -2378,7 +2378,7 @@ PROMPT;
                 }
                 
                 if (!empty($detail['sizes'])) {
-                    $lines[] = "  Доступні розміри: " . implode(', ', $detail['sizes']);
+                    $lines[] = "  Доступні розміри: " . implode(', ', array_slice($detail['sizes'], 0, 5));
                 }
                 
                 if (!empty($detail['attributes'])) {
@@ -2387,12 +2387,12 @@ PROMPT;
                         $attrStr[] = "{$name}: {$value}";
                     }
                     if ($attrStr) {
-                        $lines[] = "  Характеристики: " . implode('; ', array_slice($attrStr, 0, 8));
+                        $lines[] = "  Характеристики: " . implode('; ', array_slice($attrStr, 0, 5));
                     }
                 }
                 
                 if (!empty($detail['description'])) {
-                    $lines[] = "  Опис: " . mb_substr($detail['description'], 0, 200);
+                    $lines[] = "  Опис: " . mb_substr($detail['description'], 0, 100) . '...';
                 }
                 
                 $formatted[] = implode("\n", $lines);

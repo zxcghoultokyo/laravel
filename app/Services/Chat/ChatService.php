@@ -1167,7 +1167,7 @@ class ChatService
      * Returns last N messages in OpenAI format
      * Includes product context for follow-up queries
      */
-    protected function loadConversationHistory(string $sessionId, int $limit = 10): array
+    protected function loadConversationHistory(string $sessionId, int $limit = 6): array
     {
         try {
             // Bypass TenantScope - sessions are identified by session_id, not tenant

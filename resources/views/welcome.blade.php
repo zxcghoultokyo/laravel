@@ -606,6 +606,92 @@
                 line-height: 1.6;
             }
             
+            /* Roadmap Accordion */
+            .roadmap-accordion {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            
+            .accordion-item {
+                background: white;
+                border-radius: 16px;
+                margin-bottom: 12px;
+                border: 1px solid var(--border-color);
+                overflow: hidden;
+                transition: all 0.3s ease;
+            }
+            
+            .accordion-item:hover {
+                border-color: var(--primary);
+            }
+            
+            .accordion-header {
+                width: 100%;
+                padding: 20px 24px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 16px;
+                font-weight: 600;
+                color: var(--text-dark);
+                text-align: left;
+            }
+            
+            .accordion-title {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            .accordion-icon {
+                font-size: 24px;
+            }
+            
+            .accordion-arrow {
+                transition: transform 0.3s ease;
+                color: var(--text-gray);
+            }
+            
+            .accordion-item.open .accordion-arrow {
+                transform: rotate(180deg);
+            }
+            
+            .accordion-content {
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.3s ease, padding 0.3s ease;
+                padding: 0 24px;
+            }
+            
+            .accordion-item.open .accordion-content {
+                max-height: 500px;
+                padding: 0 24px 24px 24px;
+            }
+            
+            .feature-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .feature-item {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 12px 16px;
+                background: var(--bg-light);
+                border-radius: 10px;
+                font-size: 14px;
+                color: var(--text-dark);
+            }
+            
+            .feature-item .badge {
+                flex-shrink: 0;
+            }
+
             /* Advantages Section */
             .advantages {
                 padding: 100px 0;
@@ -1241,12 +1327,14 @@
             </div>
         </section>
 
-        <!-- Roadmap Section (replaces Coming Soon) -->
-        <section class="roadmap">
+        <!-- Roadmap Section -->
+        <section class="roadmap" id="roadmap">
             <div class="container">
-                <h2 class="section-title" data-aos="fade-up">Дорожня карта</h2>
-                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Підтримувані та майбутні платформи</p>
+                <h2 class="section-title" data-aos="fade-up">🚀 Дорожня карта</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Більше ніж чат-бот — AI-центр керування продажами</p>
                 
+                <!-- Platforms Grid -->
+                <h3 style="font-size: 20px; margin-bottom: 24px; color: var(--text-dark);" data-aos="fade-up">📦 Платформи та інтеграції</h3>
                 <div class="coming-grid">
                     <div class="coming-card" data-aos="fade-up" data-aos-delay="100" style="border: 2px solid var(--primary-color); background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, transparent 100%);">
                         <h4>🛒 Horoshop <span class="badge" style="background: var(--primary-color); color: white;">✓ Готово</span></h4>
@@ -1279,8 +1367,137 @@
                     </div>
                 </div>
                 
-                <div class="text-center mt-8" data-aos="fade-up" data-aos-delay="700">
-                    <p style="color: var(--text-muted);">Не знайшли свою платформу? <a href="https://t.me/AIntento" target="_blank" style="color: var(--primary-color);">Напишіть нам</a> — додамо в пріоритет!</p>
+                <!-- Future Features Accordion -->
+                <div class="roadmap-features" style="margin-top: 48px;" data-aos="fade-up">
+                    <h3 style="font-size: 20px; margin-bottom: 24px; color: var(--text-dark);">🎯 Майбутні можливості</h3>
+                    
+                    <!-- Accordion -->
+                    <div class="roadmap-accordion">
+                        <!-- Omnichannel -->
+                        <div class="accordion-item">
+                            <button class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-title">
+                                    <span class="accordion-icon">📱</span>
+                                    <span>Омніканальність</span>
+                                    <span class="badge badge-soon">Q1-Q2 2026</span>
+                                </div>
+                                <svg class="accordion-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </button>
+                            <div class="accordion-content">
+                                <p style="margin-bottom: 16px; color: var(--text-muted);">Єдиний inbox для всіх каналів комунікації з клієнтами:</p>
+                                <div class="feature-list">
+                                    <div class="feature-item"><span class="badge" style="background: #E4405F; color: white;">Instagram</span> DM інтеграція через Meta API</div>
+                                    <div class="feature-item"><span class="badge" style="background: #0088cc; color: white;">Telegram</span> Bot для бізнесу</div>
+                                    <div class="feature-item"><span class="badge" style="background: #1877F2; color: white;">Facebook</span> Messenger інтеграція</div>
+                                    <div class="feature-item"><span class="badge" style="background: #7360F2; color: white;">Viber</span> Бізнес-чати</div>
+                                    <div class="feature-item"><span class="badge" style="background: #25D366; color: white;">WhatsApp</span> Business API</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- SEO & Content -->
+                        <div class="accordion-item">
+                            <button class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-title">
+                                    <span class="accordion-icon">📊</span>
+                                    <span>AI SEO & Контент</span>
+                                    <span class="badge badge-soon">Q2-Q3 2026</span>
+                                </div>
+                                <svg class="accordion-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </button>
+                            <div class="accordion-content">
+                                <p style="margin-bottom: 16px; color: var(--text-muted);">Автоматична оптимізація контенту:</p>
+                                <div class="feature-list">
+                                    <div class="feature-item">🎯 <strong>SEO Score товарів</strong> — оцінка та рекомендації для кожного товару</div>
+                                    <div class="feature-item">✏️ <strong>AI Copywriting</strong> — генерація унікальних описів товарів</div>
+                                    <div class="feature-item">🏷️ <strong>Meta Tags</strong> — автоматичні title, description, alt-тексти</div>
+                                    <div class="feature-item">🔍 <strong>Keyword Analysis</strong> — аналіз конкурентів та підбір ключових слів</div>
+                                    <div class="feature-item">📝 <strong>Тексти категорій</strong> — SEO-тексти для розділів магазину</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Smart Analytics -->
+                        <div class="accordion-item">
+                            <button class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-title">
+                                    <span class="accordion-icon">📈</span>
+                                    <span>Smart Analytics</span>
+                                    <span class="badge badge-soon">Q3 2026</span>
+                                </div>
+                                <svg class="accordion-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </button>
+                            <div class="accordion-content">
+                                <p style="margin-bottom: 16px; color: var(--text-muted);">Розумна аналітика з AI-рекомендаціями:</p>
+                                <div class="feature-list">
+                                    <div class="feature-item">🎯 <strong>Conversion Funnel</strong> — де втрачаються клієнти</div>
+                                    <div class="feature-item">💬 <strong>Chat-to-Sale</strong> — атрибуція продажів з чату</div>
+                                    <div class="feature-item">💡 <strong>AI Insights</strong> — автоматичні рекомендації що покращити</div>
+                                    <div class="feature-item">🔥 <strong>Lead Scoring</strong> — визначення "гарячих" клієнтів</div>
+                                    <div class="feature-item">📊 <strong>Product Performance</strong> — аналітика ефективності товарів</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Sales Automation -->
+                        <div class="accordion-item">
+                            <button class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-title">
+                                    <span class="accordion-icon">🛒</span>
+                                    <span>Автоматизація продажів</span>
+                                    <span class="badge badge-soon">Q3-Q4 2026</span>
+                                </div>
+                                <svg class="accordion-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </button>
+                            <div class="accordion-content">
+                                <p style="margin-bottom: 16px; color: var(--text-muted);">Збільшення продажів на автопілоті:</p>
+                                <div class="feature-list">
+                                    <div class="feature-item">🛍️ <strong>Smart Bundles</strong> — AI пропонує комплекти товарів</div>
+                                    <div class="feature-item">🛒 <strong>Abandoned Cart</strong> — повернення покинутих кошиків</div>
+                                    <div class="feature-item">📦 <strong>Restock Alerts</strong> — "товар знову в наявності"</div>
+                                    <div class="feature-item">💸 <strong>Price Drop</strong> — автоповідомлення про знижки</div>
+                                    <div class="feature-item">⭐ <strong>Review Requests</strong> — автозбір відгуків</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Marketing -->
+                        <div class="accordion-item">
+                            <button class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-title">
+                                    <span class="accordion-icon">📣</span>
+                                    <span>Marketing Automation</span>
+                                    <span class="badge badge-soon">2027</span>
+                                </div>
+                                <svg class="accordion-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </button>
+                            <div class="accordion-content">
+                                <p style="margin-bottom: 16px; color: var(--text-muted);">Повноцінна маркетингова автоматизація:</p>
+                                <div class="feature-list">
+                                    <div class="feature-item">🎯 <strong>Smart Ad Feed</strong> — оптимізований фід для Google/Facebook Ads</div>
+                                    <div class="feature-item">✍️ <strong>AI Ad Copy</strong> — генерація текстів оголошень</div>
+                                    <div class="feature-item">📱 <strong>Social Auto-posting</strong> — публікація товарів в соцмережі</div>
+                                    <div class="feature-item">📧 <strong>Email Marketing</strong> — персоналізовані розсилки</div>
+                                    <div class="feature-item">🔬 <strong>A/B Testing</strong> — автотести креативів</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-8" data-aos="fade-up" data-aos-delay="200">
+                    <p style="color: var(--text-muted); margin-bottom: 16px;">Не знайшли свою платформу чи потрібну функцію?</p>
+                    <a href="https://t.me/AIntento" target="_blank" class="btn btn-outline">💬 Напишіть нам — додамо в пріоритет!</a>
                 </div>
             </div>
         </section>
@@ -1603,6 +1820,22 @@
                 showFeatureDemo(0);
                 setTimeout(() => runScenario(0), 500);
             });
+            
+            // Roadmap Accordion
+            function toggleAccordion(header) {
+                const item = header.parentElement;
+                const isOpen = item.classList.contains('open');
+                
+                // Close all other accordions
+                document.querySelectorAll('.accordion-item').forEach(i => {
+                    i.classList.remove('open');
+                });
+                
+                // Toggle current if it wasn't open
+                if (!isOpen) {
+                    item.classList.add('open');
+                }
+            }
         </script>
         
         <!-- AOS.js Animation Library -->

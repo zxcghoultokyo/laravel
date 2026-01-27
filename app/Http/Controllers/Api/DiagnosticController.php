@@ -5790,4 +5790,53 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * GET /api/diagnostic/onboarding-status/{tenantId}
+     * Check onboarding progress for a tenant
+     */
+    public function onboardingStatus(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
+
+        // Get tenant stats
+        $productsCount = DB::table('products')->where('tenant_id', $tenantId)->count();
+        $productsInStock = DB::table('products')->where('tenant_id', $tenantId)->where('in_stock', true)->count();
+        $categoriesCount = DB::table('categories')->where('tenant_id', $tenantId)->count();
+        $brandsCount = DB::table('brands')->where('tenant_id', $tenantId)->count();
+
+        return response()->json([
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'platform' => $tenant->platform,
+            'has_credentials' => !empty($tenant->platform_credentials),
+            'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
+            'onboarding_completed_at' => $tenant->onboarding_completed_at?->toDateTimeString(),
+            'onboarding_progress' => $progress ? [
+                'status' => $progress->status,
+                'overall_percent' => $progress->overall_percent,
+                'current_step' => $progress->current_step,
+                'current_step_detail' => $progress->current_step_detail,
+                'steps' => $progress->steps,
+                'started_at' => $progress->started_at?->toDateTimeString(),
+                'completed_at' => $progress->completed_at?->toDateTimeString(),
+                'error_message' => $progress->error_message,
+            ] : null,
+            'stats' => [
+                'products' => $productsCount,
+                'products_in_stock' => $productsInStock,
+                'categories' => $categoriesCount,
+                'brands' => $brandsCount,
+            ],
+        ]);
+    }
 }

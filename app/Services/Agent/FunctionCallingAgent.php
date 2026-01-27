@@ -574,16 +574,8 @@ CONTEXT;
             return 'Ось новинки:';
         }
         
-        // Extract color
-        $colors = ['олив', 'чорн', 'біл', 'мультикам', 'піксель', 'коричнев', 'coyote', 'койот', 'ranger green'];
-        foreach ($colors as $color) {
-            if (mb_stripos($lowerMsg, $color) !== false) {
-                $colorName = mb_ucfirst($color);
-                return "Ось варіанти в кольорі {$colorName}:";
-            }
-        }
-        
-        // Extract category from products or message
+        // IMPORTANT: Check category FIRST before colors!
+        // "термобілизна" contains "біл" which would match color "білий" incorrectly
         $categoryPatterns = [
             'куртк' => 'куртки',
             'берц' => 'берці',
@@ -603,6 +595,15 @@ CONTEXT;
         foreach ($categoryPatterns as $pattern => $category) {
             if (mb_stripos($lowerMsg, $pattern) !== false) {
                 return "Ось {$category}:";
+            }
+        }
+        
+        // Extract color (AFTER category check to avoid false positives like "термобілизна" -> "білий")
+        $colors = ['олив', 'чорн', 'біл', 'мультикам', 'піксель', 'коричнев', 'coyote', 'койот', 'ranger green'];
+        foreach ($colors as $color) {
+            if (mb_stripos($lowerMsg, $color) !== false) {
+                $colorName = mb_ucfirst($color);
+                return "Ось варіанти в кольорі {$colorName}:";
             }
         }
         

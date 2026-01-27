@@ -258,13 +258,14 @@ class OnboardTenantJob implements ShouldQueue
                 break;
             }
 
-            // Run enrichment synchronously for each batch
+            // Run enrichment synchronously for each batch (singleBatchOnly=true to prevent auto-dispatch)
             try {
                 AnalyzeProductsWithAiJob::dispatchSync(
                     batchSize: $products->count(),
                     offset: 0,
                     forceReanalyze: false,
-                    tenantId: $this->tenantId
+                    tenantId: $this->tenantId,
+                    singleBatchOnly: true  // Don't auto-dispatch next batch, we control the loop
                 );
             } catch (\Throwable $e) {
                 Log::warning('OnboardTenantJob: AI batch failed, continuing', [

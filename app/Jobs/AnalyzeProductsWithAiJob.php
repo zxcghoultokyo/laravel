@@ -40,12 +40,14 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
      * @param int $offset Skip first N products
      * @param bool $forceReanalyze Re-analyze even if already has keywords
      * @param int|null $tenantId If set, only analyze products for this tenant
+     * @param bool $singleBatchOnly If true, don't auto-dispatch next batch (used by OnboardTenantJob)
      */
     public function __construct(
         public int $batchSize = 10,
         public int $offset = 0,
         public bool $forceReanalyze = false,
-        public ?int $tenantId = null
+        public ?int $tenantId = null,
+        public bool $singleBatchOnly = false
     ) {
         $this->onQueue('default');
     }
@@ -157,8 +159,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             ]);
         }
 
-        // Dispatch next batch if more products exist
-        if ($products->count() === $this->batchSize) {
+        // Dispatch next batch if more products exist (unless singleBatchOnly mode)
+        if ($products->count() === $this->batchSize && !$this->singleBatchOnly) {
             Log::info('AnalyzeProductsWithAiJob: dispatching next batch', [
                 'tenant_id' => $this->tenantId,
                 'next_offset' => $this->offset + $this->batchSize,

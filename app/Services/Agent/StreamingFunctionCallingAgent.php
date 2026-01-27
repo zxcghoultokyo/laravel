@@ -211,14 +211,23 @@ CONTEXT;
             // Execute tools
             $toolResults = [];
             $allProducts = [];
+            
+            // Extract last category from conversation context for follow-up queries
+            $lastCategory = $this->extractLastCategoryFromMessages($messages);
 
             foreach ($assistantMessage['tool_calls'] as $toolCall) {
                 $functionName = $toolCall['function']['name'];
                 $args = json_decode($toolCall['function']['arguments'], true) ?? [];
+                
+                // CRITICAL: Inject category context for follow-up queries like "дешевше", "ще", "аналоги"
+                if ($functionName === 'search_products' && $lastCategory) {
+                    $args = $this->injectCategoryContext($args, $message, $lastCategory);
+                }
 
                 Log::info('StreamingAgent: executing tool', [
                     'function' => $functionName,
                     'args' => $args,
+                    'last_category' => $lastCategory,
                 ]);
 
                 $result = $this->executeTool($functionName, $args);
@@ -619,5 +628,122 @@ CONTEXT;
         
         // Default fallback - still better than generic
         return 'Ось товари:';
+    }
+    
+    /**
+     * Extract last product category from conversation messages.
+     * Used to maintain context for follow-up queries like "дешевше", "ще".
+     */
+    private function extractLastCategoryFromMessages(array $messages): ?string
+    {
+        // Scan messages in reverse to find last shown products
+        foreach (array_reverse($messages) as $msg) {
+            $content = $msg['content'] ?? '';
+            
+            // Look for [Показані товари: ...] marker
+            if (preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
+                $productText = $matches[1];
+                
+                // Extract category keywords from product text
+                $categoryKeywords = [
+                    'peltor|пелтор' => 'навушники Peltor',
+                    'earmor' => 'навушники Earmor', 
+                    'навушник|headset|comtac' => 'навушники',
+                    'куртк|jacket' => 'куртки',
+                    'берц|boots' => 'берці',
+                    'штан|pants' => 'штани',
+                    'футболк|shirt' => 'футболки',
+                    'шолом|helmet' => 'шоломи',
+                    'плитонос|plate.?carrier' => 'плитоноски',
+                    'рюкзак|backpack' => 'рюкзаки',
+                    'підсум|pouch' => 'підсумки',
+                    'термо' => 'термобілизна',
+                    'бронежилет|armor' => 'бронежилети',
+                ];
+                
+                foreach ($categoryKeywords as $pattern => $category) {
+                    if (preg_match("/($pattern)/ui", $productText)) {
+                        Log::info('StreamingAgent: extracted category from history', [
+                            'category' => $category,
+                            'from' => mb_substr($productText, 0, 100),
+                        ]);
+                        return $category;
+                    }
+                }
+            }
+            
+            // Also check user messages for explicit product mentions
+            if (($msg['role'] ?? '') === 'user') {
+                $lowerContent = mb_strtolower($content);
+                $userCategoryPatterns = [
+                    'peltor|пелтор' => 'навушники Peltor',
+                    'earmor' => 'навушники Earmor',
+                    'навушник' => 'навушники',
+                    'куртк' => 'куртки',
+                    'берц' => 'берці',
+                    'штан' => 'штани',
+                    'шолом' => 'шоломи',
+                    'плитонос' => 'плитоноски',
+                    'рюкзак' => 'рюкзаки',
+                ];
+                
+                foreach ($userCategoryPatterns as $pattern => $category) {
+                    if (preg_match("/($pattern)/ui", $lowerContent)) {
+                        return $category;
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Inject category context into search args for follow-up queries.
+     * Prevents "дешевше" from returning random products instead of same category.
+     */
+    private function injectCategoryContext(array $args, string $userMessage, string $lastCategory): array
+    {
+        $lowerMsg = mb_strtolower($userMessage);
+        
+        // Patterns that indicate follow-up without explicit category
+        $followUpPatterns = [
+            'дешевше', 'дешевший', 'дорожче', 'дорожчий',
+            'ще ', 'інші', 'інш', 'аналог', 'подібн', 'такий же', 'такі ж',
+            'більше варіант', 'ще варіант',
+        ];
+        
+        $isFollowUp = false;
+        foreach ($followUpPatterns as $pattern) {
+            if (mb_stripos($lowerMsg, $pattern) !== false) {
+                $isFollowUp = true;
+                break;
+            }
+        }
+        
+        // If not follow-up or query already has specific category, don't modify
+        if (!$isFollowUp) {
+            return $args;
+        }
+        
+        $currentQuery = $args['query'] ?? '';
+        
+        // Check if query already contains category keywords
+        $hasCategory = preg_match('/(навушник|куртк|берц|штан|шолом|рюкзак|плитонос)/ui', $currentQuery);
+        
+        if (!$hasCategory) {
+            // Inject category into query
+            $newQuery = trim($lastCategory . ' ' . $currentQuery);
+            $args['query'] = $newQuery;
+            
+            Log::info('StreamingAgent: injected category context', [
+                'original_query' => $currentQuery,
+                'new_query' => $newQuery,
+                'last_category' => $lastCategory,
+                'user_message' => $userMessage,
+            ]);
+        }
+        
+        return $args;
     }
 }

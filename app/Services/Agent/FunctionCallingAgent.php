@@ -714,9 +714,18 @@ CONTEXT;
         ];
         
         $isFollowUp = false;
+        $isCheaper = false;
+        $isMoreExpensive = false;
+        
         foreach ($followUpPatterns as $pattern) {
             if (mb_stripos($lowerMsg, $pattern) !== false) {
                 $isFollowUp = true;
+                if (in_array($pattern, ['дешевше', 'дешевший'])) {
+                    $isCheaper = true;
+                }
+                if (in_array($pattern, ['дорожче', 'дорожчий'])) {
+                    $isMoreExpensive = true;
+                }
                 break;
             }
         }
@@ -742,6 +751,15 @@ CONTEXT;
                 'last_category' => $lastCategory,
                 'user_message' => $userMessage,
             ]);
+        }
+        
+        // Add price sorting for "дешевше" / "дорожче" queries
+        if ($isCheaper) {
+            $args['sort_by'] = 'price_asc';
+            Log::info('FunctionCallingAgent: added price_asc sorting for cheaper request');
+        } elseif ($isMoreExpensive) {
+            $args['sort_by'] = 'price_desc';
+            Log::info('FunctionCallingAgent: added price_desc sorting for expensive request');
         }
         
         return $args;

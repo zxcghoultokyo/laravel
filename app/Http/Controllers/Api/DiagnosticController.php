@@ -2048,12 +2048,11 @@ class DiagnosticController extends Controller
         // 8. Sync logs
         $deleted['sync_logs'] = DB::table('sync_logs')->where('tenant_id', $tenantId)->delete();
 
-        // 9. Reset tenant fields for re-onboarding
+        // 9. Reset tenant fields for re-onboarding (KEEP platform_credentials for re-sync!)
         $tenant->update([
             'last_sync_at' => null,
             'onboarding_completed_at' => null,
-            'platform' => null,
-            'platform_credentials' => null,
+            // Keep platform and platform_credentials so re-onboarding can sync!
         ]);
 
         // 10. Delete from Meilisearch
@@ -2077,6 +2076,42 @@ class DiagnosticController extends Controller
             'deleted' => $deleted,
             'kept' => ['tenant', 'users', 'widget_settings'],
             'message' => '🔄 Tenant reset complete! Ready for re-onboarding.',
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/dispatch-onboard/{tenantId}
+     * Dispatch OnboardTenantJob for a tenant (useful after reset)
+     */
+    public function dispatchOnboard(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        // Check if credentials exist
+        if (empty($tenant->platform_credentials)) {
+            return response()->json([
+                'error' => 'Tenant has no platform_credentials configured',
+                'tenant_id' => $tenantId,
+                'platform' => $tenant->platform,
+            ], 400);
+        }
+
+        // Dispatch the job
+        \App\Jobs\OnboardTenantJob::dispatch($tenantId)->onQueue('default');
+
+        return response()->json([
+            'success' => true,
+            'tenant_id' => $tenantId,
+            'tenant_name' => $tenant->name,
+            'platform' => $tenant->platform,
+            'message' => '🚀 OnboardTenantJob dispatched! Check onboarding progress.',
         ]);
     }
 

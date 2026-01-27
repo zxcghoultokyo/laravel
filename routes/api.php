@@ -115,6 +115,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/delete-tenant-products/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'deleteTenantProducts']);
     Route::delete('/tenant/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'deleteTenant']);
     Route::post('/reset-tenant/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'resetTenant']);
+    Route::post('/dispatch-onboard/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'dispatchOnboard']);
     Route::get('/horoshop-stock-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopStockCount']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);
     Route::get('/chat-history/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatHistory']);

@@ -201,3 +201,15 @@ Schedule::command('tenants:reset-usage --sync')
 Schedule::command('tenants:sync-usage')
     ->hourly()
     ->runInBackground();
+
+// ─────────────────────────────────────────────
+// CHAT SESSION MANAGEMENT
+// ─────────────────────────────────────────────
+// Close inactive chat sessions (30 min timeout)
+// This helps track actual conversation flow and marks sessions as "completed"
+Schedule::command('chat:close-inactive --timeout=30')
+    ->everyFiveMinutes()
+    ->runInBackground()
+    ->withoutOverlapping()
+    ->appendOutputTo(storage_path('logs/chat-sessions.log'));
+

@@ -178,6 +178,10 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
     Route::delete('/cleanup-test-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTestSessions']);
     
+    // Chat session management
+    Route::get('/session-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'sessionStats']);
+    Route::post('/close-inactive-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'closeInactiveSessions']);
+    
     // Synonyms & Aliases
     Route::get('/color-synonyms', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorSynonyms']);
     Route::get('/category-aliases', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryAliases']);

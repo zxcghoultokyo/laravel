@@ -6010,4 +6010,109 @@ class DiagnosticController extends Controller
 
         return response()->json($results);
     }
+
+    /**
+     * POST /api/diagnostic/close-inactive-sessions
+     * Close chat sessions that have been inactive
+     */
+    public function closeInactiveSessions(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $timeoutMinutes = (int) $request->query('timeout', 30);
+        $dryRun = $request->query('dry_run', 'true') === 'true';
+        $cutoffTime = now()->subMinutes($timeoutMinutes);
+
+        // Find open sessions with no recent activity
+        $query = DB::table('chat_sessions')
+            ->where('status', 'open')
+            ->where('updated_at', '<', $cutoffTime);
+
+        $sessionsToClose = $query->get();
+
+        $results = [
+            'timeout_minutes' => $timeoutMinutes,
+            'cutoff_time' => $cutoffTime->toDateTimeString(),
+            'dry_run' => $dryRun,
+            'sessions_found' => $sessionsToClose->count(),
+            'sessions' => $sessionsToClose->map(fn($s) => [
+                'id' => $s->id,
+                'session_id' => $s->session_id,
+                'tenant_id' => $s->tenant_id,
+                'messages_count' => $s->messages_count,
+                'last_activity' => $s->updated_at,
+            ])->toArray(),
+            'sessions_closed' => 0,
+        ];
+
+        if (!$dryRun && $sessionsToClose->count() > 0) {
+            $closed = DB::table('chat_sessions')
+                ->where('status', 'open')
+                ->where('updated_at', '<', $cutoffTime)
+                ->update(['status' => 'closed']);
+            
+            $results['sessions_closed'] = $closed;
+        }
+
+        $results['message'] = $dryRun 
+            ? 'Dry run. Use ?dry_run=false to close sessions.'
+            : "Closed {$results['sessions_closed']} sessions.";
+
+        return response()->json($results);
+    }
+
+    /**
+     * GET /api/diagnostic/session-stats
+     * Get chat session statistics by status
+     */
+    public function sessionStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id');
+
+        $query = DB::table('chat_sessions');
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        $byStatus = (clone $query)
+            ->select('status', DB::raw('COUNT(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status')
+            ->toArray();
+
+        // Recent activity breakdown
+        $now = now();
+        $last30min = (clone $query)->where('status', 'open')->where('updated_at', '>=', $now->copy()->subMinutes(30))->count();
+        $last1hour = (clone $query)->where('status', 'open')->where('updated_at', '>=', $now->copy()->subHour())->count();
+        $last24hours = (clone $query)->where('status', 'open')->where('updated_at', '>=', $now->copy()->subDay())->count();
+        $older = (clone $query)->where('status', 'open')->where('updated_at', '<', $now->copy()->subDay())->count();
+
+        // Messages stats
+        $totalMessages = DB::table('chat_messages')->count();
+        $avgMessagesPerSession = $query->avg('messages_count');
+
+        return response()->json([
+            'by_status' => $byStatus,
+            'total_sessions' => array_sum($byStatus),
+            'open_sessions_breakdown' => [
+                'active_last_30min' => $last30min,
+                'active_last_1hour' => $last1hour,
+                'active_last_24hours' => $last24hours,
+                'stale_over_24hours' => $older,
+            ],
+            'messages' => [
+                'total' => $totalMessages,
+                'avg_per_session' => round($avgMessagesPerSession ?? 0, 1),
+            ],
+            'recommended_action' => $older > 0 
+                ? "Consider closing {$older} stale sessions with: POST /api/diagnostic/close-inactive-sessions?timeout=1440&dry_run=false"
+                : 'All sessions are healthy',
+        ]);
+    }
 }

@@ -111,6 +111,7 @@ class ChatService
             $response = [
                 'type'       => 'products',
                 'text'       => $agentResult['message'] ?? '',
+                'products'   => $products,  // Top-level for backward compatibility
                 'data'       => [
                     'products' => $products,
                     // NEW: product_cards for individual card+description display

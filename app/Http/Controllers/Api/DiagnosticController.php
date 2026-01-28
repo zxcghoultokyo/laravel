@@ -5975,6 +5975,10 @@ class DiagnosticController extends Controller
                   ->orWhere('session_id', 'LIKE', 'ctx_%')
                   ->orWhere('session_id', 'LIKE', 'v1_%')
                   ->orWhere('session_id', 'LIKE', 'v2_%')
+                  ->orWhere('session_id', 'LIKE', 'quick_%')
+                  ->orWhere('session_id', 'LIKE', 'order_%')
+                  ->orWhere('session_id', 'LIKE', 'phone_%')
+                  ->orWhere('session_id', 'LIKE', 'nadhodgennya_%')
                   ->orWhere('session_id', 'LIKE', 't%_%'); // t1_*, t23_thanks, etc
             });
 

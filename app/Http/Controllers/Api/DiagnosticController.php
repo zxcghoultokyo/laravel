@@ -5954,7 +5954,13 @@ class DiagnosticController extends Controller
         $query = DB::table('chat_sessions')
             ->where(function ($q) {
                 $q->where('session_id', 'LIKE', 'test%')
-                  ->orWhere('session_id', 'LIKE', 'compare%');
+                  ->orWhere('session_id', 'LIKE', 'compare%')
+                  ->orWhere('session_id', 'LIKE', 'debug%')
+                  ->orWhere('session_id', 'LIKE', 'fu_%')
+                  ->orWhere('session_id', 'LIKE', 'followup_%')
+                  ->orWhere('session_id', 'LIKE', 't%_%') // t1_*, t23_thanks, etc
+                  ->orWhere('session_id', 'LIKE', 'fufinal%')
+                  ->orWhere('session_id', 'LIKE', 'final_%');
             });
 
         if ($tenantId) {

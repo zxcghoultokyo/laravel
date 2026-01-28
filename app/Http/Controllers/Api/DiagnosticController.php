@@ -5953,14 +5953,23 @@ class DiagnosticController extends Controller
         // Find test sessions by pattern
         $query = DB::table('chat_sessions')
             ->where(function ($q) {
+                // Explicit test patterns
                 $q->where('session_id', 'LIKE', 'test%')
                   ->orWhere('session_id', 'LIKE', 'compare%')
                   ->orWhere('session_id', 'LIKE', 'debug%')
                   ->orWhere('session_id', 'LIKE', 'fu_%')
                   ->orWhere('session_id', 'LIKE', 'followup_%')
-                  ->orWhere('session_id', 'LIKE', 't%_%') // t1_*, t23_thanks, etc
                   ->orWhere('session_id', 'LIKE', 'fufinal%')
-                  ->orWhere('session_id', 'LIKE', 'final_%');
+                  ->orWhere('session_id', 'LIKE', 'final_%')
+                  ->orWhere('session_id', 'LIKE', 'navush_%')
+                  ->orWhere('session_id', 'LIKE', 'kurty_%')
+                  ->orWhere('session_id', 'LIKE', 'confuse_%')
+                  ->orWhere('session_id', 'LIKE', 'dial_%')
+                  ->orWhere('session_id', 'LIKE', 'fresh_%')
+                  ->orWhere('session_id', 'LIKE', 'user_%')
+                  ->orWhere('session_id', 'LIKE', 'simple_%')
+                  ->orWhere('session_id', 'LIKE', 'gender_%')
+                  ->orWhere('session_id', 'LIKE', 't%_%'); // t1_*, t23_thanks, etc
             });
 
         if ($tenantId) {

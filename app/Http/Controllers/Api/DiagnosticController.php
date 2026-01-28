@@ -5885,4 +5885,55 @@ class DiagnosticController extends Controller
             'categories' => $categories,
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/unlink-order-session/{orderId}
+     * Force unlink a session from an order (for fixing false attributions)
+     */
+    public function unlinkOrderSession(Request $request, $orderId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $order = DB::table('orders')->where('order_id', $orderId)->first();
+        
+        if (!$order) {
+            return response()->json([
+                'error' => 'Order not found',
+                'order_id' => $orderId,
+            ], 404);
+        }
+
+        $oldSessionId = $order->session_id;
+        $oldHadChat = $order->had_chat;
+        $oldProductsFromChat = $order->products_from_chat;
+
+        // Update order to remove session attribution
+        $updated = DB::table('orders')
+            ->where('id', $order->id)
+            ->update([
+                'session_id' => null,
+                'had_chat' => false,
+                'products_from_chat' => 0,
+            ]);
+
+        return response()->json([
+            'success' => true,
+            'order_id' => $orderId,
+            'customer_name' => $order->customer_name,
+            'total_sum' => $order->total_sum,
+            'before' => [
+                'session_id' => $oldSessionId,
+                'had_chat' => $oldHadChat,
+                'products_from_chat' => $oldProductsFromChat,
+            ],
+            'after' => [
+                'session_id' => null,
+                'had_chat' => false,
+                'products_from_chat' => 0,
+            ],
+            'message' => 'Order unlinked from chat session successfully',
+        ]);
+    }
 }

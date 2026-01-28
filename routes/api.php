@@ -174,6 +174,7 @@ Route::prefix('diagnostic')->group(function () {
     // Order investigation
     Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);
     Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
+    Route::post('/unlink-order-session/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'unlinkOrderSession']);
     Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
     
     // Synonyms & Aliases

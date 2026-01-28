@@ -205,10 +205,11 @@ Schedule::command('tenants:sync-usage')
 // ─────────────────────────────────────────────
 // CHAT SESSION MANAGEMENT
 // ─────────────────────────────────────────────
-// Close inactive chat sessions (30 min timeout)
-// This helps track actual conversation flow and marks sessions as "completed"
-Schedule::command('chat:close-inactive --timeout=30')
-    ->everyFiveMinutes()
+// Close inactive chat sessions (24 hour timeout)
+// Sessions reopen automatically when user sends new message
+// This is for UI/analytics only - doesn't block messages
+Schedule::command('chat:close-inactive --timeout=1440')
+    ->hourly()
     ->runInBackground()
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/chat-sessions.log'));

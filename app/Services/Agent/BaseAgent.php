@@ -2449,10 +2449,12 @@ PROMPT;
                 'content' => $message,
             ]);
             
-            // Update last_message_at for proper sorting in dashboard
+            // Update session: reopen if closed, update last_message_at
+            // Sessions may be auto-closed after 24h inactivity, reopen on new message
             $session->update([
                 'last_message_at' => now(),
                 'messages_count' => ($session->messages_count ?? 0) + 1,
+                'status' => 'open', // Reopen session on new message
             ]);
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to log user message', ['error' => $e->getMessage()]);

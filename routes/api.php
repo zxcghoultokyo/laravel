@@ -176,6 +176,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
     Route::post('/unlink-order-session/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'unlinkOrderSession']);
     Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
+    Route::delete('/cleanup-test-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTestSessions']);
     
     // Synonyms & Aliases
     Route::get('/color-synonyms', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorSynonyms']);

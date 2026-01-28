@@ -5936,4 +5936,71 @@ class DiagnosticController extends Controller
             'message' => 'Order unlinked from chat session successfully',
         ]);
     }
+
+    /**
+     * DELETE /api/diagnostic/cleanup-test-sessions
+     * Delete test chat sessions (session_id starts with 'test' or 'compare')
+     */
+    public function cleanupTestSessions(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $dryRun = $request->query('dry_run', 'true') === 'true';
+        $tenantId = $request->query('tenant_id'); // optional filter
+
+        // Find test sessions by pattern
+        $query = DB::table('chat_sessions')
+            ->where(function ($q) {
+                $q->where('session_id', 'LIKE', 'test%')
+                  ->orWhere('session_id', 'LIKE', 'compare%');
+            });
+
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        $testSessions = $query->get();
+
+        $results = [
+            'dry_run' => $dryRun,
+            'sessions_found' => $testSessions->count(),
+            'sessions' => [],
+            'messages_deleted' => 0,
+            'sessions_deleted' => 0,
+        ];
+
+        foreach ($testSessions as $session) {
+            $messagesCount = DB::table('chat_messages')
+                ->where('chat_session_id', $session->id)
+                ->count();
+
+            $results['sessions'][] = [
+                'id' => $session->id,
+                'session_id' => $session->session_id,
+                'tenant_id' => $session->tenant_id,
+                'messages_count' => $messagesCount,
+                'created_at' => $session->created_at,
+            ];
+
+            if (!$dryRun) {
+                // Delete messages first
+                $deletedMessages = DB::table('chat_messages')
+                    ->where('chat_session_id', $session->id)
+                    ->delete();
+                $results['messages_deleted'] += $deletedMessages;
+
+                // Delete session
+                DB::table('chat_sessions')->where('id', $session->id)->delete();
+                $results['sessions_deleted']++;
+            }
+        }
+
+        $results['message'] = $dryRun 
+            ? 'Dry run complete. Use ?dry_run=false to actually delete.'
+            : "Deleted {$results['sessions_deleted']} sessions and {$results['messages_deleted']} messages.";
+
+        return response()->json($results);
+    }
 }

@@ -277,20 +277,60 @@ class FetchHoroshopOrdersJob implements ShouldQueue
     }
 
     /**
-     * Check if session had meaningful chat conversation
+     * Check if session had meaningful chat conversation.
+     * 
+     * A "meaningful" conversation requires:
+     * - At least 2 user messages (excludes single trigger response like "Так")
+     * - OR products were shown in chat (via product_shown events)
+     * - OR add_to_cart happened from chat (product_from_chat = true)
      */
     protected function checkIfHadChat(string $sessionId): bool
     {
-        // Check if there are user messages in this session
+        // Get chat_session_id if we have string session_id
+        $chatSession = DB::table('chat_sessions')
+            ->where('session_id', $sessionId)
+            ->first();
+        
+        $chatSessionId = $chatSession?->id;
+        
+        // Count user messages
         $messageCount = DB::table('chat_messages')
-            ->where(function ($q) use ($sessionId) {
-                $q->where('session_id', $sessionId)
-                  ->orWhere('chat_session_id', $sessionId);
+            ->where(function ($q) use ($sessionId, $chatSessionId) {
+                $q->where('session_id', $sessionId);
+                if ($chatSessionId) {
+                    $q->orWhere('chat_session_id', $chatSessionId);
+                }
             })
             ->where('role', 'user')
             ->count();
 
-        return $messageCount > 0;
+        // At least 2 user messages means real conversation
+        if ($messageCount >= 2) {
+            return true;
+        }
+        
+        // Check if products were shown in chat (real interaction)
+        $productsShown = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->where('event_type', 'product_shown')
+            ->exists();
+        
+        if ($productsShown) {
+            return true;
+        }
+        
+        // Check if add_to_cart was from chat recommendations
+        $cartFromChat = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->where('event_type', 'add_to_cart')
+            ->whereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true")
+            ->exists();
+        
+        if ($cartFromChat) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**

@@ -334,19 +334,30 @@
          */
         hadChatConversation() {
             // Check localStorage for chat messages
-            const messagesKey = 'aintento_messages_' + (localStorage.getItem('aintento_session_id') || '');
+            const sessionId = localStorage.getItem('aintento_session_id') || '';
+            const messagesKey = 'aintento_messages_' + sessionId;
             const messages = localStorage.getItem(messagesKey);
+            
+            // Check products shown in chat
+            const shownProductsKey = 'aintento_shown_products_' + sessionId;
+            const shownProducts = JSON.parse(localStorage.getItem(shownProductsKey) || '[]');
+            
             if (messages) {
                 try {
                     const parsed = JSON.parse(messages);
-                    // At least 2 messages (user asked + assistant replied)
-                    return parsed.length >= 2;
+                    // Count user messages - need at least 2 for real conversation
+                    const userMessageCount = parsed.filter(m => m.role === 'user').length;
+                    // Real chat = 2+ user messages OR products were shown in chat
+                    return userMessageCount >= 2 || shownProducts.length > 0;
                 } catch (e) {}
             }
             
-            // Also check if chat was opened
-            const chatOpened = sessionStorage.getItem('aintento_chat_opened');
-            return chatOpened === 'true';
+            // If products were shown in chat, that's meaningful
+            if (shownProducts.length > 0) {
+                return true;
+            }
+            
+            return false;
         }
         
         /**

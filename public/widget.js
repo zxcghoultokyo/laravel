@@ -237,18 +237,22 @@
                 // Extract product info
                 const productData = extractProductFromButton(target);
                 
-                // Check if user had REAL chat conversation (user sent at least one message)
+                // Check if user had REAL chat conversation 
+                // "Real" means: at least 2 user messages (not just trigger response) OR products were shown
                 const sessionId = localStorage.getItem('aintento_session_id');
                 const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
                 const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
                 const parsedMessages = messages ? JSON.parse(messages) : [];
-                // Only count as "had chat" if user actually sent a message (not just system/assistant messages)
-                const hadChatConversation = parsedMessages.some(m => m.role === 'user');
+                // Count user messages - need at least 2 for real conversation
+                const userMessageCount = parsedMessages.filter(m => m.role === 'user').length;
                 
                 // Check if product was shown in chat
                 const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
                 const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
                 const productFromChat = shownProducts.includes(productData.id) || shownProducts.includes(productData.article);
+                
+                // Real chat = 2+ user messages OR products were shown in chat
+                const hadChatConversation = userMessageCount >= 2 || shownProducts.length > 0;
                 
                 sendAnalyticsEvent('add_to_cart', {
                     product_id: productData.id,
@@ -259,7 +263,7 @@
                     had_chat_conversation: hadChatConversation
                 });
                 
-                log('Add to cart tracked:', productData, { hadChatConversation, productFromChat });
+                log('Add to cart tracked:', productData, { hadChatConversation, productFromChat, userMessageCount, shownProducts: shownProducts.length });
             }
         }, true);
         
@@ -345,23 +349,27 @@
             const formData = new FormData(checkoutForm);
             const orderData = extractCheckoutData(formData, checkoutForm);
             
-            // Check if user had REAL chat conversation (user sent at least one message)
+            // Check if user had REAL chat conversation
+            // "Real" means: at least 2 user messages (not just trigger response) OR products were shown
             const sessionId = localStorage.getItem('aintento_session_id');
             const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
             const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
             const parsedMessages = messages ? JSON.parse(messages) : [];
-            // Only count as "had chat" if user actually sent a message
-            const hadChatConversation = parsedMessages.some(m => m.role === 'user');
-            
-            // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
-            if (!hadChatConversation) {
-                log('Skipping checkout_submit tracking - no chat conversation');
-                return;
-            }
+            // Count user messages - need at least 2 for real conversation
+            const userMessageCount = parsedMessages.filter(m => m.role === 'user').length;
             
             // Get products shown in chat
             const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
             const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
+            
+            // Real chat = 2+ user messages OR products were shown in chat
+            const hadChatConversation = userMessageCount >= 2 || shownProducts.length > 0;
+            
+            // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
+            if (!hadChatConversation) {
+                log('Skipping checkout_submit tracking - no meaningful chat conversation', { userMessageCount, shownProducts: shownProducts.length });
+                return;
+            }
             
             // Track checkout submit event
             sendAnalyticsEvent('checkout_submit', {
@@ -375,7 +383,7 @@
                 city: orderData.city
             });
             
-            log('Checkout submit tracked:', orderData, { hadChatConversation });
+            log('Checkout submit tracked:', orderData, { hadChatConversation, userMessageCount });
             
             // Also track as conversion (lead type - потенційний клієнт оформив замовлення)
             sendConversionEvent('checkout', {
@@ -488,18 +496,21 @@
         const messagesKey = sessionId ? 'aintento_messages_' + sessionId : null;
         const messages = messagesKey ? localStorage.getItem(messagesKey) : null;
         const parsedMessages = messages ? JSON.parse(messages) : [];
-        // Only count as "had chat" if user actually sent a message
-        const hadChatConversation = parsedMessages.some(m => m.role === 'user');
-        
-        // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
-        if (!hadChatConversation) {
-            log('Skipping checkout_success tracking - no chat conversation');
-            return;
-        }
+        // Count user messages - need at least 2 for real conversation
+        const userMessageCount = parsedMessages.filter(m => m.role === 'user').length;
         
         // Get products shown in chat
         const shownProductsKey = sessionId ? 'aintento_shown_products_' + sessionId : null;
         const shownProducts = shownProductsKey ? JSON.parse(localStorage.getItem(shownProductsKey) || '[]') : [];
+        
+        // Real chat = 2+ user messages OR products were shown in chat
+        const hadChatConversation = userMessageCount >= 2 || shownProducts.length > 0;
+        
+        // Skip tracking if no chat conversation - we only care about chat-attributed checkouts
+        if (!hadChatConversation) {
+            log('Skipping checkout_success tracking - no meaningful chat conversation', { userMessageCount, shownProducts: shownProducts.length });
+            return;
+        }
         
         // Extract cart data
         let orderTotal = 0;

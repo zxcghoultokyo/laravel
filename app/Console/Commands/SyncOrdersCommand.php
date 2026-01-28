@@ -455,7 +455,12 @@ class SyncOrdersCommand extends Command
     }
 
     /**
-     * Check if session had meaningful chat conversation
+     * Check if session had meaningful chat conversation.
+     * 
+     * A "meaningful" conversation requires:
+     * - At least 2 user messages (excludes single trigger response like "Так")
+     * - OR products were shown in chat (via product_shown events)
+     * - OR add_to_cart happened from chat (product_from_chat = true)
      */
     protected function sessionHadChat(string $sessionId): bool
     {
@@ -464,25 +469,41 @@ class SyncOrdersCommand extends Command
             ->where('session_id', $sessionId)
             ->first();
 
+        $messageCount = 0;
         if ($session) {
             $messageCount = DB::table('chat_messages')
                 ->where('chat_session_id', $session->id)
                 ->where('role', 'user')
                 ->count();
-
-            if ($messageCount > 0) {
-                return true;
-            }
         }
 
-        // Also check chat_events for message events
-        $eventMessages = DB::table('chat_events')
+        // At least 2 user messages means real conversation
+        if ($messageCount >= 2) {
+            return true;
+        }
+        
+        // Check if products were shown in chat (real interaction)
+        $productsShown = DB::table('chat_events')
             ->where('session_id', $sessionId)
-            ->where('event_type', 'message')
-            ->where('message_type', 'user')
-            ->count();
+            ->where('event_type', 'product_shown')
+            ->exists();
+        
+        if ($productsShown) {
+            return true;
+        }
+        
+        // Check if add_to_cart was from chat recommendations
+        $cartFromChat = DB::table('chat_events')
+            ->where('session_id', $sessionId)
+            ->where('event_type', 'add_to_cart')
+            ->whereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true")
+            ->exists();
+        
+        if ($cartFromChat) {
+            return true;
+        }
 
-        return $eventMessages > 0;
+        return false;
     }
 
     /**

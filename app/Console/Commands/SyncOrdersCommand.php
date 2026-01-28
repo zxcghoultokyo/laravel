@@ -229,6 +229,7 @@ class SyncOrdersCommand extends Command
 
         // Try to find and link chat session
         $chatData = $this->findChatSession(
+            $raw['order_id'] ?? null,
             $raw['delivery_phone'] ?? null,
             $raw['delivery_email'] ?? null,
             $raw['products'] ?? [],
@@ -355,15 +356,26 @@ class SyncOrdersCommand extends Command
 
     /**
      * Find chat session that can be linked to this order
-     * Uses multiple strategies: checkout events, add_to_cart timing, phone matching
+     * Uses multiple strategies: order_id direct link, checkout events, add_to_cart timing, phone matching
      */
-    protected function findChatSession(?string $phone, ?string $email, array $products, ?\Carbon\Carbon $orderedAt): array
+    protected function findChatSession(?string $orderId, ?string $phone, ?string $email, array $products, ?\Carbon\Carbon $orderedAt): array
     {
         $result = [
             'session_id' => null,
             'had_chat' => false,
             'products_from_chat' => 0,
         ];
+
+        // PRIORITY 1: Direct link by order_id - most reliable!
+        if ($orderId) {
+            $sessionId = $this->findSessionByOrderId($orderId);
+            if ($sessionId && $this->sessionHadChat($sessionId)) {
+                $result['session_id'] = $sessionId;
+                $result['had_chat'] = true;
+                $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+                return $result;
+            }
+        }
 
         // Normalize phone for comparison (last 10 digits)
         $phoneLast10 = $phone ? substr(preg_replace('/[^0-9]/', '', $phone), -10) : null;
@@ -373,12 +385,26 @@ class SyncOrdersCommand extends Command
         $windowStart = $orderTime->copy()->subHours(24);
         $windowEnd = $orderTime->copy()->addMinutes(30); // Some buffer for timezone issues
 
-        // Strategy 1: Look for checkout_submit events around order time
-        $checkoutEvent = DB::table('chat_events')
+        // Strategy 2: Look for checkout_submit events with MATCHING phone/email
+        // Must verify it's the same customer, not just any checkout
+        $checkoutQuery = DB::table('chat_events')
             ->where('event_type', 'checkout_submit')
             ->whereBetween('created_at', [$windowStart, $windowEnd])
-            ->orderByDesc('created_at')
-            ->first();
+            ->orderByDesc('created_at');
+        
+        // Filter by phone or email in metadata
+        if ($phoneLast10 || $email) {
+            $checkoutQuery->where(function($q) use ($phoneLast10, $email) {
+                if ($phoneLast10) {
+                    $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+                }
+                if ($email) {
+                    $q->orWhere('metadata', 'like', '%' . $email . '%');
+                }
+            });
+        }
+        
+        $checkoutEvent = $checkoutQuery->first();
 
         if ($checkoutEvent) {
             $sessionId = $checkoutEvent->session_id;
@@ -391,6 +417,7 @@ class SyncOrdersCommand extends Command
         }
 
         // Strategy 2: Look for add_to_cart events with matching products
+        // This is safer as it matches by product article
         $orderArticles = array_filter(array_column($products, 'article'));
         if (!empty($orderArticles)) {
             $cartEvent = DB::table('chat_events')
@@ -452,6 +479,31 @@ class SyncOrdersCommand extends Command
         }
 
         return $result;
+    }
+
+    /**
+     * Find chat session by order_id - most reliable method!
+     * checkout_success event is sent from frontend with both order_id and session_id
+     */
+    protected function findSessionByOrderId(string $orderId): ?string
+    {
+        // Look for checkout_success event with this order_id
+        $event = DB::table('chat_events')
+            ->where('event_type', 'checkout_success')
+            ->where(function($q) use ($orderId) {
+                // order_id can be in dedicated column or in metadata JSON
+                $q->where('order_id', $orderId)
+                  ->orWhere('metadata', 'like', '%"order_id":"' . $orderId . '"%')
+                  ->orWhere('metadata', 'like', '%"order_id":' . $orderId . '%');
+            })
+            ->first();
+        
+        if ($event && $event->session_id) {
+            $this->info("  Found session by order_id: {$event->session_id}");
+            return $event->session_id;
+        }
+        
+        return null;
     }
 
     /**
@@ -648,6 +700,7 @@ class SyncOrdersCommand extends Command
             $products = $raw['products'] ?? [];
 
             $chatData = $this->findChatSession(
+                $order->order_id,
                 $order->customer_phone,
                 $order->customer_email,
                 $products,

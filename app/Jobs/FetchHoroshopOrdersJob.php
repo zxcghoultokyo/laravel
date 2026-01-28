@@ -110,11 +110,17 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $sessionId = $this->sessionId;
         
         if ($this->linkToChat && !$sessionId) {
-            // Try to find session by customer phone or email
-            $sessionId = $this->findSessionByCustomer(
-                $data['delivery_phone'] ?? null,
-                $data['delivery_email'] ?? null
-            );
+            // PRIORITY 1: Find session by order_id in checkout_success event
+            // This is the most reliable - direct link from frontend
+            $sessionId = $this->findSessionByOrderId($orderId);
+            
+            // PRIORITY 2: Fallback to phone/email matching
+            if (!$sessionId) {
+                $sessionId = $this->findSessionByCustomer(
+                    $data['delivery_phone'] ?? null,
+                    $data['delivery_email'] ?? null
+                );
+            }
         }
         
         if ($sessionId) {
@@ -195,6 +201,34 @@ class FetchHoroshopOrdersJob implements ShouldQueue
     }
 
     /**
+     * Find chat session by order_id - most reliable method!
+     * checkout_success event is sent from frontend with both order_id and session_id
+     */
+    protected function findSessionByOrderId(string $orderId): ?string
+    {
+        // Look for checkout_success event with this order_id
+        $event = DB::table('chat_events')
+            ->where('event_type', 'checkout_success')
+            ->where(function($q) use ($orderId) {
+                // order_id can be in dedicated column or in metadata JSON
+                $q->where('order_id', $orderId)
+                  ->orWhere('metadata', 'like', '%"order_id":"' . $orderId . '"%')
+                  ->orWhere('metadata', 'like', '%"order_id":' . $orderId . '%');
+            })
+            ->first();
+        
+        if ($event && $event->session_id) {
+            Log::info('FetchHoroshopOrdersJob: Found session by order_id (direct link)', [
+                'order_id' => $orderId,
+                'session_id' => $event->session_id,
+            ]);
+            return $event->session_id;
+        }
+        
+        return null;
+    }
+
+    /**
      * Find chat session by customer phone or email
      * Improved matching: check checkout events, add_to_cart, and chat messages
      */
@@ -208,28 +242,43 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $normalizedPhone = $phone ? preg_replace('/[^0-9]/', '', $phone) : null;
         $phoneLast10 = $normalizedPhone ? substr($normalizedPhone, -10) : null;
 
-        // Strategy 1: Look for checkout_submit events with matching session in last 24h
-        // These events are sent when customer submits order form
-        $checkoutEvent = DB::table('chat_events')
+        // Strategy 1: Look for checkout_submit events with matching phone/email in last 24h
+        // These events are sent when customer submits order form and should contain their contact info
+        $checkoutQuery = DB::table('chat_events')
             ->where('event_type', 'checkout_submit')
             ->where('created_at', '>=', now()->subHours(24))
-            ->orderByDesc('created_at')
-            ->first();
+            ->orderByDesc('created_at');
+        
+        // Try to match by phone or email in metadata
+        if ($phoneLast10) {
+            $checkoutQuery->where(function($q) use ($phoneLast10, $email) {
+                $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+                if ($email) {
+                    $q->orWhere('metadata', 'like', '%' . $email . '%');
+                }
+            });
+        } elseif ($email) {
+            $checkoutQuery->where('metadata', 'like', '%' . $email . '%');
+        }
+        
+        $checkoutEvent = $checkoutQuery->first();
         
         if ($checkoutEvent) {
             // Check if this session had chat activity
             $hadChat = $this->checkIfHadChat($checkoutEvent->session_id);
             if ($hadChat) {
-                Log::info('FetchHoroshopOrdersJob: Found session from checkout event', [
+                Log::info('FetchHoroshopOrdersJob: Found session from checkout event (matched by contact)', [
                     'session_id' => $checkoutEvent->session_id,
                     'phone' => $phone,
+                    'email' => $email,
                 ]);
                 return $checkoutEvent->session_id;
             }
         }
 
         // Strategy 2: Look for sessions with add_to_cart that also had chat
-        // Match by time proximity (order created within 2h of last add_to_cart)
+        // Only if we can verify it's the same customer by checking subsequent checkout
+        // This is less reliable, so we're more conservative
         $recentCartSessions = DB::table('chat_events')
             ->where('event_type', 'add_to_cart')
             ->where('created_at', '>=', now()->subHours(2))
@@ -238,8 +287,22 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             ->pluck('session_id');
 
         foreach ($recentCartSessions as $sessionId) {
-            if ($this->checkIfHadChat($sessionId)) {
-                Log::info('FetchHoroshopOrdersJob: Found session from recent add_to_cart', [
+            // Check if this session has a checkout_submit with matching contact
+            $hasMatchingCheckout = DB::table('chat_events')
+                ->where('session_id', $sessionId)
+                ->where('event_type', 'checkout_submit')
+                ->where(function($q) use ($phoneLast10, $email) {
+                    if ($phoneLast10) {
+                        $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+                    }
+                    if ($email) {
+                        $q->orWhere('metadata', 'like', '%' . $email . '%');
+                    }
+                })
+                ->exists();
+            
+            if ($hasMatchingCheckout && $this->checkIfHadChat($sessionId)) {
+                Log::info('FetchHoroshopOrdersJob: Found session from add_to_cart with matching checkout', [
                     'session_id' => $sessionId,
                     'phone' => $phone,
                 ]);

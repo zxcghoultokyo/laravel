@@ -5954,9 +5954,14 @@ class DiagnosticController extends Controller
         $query = DB::table('chat_sessions')
             ->where(function ($q) {
                 // Match sessions that are NOT real sessions
-                // Real sessions: start with "session_" or are UUIDs (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+                // Real sessions: start with "session_" or are UUIDs
+                // UUIDs: 8-4-4-4-12 format with hyphens
                 $q->where('session_id', 'NOT LIKE', 'session_%')
-                  ->where('session_id', 'NOT REGEXP', '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
+                  ->where(DB::raw('LENGTH(session_id)'), '!=', 36) // UUIDs are exactly 36 chars
+                  ->orWhere(function ($q2) {
+                      $q2->where('session_id', 'NOT LIKE', 'session_%')
+                         ->where('session_id', 'NOT LIKE', '________-____-____-____-____________'); // UUID pattern
+                  });
             });
 
         if ($tenantId) {

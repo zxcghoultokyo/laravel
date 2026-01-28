@@ -87,6 +87,13 @@ class ResolveTenantMiddleware
                          ->first();
         }
 
+        // 2.5. Header: X-Tenant-Id (numeric ID for internal/testing)
+        if ($tenantId = $request->header('X-Tenant-Id')) {
+            return Tenant::where('id', (int) $tenantId)
+                         ->where('status', '!=', Tenant::STATUS_CANCELLED)
+                         ->first();
+        }
+
         // 3. Query parameter (for widget JS)
         if ($slug = $request->query('tenant')) {
             return Tenant::where('slug', $slug)

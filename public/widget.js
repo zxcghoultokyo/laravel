@@ -3963,6 +3963,48 @@
             return true;
         },
         
+        // Validate detected product name (filter out store names, descriptions)
+        isValidProduct: function(product) {
+            if (!product) return false;
+            
+            const lower = product.toLowerCase();
+            
+            // Too long = likely store description, not product
+            if (product.length > 100) return false;
+            
+            // Contains marketing/store phrases - not a product name
+            const invalidPhrases = [
+                'для професіоналів',
+                'для патріотів',
+                'для україн',
+                'інтернет-магазин',
+                'інтернет магазин',
+                'магазин',
+                'офіційний',
+                'офіційний сайт',
+                'найкращ',
+                'безкоштовн',
+                'доставк',
+                'знижк',
+                'акці',
+                'головна',
+                'про нас',
+                'контакт',
+                'кошик',
+                'оформлен'
+            ];
+            if (invalidPhrases.some(phrase => lower.includes(phrase))) {
+                return false;
+            }
+            
+            // Product name usually has specific patterns (article, size, color)
+            // If it looks too generic (just a few common words), it's probably not a product
+            const words = product.trim().split(/\s+/);
+            if (words.length >= 8) return false; // Too many words = description
+            
+            return true;
+        },
+        
         // Detect current product name from product page
         detectCurrentProduct: function() {
             const pageType = this.detectPageType();
@@ -4221,10 +4263,11 @@
                 const pageType = context.pageType || this.detectPageType();
                 const rawCategory = context.category || this.detectCurrentCategory();
                 const category = this.isValidCategory(rawCategory) ? rawCategory : null;
-                const product = context.product || this.detectCurrentProduct();
+                const rawProduct = context.product || this.detectCurrentProduct();
+                const product = this.isValidProduct(rawProduct) ? rawProduct : null;
                 let message = '';
                 
-                log('ProactiveTriggers: Building message for', { pageType, rawCategory, category, product, rule_type: rule.type });
+                log('ProactiveTriggers: Building message for', { pageType, rawCategory, category, rawProduct, product, rule_type: rule.type });
                 
                 // Build message based on trigger type
                 switch (rule.type) {

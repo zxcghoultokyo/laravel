@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
+use App\Scopes\TenantScope;
 use Livewire\WithPagination;
 
 /**
@@ -198,24 +199,27 @@ class TenantDetails extends Component
         $tenantId = $this->tenant->id;
         $startDate = now()->subDays($this->analyticsDays)->startOfDay();
         
-        // Get daily message counts
-        $dailyMessages = ChatMessage::where('tenant_id', $tenantId)
+        // Get daily message counts (bypass TenantScope)
+        $dailyMessages = ChatMessage::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenantId)
             ->where('created_at', '>=', $startDate)
             ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
             ->groupBy('date')
             ->pluck('count', 'date')
             ->toArray();
         
-        // Get daily session counts
-        $dailySessions = ChatSession::where('tenant_id', $tenantId)
+        // Get daily session counts (bypass TenantScope)
+        $dailySessions = ChatSession::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenantId)
             ->where('created_at', '>=', $startDate)
             ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
             ->groupBy('date')
             ->pluck('count', 'date')
             ->toArray();
         
-        // Get daily AI responses (assistant messages only)
-        $dailyAiResponses = ChatMessage::where('tenant_id', $tenantId)
+        // Get daily AI responses (assistant messages only, bypass TenantScope)
+        $dailyAiResponses = ChatMessage::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenantId)
             ->where('role', 'assistant')
             ->where('created_at', '>=', $startDate)
             ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
@@ -240,19 +244,20 @@ class TenantDetails extends Component
 
     /**
      * Get tenant statistics.
+     * Note: Must bypass TenantScope since admin might have different tenant selected in switcher.
      */
     public function getStatsProperty(): array
     {
         $tenant = $this->tenant;
         
         return [
-            'products_count' => Product::where('tenant_id', $tenant->id)->count(),
-            'products_in_stock' => Product::where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
-            'categories_count' => Product::where('tenant_id', $tenant->id)->distinct('category_path')->count('category_path'),
-            'sessions_count' => ChatSession::where('tenant_id', $tenant->id)->count(),
-            'sessions_today' => ChatSession::where('tenant_id', $tenant->id)->whereDate('created_at', today())->count(),
-            'messages_count' => ChatMessage::where('tenant_id', $tenant->id)->count(),
-            'messages_today' => ChatMessage::where('tenant_id', $tenant->id)->whereDate('created_at', today())->count(),
+            'products_count' => Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->count(),
+            'products_in_stock' => Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
+            'categories_count' => Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->distinct('category_path')->count('category_path'),
+            'sessions_count' => ChatSession::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->count(),
+            'sessions_today' => ChatSession::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->whereDate('created_at', today())->count(),
+            'messages_count' => ChatMessage::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->count(),
+            'messages_today' => ChatMessage::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->whereDate('created_at', today())->count(),
             'last_sync' => $tenant->last_sync_at?->diffForHumans() ?? 'Ніколи',
             'sync_running' => $this->isSyncRunning(),
         ];
@@ -358,8 +363,8 @@ class TenantDetails extends Component
      */
     public function clearProducts()
     {
-        $count = Product::where('tenant_id', $this->tenant->id)->count();
-        Product::where('tenant_id', $this->tenant->id)->delete();
+        $count = Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $this->tenant->id)->count();
+        Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $this->tenant->id)->delete();
         
         session()->flash('success', "Видалено {$count} товарів");
     }
@@ -399,7 +404,8 @@ class TenantDetails extends Component
      */
     public function getRecentSessionsProperty()
     {
-        return ChatSession::where('tenant_id', $this->tenant->id)
+        return ChatSession::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $this->tenant->id)
             ->with(['messages' => fn($q) => $q->orderBy('created_at', 'desc')->take(1)])
             ->orderBy('created_at', 'desc')
             ->take(10)
@@ -411,7 +417,8 @@ class TenantDetails extends Component
      */
     public function getChatSessionsProperty()
     {
-        $query = ChatSession::where('tenant_id', $this->tenant->id)
+        $query = ChatSession::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $this->tenant->id)
             ->withCount('messages');
 
         // Search filter

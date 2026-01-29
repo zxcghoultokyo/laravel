@@ -333,28 +333,97 @@
         @elseif($activeTab === 'chats')
             <!-- Chats Tab -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <h3 class="text-lg font-semibold mb-4">Останні чати</h3>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold">Чати ({{ $stats['sessions_count'] }})</h3>
+                    <div class="flex gap-2">
+                        <!-- Search -->
+                        <input type="text" 
+                               wire:model.live.debounce.300ms="chatSearch"
+                               placeholder="Пошук по сесії або тексту..."
+                               class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                        
+                        <!-- Status Filter -->
+                        <select wire:model.live="chatStatus" 
+                                class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Всі статуси</option>
+                            <option value="open">Відкриті</option>
+                            <option value="closed">Закриті</option>
+                        </select>
+
+                        @if($chatSearch || $chatStatus)
+                            <button wire:click="resetChatFilters" 
+                                    class="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg">
+                                ✕ Скинути
+                            </button>
+                        @endif
+                    </div>
+                </div>
                 
-                @if($recentSessions->isEmpty())
-                    <p class="text-gray-500">Немає чатів</p>
+                @if($chatSessions->isEmpty())
+                    <p class="text-gray-500 py-8 text-center">
+                        @if($chatSearch || $chatStatus)
+                            Немає чатів за вказаними фільтрами
+                        @else
+                            Немає чатів
+                        @endif
+                    </p>
                 @else
-                    <div class="space-y-3">
-                        @foreach($recentSessions as $session)
-                            <div class="p-4 bg-gray-50 rounded-lg">
-                                <div class="flex items-center justify-between mb-2">
-                                    <span class="font-mono text-sm text-gray-600">{{ substr($session->session_id, 0, 16) }}...</span>
-                                    <span class="text-sm text-gray-500">{{ $session->created_at->diffForHumans() }}</span>
-                                </div>
-                                @if($session->messages->first())
-                                    <p class="text-gray-700 truncate">
-                                        {{ $session->messages->first()->content }}
-                                    </p>
-                                @endif
-                                <div class="mt-2 flex gap-2 text-xs text-gray-500">
-                                    <span>{{ $session->messages_count ?? $session->messages()->count() }} повідомлень</span>
-                                </div>
-                            </div>
-                        @endforeach
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Session ID</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Статус</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Повідомлень</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Створено</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Остання активність</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @foreach($chatSessions as $session)
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3">
+                                            <a href="{{ route('admin.chats.show', $session->id) }}" 
+                                               class="font-mono text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                                               title="{{ $session->session_id }}">
+                                                {{ Str::limit($session->session_id, 24) }}
+                                            </a>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="px-2 py-1 text-xs font-medium rounded-full 
+                                                {{ $session->status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
+                                                {{ $session->status === 'open' ? 'Відкритий' : 'Закритий' }}
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="font-medium">{{ $session->messages_count }}</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-gray-600">
+                                            {{ $session->created_at->format('d.m.Y H:i') }}
+                                        </td>
+                                        <td class="px-4 py-3 text-gray-600">
+                                            {{ $session->updated_at->diffForHumans() }}
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <a href="{{ route('admin.chats.show', $session->id) }}" 
+                                               class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                                </svg>
+                                                Переглянути
+                                            </a>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="mt-4">
+                        {{ $chatSessions->links() }}
                     </div>
                 @endif
             </div>

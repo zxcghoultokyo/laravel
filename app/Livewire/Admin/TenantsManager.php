@@ -105,16 +105,24 @@ class TenantsManager extends Component
             $planExpiresAt = \Carbon\Carbon::parse($this->editForm['plan_expires_at']);
         }
         
-        // Get plan limits if manually set to null/0 (auto-update from plan)
+        // Handle limits - preserve explicit 0 (unlimited) or null
+        // Only auto-set from plan when field is empty string (not touched)
         $messagesLimit = $this->editForm['messages_limit'];
         $productsLimit = $this->editForm['products_limit'];
         
-        // If limits are empty/0, set from plan defaults
-        if (empty($messagesLimit)) {
+        // If limit is explicitly "0" - means unlimited, keep it as 0
+        // If limit is empty string - auto-set from plan defaults
+        // If limit is a number > 0 - use that number
+        if ($messagesLimit === '' || $messagesLimit === null) {
             $messagesLimit = Tenant::PLAN_LIMITS[$newPlan] ?? 1000;
+        } else {
+            $messagesLimit = (int) $messagesLimit; // Allow 0 for unlimited
         }
-        if (empty($productsLimit)) {
+        
+        if ($productsLimit === '' || $productsLimit === null) {
             $productsLimit = Tenant::PRODUCT_LIMITS[$newPlan] ?? 500;
+        } else {
+            $productsLimit = (int) $productsLimit; // Allow 0 for unlimited
         }
         
         $tenant->update([

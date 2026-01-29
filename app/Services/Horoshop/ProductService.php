@@ -117,8 +117,11 @@ class ProductService
         $total = 0;
         $skipped = 0;
         
-        // Get product limit for tenant
-        $productLimit = $tenant->products_limit ?? \App\Models\Tenant::PRODUCT_LIMITS[$tenant->plan] ?? PHP_INT_MAX;
+        // Get product limit for tenant (0 or null = unlimited)
+        $productLimit = $tenant->products_limit;
+        if (empty($productLimit) || $productLimit <= 0) {
+            $productLimit = PHP_INT_MAX; // Unlimited
+        }
         $currentProductCount = Product::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
             ->count();
@@ -134,8 +137,8 @@ class ProductService
                 break;
             }
             
-            // Check product limit
-            if ($currentProductCount + $created >= $productLimit) {
+            // Check product limit (skip if unlimited)
+            if ($productLimit !== PHP_INT_MAX && $currentProductCount + $created >= $productLimit) {
                 Log::warning('Horoshop sync: product limit reached', [
                     'tenant_id' => $tenant->id,
                     'limit' => $productLimit,
@@ -187,8 +190,8 @@ class ProductService
             }
 
             foreach ($products as $item) {
-                // Check limit before creating new product
-                if ($currentProductCount + $created >= $productLimit) {
+                // Check limit before creating new product (skip if unlimited)
+                if ($productLimit !== PHP_INT_MAX && $currentProductCount + $created >= $productLimit) {
                     $skipped++;
                     continue;
                 }

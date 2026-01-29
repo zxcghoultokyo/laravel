@@ -547,11 +547,17 @@ class Tenant extends Model
 
     /**
      * Check if tenant can send messages.
+     * Note: messages_limit = 0 or null means unlimited!
      */
     public function canSendMessage(): bool
     {
         if (!$this->isActive()) {
             return false;
+        }
+
+        // 0 or null = unlimited messages
+        if (empty($this->messages_limit) || $this->messages_limit <= 0) {
+            return true;
         }
 
         return $this->messages_used < $this->messages_limit;
@@ -649,20 +655,27 @@ class Tenant extends Model
 
     /**
      * Get usage percentage.
+     * Note: 0 or null limit = unlimited, returns 0%
      */
     public function getUsagePercentage(): float
     {
-        if ($this->messages_limit === 0) {
-            return 100;
+        // 0 or null = unlimited, show 0% usage
+        if (empty($this->messages_limit) || $this->messages_limit <= 0) {
+            return 0;
         }
         return round(($this->messages_used / $this->messages_limit) * 100, 1);
     }
 
     /**
      * Get remaining messages.
+     * Note: 0 or null limit = unlimited
      */
     public function getRemainingMessages(): int
     {
+        // 0 or null = unlimited
+        if (empty($this->messages_limit) || $this->messages_limit <= 0) {
+            return PHP_INT_MAX;
+        }
         return max(0, $this->messages_limit - $this->messages_used);
     }
 

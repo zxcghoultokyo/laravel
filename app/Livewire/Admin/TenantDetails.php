@@ -23,8 +23,11 @@ class TenantDetails extends Component
     public Tenant $tenant;
     public string $activeTab = 'overview';
     public string $syncLogFilter = '';
+    public string $chatSearch = '';
+    public string $chatStatus = '';
+    public int $chatPerPage = 20;
 
-    protected $queryString = ['activeTab'];
+    protected $queryString = ['activeTab', 'chatSearch', 'chatStatus'];
 
     public function mount(Tenant $tenant)
     {
@@ -199,12 +202,76 @@ class TenantDetails extends Component
             ->get();
     }
 
+    /**
+     * Get paginated chat sessions for Chats tab.
+     */
+    public function getChatSessionsProperty()
+    {
+        $query = ChatSession::where('tenant_id', $this->tenant->id)
+            ->withCount('messages');
+
+        // Search filter
+        if ($this->chatSearch) {
+            $query->where(function ($q) {
+                $q->where('session_id', 'like', "%{$this->chatSearch}%")
+                  ->orWhereHas('messages', function ($mq) {
+                      $mq->where('content', 'like', "%{$this->chatSearch}%");
+                  });
+            });
+        }
+
+        // Status filter
+        if ($this->chatStatus) {
+            $query->where('status', $this->chatStatus);
+        }
+
+        return $query->orderBy('updated_at', 'desc')
+            ->paginate($this->chatPerPage);
+    }
+
+    /**
+     * Get chat events for a session.
+     */
+    public function getChatEventsCount(int $sessionId): int
+    {
+        $session = ChatSession::find($sessionId);
+        if (!$session) return 0;
+        
+        return \Illuminate\Support\Facades\DB::table('chat_events')
+            ->where('session_id', $session->session_id)
+            ->count();
+    }
+
+    /**
+     * Reset chat filters.
+     */
+    public function resetChatFilters()
+    {
+        $this->chatSearch = '';
+        $this->chatStatus = '';
+        $this->resetPage();
+    }
+
+    /**
+     * Updated hook for search to reset pagination.
+     */
+    public function updatedChatSearch()
+    {
+        $this->resetPage();
+    }
+
+    public function updatedChatStatus()
+    {
+        $this->resetPage();
+    }
+
     public function render()
     {
         return view('livewire.admin.tenant-details', [
             'stats' => $this->stats,
             'syncLogs' => $this->syncLogs,
             'recentSessions' => $this->recentSessions,
+            'chatSessions' => $this->chatSessions,
         ])->layout('admin.layout');
     }
 }

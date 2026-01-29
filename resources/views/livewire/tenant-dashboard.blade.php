@@ -640,7 +640,13 @@
                                 </div>
                                 <div class="flex justify-between">
                                     <dt class="text-gray-500">Ліміт повідомлень</dt>
-                                    <dd class="font-medium">{{ number_format($stats['messages_limit']) }} / місяць</dd>
+                                    <dd class="font-medium">
+                                        @if(empty($stats['messages_limit']) || $stats['messages_limit'] <= 0)
+                                            ∞ Необмежено
+                                        @else
+                                            {{ number_format($stats['messages_limit']) }} / місяць
+                                        @endif
+                                    </dd>
                                 </div>
                             </dl>
                         </div>

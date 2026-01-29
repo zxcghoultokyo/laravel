@@ -203,6 +203,10 @@ class BrandDetectionService
         // Remove "бренд" prefix if present
         $queryClean = preg_replace('/^бренд\s+/u', '', $queryLower);
         
+        // First, normalize any cyrillic brand names to Latin
+        $queryNormalized = $this->normalizeBrandsInQuery($queryClean);
+        $queryClean = mb_strtolower($queryNormalized);
+        
         $brands = $this->getAllBrands();
         
         // Check if query matches a brand (exact or partial)
@@ -246,10 +250,11 @@ class BrandDetectionService
             }
         }
         
+        // Return normalized query even if no brand found (for cyrillic brand names like "опс кор" → "Ops-Core")
         return [
             'is_brand' => false,
             'brand' => null,
-            'enhanced_query' => $query,
+            'enhanced_query' => $queryNormalized,
         ];
     }
 

@@ -80,6 +80,11 @@
                            {{ $activeTab === 'overview' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
                 Огляд
             </button>
+            <button wire:click="$set('activeTab', 'analytics')" 
+                    class="py-3 px-1 border-b-2 font-medium text-sm transition
+                           {{ $activeTab === 'analytics' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
+                📊 Аналітика
+            </button>
             <button wire:click="$set('activeTab', 'sync')" 
                     class="py-3 px-1 border-b-2 font-medium text-sm transition
                            {{ $activeTab === 'sync' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' }}">
@@ -218,6 +223,171 @@
                             </div>
                         </div>
                     </dl>
+                </div>
+            </div>
+
+        @elseif($activeTab === 'analytics')
+            <!-- Analytics Tab -->
+            <div class="space-y-6">
+                <!-- Period Selector -->
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold">📊 Аналітика тенанта</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-gray-500">Період:</span>
+                        <select wire:change="setAnalyticsDays($event.target.value)" class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500">
+                            <option value="7" {{ $analyticsDays == 7 ? 'selected' : '' }}>7 днів</option>
+                            <option value="14" {{ $analyticsDays == 14 ? 'selected' : '' }}>14 днів</option>
+                            <option value="30" {{ $analyticsDays == 30 ? 'selected' : '' }}>30 днів</option>
+                            <option value="90" {{ $analyticsDays == 90 ? 'selected' : '' }}>90 днів</option>
+                        </select>
+                        <button wire:click="loadAnalyticsData" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                            🔄 Оновити
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Conversion Funnel -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-lg">🔄 Воронка конверсії</h4>
+                        @if(($funnelData['overall_rate'] ?? 0) > 0)
+                            <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                                {{ $funnelData['overall_rate'] }}% загальна конверсія
+                            </span>
+                        @endif
+                    </div>
+                    
+                    @if(!empty($funnelData['stages']) && collect($funnelData['stages'])->sum('count') > 0)
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                            @foreach($funnelData['stages'] as $index => $stage)
+                                <div class="bg-gradient-to-b from-gray-50 to-white border border-gray-200 rounded-xl p-4 text-center relative" title="{{ $stage['hint'] }}">
+                                    <span class="text-2xl">{{ $stage['icon'] }}</span>
+                                    <p class="text-2xl font-bold text-gray-900 mt-2">{{ number_format($stage['count']) }}</p>
+                                    <p class="text-xs text-gray-500">{{ $stage['label'] }}</p>
+                                    @if($index > 0 && $stage['rate'] > 0)
+                                        <span class="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full {{ $stage['rate'] >= 50 ? 'bg-green-100 text-green-700' : ($stage['rate'] >= 20 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                            {{ $stage['rate'] }}%
+                                        </span>
+                                    @endif
+                                    @if($index > 0 && $stage['dropoff'] > 0)
+                                        <p class="text-xs text-gray-400 mt-1">-{{ $stage['dropoff'] }}% відсіялось</p>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="text-center py-8 text-gray-400">
+                            <span class="text-4xl">📊</span>
+                            <p class="mt-2">Ще немає даних для воронки</p>
+                            <p class="text-sm mt-1">Дані з'являться коли відвідувачі почнуть взаємодіяти з віджетом</p>
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Usage Chart -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h4 class="font-semibold text-lg mb-4">📈 Використання за період</h4>
+                    
+                    @if(!empty($usageChartData) && collect($usageChartData)->sum('messages') > 0)
+                        <!-- Summary Stats -->
+                        <div class="grid grid-cols-3 gap-4 mb-6">
+                            <div class="text-center p-4 bg-blue-50 rounded-lg">
+                                <p class="text-2xl font-bold text-blue-600">{{ number_format(collect($usageChartData)->sum('sessions')) }}</p>
+                                <p class="text-xs text-gray-500">Сесій</p>
+                            </div>
+                            <div class="text-center p-4 bg-purple-50 rounded-lg">
+                                <p class="text-2xl font-bold text-purple-600">{{ number_format(collect($usageChartData)->sum('messages')) }}</p>
+                                <p class="text-xs text-gray-500">Повідомлень</p>
+                            </div>
+                            <div class="text-center p-4 bg-green-50 rounded-lg">
+                                <p class="text-2xl font-bold text-green-600">{{ number_format(collect($usageChartData)->sum('ai_responses')) }}</p>
+                                <p class="text-xs text-gray-500">AI-відповідей</p>
+                            </div>
+                        </div>
+
+                        <!-- Simple Bar Chart -->
+                        <div class="relative h-48 flex items-end gap-1">
+                            @php
+                                $maxVal = max(collect($usageChartData)->max('messages'), 1);
+                            @endphp
+                            @foreach($usageChartData as $day)
+                                <div class="flex-1 flex flex-col items-center group">
+                                    <div class="relative w-full flex flex-col items-center justify-end h-40">
+                                        <!-- Messages bar -->
+                                        <div class="w-full bg-blue-500 rounded-t transition-all duration-300 hover:bg-blue-600" 
+                                             style="height: {{ ($day['messages'] / $maxVal) * 100 }}%"
+                                             title="{{ $day['date'] }}: {{ $day['messages'] }} повідомлень">
+                                        </div>
+                                    </div>
+                                    <span class="text-xs text-gray-400 mt-1 {{ count($usageChartData) > 14 ? 'hidden md:block' : '' }}">
+                                        {{ $day['date'] }}
+                                    </span>
+                                    <!-- Tooltip -->
+                                    <div class="absolute bottom-full mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                                        {{ $day['date'] }}: {{ $day['sessions'] }} сесій, {{ $day['messages'] }} повідомлень
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        
+                        <div class="flex items-center justify-center gap-4 mt-4 text-xs text-gray-500">
+                            <span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 rounded"></span> Повідомлення</span>
+                        </div>
+                    @else
+                        <div class="text-center py-8 text-gray-400">
+                            <span class="text-4xl">📈</span>
+                            <p class="mt-2">Немає даних за обраний період</p>
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Quick Stats Table -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h4 class="font-semibold text-lg mb-4">📋 Детальна статистика</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-700">Метрика</th>
+                                    <th class="px-4 py-3 text-right font-medium text-gray-700">Значення</th>
+                                    <th class="px-4 py-3 text-right font-medium text-gray-700">Сьогодні</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <tr>
+                                    <td class="px-4 py-3">💬 Всього чатів</td>
+                                    <td class="px-4 py-3 text-right font-medium">{{ number_format($stats['sessions_count']) }}</td>
+                                    <td class="px-4 py-3 text-right text-green-600">+{{ $stats['sessions_today'] }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3">✉️ Всього повідомлень</td>
+                                    <td class="px-4 py-3 text-right font-medium">{{ number_format($stats['messages_count']) }}</td>
+                                    <td class="px-4 py-3 text-right text-green-600">+{{ $stats['messages_today'] }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3">🤖 AI-відповідей використано</td>
+                                    <td class="px-4 py-3 text-right font-medium">{{ number_format($tenant->messages_used) }}</td>
+                                    <td class="px-4 py-3 text-right text-gray-400">
+                                        @if(empty($tenant->messages_limit) || $tenant->messages_limit <= 0)
+                                            ∞
+                                        @else
+                                            {{ round($tenant->messages_used / $tenant->messages_limit * 100, 1) }}%
+                                        @endif
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3">📦 Товарів</td>
+                                    <td class="px-4 py-3 text-right font-medium">{{ number_format($stats['products_count']) }}</td>
+                                    <td class="px-4 py-3 text-right text-gray-400">{{ $stats['products_in_stock'] }} в наявності</td>
+                                </tr>
+                                <tr>
+                                    <td class="px-4 py-3">🗂 Категорій</td>
+                                    <td class="px-4 py-3 text-right font-medium">{{ $stats['categories_count'] }}</td>
+                                    <td class="px-4 py-3 text-right text-gray-400">—</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

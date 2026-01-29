@@ -10,6 +10,8 @@ use App\Models\SyncLog;
 use App\Jobs\SyncHoroshopProductsJob;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -26,12 +28,214 @@ class TenantDetails extends Component
     public string $chatSearch = '';
     public string $chatStatus = '';
     public int $chatPerPage = 20;
+    
+    // Analytics
+    public int $analyticsDays = 30;
+    public array $funnelData = [];
+    public array $usageChartData = [];
 
     protected $queryString = ['activeTab', 'chatSearch', 'chatStatus'];
 
     public function mount(Tenant $tenant)
     {
         $this->tenant = $tenant;
+        $this->loadAnalyticsData();
+    }
+
+    /**
+     * Load analytics data (funnel + usage chart).
+     */
+    public function loadAnalyticsData()
+    {
+        $this->loadFunnelData();
+        $this->loadUsageChartData();
+    }
+
+    /**
+     * Set analytics period and reload data.
+     */
+    public function setAnalyticsDays(int $days)
+    {
+        $this->analyticsDays = $days;
+        $this->loadAnalyticsData();
+    }
+
+    /**
+     * Load funnel data for this tenant.
+     */
+    public function loadFunnelData()
+    {
+        $tenant = $this->tenant;
+        $startDate = now()->subDays($this->analyticsDays)->startOfDay();
+        $tenantId = $tenant->id;
+        
+        // Get ALL merchant identifiers for fallback filtering (old records)
+        $slug = $tenant->slug;
+        $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenantId)
+            ->pluck('api_token')
+            ->filter()
+            ->toArray();
+        $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
+        
+        // Check if tenant_id column exists
+        $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
+        
+        // Pre-calculate checkout_success from orders table (more reliable)
+        $checkoutCountFromOrders = 0;
+        if (Schema::hasTable('orders')) {
+            try {
+                $tenantSessionIds = DB::table('chat_sessions')
+                    ->where('tenant_id', $tenantId)
+                    ->pluck('session_id')
+                    ->toArray();
+                
+                if (!empty($tenantSessionIds)) {
+                    $checkoutCountFromOrders = DB::table('orders')
+                        ->where('created_at', '>=', $startDate)
+                        ->where('had_chat', true)
+                        ->whereIn('session_id', $tenantSessionIds)
+                        ->count();
+                }
+            } catch (\Throwable $e) {
+                // Ignore - will fall back to chat_events
+            }
+        }
+        
+        // Define funnel stages
+        $stages = [
+            'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Унікальні сесії на сайті'],
+            'chat_opened' => ['label' => 'Відкрили чат', 'icon' => '💬', 'hint' => 'Клікнули на віджет'],
+            'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
+            'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
+            'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар в кошик'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+        ];
+        
+        $funnel = [];
+        $prevCount = 0;
+        
+        foreach ($stages as $eventType => $stage) {
+            try {
+                // For checkout_success, prefer orders table count
+                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                    $count = $checkoutCountFromOrders;
+                } else {
+                    $query = DB::table('chat_events')
+                        ->where('event_type', $eventType)
+                        ->where('created_at', '>=', $startDate);
+                    
+                    // Filter by tenant_id (new records) OR merchant_id (old records)
+                    if ($hasTenantIdColumn) {
+                        $query->where(function($q) use ($tenantId, $merchantIds) {
+                            $q->where('tenant_id', $tenantId);
+                            if (!empty($merchantIds)) {
+                                $q->orWhere(function($q2) use ($merchantIds) {
+                                    $q2->whereNull('tenant_id')
+                                       ->whereIn('merchant_id', $merchantIds);
+                                });
+                            }
+                        });
+                    } else {
+                        $query->whereIn('merchant_id', $merchantIds);
+                    }
+                    
+                    // For add_to_cart: only count chat-attributed
+                    if ($eventType === 'add_to_cart') {
+                        $query->where(function($q) {
+                            $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
+                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
+                        });
+                        $count = $query->count();
+                    } else {
+                        $count = $query->distinct('session_id')->count('session_id');
+                    }
+                    
+                    // For checkout_success, also check orders if chat_events is 0
+                    if ($eventType === 'checkout_success') {
+                        $count = max($count, $checkoutCountFromOrders);
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::error('TenantDetails loadFunnelData error', [
+                    'tenant_id' => $tenantId,
+                    'stage' => $eventType,
+                    'error' => $e->getMessage()
+                ]);
+                $count = 0;
+            }
+            
+            $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
+            $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
+            
+            $funnel[] = [
+                'stage' => $eventType,
+                'label' => $stage['label'],
+                'icon' => $stage['icon'],
+                'hint' => $stage['hint'],
+                'count' => $count,
+                'rate' => $rate,
+                'dropoff' => $dropoff,
+            ];
+            
+            $prevCount = $count ?: $prevCount;
+        }
+        
+        $firstStage = $funnel[0]['count'] ?? 0;
+        $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
+        $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
+        
+        $this->funnelData = [
+            'stages' => $funnel,
+            'overall_rate' => $overallRate,
+        ];
+    }
+
+    /**
+     * Load usage chart data (messages per day).
+     */
+    public function loadUsageChartData()
+    {
+        $tenantId = $this->tenant->id;
+        $startDate = now()->subDays($this->analyticsDays)->startOfDay();
+        
+        // Get daily message counts
+        $dailyMessages = ChatMessage::where('tenant_id', $tenantId)
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->pluck('count', 'date')
+            ->toArray();
+        
+        // Get daily session counts
+        $dailySessions = ChatSession::where('tenant_id', $tenantId)
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->pluck('count', 'date')
+            ->toArray();
+        
+        // Get daily AI responses (assistant messages only)
+        $dailyAiResponses = ChatMessage::where('tenant_id', $tenantId)
+            ->where('role', 'assistant')
+            ->where('created_at', '>=', $startDate)
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->pluck('count', 'date')
+            ->toArray();
+        
+        // Build chart data for each day
+        $chartData = [];
+        for ($i = $this->analyticsDays - 1; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $chartData[] = [
+                'date' => now()->subDays($i)->format('d.m'),
+                'messages' => $dailyMessages[$date] ?? 0,
+                'sessions' => $dailySessions[$date] ?? 0,
+                'ai_responses' => $dailyAiResponses[$date] ?? 0,
+            ];
+        }
+        
+        $this->usageChartData = $chartData;
     }
 
     /**
@@ -272,6 +476,8 @@ class TenantDetails extends Component
             'syncLogs' => $this->syncLogs,
             'recentSessions' => $this->recentSessions,
             'chatSessions' => $this->chatSessions,
+            'funnelData' => $this->funnelData,
+            'usageChartData' => $this->usageChartData,
         ])->layout('admin.layout');
     }
 }

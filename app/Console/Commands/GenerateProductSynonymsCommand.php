@@ -355,7 +355,7 @@ PROMPT;
         ];
     }
 
-    private function saveSynonyms(array $synonymsMap, bool $force, ?int $tenantId = null): void
+    private function saveSynonyms(array $synonymsMap, bool $force, ?int $tenantId = null): array
     {
         if ($force) {
             $this->warn("Deleting existing synonyms...");

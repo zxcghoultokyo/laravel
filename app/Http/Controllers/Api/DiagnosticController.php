@@ -6189,6 +6189,11 @@ class DiagnosticController extends Controller
 
         // Always force non-interactive
         $arguments['--no-interaction'] = true;
+        
+        // Add --force for migrate command in production
+        if ($artisanCommand === 'migrate') {
+            $arguments['--force'] = true;
+        }
 
         try {
             $startTime = microtime(true);
@@ -6228,11 +6233,18 @@ class DiagnosticController extends Controller
 
         try {
             $total = DB::table('product_synonyms')->count();
-            $byTenant = DB::table('product_synonyms')
-                ->select('tenant_id', DB::raw('COUNT(*) as count'))
-                ->groupBy('tenant_id')
-                ->pluck('count', 'tenant_id')
-                ->toArray();
+            
+            // Check if tenant_id column exists
+            $hasTenantColumn = DB::getSchemaBuilder()->hasColumn('product_synonyms', 'tenant_id');
+            
+            $byTenant = [];
+            if ($hasTenantColumn) {
+                $byTenant = DB::table('product_synonyms')
+                    ->select('tenant_id', DB::raw('COUNT(*) as count'))
+                    ->groupBy('tenant_id')
+                    ->pluck('count', 'tenant_id')
+                    ->toArray();
+            }
             
             $byLanguage = DB::table('product_synonyms')
                 ->select('language', DB::raw('COUNT(*) as count'))
@@ -6240,8 +6252,17 @@ class DiagnosticController extends Controller
                 ->pluck('count', 'language')
                 ->toArray();
 
+            // Get columns that exist
+            $columns = ['synonym', 'product_type'];
+            if (DB::getSchemaBuilder()->hasColumn('product_synonyms', 'canonical')) {
+                $columns[] = 'canonical';
+            }
+            if ($hasTenantColumn) {
+                $columns[] = 'tenant_id';
+            }
+
             $sampleSynonyms = DB::table('product_synonyms')
-                ->select('synonym', 'canonical', 'product_type', 'tenant_id')
+                ->select($columns)
                 ->limit(20)
                 ->get();
 
@@ -6251,6 +6272,8 @@ class DiagnosticController extends Controller
                 'by_language' => $byLanguage,
                 'sample' => $sampleSynonyms,
                 'table_exists' => true,
+                'has_tenant_column' => $hasTenantColumn,
+                'hint' => !$hasTenantColumn ? 'Run migrate to add tenant_id column' : null,
             ]);
         } catch (\Exception $e) {
             return response()->json([

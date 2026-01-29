@@ -205,7 +205,7 @@ class BrandDetectionService
         
         // First, normalize any cyrillic brand names to Latin
         $queryNormalized = $this->normalizeBrandsInQuery($queryClean);
-        $queryClean = mb_strtolower($queryNormalized);
+        $queryForSearch = mb_strtolower($queryNormalized);
         
         $brands = $this->getAllBrands();
         
@@ -213,39 +213,42 @@ class BrandDetectionService
         foreach ($brands as $brand) {
             $brandLower = mb_strtolower($brand);
             
-            // Exact match
-            if ($queryClean === $brandLower) {
+            // Exact match - only brand name
+            if ($queryForSearch === $brandLower) {
                 return [
                     'is_brand' => true,
                     'brand' => $brand,
-                    'enhanced_query' => $brand . ' ' . $brand . ' ' . $brand, // Boost by repetition
+                    'enhanced_query' => $brand, // Just the brand
                 ];
             }
             
-            // Brand at start
-            if (str_starts_with($queryClean, $brandLower . ' ')) {
+            // Brand at start - remove brand and get rest of query
+            if (str_starts_with($queryForSearch, $brandLower . ' ')) {
+                $restOfQuery = trim(substr($queryForSearch, strlen($brandLower)));
                 return [
                     'is_brand' => true,
                     'brand' => $brand,
-                    'enhanced_query' => $brand . ' ' . $brand . ' ' . $queryClean,
+                    'enhanced_query' => $brand . ' ' . $restOfQuery, // Brand + rest (without duplication)
                 ];
             }
             
-            // Brand at end
-            if (str_ends_with($queryClean, ' ' . $brandLower)) {
+            // Brand at end - remove brand and get rest of query
+            if (str_ends_with($queryForSearch, ' ' . $brandLower)) {
+                $restOfQuery = trim(substr($queryForSearch, 0, -strlen($brandLower)));
                 return [
                     'is_brand' => true,
                     'brand' => $brand,
-                    'enhanced_query' => $brand . ' ' . $brand . ' ' . $queryClean,
+                    'enhanced_query' => $restOfQuery . ' ' . $brand, // Rest + brand (without duplication)
                 ];
             }
             
-            // Brand in middle
-            if (str_contains($queryClean, ' ' . $brandLower . ' ')) {
+            // Brand in middle - replace it to avoid duplication
+            if (str_contains($queryForSearch, ' ' . $brandLower . ' ')) {
+                // Just return normalized query as-is, brand is already there
                 return [
                     'is_brand' => true,
                     'brand' => $brand,
-                    'enhanced_query' => $brand . ' ' . $brand . ' ' . $queryClean,
+                    'enhanced_query' => $queryNormalized,
                 ];
             }
         }

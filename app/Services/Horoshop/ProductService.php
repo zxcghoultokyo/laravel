@@ -115,6 +115,13 @@ class ProductService
         $created = 0;
         $updated = 0;
         $total = 0;
+        $skipped = 0;
+        
+        // Get product limit for tenant
+        $productLimit = $tenant->products_limit ?? \App\Models\Tenant::PRODUCT_LIMITS[$tenant->plan] ?? PHP_INT_MAX;
+        $currentProductCount = Product::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->count();
         
         // Set running flag for cancel functionality
         $cacheKey = "sync_running_{$tenant->id}";
@@ -124,6 +131,17 @@ class ProductService
             // Check if cancelled (only if explicitly set to false)
             if (\Illuminate\Support\Facades\Cache::get($cacheKey) === false) {
                 Log::info('Sync cancelled for tenant', ['tenant_id' => $tenant->id]);
+                break;
+            }
+            
+            // Check product limit
+            if ($currentProductCount + $created >= $productLimit) {
+                Log::warning('Horoshop sync: product limit reached', [
+                    'tenant_id' => $tenant->id,
+                    'limit' => $productLimit,
+                    'current' => $currentProductCount,
+                    'created' => $created,
+                ]);
                 break;
             }
             
@@ -169,6 +187,12 @@ class ProductService
             }
 
             foreach ($products as $item) {
+                // Check limit before creating new product
+                if ($currentProductCount + $created >= $productLimit) {
+                    $skipped++;
+                    continue;
+                }
+                
                 $result = $this->upsertProductForTenant($tenant, $item);
                 if ($result === 'created') {
                     $created++;
@@ -185,6 +209,9 @@ class ProductService
             'total' => $total,
             'created' => $created,
             'updated' => $updated,
+            'skipped' => $skipped,
+            'limit_reached' => ($currentProductCount + $created >= $productLimit),
+            'product_limit' => $productLimit,
             'tenant_id' => $tenant->id,
         ];
     }

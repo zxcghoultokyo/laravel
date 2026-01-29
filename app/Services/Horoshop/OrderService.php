@@ -30,15 +30,30 @@ class OrderService
     {
         $statusCode = (int) ($raw['stat_status'] ?? 0);
 
+        // Horoshop order statuses (from API documentation)
+        // Note: Always log unknown statuses to catch new/changed API values
         $statusLabelMap = [
-            1 => 'новий',
-            2 => 'в обробці',
-            3 => 'доставлено',
-            4 => 'не доставлено',
-            6 => 'доставляється',
+            0 => 'чернетка',      // Draft
+            1 => 'новий',          // New
+            2 => 'в обробці',      // Processing
+            3 => 'доставлено',     // Delivered
+            4 => 'не доставлено',  // Not delivered / Cancelled
+            5 => 'скасовано',      // Cancelled (different from 4)
+            6 => 'доставляється',  // In delivery / Shipping
+            7 => 'очікує оплати',  // Awaiting payment
+            8 => 'завершено',      // Completed
         ];
 
         $statusLabel = $statusLabelMap[$statusCode] ?? 'невідомий статус';
+        
+        // Log unknown status codes to help identify missing mappings
+        if (!isset($statusLabelMap[$statusCode])) {
+            \Illuminate\Support\Facades\Log::warning('OrderService: Unknown status code', [
+                'order_id' => $raw['order_id'] ?? 'N/A',
+                'stat_status' => $statusCode,
+                'raw_stat_status' => $raw['stat_status'] ?? null,
+            ]);
+        }
 
         $items = [];
 

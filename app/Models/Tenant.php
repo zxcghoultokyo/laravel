@@ -75,7 +75,7 @@ class Tenant extends Model
     public const PLATFORM_MANUAL = 'manual';
 
     /**
-     * Plan limits
+     * Plan limits - messages per month (AI responses only)
      */
     public const PLAN_LIMITS = [
         self::PLAN_TRIAL => 5000,    // Pro limits during trial!
@@ -85,8 +85,22 @@ class Tenant extends Model
     ];
 
     /**
+     * Product limits per plan
+     */
+    public const PRODUCT_LIMITS = [
+        self::PLAN_TRIAL => 5000,    // Pro limits during trial!
+        self::PLAN_STARTER => 500,
+        self::PLAN_PRO => 5000,
+        self::PLAN_ENTERPRISE => PHP_INT_MAX,
+    ];
+
+    /**
      * Features available per plan.
      * Trial gets Pro features to hook users!
+     * 
+     * Starter: basic widget + conversions (no prompts, triggers, analytics)
+     * Pro: all features except enterprise
+     * Enterprise: everything including API & white-label
      */
     public const PLAN_FEATURES = [
         self::PLAN_TRIAL => [
@@ -96,14 +110,15 @@ class Tenant extends Model
             'custom_prompts',
             'proactive_triggers',
             'advanced_analytics',
+            'conversions', // always available
             'priority_support',
         ],
         self::PLAN_STARTER => [
             'chat_widget',
             'widget_customization',
             'custom_greetings',
-            'custom_prompts',
-            'basic_analytics',
+            'conversions', // our bread - always available!
+            // NO: custom_prompts, proactive_triggers, advanced_analytics
         ],
         self::PLAN_PRO => [
             'chat_widget',
@@ -112,6 +127,7 @@ class Tenant extends Model
             'custom_prompts',
             'proactive_triggers',
             'advanced_analytics',
+            'conversions',
             'priority_support',
         ],
         self::PLAN_ENTERPRISE => [
@@ -121,6 +137,7 @@ class Tenant extends Model
             'custom_prompts',
             'proactive_triggers',
             'advanced_analytics',
+            'conversions',
             'priority_support',
             'api_access',
             'white_label',
@@ -166,6 +183,12 @@ class Tenant extends Model
             'label' => 'Кастомні промпти',
             'description' => 'Налаштуйте тон та стиль відповідей бота',
             'icon' => '✨',
+            'min_plan' => 'pro',
+        ],
+        'conversions' => [
+            'label' => 'Конверсії',
+            'description' => 'Перегляд впливу чат-бота на продажі',
+            'icon' => '🎯',
             'min_plan' => 'starter',
         ],
         'proactive_triggers' => [

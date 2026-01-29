@@ -117,6 +117,10 @@ class StreamingFunctionCallingAgent extends BaseAgent
 
         // Load shown product IDs to exclude from subsequent searches
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
+        
+        // Set current message for modular prompt building
+        $this->currentMessage = $message;
+        $this->currentContext['has_history'] = !empty($history);
 
         Log::info('StreamingAgent: loaded history', [
             'session_id' => $sessionId,
@@ -135,6 +139,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Detect trigger query
         $isTriggerQuery = $this->detectTriggerQuery($message);
         if ($isTriggerQuery) {
+            $this->currentContext['is_trigger'] = true;
             $messages[] = [
                 'role' => 'system',
                 'content' => $this->getTriggerSystemMessage(),

@@ -139,24 +139,34 @@ class FunctionCallingAgent extends BaseAgent
      */
     private function buildMessages(string $message, array $context): array
     {
+        // Set current message for modular prompt building
+        $this->currentMessage = $message;
+        
+        // Add conversation history if available
+        $history = $context['history'] ?? [];
+        $sessionId = $context['session_id'] ?? null;
+        
+        // Set context for modular prompts
+        $this->currentContext['has_history'] = !empty($history);
+
+        // Detect trigger query (from proactive triggers)
+        $isTriggerQuery = $this->detectTriggerQuery($message);
+        if ($isTriggerQuery) {
+            $this->currentContext['is_trigger'] = true;
+        }
+        
         $systemPrompt = $this->getSystemPrompt();
 
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt],
         ];
 
-        // Detect trigger query (from proactive triggers)
-        $isTriggerQuery = $this->detectTriggerQuery($message);
         if ($isTriggerQuery) {
             $messages[] = [
                 'role' => 'system',
                 'content' => $this->getTriggerSystemMessage(),
             ];
         }
-
-        // Add conversation history if available
-        $history = $context['history'] ?? [];
-        $sessionId = $context['session_id'] ?? null;
 
         // Check if this is a fresh/new query (not a follow-up)
         $isFreshQuery = $this->isFreshQuery($message, $history);

@@ -49,6 +49,10 @@ return [
         
         // Rate limiting
         'rate_limit_per_minute' => (int) env('OPENAI_RATE_LIMIT', 60),
+        
+        // Modular prompt system (reduces prompt from ~14K to ~3K tokens)
+        // Set to false to use legacy full prompt
+        'modular_prompt' => env('OPENAI_MODULAR_PROMPT', true),
     ],
 
     // Admin panel

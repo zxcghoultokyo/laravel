@@ -108,12 +108,31 @@ class StreamingChatController extends Controller
                 return;
             }
 
+            // Check message limit for tenant
+            $tenantContext = app(\App\Services\Tenant\TenantContext::class);
+            $tenant = $tenantContext->getTenant();
+            if ($tenant && !$tenant->canSendMessage()) {
+                Log::warning('StreamingChatController: message limit exceeded', [
+                    'request_id' => $requestId,
+                    'tenant_id' => $tenant->id,
+                    'messages_used' => $tenant->messages_used,
+                    'messages_limit' => $tenant->messages_limit,
+                ]);
+                
+                $this->sendEvent('chunk', [
+                    'text' => 'На жаль, вичерпано ліміт повідомлень на цей місяць. Зверніться до адміністратора магазину.',
+                ]);
+                $this->sendEvent('done', ['session_id' => $sessionId]);
+                return;
+            }
+
             try {
                 // Set context for prompt preset matching
                 $presetContext = $this->buildPresetContext($sessionId, $message);
                 $this->streamingAgent->setContext($presetContext);
                 
                 // Stream response from agent
+                $responseGenerated = false;
                 foreach ($this->streamingAgent->stream($message, $sessionId) as $event) {
                     $type = $event['type'] ?? 'chunk';
                     $data = $event['data'] ?? [];
@@ -121,6 +140,16 @@ class StreamingChatController extends Controller
                     $data['request_id'] = $requestId;
                     
                     $this->sendEvent($type, $data);
+                    
+                    // Mark that we got a real response (not just status)
+                    if ($type === 'chunk' || $type === 'products') {
+                        $responseGenerated = true;
+                    }
+                }
+                
+                // Increment message usage ONLY if AI generated a response
+                if ($tenant && $responseGenerated) {
+                    $tenant->incrementMessageUsage();
                 }
 
             } catch (\Throwable $e) {

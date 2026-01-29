@@ -63,10 +63,12 @@ return [
             'limits' => [
                 'messages_per_month' => 1000,
                 'products_limit' => 500,
-                'users_limit' => 1,
                 'features' => [
                     'chat_widget',
-                    'basic_analytics',
+                    'widget_customization',
+                    'custom_greetings',
+                    'conversions', // always available
+                    // NO: custom_prompts, proactive_triggers, advanced_analytics
                 ],
             ],
             'wayforpay_product_id' => 'ailure_starter_monthly',
@@ -81,11 +83,14 @@ return [
             'limits' => [
                 'messages_per_month' => 5000,
                 'products_limit' => 5000,
-                'users_limit' => 3,
                 'features' => [
                     'chat_widget',
-                    'advanced_analytics',
+                    'widget_customization',
+                    'custom_greetings',
                     'custom_prompts',
+                    'proactive_triggers',
+                    'advanced_analytics',
+                    'conversions',
                     'priority_support',
                 ],
             ],
@@ -101,11 +106,14 @@ return [
             'limits' => [
                 'messages_per_month' => 50000,
                 'products_limit' => null, // unlimited
-                'users_limit' => null,    // unlimited
                 'features' => [
                     'chat_widget',
-                    'advanced_analytics',
+                    'widget_customization',
+                    'custom_greetings',
                     'custom_prompts',
+                    'proactive_triggers',
+                    'advanced_analytics',
+                    'conversions',
                     'priority_support',
                     'api_access',
                     'white_label',

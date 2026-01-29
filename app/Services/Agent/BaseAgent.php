@@ -7,6 +7,7 @@ use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Ai\ToneService;
 use App\Services\Ai\PromptPresetService;
+use App\Services\Ai\PromptModulesService;
 use App\Services\Catalog\PriceStatsService;
 use App\Services\Catalog\CategoryPatternService;
 use App\Models\Product;
@@ -34,6 +35,7 @@ abstract class BaseAgent
     protected OrderSearchService $orderSearchService;
     protected ToneService $toneService;
     protected PromptPresetService $promptPresetService;
+    protected PromptModulesService $promptModulesService;
     protected CategoryPatternService $categoryPatternService;
     
     // Context for prompt preset matching
@@ -41,6 +43,9 @@ abstract class BaseAgent
     
     // Track shown product IDs to exclude from subsequent searches
     protected array $shownProductIds = [];
+    
+    // Current user message (for modular prompt building)
+    protected string $currentMessage = '';
 
     public function __construct(
         MeiliProductSearchTool $searchTool,
@@ -56,6 +61,7 @@ abstract class BaseAgent
         $this->orderSearchService = $orderSearchService;
         $this->toneService = app(ToneService::class);
         $this->promptPresetService = app(PromptPresetService::class);
+        $this->promptModulesService = app(PromptModulesService::class);
         $this->categoryPatternService = app(CategoryPatternService::class);
     }
 
@@ -441,29 +447,97 @@ abstract class BaseAgent
     // ============================================================
 
     /**
-     * Get system prompt - first checks for matching PromptPreset, then MERGES with core rules.
+     * Get system prompt - uses modular approach for optimized token usage.
+     * 
+     * Strategy:
+     * 1. Check for custom PromptPreset (manual override)
+     * 2. Use modular prompt builder (context-aware, ~3K tokens)
+     * 3. Fallback to legacy full prompt if PROMPT_MODULAR_ENABLED=false
      */
     protected function getSystemPrompt(): string
     {
+        // Check for manual prompt preset override first
         $customPrompt = $this->promptPresetService->getSystemPromptForContext(
             $this->currentContext,
             $this->getDefaultVariables()
         );
         
-        $coreRules = $this->getCoreRules();
-        
         if ($customPrompt) {
-            Log::debug('BaseAgent: using custom prompt preset + core rules', [
+            Log::debug('BaseAgent: using custom prompt preset', [
                 'context' => $this->currentContext,
             ]);
-            return $customPrompt . "\n\n" . $coreRules;
+            // Add minimal core rules to custom prompt
+            return $customPrompt . "\n\n" . $this->getMinimalCoreRules();
         }
         
+        // Use modular prompt if enabled (default: true)
+        if (config('services.openai.modular_prompt', true)) {
+            return $this->getModularSystemPrompt();
+        }
+        
+        // Legacy fallback - full prompt (~14K tokens)
         return $this->getDefaultSystemPrompt();
     }
 
     /**
+     * Build modular system prompt based on current message context.
+     * Reduces prompt from ~14K to ~3-4K tokens by loading only relevant modules.
+     */
+    protected function getModularSystemPrompt(): string
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        if ($tenantId) {
+            $this->toneService->setTenantId($tenantId);
+        }
+        
+        $tenantInfo = $this->getTenantInfo();
+        $storeInfo = [
+            'name' => $tenantInfo['name'],
+            'phone' => $this->getShopPhone(),
+            'faq' => $this->loadFaqInfo(),
+            'tone_section' => $this->toneService->getFullPromptSection(),
+        ];
+        
+        $context = [
+            'has_history' => !empty($this->shownProductIds) || !empty($this->currentContext['has_history']),
+            'is_trigger' => $this->currentContext['is_trigger'] ?? false,
+        ];
+        
+        $prompt = $this->promptModulesService->buildPrompt(
+            $this->currentMessage,
+            $context,
+            $storeInfo
+        );
+        
+        // Add price context
+        $priceContext = $this->loadPriceContext();
+        if ($priceContext) {
+            $prompt .= "\n\n" . $priceContext;
+        }
+        
+        return $prompt;
+    }
+
+    /**
+     * Minimal core rules for custom presets (~500 tokens).
+     */
+    protected function getMinimalCoreRules(): string
+    {
+        $shopPhone = $this->getShopPhone();
+        
+        return <<<RULES
+🎯 CORE RULES:
+- ЗАВЖДИ search_products() перед відповіддю на запит про товари
+- МАКСИМУМ 3 товари за раз
+- intro = контекст ("Ось куртки:"), НЕ "Ось що я знайшов"
+- Замовлення: "Натисніть картку → сайт → кошик. Тел: {$shopPhone}"
+- Мова = мова запиту
+RULES;
+    }
+
+    /**
      * Get core rules that ALWAYS apply regardless of custom preset.
+     * @deprecated Use getMinimalCoreRules() or modular prompts instead
      */
     protected function getCoreRules(): string
     {

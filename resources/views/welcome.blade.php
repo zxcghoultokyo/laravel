@@ -827,6 +827,11 @@
                 border-bottom: none;
             }
             
+            .pricing-features li.disabled {
+                color: var(--text-muted);
+                opacity: 0.6;
+            }
+            
             .btn-full {
                 width: 100%;
                 justify-content: center;
@@ -1270,10 +1275,13 @@
                             <p class="pricing-desc">~$20 • Для малого бізнесу</p>
                         </div>
                         <ul class="pricing-features">
-                            <li>✓ 1 000 повідомлень/міс</li>
+                            <li>✓ 1 000 AI-відповідей/міс</li>
                             <li>✓ До 500 товарів</li>
-                            <li>✓ Базова аналітика</li>
-                            <li>✓ Email підтримка</li>
+                            <li>✓ Кастомізація віджету</li>
+                            <li>✓ Базова статистика (конверсії)</li>
+                            <li class="disabled">✗ Кастомні промпти</li>
+                            <li class="disabled">✗ Proactive тригери</li>
+                            <li class="disabled">✗ Розширена аналітика</li>
                         </ul>
                         @auth
                             <a href="{{ url('/dashboard') }}" class="btn btn-outline btn-full">Перейти в Dashboard</a>
@@ -1293,10 +1301,12 @@
                             <p class="pricing-desc">~$50 • Для зростаючих магазинів</p>
                         </div>
                         <ul class="pricing-features">
-                            <li>✓ 5 000 повідомлень/міс</li>
-                            <li>✓ До 10 000 товарів</li>
-                            <li>✓ Розширена аналітика</li>
+                            <li>✓ 5 000 AI-відповідей/міс</li>
+                            <li>✓ До 5 000 товарів</li>
+                            <li>✓ Кастомізація віджету</li>
+                            <li>✓ Кастомні промпти</li>
                             <li>✓ Proactive тригери</li>
+                            <li>✓ Розширена аналітика</li>
                             <li>✓ Пріоритетна підтримка</li>
                         </ul>
                         @auth
@@ -1315,9 +1325,11 @@
                             <p class="pricing-desc">Для великих каталогів</p>
                         </div>
                         <ul class="pricing-features">
-                            <li>✓ Необмежені діалоги</li>
+                            <li>✓ Необмежені AI-відповіді</li>
                             <li>✓ Необмежені товари</li>
-                            <li>✓ Кастомні інтеграції</li>
+                            <li>✓ Все з Pro плану</li>
+                            <li>✓ API доступ</li>
+                            <li>✓ White-label</li>
                             <li>✓ Виділений менеджер</li>
                             <li>✓ SLA гарантії</li>
                         </ul>

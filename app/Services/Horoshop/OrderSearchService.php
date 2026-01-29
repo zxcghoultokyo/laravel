@@ -48,10 +48,25 @@ class OrderSearchService
 
         Log::info('OrderSearchService: searching', compact('orderId', 'phone', 'name', 'email', 'limit'));
 
-        // Priority 1: exact order_id
+        // Priority 1: exact order_id (but MUST verify phone if provided for security!)
         if (!empty($orderId)) {
             $raw = $this->orderService->getById($orderId);
             if ($raw) {
+                // SECURITY: If phone was provided, MUST match order's phone
+                // This prevents exposing ANY order by just knowing the order number
+                if (!empty($phone)) {
+                    $orderPhone = $raw['delivery_phone'] ?? '';
+                    if (!$this->matchPhone($raw, $phone)) {
+                        Log::warning('OrderSearchService: phone mismatch for order_id lookup', [
+                            'order_id' => $orderId,
+                            'provided_phone' => $phone,
+                            'order_phone' => $orderPhone,
+                        ]);
+                        // Return empty - don't reveal that order exists with different phone
+                        return ['orders' => [], 'total' => 0, 'search_type' => 'order_id', 'error' => 'phone_mismatch'];
+                    }
+                }
+                
                 return [
                     'orders' => [$this->orderService->normalize($raw)],
                     'total' => 1,

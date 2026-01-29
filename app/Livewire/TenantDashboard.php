@@ -764,6 +764,22 @@ class TenantDashboard extends Component
 
     public function setTab(string $tab)
     {
+        // Check feature access for restricted tabs
+        $featureMap = [
+            'prompts' => 'custom_prompts',
+            'triggers' => 'proactive_triggers',
+            'analytics' => 'advanced_analytics',
+        ];
+        
+        if (isset($featureMap[$tab])) {
+            $tenant = Auth::user()->tenant;
+            if ($tenant && !$tenant->hasFeature($featureMap[$tab])) {
+                // Don't switch to restricted tab - show upgrade message
+                $this->dispatch('show-upgrade-modal', feature: $featureMap[$tab]);
+                return;
+            }
+        }
+        
         $this->activeTab = $tab;
         $this->selectedChatId = null; // Reset selected chat when changing tabs
         $this->resetPage();

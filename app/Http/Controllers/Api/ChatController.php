@@ -81,9 +81,33 @@ class ChatController extends Controller
                 ]);
             }
 
+            // Check message limit for tenant
+            $tenantContext = app(\App\Services\Tenant\TenantContext::class);
+            $tenant = $tenantContext->getTenant();
+            if ($tenant && !$tenant->canSendMessage()) {
+                Log::warning('ChatController: message limit exceeded', [
+                    'request_id' => $requestId,
+                    'tenant_id' => $tenant->id,
+                    'messages_used' => $tenant->messages_used,
+                    'messages_limit' => $tenant->messages_limit,
+                ]);
+                
+                return response()->json([
+                    'type' => 'text',
+                    'text' => 'На жаль, вичерпано ліміт повідомлень на цей місяць. Зверніться до адміністратора магазину.',
+                    'session_id' => $sessionId,
+                    'meta' => ['request_id' => $requestId, 'limit_exceeded' => true],
+                ]);
+            }
+
             $startTime = microtime(true);
             $response = $this->chatService->handleMessage($message, $sessionId);
             $responseTime = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Increment message usage for AI response
+            if ($tenant && !empty($response['text'])) {
+                $tenant->incrementMessageUsage();
+            }
 
             // Check if session needs escalation to human operator
             if (config('services.escalation.enabled', true)) {

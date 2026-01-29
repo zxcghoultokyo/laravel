@@ -91,6 +91,7 @@ class TenantsManager extends Component
         ]);
 
         $tenant = Tenant::findOrFail($this->editingTenantId);
+        $newPlan = $this->editForm['plan'];
         
         // Parse trial_ends_at (for trial plan)
         $trialEndsAt = null;
@@ -104,14 +105,26 @@ class TenantsManager extends Component
             $planExpiresAt = \Carbon\Carbon::parse($this->editForm['plan_expires_at']);
         }
         
+        // Get plan limits if manually set to null/0 (auto-update from plan)
+        $messagesLimit = $this->editForm['messages_limit'];
+        $productsLimit = $this->editForm['products_limit'];
+        
+        // If limits are empty/0, set from plan defaults
+        if (empty($messagesLimit)) {
+            $messagesLimit = Tenant::PLAN_LIMITS[$newPlan] ?? 1000;
+        }
+        if (empty($productsLimit)) {
+            $productsLimit = Tenant::PRODUCT_LIMITS[$newPlan] ?? 500;
+        }
+        
         $tenant->update([
             'name' => $this->editForm['name'],
             'slug' => $this->editForm['slug'],
             'domain' => $this->editForm['domain'],
             'status' => $this->editForm['status'],
-            'plan' => $this->editForm['plan'],
-            'messages_limit' => $this->editForm['messages_limit'],
-            'products_limit' => $this->editForm['products_limit'],
+            'plan' => $newPlan,
+            'messages_limit' => $messagesLimit,
+            'products_limit' => $productsLimit,
             'trial_ends_at' => $trialEndsAt,
             'plan_expires_at' => $planExpiresAt,
         ]);
@@ -414,6 +427,9 @@ class TenantsManager extends Component
         ];
 
         $plans = config('billing.plans', []);
+        
+        // Add trial plan for admin selector
+        $plans = array_merge(['trial' => ['name' => 'Trial (14 днів)']], $plans);
 
         return view('livewire.admin.tenants-manager', [
             'tenants' => $tenants,

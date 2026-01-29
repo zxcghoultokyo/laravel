@@ -8,6 +8,7 @@ use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
 use App\Services\Search\QueryExpander;
 use App\Services\Search\SemanticSearchService;
+use App\Services\Search\SlangDictionaryService;
 use App\Services\Analytics\ABTestingService;
 use Illuminate\Support\Facades\Log;
 
@@ -16,6 +17,7 @@ class MeiliProductSearchTool
     protected ?ABTestingService $abTesting = null;
     protected ?string $currentSessionId = null;
     protected array $searchMeta = [];
+    protected ?SlangDictionaryService $slangDictionary = null;
 
     public function __construct(
         private MeiliClient $meiliClient,
@@ -38,6 +40,13 @@ class MeiliProductSearchTool
             $this->abTesting = app(ABTestingService::class);
         } catch (\Throwable $e) {
             $this->abTesting = null;
+        }
+        
+        // Initialize slang dictionary
+        try {
+            $this->slangDictionary = app(SlangDictionaryService::class);
+        } catch (\Throwable $e) {
+            $this->slangDictionary = null;
         }
     }
 
@@ -840,7 +849,61 @@ class MeiliProductSearchTool
         $q = trim($query);
         $l = mb_strtolower($q);
         
-        // 0. ENGLISH → UKRAINIAN translation for common tactical terms
+        // 0. SLANG DICTIONARY — expand user slang to standard product terms
+        // This is the PRIMARY source for Ukrainian military/tactical slang
+        if ($this->slangDictionary) {
+            $words = preg_split('/\s+/', $q);
+            $expandedWords = [];
+            $usedSlang = false;
+            
+            foreach ($words as $word) {
+                // Check if this word is slang for a product type
+                $productType = $this->slangDictionary->findTypeByTerm($word);
+                
+                if ($productType) {
+                    // Replace slang with canonical Ukrainian term
+                    // e.g., "термуха" → "термобілизна", "пц" → "плитоноска"
+                    $entry = config('slang_dictionary.' . $productType, []);
+                    $canonical = $entry['synonyms'][0] ?? $productType;
+                    
+                    // Some canonical replacements
+                    $canonicalMap = [
+                        'thermal_underwear' => 'термобілизна',
+                        'plate_carrier' => 'плитоноска',
+                        'headset' => 'навушники',
+                        'helmet' => 'шолом',
+                        'boots' => 'черевики',
+                        'tourniquet' => 'турнікет',
+                        'backpack' => 'рюкзак',
+                        'pouch' => 'підсумок',
+                        'gloves' => 'рукавички',
+                        'uniform_pants' => 'штани',
+                        'socks' => 'шкарпетки',
+                        'jacket' => 'куртка',
+                    ];
+                    
+                    $canonical = $canonicalMap[$productType] ?? $canonical;
+                    $expandedWords[] = $canonical;
+                    $usedSlang = true;
+                    
+                    Log::debug('MeiliProductSearchTool: slang expanded', [
+                        'original' => $word,
+                        'product_type' => $productType,
+                        'canonical' => $canonical,
+                    ]);
+                } else {
+                    $expandedWords[] = $word;
+                }
+            }
+            
+            if ($usedSlang) {
+                $q = implode(' ', $expandedWords);
+                $l = mb_strtolower($q);
+                $this->searchMeta['used_slang'] = true;
+            }
+        }
+        
+        // 1. ENGLISH → UKRAINIAN translation for common tactical terms
         // This enables English queries to find Ukrainian products
         $enToUk = [
             'plate carrier' => 'плитоноска',

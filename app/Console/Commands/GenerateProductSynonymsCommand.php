@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\IndexProductsToMeiliJob;
 use App\Models\ProductSynonym;
 use App\Models\Product;
 use App\Models\SyncLog;
@@ -107,6 +108,13 @@ class GenerateProductSynonymsCommand extends Command
             $stats = $this->saveSynonyms($synonymsMap, $this->option('force'), $tenantId);
 
             $this->info("\n✅ Product synonyms generated successfully!");
+            
+            // Trigger Meili reindex to include new synonyms in search_index
+            if ($stats['inserted'] > 0 && config('meilisearch.enabled', false)) {
+                $this->info("\n🔄 Dispatching Meilisearch reindex job...");
+                IndexProductsToMeiliJob::dispatch($tenantId);
+                $this->info("Meili reindex job dispatched for " . ($tenantId ? "tenant {$tenantId}" : "all tenants"));
+            }
             
             $syncLog->complete([
                 'categories_count' => count($categories),

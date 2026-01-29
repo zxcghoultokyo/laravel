@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Product;
+use App\Models\ProductSynonym;
 use App\Models\SyncLog;
 use App\Models\TenantOnboardingProgress;
 use App\Services\Search\MeiliClient;
@@ -138,46 +139,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     'ai_materials',      // Materials
                     'ai_standards',      // Protection standards
                 ],
-                // Синоніми для покращення пошуку (одне слово знаходить всі варіанти)
-                'synonyms' => [
-                    // Електроніка / Смартфони
-                    'smartphone' => ['смартфон', 'телефон', 'phone', 'mobile', 'iphone', 'мобільний'],
-                    'phone' => ['телефон', 'смартфон', 'smartphone', 'iphone', 'мобільний'],
-                    'телефон' => ['смартфон', 'smartphone', 'phone', 'iphone', 'мобільний'],
-                    'iphone' => ['айфон', 'apple phone', 'smartphone', 'телефон'],
-                    'айфон' => ['iphone', 'apple phone', 'smartphone', 'телефон'],
-                    // Шоломи
-                    'шолом' => ['каска', 'шлем', 'helmet', 'ballistic helmet', 'кевларовий шолом'],
-                    'каска' => ['шолом', 'helmet', 'ballistic helmet'],
-                    'helmet' => ['шолом', 'каска'],
-                    // Плитоноски
-                    'плитоноска' => ['plate carrier', 'плейткерієр', 'плитник', 'розвантажка', 'разгрузка'],
-                    'plate carrier' => ['плитоноска', 'плейткерієр'],
-                    // Одяг
-                    'сорочка' => ['shirt', 'бойова сорочка', 'combat shirt'],
-                    'штани' => ['брюки', 'pants', 'бойові штани'],
-                    // Взуття
-                    'берці' => ['черевики', 'boots', 'ботинки', 'берцы'],
-                    'кросівки' => ['кроси', 'sneakers', 'тактичні кросівки'],
-                    // Підсумки
-                    'підсумок' => ['подсумок', 'pouch', 'сумка', 'mag pouch'],
-                    'pouch' => ['підсумок', 'подсумок'],
-                    // Рюкзаки
-                    'рюкзак' => ['backpack', 'ранець', 'наплічник'],
-                    'backpack' => ['рюкзак', 'ранець'],
-                    // Термобілизна
-                    'термобілизна' => ['термуха', 'thermal underwear', 'base layer', 'кальсони', 'подштанники', 'термобілізна', 'level 1', 'level 2'],
-                    'термуха' => ['термобілизна', 'thermal underwear', 'base layer', 'термобілізна'],
-                    'thermal' => ['термо', 'термобілизна', 'термуха'],
-                    // Бренди з варіантами написання
-                    'ops-core' => ['ops core', 'opscore', 'опс-кор', 'опскор'],
-                    'crye precision' => ['crye', 'край', 'край прецішн'],
-                    // Загальні рівні/левели (універсально)
-                    'level' => ['левел', 'лвл', 'рівень', 'lvl'],
-                    'левел' => ['level', 'лвл', 'рівень', 'lvl'],
-                    'лвл' => ['level', 'левел', 'рівень', 'lvl'],
-                    'рівень' => ['level', 'левел', 'лвл', 'lvl'],
-                ],
+                // Синоніми для покращення пошуку (базові + з ProductSynonym таблиці)
+                'synonyms' => $this->buildMeiliSynonyms(),
             ]);
             echo "✅ Налаштування Meili оновлено (включно з синонімами та ранкінгом)\n\n";
         } catch (\Throwable $e) {
@@ -544,5 +507,85 @@ class IndexProductsToMeiliJob implements ShouldQueue
         } catch (\Throwable $e) {
             echo "   ⚠️  Cleanup помилка: {$e->getMessage()}\n\n";
         }
+    }
+    
+    /**
+     * Build synonyms map for Meilisearch from base synonyms + ProductSynonym table.
+     * Merges static synonyms with dynamic ones from database.
+     */
+    protected function buildMeiliSynonyms(): array
+    {
+        // Base synonyms (always included)
+        $baseSynonyms = [
+            // Електроніка / Смартфони
+            'smartphone' => ['смартфон', 'телефон', 'phone', 'mobile', 'iphone', 'мобільний'],
+            'phone' => ['телефон', 'смартфон', 'smartphone', 'iphone', 'мобільний'],
+            'телефон' => ['смартфон', 'smartphone', 'phone', 'iphone', 'мобільний'],
+            'iphone' => ['айфон', 'apple phone', 'smartphone', 'телефон'],
+            'айфон' => ['iphone', 'apple phone', 'smartphone', 'телефон'],
+            // Шоломи
+            'шолом' => ['каска', 'шлем', 'helmet', 'ballistic helmet', 'кевларовий шолом'],
+            'каска' => ['шолом', 'helmet', 'ballistic helmet'],
+            'helmet' => ['шолом', 'каска'],
+            // Плитоноски
+            'плитоноска' => ['plate carrier', 'плейткерієр', 'плитник', 'розвантажка', 'разгрузка'],
+            'plate carrier' => ['плитоноска', 'плейткерієр'],
+            // Одяг
+            'сорочка' => ['shirt', 'бойова сорочка', 'combat shirt'],
+            'штани' => ['брюки', 'pants', 'бойові штани'],
+            // Взуття
+            'берці' => ['черевики', 'boots', 'ботинки', 'берцы'],
+            'кросівки' => ['кроси', 'sneakers', 'тактичні кросівки'],
+            // Підсумки
+            'підсумок' => ['подсумок', 'pouch', 'сумка', 'mag pouch'],
+            'pouch' => ['підсумок', 'подсумок'],
+            // Рюкзаки
+            'рюкзак' => ['backpack', 'ранець', 'наплічник'],
+            'backpack' => ['рюкзак', 'ранець'],
+            // Термобілизна
+            'термобілизна' => ['термуха', 'thermal underwear', 'base layer', 'кальсони', 'подштанники', 'термобілізна', 'level 1', 'level 2'],
+            'термуха' => ['термобілизна', 'thermal underwear', 'base layer', 'термобілізна'],
+            'thermal' => ['термо', 'термобілизна', 'термуха'],
+            // Бренди з варіантами написання
+            'ops-core' => ['ops core', 'opscore', 'опс-кор', 'опскор'],
+            'crye precision' => ['crye', 'край', 'край прецішн'],
+            // Загальні рівні/левели (універсально)
+            'level' => ['левел', 'лвл', 'рівень', 'lvl'],
+            'левел' => ['level', 'лвл', 'рівень', 'lvl'],
+            'лвл' => ['level', 'левел', 'рівень', 'lvl'],
+            'рівень' => ['level', 'левел', 'лвл', 'lvl'],
+        ];
+        
+        // Load dynamic synonyms from ProductSynonym table
+        try {
+            $dbSynonyms = ProductSynonym::query()
+                ->select('product_type', 'synonyms')
+                ->get();
+            
+            foreach ($dbSynonyms as $row) {
+                $type = mb_strtolower(trim($row->product_type));
+                $synonymsList = is_array($row->synonyms) ? $row->synonyms : json_decode($row->synonyms, true) ?? [];
+                
+                if (empty($type) || empty($synonymsList)) {
+                    continue;
+                }
+                
+                // Merge with existing or add new
+                if (isset($baseSynonyms[$type])) {
+                    $baseSynonyms[$type] = array_values(array_unique(
+                        array_merge($baseSynonyms[$type], $synonymsList)
+                    ));
+                } else {
+                    $baseSynonyms[$type] = array_values(array_unique($synonymsList));
+                }
+            }
+            
+            echo "📚 Loaded " . count($dbSynonyms) . " synonym groups from database\n";
+            
+        } catch (\Throwable $e) {
+            echo "⚠️  Could not load ProductSynonym: {$e->getMessage()}\n";
+        }
+        
+        return $baseSynonyms;
     }
 }

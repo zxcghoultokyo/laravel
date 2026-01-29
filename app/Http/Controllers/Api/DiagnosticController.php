@@ -6115,4 +6115,170 @@ class DiagnosticController extends Controller
                 : 'All sessions are healthy',
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/run-command
+     * Run artisan commands safely
+     * 
+     * Allowed commands (whitelist for security):
+     * - migrate
+     * - synonyms:products --tenant=X
+     * - synonyms:regenerate --for-all-tenants
+     * - meili:reindex-products
+     * - meili:setup-products
+     * - sync:horoshop-products --tenant=X
+     * - queue:restart
+     * - optimize:clear
+     */
+    public function runCommand(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $command = $request->input('command');
+        
+        if (empty($command)) {
+            return response()->json([
+                'error' => 'Missing command parameter',
+                'usage' => 'POST /api/diagnostic/run-command?key=XXX with body {"command": "synonyms:products --tenant=2"}',
+                'allowed_commands' => $this->getAllowedCommands(),
+            ], 400);
+        }
+
+        // Parse command and arguments
+        $parts = explode(' ', trim($command));
+        $artisanCommand = array_shift($parts);
+        
+        // Security: whitelist of allowed commands
+        $allowedCommands = [
+            'migrate',
+            'synonyms:products',
+            'synonyms:regenerate', 
+            'meili:reindex-products',
+            'meili:setup-products',
+            'sync:horoshop-products',
+            'queue:restart',
+            'optimize:clear',
+            'optimize',
+            'cache:clear',
+            'config:clear',
+            'view:clear',
+        ];
+
+        if (!in_array($artisanCommand, $allowedCommands)) {
+            return response()->json([
+                'error' => "Command '{$artisanCommand}' is not allowed",
+                'allowed_commands' => $allowedCommands,
+            ], 403);
+        }
+
+        // Parse arguments
+        $arguments = [];
+        foreach ($parts as $part) {
+            if (str_starts_with($part, '--')) {
+                $part = ltrim($part, '-');
+                if (str_contains($part, '=')) {
+                    [$key, $value] = explode('=', $part, 2);
+                    $arguments["--{$key}"] = $value;
+                } else {
+                    $arguments["--{$part}"] = true;
+                }
+            }
+        }
+
+        // Always force non-interactive
+        $arguments['--no-interaction'] = true;
+
+        try {
+            $startTime = microtime(true);
+            
+            $exitCode = \Illuminate\Support\Facades\Artisan::call($artisanCommand, $arguments);
+            $output = \Illuminate\Support\Facades\Artisan::output();
+            
+            $duration = round(microtime(true) - $startTime, 2);
+
+            return response()->json([
+                'success' => $exitCode === 0,
+                'command' => $artisanCommand,
+                'arguments' => $arguments,
+                'exit_code' => $exitCode,
+                'output' => $output,
+                'duration_seconds' => $duration,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'command' => $artisanCommand,
+                'error' => $e->getMessage(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : null,
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/diagnostic/synonyms-stats
+     * Get product synonyms statistics
+     */
+    public function synonymsStats(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $total = DB::table('product_synonyms')->count();
+            $byTenant = DB::table('product_synonyms')
+                ->select('tenant_id', DB::raw('COUNT(*) as count'))
+                ->groupBy('tenant_id')
+                ->pluck('count', 'tenant_id')
+                ->toArray();
+            
+            $byLanguage = DB::table('product_synonyms')
+                ->select('language', DB::raw('COUNT(*) as count'))
+                ->groupBy('language')
+                ->pluck('count', 'language')
+                ->toArray();
+
+            $sampleSynonyms = DB::table('product_synonyms')
+                ->select('synonym', 'canonical', 'product_type', 'tenant_id')
+                ->limit(20)
+                ->get();
+
+            return response()->json([
+                'total' => $total,
+                'by_tenant' => $byTenant,
+                'by_language' => $byLanguage,
+                'sample' => $sampleSynonyms,
+                'table_exists' => true,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'table_exists' => false,
+                'hint' => 'Run: POST /api/diagnostic/run-command with {"command": "migrate"}',
+            ]);
+        }
+    }
+
+    /**
+     * Get list of allowed commands
+     */
+    private function getAllowedCommands(): array
+    {
+        return [
+            'migrate' => 'Run database migrations',
+            'synonyms:products --tenant=X' => 'Generate product synonyms for tenant X',
+            'synonyms:regenerate --for-all-tenants' => 'Regenerate synonyms for all tenants',
+            'meili:reindex-products' => 'Reindex all products in Meilisearch',
+            'meili:setup-products' => 'Setup Meilisearch index settings',
+            'sync:horoshop-products --tenant=X' => 'Sync products from Horoshop for tenant X',
+            'queue:restart' => 'Restart queue workers',
+            'optimize:clear' => 'Clear all cached data',
+            'optimize' => 'Cache configs and routes',
+            'cache:clear' => 'Clear application cache',
+            'config:clear' => 'Clear config cache',
+            'view:clear' => 'Clear view cache',
+        ];
+    }
 }

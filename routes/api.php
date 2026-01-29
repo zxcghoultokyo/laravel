@@ -185,6 +185,10 @@ Route::prefix('diagnostic')->group(function () {
     // Synonyms & Aliases
     Route::get('/color-synonyms', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorSynonyms']);
     Route::get('/category-aliases', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryAliases']);
+    
+    // Command execution & synonyms management
+    Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
+    Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

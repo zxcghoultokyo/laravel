@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Models\SyncLog;
+use App\Models\TenantOnboardingProgress;
 use App\Scopes\TenantScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -116,6 +117,11 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             if ($syncLog) {
                 $syncLog->complete(['message' => 'No more products to analyze']);
             }
+            
+            // Mark AI enrichment as completed in onboarding progress
+            if ($this->tenantId !== null) {
+                $this->markAiEnrichmentCompleted();
+            }
             return;
         }
 
@@ -159,6 +165,11 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             ]);
         }
 
+        // Update onboarding progress if tenant-specific job
+        if ($this->tenantId !== null) {
+            $this->updateOnboardingProgress($analyzed);
+        }
+
         // Dispatch next batch if more products exist (unless singleBatchOnly mode)
         if ($products->count() === $this->batchSize && !$this->singleBatchOnly) {
             Log::info('AnalyzeProductsWithAiJob: dispatching next batch', [
@@ -173,6 +184,126 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
                 tenantId: $this->tenantId  // CRITICAL: pass tenant_id to next batch
             )->delay(now()->addSeconds(2));
         }
+    }
+
+    /**
+     * Update onboarding progress with current AI enrichment stats
+     */
+    private function updateOnboardingProgress(int $batchAnalyzed): void
+    {
+        $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+        
+        if (!$progress || $progress->status !== 'in_progress') {
+            return;
+        }
+
+        // Count total products for this tenant
+        $totalProducts = Product::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $this->tenantId)
+            ->where('in_stock', true)
+            ->count();
+
+        // Count enriched products
+        $enrichedCount = ProductAiIndex::whereHas('product', function ($q) {
+            $q->withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $this->tenantId);
+        })->whereNotNull('keywords')->count();
+
+        // Calculate progress
+        $percent = $totalProducts > 0 
+            ? min(95, (int) round($enrichedCount / $totalProducts * 100))
+            : 0;
+
+        $detail = "AI аналіз: {$enrichedCount} з {$totalProducts} товарів";
+        
+        // Update progress
+        $progress->updateStep('ai_enrichment', 'in_progress', $percent, $detail, [
+            'total' => $totalProducts,
+            'enriched' => $enrichedCount,
+            'processed' => $enrichedCount,
+            'batch_analyzed' => $batchAnalyzed,
+        ]);
+
+        Log::info('AnalyzeProductsWithAiJob: updated onboarding progress', [
+            'tenant_id' => $this->tenantId,
+            'enriched' => $enrichedCount,
+            'total' => $totalProducts,
+            'percent' => $percent,
+        ]);
+    }
+
+    /**
+     * Mark AI enrichment as completed when all products are processed
+     */
+    private function markAiEnrichmentCompleted(): void
+    {
+        $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+        
+        if (!$progress) {
+            return;
+        }
+
+        // Count final stats
+        $totalProducts = Product::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $this->tenantId)
+            ->where('in_stock', true)
+            ->count();
+
+        $enrichedCount = ProductAiIndex::whereHas('product', function ($q) {
+            $q->withoutGlobalScope(TenantScope::class)
+                ->where('tenant_id', $this->tenantId);
+        })->whereNotNull('keywords')->count();
+
+        $detail = "AI аналіз завершено: {$enrichedCount} товарів оброблено";
+        
+        $progress->updateStep('ai_enrichment', 'completed', 100, $detail, [
+            'total' => $totalProducts,
+            'enriched' => $enrichedCount,
+            'processed' => $enrichedCount,
+        ]);
+
+        Log::info('AnalyzeProductsWithAiJob: AI enrichment completed', [
+            'tenant_id' => $this->tenantId,
+            'enriched' => $enrichedCount,
+            'total' => $totalProducts,
+        ]);
+
+        // Trigger next step: Meilisearch indexing
+        // This ensures the onboarding flow continues even if OnboardTenantJob timed out
+        $this->triggerMeiliIndexing();
+    }
+
+    /**
+     * Trigger Meilisearch indexing after AI enrichment completes
+     */
+    private function triggerMeiliIndexing(): void
+    {
+        $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+        
+        if (!$progress || $progress->status !== 'in_progress') {
+            return;
+        }
+
+        // Check if meili step hasn't started yet
+        $steps = $progress->steps ?? [];
+        $meiliStep = $steps['meili_indexing'] ?? null;
+        
+        if ($meiliStep && $meiliStep['status'] !== 'pending') {
+            // Meili already started or completed
+            return;
+        }
+
+        $progress->updateStep('meili_indexing', 'in_progress', 0, 'Запуск індексації...');
+
+        // Dispatch Meili indexing job
+        IndexProductsToMeiliJob::dispatch(
+            chunk: 500,
+            tenantId: $this->tenantId
+        );
+
+        Log::info('AnalyzeProductsWithAiJob: triggered Meili indexing', [
+            'tenant_id' => $this->tenantId,
+        ]);
     }
 
     private function analyzeProduct(Product $product, string $apiKey, array $config): void

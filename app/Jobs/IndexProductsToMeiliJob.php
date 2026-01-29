@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Product;
 use App\Models\SyncLog;
+use App\Models\TenantOnboardingProgress;
 use App\Services\Search\MeiliClient;
 use App\Support\ProductRawExtractor;
 use App\Support\ColorNormalizer;
@@ -208,6 +209,11 @@ class IndexProductsToMeiliJob implements ShouldQueue
                         });
                 }
 
+                // Update onboarding progress periodically
+                if ($this->tenantId !== null && $processedCount > 0) {
+                    $this->updateMeiliProgress($processedCount, $totalCount);
+                }
+
                 foreach ($products as $p) {
                     $lang = 'ua';
                     $raw = is_array($p->raw ?? null) ? $p->raw : (array) ($p->raw ?? []);
@@ -307,10 +313,87 @@ class IndexProductsToMeiliJob implements ShouldQueue
             'skipped' => 0,
             'failed' => 0,
         ]);
+
+        // Mark Meili indexing as completed in onboarding progress
+        if ($this->tenantId !== null) {
+            $this->markMeiliCompleted($processedCount);
+        }
         
         } catch (\Throwable $e) {
             $syncLog->fail($e->getMessage());
             throw $e;
+        }
+    }
+
+    /**
+     * Update Meili indexing progress
+     */
+    private function updateMeiliProgress(int $processed, int $total): void
+    {
+        $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+        
+        if (!$progress || $progress->status !== 'in_progress') {
+            return;
+        }
+
+        $percent = $total > 0 
+            ? min(95, (int) round($processed / $total * 100))
+            : 0;
+
+        $detail = "Індексація: {$processed} з {$total} товарів";
+        
+        $progress->updateStep('meili_indexing', 'in_progress', $percent, $detail, [
+            'total' => $total,
+            'processed' => $processed,
+        ]);
+    }
+
+    /**
+     * Mark Meili indexing as completed and finalize onboarding
+     */
+    private function markMeiliCompleted(int $processedCount): void
+    {
+        $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+        
+        if (!$progress) {
+            return;
+        }
+
+        $progress->updateStep('meili_indexing', 'completed', 100, 
+            "Проіндексовано {$processedCount} товарів",
+            ['processed' => $processedCount]
+        );
+
+        // Check if all steps are completed and mark onboarding as done
+        $this->finalizeOnboardingIfComplete($progress);
+    }
+
+    /**
+     * Finalize onboarding if all steps are completed
+     */
+    private function finalizeOnboardingIfComplete(TenantOnboardingProgress $progress): void
+    {
+        $steps = $progress->steps ?? [];
+        $allCompleted = true;
+
+        foreach (['horoshop_sync', 'categories_rebuild', 'brands_sync', 'ai_enrichment', 'meili_indexing'] as $stepKey) {
+            $step = $steps[$stepKey] ?? null;
+            if (!$step || $step['status'] !== 'completed') {
+                $allCompleted = false;
+                break;
+            }
+        }
+
+        if ($allCompleted && $progress->status !== 'completed') {
+            $progress->complete();
+            
+            // Update tenant
+            \App\Models\Tenant::where('id', $this->tenantId)
+                ->update(['onboarding_completed_at' => now()]);
+
+            \Illuminate\Support\Facades\Log::info('IndexProductsToMeiliJob: Onboarding finalized', [
+                'tenant_id' => $this->tenantId,
+            ]);
         }
     }
 

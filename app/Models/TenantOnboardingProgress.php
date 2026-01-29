@@ -73,12 +73,21 @@ class TenantOnboardingProgress extends Model
         ],
         'ai_enrichment' => [
             'name' => 'AI збагачення товарів',
-            'weight' => 40,
+            'weight' => 35,
             'substeps' => [
                 'analyzing' => 'Аналіз товарів',
                 'keywords' => 'Генерація ключових слів',
                 'slang' => 'Створення сленгових синонімів',
                 'categories' => 'AI категоризація',
+            ],
+        ],
+        'synonyms_generation' => [
+            'name' => 'Генерація синонімів',
+            'weight' => 5,
+            'substeps' => [
+                'extracting' => 'Витягування типів товарів',
+                'generating' => 'Генерація синонімів через AI',
+                'saving' => 'Збереження синонімів',
             ],
         ],
         'meili_indexing' => [

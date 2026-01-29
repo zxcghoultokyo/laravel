@@ -17,12 +17,14 @@ class QueryExpander
      * @param  string       $query     оригінальний текст користувача
      * @param  string       $language  мова (наприклад 'uk' або 'ru')
      * @param  string|null  $domain    домен/ідентифікатор магазину (наприклад 'contractor.kiev.ua')
+     * @param  int|null     $tenantId  ID тенанта для tenant-specific синонімів
      * @return string
      */
     public function expandQueryWithDomainSynonyms(
         string $query,
         string $language = 'uk',
-        ?string $domain = null
+        ?string $domain = null,
+        ?int $tenantId = null
     ): string {
         $normalized = mb_strtolower(trim($query));
 
@@ -39,11 +41,16 @@ class QueryExpander
         }
 
         // -----------------------------
-        // 1) PRODUCT_SYNONYMS
+        // 1) PRODUCT_SYNONYMS (з урахуванням tenant_id)
         // -----------------------------
         $productSynonymsQuery = ProductSynonym::query()
             ->where('is_active', true)
             ->whereIn('synonym', $uniqueTokens)
+            // Tenant filter: tenant-specific OR global (NULL)
+            ->where(function ($q) use ($tenantId) {
+                $q->where('tenant_id', $tenantId)
+                  ->orWhereNull('tenant_id');
+            })
             ->when($language, function ($q) use ($language) {
                 $q->where(function ($q2) use ($language) {
                     $q2->whereNull('language')->orWhere('language', $language);
@@ -73,6 +80,11 @@ class QueryExpander
             $allProductTypeSynonyms = ProductSynonym::query()
                 ->where('is_active', true)
                 ->whereIn('product_type', $matchedProductTypes)
+                // Tenant filter: tenant-specific OR global (NULL)
+                ->where(function ($q) use ($tenantId) {
+                    $q->where('tenant_id', $tenantId)
+                      ->orWhereNull('tenant_id');
+                })
                 ->when($language, function ($q) use ($language) {
                     $q->where(function ($q2) use ($language) {
                         $q2->whereNull('language')->orWhere('language', $language);

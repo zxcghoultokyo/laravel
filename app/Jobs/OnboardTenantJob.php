@@ -20,7 +20,8 @@ use Illuminate\Support\Facades\Log;
  * 2. Rebuild categories
  * 3. Sync brands
  * 4. Start AI enrichment (ALL products)
- * 5. Reindex in Meilisearch
+ * 5. Generate product synonyms for search
+ * 6. Reindex in Meilisearch
  * 
  * @see docs/TENANT_ONBOARDING.md
  */
@@ -68,7 +69,10 @@ class OnboardTenantJob implements ShouldQueue
             // 4. Start AI enrichment for ALL products
             $this->runAiEnrichment();
             
-            // 5. Reindex in Meilisearch
+            // 5. Generate product synonyms for search
+            $this->generateSynonyms();
+            
+            // 6. Reindex in Meilisearch
             $this->reindexMeili();
             
             // Mark onboarding as completed
@@ -445,6 +449,74 @@ class OnboardTenantJob implements ShouldQueue
             
             $this->progress->updateStep('meili_indexing', 'completed', 100,
                 'Індексація пропущена (Meilisearch недоступний)',
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
+
+    /**
+     * Generate product synonyms for improved search
+     * Uses AI to create synonyms from category paths
+     */
+    protected function generateSynonyms(): void
+    {
+        $this->progress->updateStep('synonyms_generation', 'in_progress', 0, 'Витягування типів товарів...');
+
+        // Get unique category paths count for this tenant
+        $categoryCount = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $this->tenantId)
+            ->whereNotNull('category_path')
+            ->where('category_path', '!=', '')
+            ->distinct('category_path')
+            ->count('category_path');
+
+        if ($categoryCount === 0) {
+            $this->progress->updateStep('synonyms_generation', 'completed', 100,
+                'Категорії не знайдені, пропускаємо генерацію синонімів',
+                ['categories_count' => 0]
+            );
+            return;
+        }
+
+        Log::info('OnboardTenantJob: Generating synonyms', [
+            'tenant_id' => $this->tenantId,
+            'category_count' => $categoryCount,
+        ]);
+
+        $this->progress->updateStep('synonyms_generation', 'in_progress', 30, 
+            "Генерація синонімів для {$categoryCount} категорій через AI...");
+
+        try {
+            // Run synonyms generation via artisan command
+            \Illuminate\Support\Facades\Artisan::call('synonyms:products', [
+                '--tenant' => $this->tenantId,
+                '--force' => false,
+            ]);
+
+            $this->progress->updateStep('synonyms_generation', 'in_progress', 80, 'Збереження синонімів...');
+
+            // Count generated synonyms
+            $synonymsCount = \App\Models\ProductSynonym::where('tenant_id', $this->tenantId)->count();
+
+            $this->progress->updateStep('synonyms_generation', 'completed', 100,
+                "Згенеровано {$synonymsCount} синонімів для {$categoryCount} категорій",
+                ['synonyms_count' => $synonymsCount, 'categories_count' => $categoryCount]
+            );
+
+            Log::info('OnboardTenantJob: Synonyms generated', [
+                'tenant_id' => $this->tenantId,
+                'synonyms_count' => $synonymsCount,
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::warning('OnboardTenantJob: Synonyms generation failed, continuing', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
+
+            // Don't fail the whole onboarding, just mark as completed with warning
+            $this->progress->updateStep('synonyms_generation', 'completed', 100,
+                'Генерація синонімів пропущена (помилка AI)',
                 ['error' => $e->getMessage()]
             );
         }

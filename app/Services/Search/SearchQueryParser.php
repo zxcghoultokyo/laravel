@@ -11,7 +11,7 @@ class SearchQueryParser
     {
     }
 
-    public function parse(string $rawQuery, string $language = 'uk', ?string $domain = null): array
+    public function parse(string $rawQuery, string $language = 'uk', ?string $domain = null, ?int $tenantId = null): array
     {
         $normalized = mb_strtolower(trim($rawQuery));
         if ($normalized === '') {
@@ -25,14 +25,14 @@ class SearchQueryParser
             ];
         }
 
-        $expanded = $this->expander->expandQueryWithDomainSynonyms($normalized, $language, $domain);
+        $expanded = $this->expander->expandQueryWithDomainSynonyms($normalized, $language, $domain, $tenantId);
         [$price, $withoutPrice] = $this->extractPriceFilters($expanded);
         $expanded = $withoutPrice !== '' ? $withoutPrice : $expanded;
 
         $tokens = preg_split('/\s+/u', $expanded) ?: [];
         $tokens = array_values(array_unique(array_filter($tokens, fn ($t) => $t !== '')));
 
-        $signals = $this->detectSignalsFromDb($tokens, $language, $domain);
+        $signals = $this->detectSignalsFromDb($tokens, $language, $domain, $tenantId);
 
         return [
             'raw' => $rawQuery,
@@ -63,7 +63,7 @@ class SearchQueryParser
         return [$price, trim(preg_replace('/\s+/u', ' ', $query))];
     }
 
-    protected function detectSignalsFromDb(array $tokens, string $language = 'uk', ?string $domain = null): array
+    protected function detectSignalsFromDb(array $tokens, string $language = 'uk', ?string $domain = null, ?int $tenantId = null): array
     {
         if (empty($tokens)) {
             return ['product_types' => [], 'color_groups' => [], 'color_synonyms_map' => []];
@@ -72,6 +72,11 @@ class SearchQueryParser
         $matchedProductTypes = ProductSynonym::query()
             ->where('is_active', true)
             ->whereIn('synonym', $tokens)
+            // Tenant filter: tenant-specific OR global (NULL)
+            ->where(function ($q) use ($tenantId) {
+                $q->where('tenant_id', $tenantId)
+                  ->orWhereNull('tenant_id');
+            })
             ->when($language, function ($q) use ($language) {
                 $q->where(function ($q2) use ($language) {
                     $q2->whereNull('language')->orWhere('language', $language);

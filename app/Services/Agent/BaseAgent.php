@@ -1933,14 +1933,20 @@ PROMPT;
 
     /**
      * Get product type synonyms from DB.
+     * Includes both tenant-specific and global synonyms.
      */
     protected function getProductTypeSynonyms(string $productType): array
     {
-        $cacheKey = 'product_type_synonyms:' . md5($productType);
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cacheKey = 'product_type_synonyms:' . ($tenantId ?? 'global') . ':' . md5($productType);
 
-        return Cache::remember($cacheKey, 3600, function () use ($productType) {
-            $synonyms = ProductSynonym::where('product_type', $productType)
-                ->orWhere('synonym', $productType)
+        return Cache::remember($cacheKey, 3600, function () use ($productType, $tenantId) {
+            // Use forTenant() which returns tenant-specific + global (NULL) synonyms
+            $synonyms = ProductSynonym::forTenant($tenantId)
+                ->where(function ($q) use ($productType) {
+                    $q->where('product_type', $productType)
+                      ->orWhere('synonym', $productType);
+                })
                 ->pluck('synonym')
                 ->toArray();
 

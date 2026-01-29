@@ -392,58 +392,90 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 1. "product_type": основний тип товару англійською (ОБОВ'ЯЗКОВО!)
    
-   КРИТИЧНО ДЛЯ ШОЛОМІВ ТА АКСЕСУАРІВ - РОЗРІЗНЯЙ:
-   - "helmet" - ТІЛЬКИ справжні балістичні/тактичні шоломи (Ops-Core, MICH, ACH, FAST)
+   КРИТИЧНО - РОЗРІЗНЯЙ ОСНОВНИЙ ТОВАР від АКСЕСУАРІВ:
+   
+   ШОЛОМИ:
+   - "helmet" - ТІЛЬКИ справжні балістичні/тактичні шоломи
    - "helmet_cover" - кавери, чохли на шолом
    - "helmet_pads" - подушки, накладки всередину шолома
-   - "helmet_mount" - кріплення, адаптери, планки Пікатінні НА шолом
-   - "helmet_accessory" - інші аксесуари для шоломів (ремінці, velcro панелі)
+   - "helmet_mount" - кріплення, адаптери, планки НА шолом
+   - "helmet_accessory" - інші аксесуари для шоломів
    
-   КРИТИЧНО ДЛЯ ПЛИТОНОСОК ТА АКСЕСУАРІВ - РОЗРІЗНЯЙ:
+   ПЛИТОНОСКИ:
    - "plate_carrier" - ТІЛЬКИ справжні плитоноски/бронежилети
-   - "plate_carrier_accessory" - підсумки, панелі, cummerbund-и ДЛЯ плитоносок
+   - "pouch" - підсумки для магазинів, медичні, утилітарні
    - "armor_plate" - бронеплити
    - "side_plate" - бокові плити
    
-   Інші приклади типів:
-   - Військове: boots, pouch, gloves, uniform, backpack, holster, tourniquet
-   - Електроніка: smartphone, laptop, tablet, headphones, smartwatch, camera, tv, speaker
-   - Одяг: jacket, pants, shirt, dress, shoes, sneakers, coat, hoodie
-   - Дім: furniture, lamp, mattress, pillow, kitchenware, decor
-   - Інше: toy, book, cosmetics, food, tool, sport_equipment
+   ВІЙСЬКОВЕ/ТАКТИЧНЕ:
+   - boots, gloves, uniform, backpack, holster, tourniquet, first_aid_kit, radio, flashlight, knife
+   
+   ЕЛЕКТРОНІКА:
+   - smartphone, laptop, tablet, headphones, earbuds, smartwatch, camera, tv, speaker, charger, cable, powerbank
+   - phone_case, screen_protector, laptop_bag - АКСЕСУАРИ!
+   
+   ОДЯГ:
+   - jacket, pants, shirt, dress, skirt, shoes, sneakers, coat, hoodie, sweater, t_shirt, jeans
+   - belt, scarf, hat, gloves_fashion, socks - АКСЕСУАРИ одягу
+   
+   КОСМЕТИКА/КРАСА:
+   - perfume, lipstick, mascara, foundation, skincare, shampoo, conditioner, nail_polish, makeup_brush
+   
+   ДИТЯЧЕ:
+   - toy, stroller, baby_clothes, diaper, feeding_bottle, pacifier, crib
+   
+   ДІМ:
+   - furniture, sofa, bed, table, chair, lamp, mattress, pillow, blanket, curtain, rug
+   - kitchenware, pan, pot, knife_kitchen, plates, cups
+   - decor, vase, picture_frame, candle
+   
+   СПОРТ:
+   - bicycle, treadmill, dumbbell, yoga_mat, sports_shoes, sportswear, gym_bag, fitness_tracker
+   
+   ЇЖА/НАПОЇ:
+   - coffee, tea, chocolate, snack, supplement, vitamin
+   
+   КНИГИ/КАНЦЕЛЯРІЯ:
+   - book, notebook, pen, pencil, backpack_school
+   
+   ІНСТРУМЕНТИ:
+   - drill, hammer, screwdriver, saw, measuring_tape, toolbox
 
 2. "ai_category": загальна категорія англійською (ОБОВ'ЯЗКОВО!)
-   ВАЖЛИВО: Аксесуари мають категорію "accessories", НЕ категорію основного товару!
-   - helmet → armor
-   - helmet_cover, helmet_pads, helmet_mount → accessories
-   - plate_carrier → armor
-   - plate_carrier_accessory, pouch → accessories
-   Інші: apparel, footwear, bags, optics, electronics, home, beauty, sports, kids, food
+   ВАЖЛИВО: Аксесуари мають категорію "accessories"!
+   Категорії: armor, apparel, footwear, accessories, bags, optics, electronics, home, 
+              beauty, sports, kids, food, books, tools, automotive, pets, garden
 
 3. "keywords": масив 10-20 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку.
    Включи: назву, бренд, тип, призначення, характеристики, синоніми.
-   Приклад для iPhone: ["iphone", "айфон", "смартфон", "телефон", "apple", "мобільний", "smartphone", "phone"]
-   Приклад для плитоноски: ["плитоноска", "plate carrier", "бронежилет", "тактичний жилет", "molle"]
+   Приклади:
+   - Телефон: ["iphone", "айфон", "смартфон", "телефон", "apple", "smartphone"]
+   - Крем: ["крем для обличчя", "зволожуючий", "moisturizer", "skincare", "догляд"]
+   - Кросівки: ["кросівки", "nike", "найк", "sneakers", "спортивне взуття", "running"]
 
-4. "slang": масив 5-10 сленгових/жаргонних назв УКРАЇНСЬКОЮ як шукають реальні люди.
-   Приклад для iPhone: ["яблуко", "айфончик", "телефон", "мобілка", "труба"]
-   Приклад для плитоноски: ["плитка", "бронік", "броня", "жилетка", "pc"]
-   Приклад для ноутбука: ["ноут", "бук", "лептоп", "комп"]
+4. "slang": масив 5-10 сленгових назв УКРАЇНСЬКОЮ як шукають реальні люди.
+   Приклади:
+   - Телефон: ["мобілка", "труба", "телефончик", "звонилка"]
+   - Ноутбук: ["ноут", "бук", "лептоп", "комп"]
+   - Кросівки: ["кроси", "тапки", "найки", "сніки"]
+   - Навушники: ["вуха", "наушники", "подси", "ейрподси"]
+   - Плитоноска: ["плитка", "бронік", "броня", "pc"]
 
 5. "synonyms": масив синонімів назви товару (варіанти написання, переклади)
 
 6. "search_queries": масив 5-10 ТИПОВИХ ПОШУКОВИХ ЗАПИТІВ українською як їх пише користувач.
    Приклад: ["купити iphone", "який телефон краще", "смартфон до 20000", "телефон для мами"]
 
-7. "materials": масив матеріалів якщо є (glass, aluminum, plastic, cordura, nylon, leather, etc)
+7. "materials": масив матеріалів якщо є (glass, aluminum, plastic, cordura, nylon, leather, cotton, etc)
 
-8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, ДСТУ, etc)
+8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, ДСТУ, ISO, CE, etc)
 
-9. "usage": масив призначення (everyday, work, gaming, sport, travel, gift, professional, etc)
+9. "usage": масив призначення (everyday, work, gaming, sport, travel, gift, professional, military, outdoor, etc)
 
 КРИТИЧНО ВАЖЛИВО:
 - product_type та ai_category ОБОВ'ЯЗКОВІ - НІКОЛИ не повертай null!
-- АКСЕСУАРИ завжди мають окремий product_type (helmet_mount, helmet_pads, NOT helmet!)
+- АКСЕСУАРИ завжди мають окремий product_type (phone_case, helmet_mount, NOT smartphone, NOT helmet!)
+- Якщо категорія містить "Аксесуар" - це ТОЧНО аксесуар, встанови відповідний тип
 - Визнач тип товару з назви та категорії навіть якщо опис порожній
 - Всі ключові слова МАЛИМИ ЛІТЕРАМИ
 - Keywords має включати СИНОНІМИ та ПЕРЕКЛАДИ (укр + англ)

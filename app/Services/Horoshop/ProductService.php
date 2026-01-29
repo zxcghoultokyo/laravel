@@ -673,8 +673,17 @@ class ProductService
         $expandedTokens = $baseTokens;
 
         // 1) product_synonyms: synonym -> product_type (канонічний “токен”)
+        
+        // Get tenant ID from context
+        $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
+        
+        // Includes both tenant-specific and global (tenant_id = NULL) synonyms
         $synonyms = ProductSynonym::query()
             ->whereIn('synonym', $baseTokens)
+            ->where(function ($q) use ($tenantId) {
+                $q->where('tenant_id', $tenantId)
+                  ->orWhereNull('tenant_id');
+            })
             ->where(function ($q) use ($language) {
                 $q->whereNull('language')->orWhere('language', $language);
             })
@@ -751,7 +760,11 @@ class ProductService
         // 2) Парсимо запит (синоніми, ціни, сигнали)
         /** @var \App\Services\Search\SearchQueryParser $parser */
         $parser = app(\App\Services\Search\SearchQueryParser::class);
-        $parsed = $parser->parse($rawQuery, $language, null);
+        
+        // Get tenant ID from context
+        $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
+        
+        $parsed = $parser->parse($rawQuery, $language, null, $tenantId);
 
         if (($parsed['normalized'] ?? '') === '') {
             return [];

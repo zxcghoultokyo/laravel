@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Ai\AiRouter;
 use App\Services\Horoshop\ProductService;
 use App\Services\Search\ProductSearchEngine;
+use App\Services\Tenant\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -41,8 +42,11 @@ class ProductSearchController extends Controller
 
         /** @var \App\Services\Search\SearchQueryParser $parser */
         $parser = app(\App\Services\Search\SearchQueryParser::class);
+        
+        // Get tenant ID from context
+        $tenantId = app(TenantContext::class)->getTenantId();
 
-        $parsed = $parser->parse($q, $language, null);
+        $parsed = $parser->parse($q, $language, null, $tenantId);
         if (($parsed['normalized'] ?? '') === '') {
             return response()->json([
                 'type' => 'products',

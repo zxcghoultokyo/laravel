@@ -246,6 +246,11 @@ class MeiliProductSearchTool
             // Apply contextual accessory filtering
             $filtered = $this->filterAccessories($hits, $query);
             
+            // Filter products where search term only appears in description, not in title/category
+            // This prevents "куртка" from appearing in "термобілизна" search results just because
+            // the jacket description mentions "в комбінації з термобілизною"
+            $filtered = $this->filterByTitleRelevance($filtered, $enhancedQuery);
+            
             // Filter side plates when user asks for main plates (not "бокові")
             $filtered = $this->filterSidePlates($filtered, $query);
 
@@ -443,6 +448,108 @@ class MeiliProductSearchTool
             if ($matched) {
                 $filtered[] = $hit;
             }
+        }
+        
+        return $filtered;
+    }
+
+    /**
+     * Filter products where search term only appears in description but NOT in title/category.
+     * 
+     * This prevents products from appearing in search results when the search term is only
+     * mentioned tangentially in the description (e.g., jacket description mentioning
+     * "в комбінації з термобілизною" should not appear in search for "термобілизна").
+     * 
+     * Products where the search term appears in title, category_path, or ai_keywords are kept.
+     */
+    private function filterByTitleRelevance(array $hits, string $query): array
+    {
+        if (empty($hits) || empty($query)) {
+            return $hits;
+        }
+        
+        $queryLower = mb_strtolower(trim($query));
+        $queryWords = preg_split('/\s+/', $queryLower);
+        
+        // Only filter for single-word product type queries
+        // Multi-word queries (like "чорна плитоноска") need different handling
+        if (count($queryWords) > 2) {
+            return $hits;
+        }
+        
+        // Define product-type specific terms that should be in title/category
+        // If query contains these terms, the product title/category should also contain them
+        $productTypeTerms = [
+            'термобілизна' => ['термобілизна', 'термобілизни', 'термо', 'level 1', 'level 2', 'ecwcs'],
+            'навушники' => ['навушники', 'навушників', 'гарнітура', 'peltor', 'комтак', 'comtac', 'earmor', 'sordin'],
+            'рукавички' => ['рукавички', 'рукавиць', 'перчатки', 'gloves'],
+            'шкарпетки' => ['шкарпетки', 'шкарпеток', 'socks'],
+            'шолом' => ['шолом', 'каска', 'helmet', 'fast', 'mich'],
+            'плитоноска' => ['плитоноска', 'плитоносці', 'plate carrier', 'бронежилет', 'жилет'],
+            'турнікет' => ['турнікет', 'джгут', 'cat', 'sof', 'tq'],
+            'рюкзак' => ['рюкзак', 'рюкзака', 'backpack', 'сумка'],
+        ];
+        
+        // Check if query contains any product type term
+        $relevantTerms = null;
+        foreach ($productTypeTerms as $term => $variants) {
+            foreach ($variants as $variant) {
+                if (str_contains($queryLower, $variant)) {
+                    $relevantTerms = $variants;
+                    break 2;
+                }
+            }
+        }
+        
+        // If query doesn't match any product type, don't filter
+        if (!$relevantTerms) {
+            return $hits;
+        }
+        
+        $filtered = [];
+        $removed = [];
+        
+        foreach ($hits as $hit) {
+            $title = mb_strtolower($hit['title'] ?? '');
+            $category = mb_strtolower($hit['category_path'] ?? '');
+            $aiKeywords = mb_strtolower($hit['ai_keywords'] ?? '');
+            $aiSlang = mb_strtolower($hit['ai_slang'] ?? '');
+            
+            // Check if any relevant term appears in title, category, or AI fields
+            $foundInRelevantField = false;
+            foreach ($relevantTerms as $term) {
+                if (str_contains($title, $term) || 
+                    str_contains($category, $term) ||
+                    str_contains($aiKeywords, $term) ||
+                    str_contains($aiSlang, $term)) {
+                    $foundInRelevantField = true;
+                    break;
+                }
+            }
+            
+            if ($foundInRelevantField) {
+                $filtered[] = $hit;
+            } else {
+                $removed[] = $hit['title'] ?? 'unknown';
+            }
+        }
+        
+        // If we filtered out everything, return original results
+        if (empty($filtered)) {
+            Log::info('MeiliProductSearchTool: filterByTitleRelevance would remove all results, keeping originals', [
+                'query' => $query,
+                'hits_count' => count($hits),
+            ]);
+            return $hits;
+        }
+        
+        if (!empty($removed)) {
+            Log::info('MeiliProductSearchTool: filterByTitleRelevance removed products', [
+                'query' => $query,
+                'removed_count' => count($removed),
+                'removed_titles' => array_slice($removed, 0, 3),
+                'kept_count' => count($filtered),
+            ]);
         }
         
         return $filtered;

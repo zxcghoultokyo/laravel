@@ -92,9 +92,19 @@ class MeiliProductSearchTool
             // Since variants (size/color) are separate docs, we need 5x to get enough unique models
             $meiliLimit = $limit * 5;
             
+            // First: transliterate cyrillic brand names to latin (e.g., "опс кор" → "Ops-Core")
+            $normalizedQuery = $this->brandDetection->normalizeBrandsInQuery($query);
+            
             // Detect brand in query and enhance search
-            $brandInfo = $this->brandDetection->detectBrand($query);
-            $enhancedQuery = $this->expandQuerySynonyms($brandInfo['enhanced_query'] ?? $query);
+            $brandInfo = $this->brandDetection->detectBrand($normalizedQuery);
+            $enhancedQuery = $this->expandQuerySynonyms($brandInfo['enhanced_query'] ?? $normalizedQuery);
+            
+            Log::debug('MeiliProductSearchTool: brand normalization', [
+                'original' => $query,
+                'normalized' => $normalizedQuery,
+                'enhanced' => $enhancedQuery,
+                'brand_detected' => $brandInfo['brand'] ?? null,
+            ]);
             
             // Build filter string
             $filterParts = [];

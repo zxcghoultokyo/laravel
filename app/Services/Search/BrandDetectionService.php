@@ -18,6 +18,9 @@ class BrandDetectionService
         'опс коре' => 'Ops-Core',
         'опскор' => 'Ops-Core',
         'опс-кор' => 'Ops-Core',
+        'опс кор' => 'Ops-Core',
+        'ops core' => 'Ops-Core',
+        'opscore' => 'Ops-Core',
         // SESTAN BUSCH
         'сестан буш' => 'SESTAN BUSCH',
         'сестан' => 'SESTAN BUSCH',

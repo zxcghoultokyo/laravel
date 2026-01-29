@@ -51,6 +51,16 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\Search\BrandDetectionService();
         });
         
+        // SlangDictionaryService
+        $this->app->singleton(\App\Services\Search\SlangDictionaryService::class, function ($app) {
+            return new \App\Services\Search\SlangDictionaryService();
+        });
+        
+        // QueryPreprocessorService - normalizes queries before GPT (slang, brands, FAQ detection)
+        $this->app->singleton(\App\Services\Search\QueryPreprocessorService::class, function ($app) {
+            return new \App\Services\Search\QueryPreprocessorService();
+        });
+        
         // HoroshopService (обгортка над клієнтом, якщо він у тебе є)
         $this->app->singleton(HoroshopService::class, function ($app) {
             return new HoroshopService(

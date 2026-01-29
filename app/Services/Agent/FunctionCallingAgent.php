@@ -5,6 +5,7 @@ namespace App\Services\Agent;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
+use App\Services\Search\QueryPreprocessorService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -17,12 +18,15 @@ use Illuminate\Support\Facades\Log;
  */
 class FunctionCallingAgent extends BaseAgent
 {
+    protected QueryPreprocessorService $queryPreprocessor;
+    
     public function __construct(
         MeiliProductSearchTool $searchTool,
         ProductDetailsTool $detailsTool,
         OrderSearchService $orderSearchService
     ) {
         parent::__construct($searchTool, $detailsTool, $orderSearchService);
+        $this->queryPreprocessor = app(QueryPreprocessorService::class);
     }
 
     /**
@@ -38,9 +42,44 @@ class FunctionCallingAgent extends BaseAgent
 
         Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId, 'tenant_id' => $tenantId]);
 
+        // PRE-PROCESS: Normalize slang, brands, detect FAQ/greetings
+        $preprocessed = $this->queryPreprocessor->preprocess($message);
+        
+        if ($preprocessed['intercepted']) {
+            Log::info('FunctionCallingAgent: query intercepted by preprocessor', [
+                'message' => $message,
+                'type' => $preprocessed['response_type'],
+            ]);
+            
+            // Log assistant response
+            $this->logAssistantMessage($sessionId, $preprocessed['response'], [], $preprocessed['response_type']);
+            
+            return [
+                'type' => 'text',
+                'message' => $preprocessed['response'],
+                'products' => [],
+                'meta' => [
+                    'intercepted' => true,
+                    'type' => $preprocessed['response_type'],
+                ],
+            ];
+        }
+        
+        // Use normalized query for further processing
+        $normalizedMessage = $preprocessed['query'];
+        
+        if ($normalizedMessage !== $message) {
+            Log::info('FunctionCallingAgent: query normalized', [
+                'original' => $message,
+                'normalized' => $normalizedMessage,
+                'slang' => $preprocessed['detected_slang'],
+                'brand' => $preprocessed['detected_brand'],
+            ]);
+        }
+
         // PRE-PROCESS: Handle follow-up questions about previously shown products
         // These should NOT trigger search, but answer from context
-        $followUpResult = $this->handleFollowUpQuestion($message, $sessionId);
+        $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
         if ($followUpResult) {
             // Log and save to DB
             $this->logAssistantMessage(
@@ -53,7 +92,7 @@ class FunctionCallingAgent extends BaseAgent
         }
 
         // PRE-PROCESS: Detect implicit queries and search directly
-        $implicitSearchResult = $this->handleImplicitQuery($message, $sessionId);
+        $implicitSearchResult = $this->handleImplicitQuery($normalizedMessage, $sessionId);
         if ($implicitSearchResult) {
             return $implicitSearchResult;
         }
@@ -62,20 +101,20 @@ class FunctionCallingAgent extends BaseAgent
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
 
         // Build conversation history
-        $messages = $this->buildMessages($message, $context);
+        $messages = $this->buildMessages($normalizedMessage, $context);
 
         // Call GPT with tools
         $response = $this->callGptWithTools($messages);
 
         if (!$response) {
-            return $this->fallbackResponse($message);
+            return $this->fallbackResponse($normalizedMessage);
         }
 
         // Process tool calls if any
         $toolCalls = $response['choices'][0]['message']['tool_calls'] ?? null;
 
         if ($toolCalls) {
-            return $this->handleToolCalls($toolCalls, $messages, $message, $sessionId);
+            return $this->handleToolCalls($toolCalls, $messages, $normalizedMessage, $sessionId);
         }
 
         // Direct text response (small talk, FAQ, follow-up questions)

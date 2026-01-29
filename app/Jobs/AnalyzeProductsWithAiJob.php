@@ -391,15 +391,34 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 Згенеруй JSON з полями:
 
 1. "product_type": основний тип товару англійською (ОБОВ'ЯЗКОВО!)
-   Приклади:
-   - Військове: plate_carrier, helmet, boots, pouch, gloves, uniform, backpack, holster
+   
+   КРИТИЧНО ДЛЯ ШОЛОМІВ ТА АКСЕСУАРІВ - РОЗРІЗНЯЙ:
+   - "helmet" - ТІЛЬКИ справжні балістичні/тактичні шоломи (Ops-Core, MICH, ACH, FAST)
+   - "helmet_cover" - кавери, чохли на шолом
+   - "helmet_pads" - подушки, накладки всередину шолома
+   - "helmet_mount" - кріплення, адаптери, планки Пікатінні НА шолом
+   - "helmet_accessory" - інші аксесуари для шоломів (ремінці, velcro панелі)
+   
+   КРИТИЧНО ДЛЯ ПЛИТОНОСОК ТА АКСЕСУАРІВ - РОЗРІЗНЯЙ:
+   - "plate_carrier" - ТІЛЬКИ справжні плитоноски/бронежилети
+   - "plate_carrier_accessory" - підсумки, панелі, cummerbund-и ДЛЯ плитоносок
+   - "armor_plate" - бронеплити
+   - "side_plate" - бокові плити
+   
+   Інші приклади типів:
+   - Військове: boots, pouch, gloves, uniform, backpack, holster, tourniquet
    - Електроніка: smartphone, laptop, tablet, headphones, smartwatch, camera, tv, speaker
    - Одяг: jacket, pants, shirt, dress, shoes, sneakers, coat, hoodie
    - Дім: furniture, lamp, mattress, pillow, kitchenware, decor
    - Інше: toy, book, cosmetics, food, tool, sport_equipment
 
 2. "ai_category": загальна категорія англійською (ОБОВ'ЯЗКОВО!)
-   Приклади: armor, apparel, footwear, accessories, bags, optics, electronics, home, beauty, sports, kids, food
+   ВАЖЛИВО: Аксесуари мають категорію "accessories", НЕ категорію основного товару!
+   - helmet → armor
+   - helmet_cover, helmet_pads, helmet_mount → accessories
+   - plate_carrier → armor
+   - plate_carrier_accessory, pouch → accessories
+   Інші: apparel, footwear, bags, optics, electronics, home, beauty, sports, kids, food
 
 3. "keywords": масив 10-20 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку.
    Включи: назву, бренд, тип, призначення, характеристики, синоніми.
@@ -424,6 +443,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 КРИТИЧНО ВАЖЛИВО:
 - product_type та ai_category ОБОВ'ЯЗКОВІ - НІКОЛИ не повертай null!
+- АКСЕСУАРИ завжди мають окремий product_type (helmet_mount, helmet_pads, NOT helmet!)
 - Визнач тип товару з назви та категорії навіть якщо опис порожній
 - Всі ключові слова МАЛИМИ ЛІТЕРАМИ
 - Keywords має включати СИНОНІМИ та ПЕРЕКЛАДИ (укр + англ)

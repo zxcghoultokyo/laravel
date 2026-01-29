@@ -5,6 +5,7 @@ namespace App\Services\Agent;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Horoshop\OrderSearchService;
+use App\Services\Search\QueryPreprocessorService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Generator;
@@ -25,12 +26,15 @@ use Generator;
  */
 class StreamingFunctionCallingAgent extends BaseAgent
 {
+    protected QueryPreprocessorService $queryPreprocessor;
+    
     public function __construct(
         MeiliProductSearchTool $searchTool,
         ProductDetailsTool $detailsTool,
         OrderSearchService $orderSearchService
     ) {
         parent::__construct($searchTool, $detailsTool, $orderSearchService);
+        $this->queryPreprocessor = app(QueryPreprocessorService::class);
     }
 
     /**
@@ -48,8 +52,42 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Log user message to DB
         $this->logUserMessage($sessionId, $message);
 
+        // PRE-PROCESS: Normalize slang, brands, detect FAQ/greetings
+        $preprocessed = $this->queryPreprocessor->preprocess($message);
+        
+        if ($preprocessed['intercepted']) {
+            Log::info('StreamingAgent: query intercepted by preprocessor', [
+                'message' => $message,
+                'type' => $preprocessed['response_type'],
+            ]);
+            
+            yield ['type' => 'text', 'data' => ['text' => $preprocessed['response']]];
+            
+            // Log assistant response
+            $this->logAssistantMessage($sessionId, $preprocessed['response'], [], $preprocessed['response_type']);
+            
+            yield ['type' => 'done', 'data' => ['meta' => [
+                'intercepted' => true,
+                'type' => $preprocessed['response_type'],
+            ]]];
+            return;
+        }
+        
+        // Use normalized query for further processing
+        $normalizedMessage = $preprocessed['query'];
+        $originalMessage = $message;
+        
+        if ($normalizedMessage !== $message) {
+            Log::info('StreamingAgent: query normalized', [
+                'original' => $message,
+                'normalized' => $normalizedMessage,
+                'slang' => $preprocessed['detected_slang'],
+                'brand' => $preprocessed['detected_brand'],
+            ]);
+        }
+
         // PRE-PROCESS: Handle follow-up questions about previously shown products
-        $followUpResult = $this->handleFollowUpQuestion($message, $sessionId);
+        $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
         if ($followUpResult) {
             Log::info('StreamingAgent: follow-up question handled directly', [
                 'message' => $message,
@@ -69,10 +107,10 @@ class StreamingFunctionCallingAgent extends BaseAgent
         }
 
         // PRE-PROCESS: Handle implicit queries directly
-        $implicitResult = $this->handleImplicitQuery($message, $sessionId);
+        $implicitResult = $this->handleImplicitQuery($normalizedMessage, $sessionId);
         if ($implicitResult) {
             Log::info('StreamingAgent: implicit query handled directly', [
-                'message' => $message,
+                'message' => $normalizedMessage,
                 'products_found' => count($implicitResult['products'] ?? []),
             ]);
             
@@ -101,7 +139,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
 
         if (empty($this->apiKey)) {
             Log::warning('StreamingAgent: no API key, using fallback');
-            yield from $this->fallbackStream($message);
+            yield from $this->fallbackStream($normalizedMessage);
             return;
         }
 
@@ -109,7 +147,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         $history = $this->loadConversationHistory($sessionId);
         
         // Check if this is a fresh/new query (not a follow-up)
-        $isFreshQuery = $this->isFreshQuery($message, $history);
+        $isFreshQuery = $this->isFreshQuery($normalizedMessage, $history);
         $conversationContext = $isFreshQuery ? '' : $this->extractConversationContext($history);
         
         // Load detailed product info for follow-up questions
@@ -119,7 +157,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
         
         // Set current message for modular prompt building
-        $this->currentMessage = $message;
+        $this->currentMessage = $normalizedMessage;
         $this->currentContext['has_history'] = !empty($history);
 
         Log::info('StreamingAgent: loaded history', [
@@ -137,7 +175,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         ];
 
         // Detect trigger query
-        $isTriggerQuery = $this->detectTriggerQuery($message);
+        $isTriggerQuery = $this->detectTriggerQuery($normalizedMessage);
         if ($isTriggerQuery) {
             $this->currentContext['is_trigger'] = true;
             $messages[] = [
@@ -195,7 +233,7 @@ CONTEXT;
         }
 
         // Add current message
-        $messages[] = ['role' => 'user', 'content' => $message];
+        $messages[] = ['role' => 'user', 'content' => $normalizedMessage];
 
         yield ['type' => 'status', 'data' => ['text' => 'Аналізую запит...', 'phase' => 'thinking']];
 
@@ -203,7 +241,7 @@ CONTEXT;
         $response = $this->callGptWithTools($messages);
 
         if (!$response) {
-            yield from $this->fallbackStream($message);
+            yield from $this->fallbackStream($normalizedMessage);
             return;
         }
 
@@ -226,7 +264,7 @@ CONTEXT;
                 
                 // CRITICAL: Inject category context for follow-up queries like "дешевше", "ще", "аналоги"
                 if ($functionName === 'search_products' && $lastCategory) {
-                    $args = $this->injectCategoryContext($args, $message, $lastCategory);
+                    $args = $this->injectCategoryContext($args, $normalizedMessage, $lastCategory);
                 }
 
                 Log::info('StreamingAgent: executing tool', [
@@ -304,7 +342,7 @@ CONTEXT;
 
             // Personalize intro text
             $introText = $structured['intro'] ?? '';
-            $introText = $this->personalizeIntro($introText, $message, $allProducts);
+            $introText = $this->personalizeIntro($introText, $normalizedMessage, $allProducts);
             
             $responseText = $introText ?: $collectedText;
             $responseProducts = $structured['products'] ?? [];
@@ -330,7 +368,7 @@ CONTEXT;
             // Generate outro for trigger queries if needed (pass responseText to avoid duplication)
             $outro = $structured['outro'] ?? null;
             if ($isTriggerQuery && !empty($allProducts) && empty($outro)) {
-                $outro = $this->generateTriggerOutro($allProducts, $responseText, $message);
+                $outro = $this->generateTriggerOutro($allProducts, $responseText, $normalizedMessage);
             }
 
             if (!empty($outro)) {

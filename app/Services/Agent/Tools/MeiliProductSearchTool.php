@@ -360,12 +360,24 @@ class MeiliProductSearchTool
             'dominant_count' => $dominantCount,
         ]);
         
-        // Use ai_product_type to determine what's an accessory
-        // Products with ai_product_type containing these patterns are typically accessories
-        // This relies on AI enrichment naming conventions, not hardcoded product lists
-        $isAccessoryType = function($type) {
+        // Use ai_product_type AND category_path to determine what's an accessory
+        // Combines AI enrichment types with category structure for better accuracy
+        $isAccessoryType = function($type, ?string $categoryPath = null) {
             if (empty($type) || $type === '__unknown__') return true;
             $t = mb_strtolower($type);
+            
+            // Check category_path first - most reliable indicator
+            // "Аксесуари на шоломи" contains accessories, not actual helmets
+            if ($categoryPath) {
+                $catLower = mb_strtolower($categoryPath);
+                if (str_contains($catLower, 'аксесуар')) {
+                    return true;
+                }
+                if (str_contains($catLower, 'комплектуюч')) {
+                    return true;
+                }
+            }
+            
             // AI enrichment marks accessories with these patterns in ai_product_type
             return str_contains($t, 'accessory') 
                 || str_contains($t, 'adapter')
@@ -373,32 +385,52 @@ class MeiliProductSearchTool
                 || str_contains($t, 'strap')
                 || str_contains($t, 'cover')
                 || str_contains($t, 'patch')
+                || str_contains($t, '_pads')   // helmet_pads, etc
                 || str_starts_with($t, 'side_');
         };
         
-        // If dominant type is NOT an accessory and we have 3+ of them, filter accessories
-        if (!$isAccessoryType($dominantType) && $dominantCount >= 3) {
+        // Recount with proper category-aware detection
+        $mainCount = 0;
+        $accessoryCount = 0;
+        foreach ($hits as $hit) {
+            $type = $hit['ai_product_type'] ?? '__unknown__';
+            $cat = $hit['category_path'] ?? null;
+            if ($isAccessoryType($type, $cat)) {
+                $accessoryCount++;
+            } else {
+                $mainCount++;
+            }
+        }
+        
+        Log::info('MeiliProductSearchTool: filterAccessories revised analysis', [
+            'query' => $query,
+            'main_count' => $mainCount,
+            'accessory_count' => $accessoryCount,
+        ]);
+        
+        // If we have at least 2 main products, filter out accessories
+        if ($mainCount >= 2) {
             $filtered = array_filter($hits, function ($hit) use ($isAccessoryType) {
                 $type = $hit['ai_product_type'] ?? '__unknown__';
-                return !$isAccessoryType($type);
+                $cat = $hit['category_path'] ?? null;
+                return !$isAccessoryType($type, $cat);
             });
             
-            Log::info('MeiliProductSearchTool: filtered accessories by ai_product_type', [
+            Log::info('MeiliProductSearchTool: filtered accessories', [
                 'query' => $query,
                 'before' => count($hits),
                 'after' => count($filtered),
-                'dominant_type' => $dominantType,
             ]);
             
-            if (count($filtered) >= 3) {
+            if (count($filtered) >= 2) {
                 return array_values($filtered);
             }
         }
         
         // Fallback: sort by putting main products first, accessories last
         usort($hits, function ($a, $b) use ($isAccessoryType) {
-            $aIsAccessory = $isAccessoryType($a['ai_product_type'] ?? '__unknown__');
-            $bIsAccessory = $isAccessoryType($b['ai_product_type'] ?? '__unknown__');
+            $aIsAccessory = $isAccessoryType($a['ai_product_type'] ?? '__unknown__', $a['category_path'] ?? null);
+            $bIsAccessory = $isAccessoryType($b['ai_product_type'] ?? '__unknown__', $b['category_path'] ?? null);
             
             if ($aIsAccessory === $bIsAccessory) {
                 return 0;

@@ -1271,19 +1271,9 @@ PROMPT;
             $results = array_values($results);
         }
 
-        // Filter by product_type
-        if (!empty($args['product_type']) && !empty($results)) {
-            $productType = mb_strtolower($args['product_type']);
-            $searchTerms = $this->getProductTypeSynonyms($productType);
-            $results = array_filter($results, function ($p) use ($searchTerms) {
-                $searchText = mb_strtolower(($p['ai_product_type'] ?? '') . ' ' . ($p['title'] ?? '') . ' ' . ($p['category_path'] ?? ''));
-                foreach ($searchTerms as $term) {
-                    if (str_contains($searchText, $term)) return true;
-                }
-                return false;
-            });
-            $results = array_values($results);
-        }
+        // NOTE: Removed product_type filter - it was too aggressive and filtered out
+        // valid results. Meilisearch relevance scoring handles this better.
+        // MinimalAgent doesn't have this filter and works better.
 
         // Filter by color
         if (!empty($args['color']) && !empty($results)) {

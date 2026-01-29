@@ -166,6 +166,34 @@
                 <span class="text-green-600">💬 {{ $stats['orders']['chat_attributed'] ?? 0 }} з чату</span>
             </div>
         </div>
+
+        {{-- Synonyms --}}
+        <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-teal-500">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-sm text-gray-500 font-medium">🏷️ Синоніми</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-1">{{ number_format($stats['synonyms']['total'] ?? 0) }}</p>
+                </div>
+                <span class="text-2xl">📝</span>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
+                <div class="bg-teal-50 rounded p-2">
+                    <span class="text-teal-600">Глобальні</span>
+                    <p class="font-bold text-teal-700">{{ number_format($stats['synonyms']['global'] ?? 0) }}</p>
+                </div>
+                <div class="bg-blue-50 rounded p-2">
+                    <span class="text-blue-600">Тенант</span>
+                    <p class="font-bold text-blue-700">{{ number_format($stats['synonyms']['tenant_specific'] ?? 0) }}</p>
+                </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-500">
+                @if(($stats['synonyms']['tenants_without_synonyms'] ?? 0) > 0)
+                    <span class="text-yellow-600">⚠️ {{ $stats['synonyms']['tenants_without_synonyms'] }} тенантів без синонімів</span>
+                @else
+                    <span class="text-green-600">✅ Всі тенанти мають синоніми</span>
+                @endif
+            </div>
+        </div>
     </div>
 
     {{-- Schedule Info --}}

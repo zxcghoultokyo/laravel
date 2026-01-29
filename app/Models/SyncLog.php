@@ -44,6 +44,7 @@ class SyncLog extends Model
     public const TYPE_COLOR_DETECTION = 'color_detection';
     public const TYPE_COLOR_SYNONYMS = 'color_synonyms';
     public const TYPE_CATEGORY_ALIASES = 'category_aliases';
+    public const TYPE_PRODUCT_SYNONYMS = 'product_synonyms';
 
     // Statuses
     public const STATUS_RUNNING = 'running';
@@ -60,6 +61,7 @@ class SyncLog extends Model
         self::TYPE_STATS => '📊 Статистика',
         self::TYPE_BRANDS => '🏷️ Бренди',
         self::TYPE_COLOR_DETECTION => '🎨 Визначення кольорів',
+        self::TYPE_PRODUCT_SYNONYMS => '🏷️ Синоніми товарів',
     ];
 
     public static array $statusLabels = [

@@ -12,6 +12,7 @@ use Livewire\Component;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Http;
+use App\Models\ProductSynonym;
 use Illuminate\Support\Facades\Cache;
 
 class SyncReports extends Component
@@ -111,6 +112,7 @@ class SyncReports extends Component
             'categories' => [
                 'total' => $totalCategories,
             ],
+            'synonyms' => $this->getSynonymsStats(),
             'meilisearch' => $meiliStats,
         ];
     }
@@ -143,6 +145,43 @@ class SyncReports extends Component
             'documents' => 0,
             'is_indexing' => false,
             'field_distribution' => [],
+        ];
+    }
+    
+    private function getSynonymsStats(): array
+    {
+        if (!Schema::hasTable('product_synonyms')) {
+            return [
+                'total' => 0,
+                'global' => 0,
+                'tenant_specific' => 0,
+                'product_types' => 0,
+                'tenants_with_synonyms' => 0,
+                'tenants_without_synonyms' => 0,
+            ];
+        }
+        
+        $total = ProductSynonym::count();
+        $global = ProductSynonym::whereNull('tenant_id')->count();
+        $tenantSpecific = $total - $global;
+        
+        $productTypes = ProductSynonym::distinct('product_type')->count('product_type');
+        
+        // Get tenants that have products but need synonyms check
+        $tenantsWithProducts = \App\Models\Tenant::whereHas('products', fn($q) => $q->where('in_stock', true))->pluck('id');
+        $tenantsWithSynonyms = ProductSynonym::whereNotNull('tenant_id')
+            ->distinct('tenant_id')
+            ->pluck('tenant_id');
+        
+        $tenantsWithoutSynonyms = $tenantsWithProducts->diff($tenantsWithSynonyms)->count();
+        
+        return [
+            'total' => $total,
+            'global' => $global,
+            'tenant_specific' => $tenantSpecific,
+            'product_types' => $productTypes,
+            'tenants_with_synonyms' => $tenantsWithSynonyms->count(),
+            'tenants_without_synonyms' => $tenantsWithoutSynonyms,
         ];
     }
 
@@ -234,11 +273,21 @@ class SyncReports extends Component
             [
                 'name' => '🧬 Embeddings',
                 'command' => 'products:generate-embeddings --limit=100',
-                'schedule' => 'Щотижня',
+                'schedule' => 'Щотижня (неділя 02:30)',
                 'last_run' => $this->getLastSyncTime(SyncLog::TYPE_EMBEDDINGS),
                 'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_EMBEDDINGS),
                 'next_run' => '-',
                 'is_queue' => true,
+            ],
+            [
+                'name' => '🏷️ Синоніми товарів',
+                'command' => 'synonyms:products',
+                'schedule' => 'Щотижня (неділя 03:00) + онбординг',
+                'last_run' => $this->getLastSyncTime(SyncLog::TYPE_PRODUCT_SYNONYMS),
+                'last_info' => $this->getLastSyncInfo(SyncLog::TYPE_PRODUCT_SYNONYMS),
+                'next_run' => 'Неділя о 03:00',
+                'is_queue' => false,
+                'description' => 'Генерує синоніми для категорій товарів (плитоноска → броник, plate carrier)',
             ],
             [
                 'name' => '🎨 Визначення кольорів',

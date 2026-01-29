@@ -189,6 +189,52 @@ Schedule::command('products:generate-embeddings --limit=100')
     ->appendOutputTo(storage_path('logs/sync-embeddings.log'));
 
 // ─────────────────────────────────────────────
+// 6. WEEKLY SYNONYMS CHECK (Sunday 03:00)
+// ─────────────────────────────────────────────
+// Ensure all tenants have synonyms for their product categories
+// This auto-generates synonyms for new categories or new tenants
+Schedule::call(function () {
+    $tenants = \App\Models\Tenant::canUseService()
+        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->get();
+    
+    foreach ($tenants as $tenant) {
+        // Get unique category count for tenant
+        $categoryCount = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenant->id)
+            ->whereNotNull('category_path')
+            ->where('category_path', '!=', '')
+            ->distinct('category_path')
+            ->count('category_path');
+        
+        // Get synonym count for tenant
+        $synonymCount = \App\Models\ProductSynonym::where('tenant_id', $tenant->id)->count();
+        
+        // If categories exist but no/few synonyms, generate them
+        // Threshold: at least 5 synonyms per category expected
+        if ($categoryCount > 0 && $synonymCount < ($categoryCount * 3)) {
+            \Illuminate\Support\Facades\Log::info('Weekly synonyms check: generating for tenant', [
+                'tenant_id' => $tenant->id,
+                'category_count' => $categoryCount,
+                'current_synonyms' => $synonymCount,
+            ]);
+            
+            \Illuminate\Support\Facades\Artisan::call('synonyms:products', [
+                '--tenant' => $tenant->id,
+                '--force' => false,
+            ]);
+        }
+    }
+    
+    \Illuminate\Support\Facades\Log::info('Weekly synonyms check completed', [
+        'tenants_checked' => $tenants->count(),
+    ]);
+})
+    ->weeklyOn(0, '03:00') // Sunday at 03:00
+    ->name('synonyms-weekly-check')
+    ->withoutOverlapping();
+
+// ─────────────────────────────────────────────
 // TENANT MANAGEMENT
 // ─────────────────────────────────────────────
 // Reset monthly usage on 1st of each month at midnight

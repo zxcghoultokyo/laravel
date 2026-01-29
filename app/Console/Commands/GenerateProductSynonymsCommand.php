@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\ProductSynonym;
 use App\Models\Product;
+use App\Models\SyncLog;
 use App\Services\Ai\AiRouter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +28,13 @@ class GenerateProductSynonymsCommand extends Command
     {
         $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
         
+        // Start sync log
+        $syncLog = SyncLog::start(SyncLog::TYPE_PRODUCT_SYNONYMS, $tenantId ? "Tenant {$tenantId}" : "Global");
+        if ($tenantId) {
+            $syncLog->tenant_id = $tenantId;
+            $syncLog->save();
+        }
+        
         $this->info('🏷️ Generating product type synonyms...');
         if ($tenantId) {
             $this->info("For tenant ID: {$tenantId}");
@@ -34,76 +42,155 @@ class GenerateProductSynonymsCommand extends Command
             $this->info("Global synonyms (no tenant)");
         }
 
-        // Extract product types from category paths
-        $query = Product::query()
-            ->whereNotNull('category_path')
-            ->where('category_path', '!=', '');
-            
-        // Filter by tenant if specified
-        if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
-        }
-        
-        $categories = $query
-            ->select('category_path', DB::raw('COUNT(*) as cnt'))
-            ->groupBy('category_path')
-            ->orderByDesc('cnt')
-            ->limit(100)
-            ->pluck('cnt', 'category_path')
-            ->toArray();
-
-        if (empty($categories)) {
-            $this->error('No categories found in products table!');
-            return 1;
-        }
-
-        $this->info("Found " . count($categories) . " unique category paths");
-
-        // Extract leaf categories (last segment)
-        $productTypes = [];
-        foreach ($categories as $path => $count) {
-            $segments = explode('/', $path);
-            $leaf = end($segments);
-            $leaf = trim($leaf);
-            if (!empty($leaf)) {
-                $productTypes[$leaf] = ($productTypes[$leaf] ?? 0) + $count;
+        try {
+            // Extract product types from category paths
+            $query = Product::query()
+                ->whereNotNull('category_path')
+                ->where('category_path', '!=', '');
+                
+            // Filter by tenant if specified
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
             }
-        }
-        arsort($productTypes);
+            
+            $categories = $query
+                ->select('category_path', DB::raw('COUNT(*) as cnt'))
+                ->groupBy('category_path')
+                ->orderByDesc('cnt')
+                ->pluck('cnt', 'category_path')
+                ->toArray();
 
-        $this->info("Extracted " . count($productTypes) . " product types");
-        $this->table(['Product Type', 'Count'], collect($productTypes)->take(30)->map(fn($cnt, $type) => [$type, $cnt])->values()->toArray());
+            if (empty($categories)) {
+                $this->error('No categories found in products table!');
+                $syncLog->fail('No categories found');
+                return 1;
+            }
 
-        // Generate synonyms using AI
-        $synonymsMap = $this->generateSynonymsWithAI(array_keys($productTypes));
+            $this->info("Found " . count($categories) . " unique category paths");
 
-        if (empty($synonymsMap)) {
-            $this->error('AI failed to generate synonyms!');
-            return 1;
-        }
+            // Extract leaf categories (last segment)
+            $productTypes = [];
+            foreach ($categories as $path => $count) {
+                $segments = explode('/', $path);
+                $leaf = end($segments);
+                $leaf = trim($leaf);
+                if (!empty($leaf)) {
+                    $productTypes[$leaf] = ($productTypes[$leaf] ?? 0) + $count;
+                }
+            }
+            arsort($productTypes);
 
-        $this->info("\n📝 Generated synonym groups:");
-        foreach ($synonymsMap as $type => $synonyms) {
-            $this->line("  <fg=cyan>{$type}</> → " . implode(', ', array_slice($synonyms, 0, 5)) . (count($synonyms) > 5 ? '...' : ''));
-        }
+            $this->info("Extracted " . count($productTypes) . " product types");
+            $this->table(['Product Type', 'Count'], collect($productTypes)->take(30)->map(fn($cnt, $type) => [$type, $cnt])->values()->toArray());
 
-        if ($this->option('dry-run')) {
-            $this->warn("\n--dry-run mode: No changes saved.");
+            // Generate synonyms using AI
+            $synonymsMap = $this->generateSynonymsWithAI(array_keys($productTypes));
+
+            if (empty($synonymsMap)) {
+                $this->error('AI failed to generate synonyms!');
+                $syncLog->fail('AI failed to generate synonyms');
+                return 1;
+            }
+
+            $this->info("\n📝 Generated synonym groups:");
+            foreach ($synonymsMap as $type => $synonyms) {
+                $this->line("  <fg=cyan>{$type}</> → " . implode(', ', array_slice($synonyms, 0, 5)) . (count($synonyms) > 5 ? '...' : ''));
+            }
+
+            if ($this->option('dry-run')) {
+                $this->warn("\n--dry-run mode: No changes saved.");
+                $syncLog->complete(['dry_run' => true, 'types_count' => count($synonymsMap)]);
+                return 0;
+            }
+
+            // Save to database
+            $stats = $this->saveSynonyms($synonymsMap, $this->option('force'), $tenantId);
+
+            $this->info("\n✅ Product synonyms generated successfully!");
+            
+            $syncLog->complete([
+                'categories_count' => count($categories),
+                'types_count' => count($productTypes),
+                'synonym_groups' => count($synonymsMap),
+                'inserted' => $stats['inserted'],
+                'skipped' => $stats['skipped'],
+            ]);
+
             return 0;
+            
+        } catch (\Throwable $e) {
+            $this->error("Error: " . $e->getMessage());
+            $syncLog->fail($e->getMessage());
+            throw $e;
         }
-
-        // Save to database
-        $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
-        $this->saveSynonyms($synonymsMap, $this->option('force'), $tenantId);
-
-        $this->info("\n✅ Product synonyms generated successfully!");
-
-        return 0;
     }
 
     private function generateSynonymsWithAI(array $productTypes): array
     {
-        $typesList = implode("\n", array_slice($productTypes, 0, 50));
+        // Спочатку спробуємо fallback словник (швидше і надійніше)
+        $fallbackSynonyms = $this->getFallbackSynonyms();
+        $result = [];
+        $aiNeededTypes = [];
+        
+        // Перевіряємо які типи є в fallback словнику
+        foreach ($productTypes as $type) {
+            $normalizedType = mb_strtolower(trim($type));
+            $matched = false;
+            
+            foreach ($fallbackSynonyms as $fallbackType => $synonyms) {
+                // Порівнюємо нормалізовано
+                if ($this->typesMatch($normalizedType, $fallbackType)) {
+                    $result[$type] = $synonyms;
+                    $matched = true;
+                    break;
+                }
+            }
+            
+            if (!$matched) {
+                $aiNeededTypes[] = $type;
+            }
+        }
+        
+        $this->info("\n📚 Fallback dictionary matched: " . count($result) . " types");
+        $this->info("🤖 Types needing AI: " . count($aiNeededTypes));
+        
+        // Якщо є типи без fallback, спробуємо AI
+        if (!empty($aiNeededTypes) && count($aiNeededTypes) <= 100) {
+            $aiResult = $this->callAiForSynonyms($aiNeededTypes);
+            $result = array_merge($result, $aiResult);
+        } elseif (count($aiNeededTypes) > 100) {
+            $this->warn("Too many types for AI ({$aiNeededTypes}), using fallback only");
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * Check if two product types match (fuzzy matching)
+     */
+    private function typesMatch(string $type1, string $type2): bool
+    {
+        $type1 = mb_strtolower(trim($type1));
+        $type2 = mb_strtolower(trim($type2));
+        
+        // Exact match
+        if ($type1 === $type2) return true;
+        
+        // Starts with match ("бронежилети та плитоноски" matches "бронежилети")
+        if (str_starts_with($type1, $type2) || str_starts_with($type2, $type1)) return true;
+        
+        // Contains match for short keys
+        if (strlen($type2) >= 4 && str_contains($type1, $type2)) return true;
+        
+        return false;
+    }
+    
+    /**
+     * Call AI for synonym generation
+     */
+    private function callAiForSynonyms(array $productTypes): array
+    {
+        $typesList = implode("\n", array_slice($productTypes, 0, 80));
 
         $prompt = <<<PROMPT
 Ти — експерт з e-commerce та пошукової оптимізації для українського інтернет-магазину.
@@ -114,6 +201,7 @@ class GenerateProductSynonymsCommand extends Command
 Твоє завдання:
 1. Для кожного типу товару створи список СИНОНІМІВ (укр, рус, англ, сленг, скорочення)
 2. Синоніми = те, що користувач може написати в пошуку
+3. Для кожного типу мінімум 8-15 синонімів!
 
 ВАЖЛИВО:
 - Включай український сленг та жаргон
@@ -121,29 +209,19 @@ class GenerateProductSynonymsCommand extends Command
 - Включай англійські терміни
 - Включай скорочення та абревіатури
 - Включай поширені помилкові написання
+- Включай бренди-приклади якщо релевантно
 
-ПРИКЛАДИ для різних категорій:
-- "Смартфони" → смартфон, телефон, мобільний, мобілка, phone, smartphone, айфон, iphone, samsung, труба, звонилка
-- "Ноутбуки" → ноутбук, ноут, бук, лептоп, laptop, notebook, комп, ноутік, портативний комп'ютер
-- "Навушники" → навушники, наушники, вуха, headphones, earbuds, бездротові навушники, bluetooth навушники, ейрподси, airpods
-- "Кросівки" → кросівки, кроссовки, кроси, sneakers, тапки, найки, адіки, спортивне взуття
-- "Куртки" → куртка, курточка, jacket, пальто, парка, вітровка, бомбер, пуховик, зимова куртка
-- "Сукні" → сукня, плаття, dress, платье, вечірня сукня, коктейльне плаття
-- "Плитоноски" → плитоноска, бронік, plate carrier, pc, бронежилет, жилет, носій плит (для тактичних)
-- "Меблі" → меблі, мебель, furniture, стіл, стул, шафа, диван
-
-Поверни JSON (тільки для типів де є сенс додавати синоніми):
+Поверни JSON для ВСІХ типів:
 {
-  "смартфони": ["смартфон", "телефон", "мобілка", "phone", "айфон"],
-  "ноутбуки": ["ноутбук", "ноут", "laptop", "бук", "лептоп"],
+  "тип1": ["синонім1", "синонім2", ...],
   ...
 }
 
-Поверни ТІЛЬКИ JSON без пояснень. Максимум 30 типів.
+Поверни ТІЛЬКИ JSON без пояснень.
 PROMPT;
 
         try {
-            $this->info("\n🤖 Calling AI for synonym generation...");
+            $this->info("\n🤖 Calling AI for " . count($productTypes) . " types...");
             $response = $this->aiRouter->callOpenAI($prompt, 0.3);
             
             // Clean response
@@ -155,15 +233,16 @@ PROMPT;
             
             if (!is_array($result)) {
                 $this->error("Invalid JSON response: " . substr($response, 0, 500));
-                return $this->getFallbackSynonyms();
+                return [];
             }
             
+            $this->info("✅ AI returned " . count($result) . " synonym groups");
             return $result;
             
         } catch (\Exception $e) {
             $this->error("AI error: " . $e->getMessage());
             Log::error('GenerateProductSynonyms: AI failed', ['error' => $e->getMessage()]);
-            return $this->getFallbackSynonyms();
+            return [];
         }
     }
 
@@ -226,6 +305,8 @@ PROMPT;
             'активні наушники' => ['активні навушники', 'тактичні навушники', 'активні наушники', 'peltor', 'comtac', 'сордін', 'sordin', 'earmor', 'headset', 'гарнітура', 'навушники', 'наушники', 'активка', 'пелтор', 'комтак'],
             'аксесуари для навушників' => ['кріплення навушників', 'адаптер навушників', 'чебурашки', 'arc rail', 'helmet mount', 'рейка', 'кріплення на шолом', 'адаптер', 'ear muffs mount'],
             'комплектуючі на шоломи' => ['кавер', 'чохол на шолом', 'helmet cover', 'накладки', 'пади', 'pads', 'підвіс', 'suspension', 'ремінь шолома', 'nvg mount', 'кріплення пнв', 'страйкбайк'],
+            'мякі балістичні вставки' => ['м\'яка вставка', 'soft armor', 'soft insert', 'балістична вставка', 'м\'який бронепакет', 'nij iiia', 'soft panel'],
+            'захисне спорядження та модулі' => ['захист', 'захисний модуль', 'protective gear', 'модулі захисту', 'бокові плити', 'side plates', 'додатковий захист'],
             
             // === ТАКТИЧНИЙ ОДЯГ ===
             'тактичні штани' => ['тактичні штани', 'бойові штани', 'combat pants', 'cargo', 'карго', 'військові штани', 'штани з наколінниками', 'штани тактика', 'tactical pants'],
@@ -248,6 +329,17 @@ PROMPT;
             
             // === ШЕВРОНИ ===
             'шеврони та патчі ' => ['шеврон', 'патч', 'patch', 'нашивка', 'нарукавний знак', 'прапор', 'flag patch', 'morale patch', 'velcro patch', 'липучка'],
+            'шеврони' => ['шеврон', 'патч', 'patch', 'нашивка', 'шевроны', 'нашивки', 'нарукавний знак', 'прапор', 'morale patch', 'липучка', 'velcro'],
+            
+            // === ЕЛЕКТРИЧНЕ ТА ТУРИСТИЧНЕ ===
+            'електричне обладнання' => ['електрика', 'батарея', 'акумулятор', 'battery', 'зарядка', 'ліхтар', 'flashlight', 'електронне'],
+            'туристичне обладнання' => ['туризм', 'кемпінг', 'camping', 'похід', 'outdoor', 'спорядження', 'намет', 'tent', 'спальник', 'sleeping bag'],
+            
+            // === LEVEL ОДЯГ ===
+            'level 1' => ['термобілизна', 'терма', 'base layer', 'термо', 'нижня білизна', 'термоодяг', 'thermal'],
+            'level 3' => ['фліс', 'флісова кофта', 'fleece', 'полар', 'polar', 'флісовка', 'mid layer'],
+            'level 5' => ['софтшел', 'soft shell', 'softshell', 'вітровка', 'windbreaker', 'мембрана'],
+            'level 7' => ['зимовий одяг', 'зимова куртка', 'утеплений', 'insulated', 'зимовка', 'прималофт', 'primaloft', 'пуховик'],
             
             // === ЗБРОЙОВІ АКСЕСУАРИ ===
             'збройові ремені' => ['ремінь', 'слінг', 'sling', 'збройовий ремінь', 'тактичний ремінь', '2 point', '1 point', 'одноточка', 'двохточка', 'ременюка'],
@@ -315,6 +407,8 @@ PROMPT;
         }
 
         $this->info("Inserted: {$inserted}, Skipped: {$skipped}");
+        
+        return ['inserted' => $inserted, 'skipped' => $skipped];
     }
 
     private function detectLanguage(string $text): string

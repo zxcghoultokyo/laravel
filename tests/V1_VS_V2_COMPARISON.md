@@ -1,8 +1,8 @@
 # 📊 Порівняльна таблиця: v1 (FunctionCallingAgent) vs v2 (MinimalAgent)
 
 **Дата тестування:** 27.01.2026  
-**API v1:** https://aimbot.laravel.cloud/api/chat  
-**API v2:** https://aimbot.laravel.cloud/api/chat/v2  
+**API v1:** https://aintento.laravel.cloud/api/chat  
+**API v2:** https://aintento.laravel.cloud/api/chat/v2  
 **Tenant:** contractor.kiev.ua
 
 ---

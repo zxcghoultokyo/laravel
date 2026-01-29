@@ -120,12 +120,12 @@
 
 ```bash
 # Tenant 2 - плитоноска
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"плитоноска","session_id":"test1","tenant_id":2}' | jq .
 
 # Tenant 5 - сорочка  
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"сорочка","session_id":"test2","tenant_id":5}' | jq .
 ```

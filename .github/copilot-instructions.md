@@ -162,22 +162,22 @@ Config & Env
 
 ## 🔧 Diagnostic API (Production Debugging)
 
-**Base URL:** `https://aimbot.laravel.cloud/api/diagnostic`
+**Base URL:** `https://aintento.laravel.cloud/api/diagnostic`
 **Key:** `?key=diagnostic_secret_key_2025`
 
 Quick debug commands:
 ```bash
 # Check chat history for a session
-curl "https://aimbot.laravel.cloud/api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025"
 
 # Search products in DB
-curl "https://aimbot.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=футболка"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=футболка"
 
 # Search in Meilisearch
-curl "https://aimbot.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=футболка"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=футболка"
 
 # DB stats
-curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
 ```
 
 Full docs: [docs/DIAGNOSTIC_API.md](docs/DIAGNOSTIC_API.md)

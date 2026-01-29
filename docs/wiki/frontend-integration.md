@@ -68,7 +68,7 @@ function initWidget() {
     const token = container.dataset.ailureToken;
     
     // 2. Fetch widget settings від API
-    fetch('https://aimbot.laravel.cloud/api/widget/settings', {
+    fetch('https://aintento.laravel.cloud/api/widget/settings', {
         headers: { 'X-Widget-Token': token }
     })
     .then(res => res.json())
@@ -250,7 +250,7 @@ const defaults = {
     <div data-ailure-token="YOUR_UNIQUE_TOKEN"></div>
     
     <!-- Widget Script (в кінці body) -->
-    <script src="https://aimbot.laravel.cloud/widget.js"></script>
+    <script src="https://aintento.laravel.cloud/widget.js"></script>
 </body>
 </html>
 ```
@@ -320,7 +320,7 @@ php artisan serve
 #### Production Testing
 ```html
 <div data-ailure-token="prod-token-abc"></div>
-<script src="https://aimbot.laravel.cloud/widget.js"></script>
+<script src="https://aintento.laravel.cloud/widget.js"></script>
 ```
 
 ---

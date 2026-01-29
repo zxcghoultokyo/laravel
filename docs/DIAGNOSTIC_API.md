@@ -1,6 +1,6 @@
 # Diagnostic API Reference
 
-Production URL: `https://aimbot.laravel.cloud/api/diagnostic`
+Production URL: `https://aintento.laravel.cloud/api/diagnostic`
 
 **Secret Key**: `?key=diagnostic_secret_key_2025`
 
@@ -114,38 +114,38 @@ Shows: `raw_color`, `raw_Kolir`, `raw_Rozmir`, `raw_mod_title`
 
 ```bash
 # 1. Скільки їх в БД?
-curl "https://aimbot.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=рукавич"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=рукавич"
 
 # 2. Скільки в Meili?
-curl "https://aimbot.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=рукавички"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=рукавички"
 
 # 3. Що повертає MeiliProductSearchTool?
-curl "https://aimbot.laravel.cloud/api/diagnostic/test-chat?key=diagnostic_secret_key_2025&q=рукавички%20тактичні"
+curl "https://aintento.laravel.cloud/api/diagnostic/test-chat?key=diagnostic_secret_key_2025&q=рукавички%20тактичні"
 
 # 4. Чи є категорія Рукавиці?
-curl "https://aimbot.laravel.cloud/api/diagnostic/category-products?key=diagnostic_secret_key_2025&path=Рукавиц"
+curl "https://aintento.laravel.cloud/api/diagnostic/category-products?key=diagnostic_secret_key_2025&path=Рукавиц"
 ```
 
 ### 2. Перевірити color_variants
 
 ```bash
 # Знайти товар з варіантами
-curl "https://aimbot.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=KOMBAT" | jq '.products[0].id'
+curl "https://aintento.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=KOMBAT" | jq '.products[0].id'
 
 # Отримати всі варіанти
-curl "https://aimbot.laravel.cloud/api/diagnostic/product/123?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/product/123?key=diagnostic_secret_key_2025"
 ```
 
 ### 3. Перевірити чи Kolir витягується
 
 ```bash
-curl "https://aimbot.laravel.cloud/api/diagnostic/sync-sample?key=diagnostic_secret_key_2025&article=kb-atg-olgr-s"
+curl "https://aintento.laravel.cloud/api/diagnostic/sync-sample?key=diagnostic_secret_key_2025&article=kb-atg-olgr-s"
 ```
 
 ### 4. Перевірити статистику після синхронізації
 
 ```bash
-curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025" | jq '{total: .total_products, with_color: .with_color, colors: .unique_colors}'
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025" | jq '{total: .total_products, with_color: .with_color, colors: .unique_colors}'
 ```
 
 ---

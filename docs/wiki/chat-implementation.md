@@ -22,7 +22,7 @@
 #### 1. Додайте код перед `</body>`
 ```html
 <div id="ailure-chat" data-token="YOUR_TOKEN"></div>
-<script src="https://aimbot.laravel.cloud/widget.js"></script>
+<script src="https://aintento.laravel.cloud/widget.js"></script>
 ```
 
 #### 2. Замініть `YOUR_TOKEN` на ваш унікальний токен
@@ -48,7 +48,7 @@
 
 #### Метод 1: Через Admin Panel (Recommended)
 ```
-1. Перейдіть на https://aimbot.laravel.cloud/admin
+1. Перейдіть на https://aintento.laravel.cloud/admin
 2. Login → Widget Settings
 3. Click "Generate New Token"
 4. Copy token (наприклад: abc123xyz789)
@@ -78,7 +78,7 @@ Body:
 // Перед <?php wp_footer(); ?>
 
 <div id="ailure-chat" data-token="YOUR_TOKEN"></div>
-<script src="https://aimbot.laravel.cloud/widget.js"></script>
+<script src="https://aintento.laravel.cloud/widget.js"></script>
 ```
 
 **Метод 2: Plugin "Insert Headers and Footers"**
@@ -98,7 +98,7 @@ Body:
 // Перед </body>
 
 <div id="ailure-chat" data-token="YOUR_TOKEN"></div>
-<script src="https://aimbot.laravel.cloud/widget.js"></script>
+<script src="https://aintento.laravel.cloud/widget.js"></script>
 ```
 
 ---
@@ -119,7 +119,7 @@ Body:
     
     <!-- Widget (в кінці body) -->
     <div id="ailure-chat" data-token="abc123xyz789"></div>
-    <script src="https://aimbot.laravel.cloud/widget.js"></script>
+    <script src="https://aintento.laravel.cloud/widget.js"></script>
 </body>
 </html>
 ```

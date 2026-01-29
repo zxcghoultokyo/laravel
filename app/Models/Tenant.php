@@ -710,7 +710,7 @@ class Tenant extends Model
      */
     public function getEmbedCode(): string
     {
-        $baseUrl = config('app.url', 'https://aimbot.laravel.cloud');
+        $baseUrl = config('app.url', 'https://aintento.laravel.cloud');
         $token = $this->widgetSettings?->api_token ?? '';
         $tenantId = $this->id;
         

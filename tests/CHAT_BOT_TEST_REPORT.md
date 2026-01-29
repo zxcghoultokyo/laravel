@@ -1,7 +1,7 @@
 # 🧪 Chat Bot Test Report
 
 **Дата тестування:** 26.01.2026  
-**API:** https://aimbot.laravel.cloud/api/chat  
+**API:** https://aintento.laravel.cloud/api/chat  
 **Tenant:** contractor.kiev.ua (ID: 2)
 
 ---
@@ -176,17 +176,17 @@ A: [показує футболки оливкового кольору]
 
 ```bash
 # Базовий тест
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "Покажи плитоноски", "session_id": "test_manual_1"}' | jq
 
 # Follow-up тест (той самий session_id!)
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "А є дешевше?", "session_id": "test_manual_1"}' | jq
 
 # Перевірка історії
-curl -s "https://aimbot.laravel.cloud/api/diagnostic/chat-history/test_manual_1?key=diagnostic_secret_key_2025" | jq
+curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/test_manual_1?key=diagnostic_secret_key_2025" | jq
 ```
 
 ---

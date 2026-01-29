@@ -153,7 +153,7 @@ Route::post('/billing/webhook/liqpay', [BillingWebhookController::class, 'liqpay
 ```bash
 WAYFORPAY_MERCHANT_ACCOUNT=your_merchant
 WAYFORPAY_MERCHANT_SECRET=your_secret
-WAYFORPAY_WEBHOOK_URL=https://aimbot.laravel.cloud/api/billing/webhook/wayforpay
+WAYFORPAY_WEBHOOK_URL=https://aintento.laravel.cloud/api/billing/webhook/wayforpay
 ```
 
 ### Webhook Signature Verification

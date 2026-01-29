@@ -3,7 +3,7 @@
  * Main entry point - assembles all modules
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js"></script>
+ *        <script src="https://aintento.laravel.cloud/widget.js"></script>
  */
 
 import { 

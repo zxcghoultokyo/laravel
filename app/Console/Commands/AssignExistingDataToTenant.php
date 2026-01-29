@@ -110,7 +110,7 @@ class AssignExistingDataToTenant extends Command
                 // Create default
                 WidgetSettings::create([
                     'tenant_id' => $tenantId,
-                    'domain' => $tenant->slug . '.aimbot.com.ua',
+                    'domain' => $tenant->slug . '.aintento.com',
                     'primary_color' => '#2563EB',
                     'welcome_message' => 'Привіт! Чим можу допомогти?',
                     'position' => 'bottom-right',

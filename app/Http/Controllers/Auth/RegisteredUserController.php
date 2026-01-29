@@ -64,7 +64,7 @@ class RegisteredUserController extends Controller
 
             // Create default widget settings
             $tenant->widgetSettings()->create([
-                'domain' => $slug . '.aimbot.com.ua',
+                'domain' => $slug . '.aintento.com',
                 'primary_color' => '#2563EB',
                 'welcome_message' => 'Привіт! Чим можу допомогти?',
                 'position' => 'bottom-right',

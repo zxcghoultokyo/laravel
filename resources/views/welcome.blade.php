@@ -11,14 +11,14 @@
         <meta name="keywords" content="AI асистент, чат-бот для магазину, e-commerce AI, штучний інтелект для продажів, чат консультант, автоматизація продажів, Horoshop інтеграція, збільшення конверсії">
         <meta name="author" content="AIntento">
         <meta name="robots" content="index, follow">
-        <link rel="canonical" href="https://aimbot.laravel.cloud/">
+        <link rel="canonical" href="https://aintento.laravel.cloud/">
 
         <!-- Open Graph / Facebook -->
         <meta property="og:type" content="website">
-        <meta property="og:url" content="https://aimbot.laravel.cloud/">
+        <meta property="og:url" content="https://aintento.laravel.cloud/">
         <meta property="og:title" content="AIntento — AI Асистент для e-commerce">
         <meta property="og:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації. Збільшує конверсію на 15-30%.">
-        <meta property="og:image" content="https://aimbot.laravel.cloud/images/og-image.png">
+        <meta property="og:image" content="https://aintento.laravel.cloud/images/og-image.png">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
         <meta property="og:locale" content="uk_UA">
@@ -26,10 +26,10 @@
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:url" content="https://aimbot.laravel.cloud/">
+        <meta name="twitter:url" content="https://aintento.laravel.cloud/">
         <meta name="twitter:title" content="AIntento — AI Асистент для e-commerce">
         <meta name="twitter:description" content="Розумний AI-асистент для інтернет-магазинів. Автоматичний підбір товарів, консультації 24/7, персоналізовані рекомендації.">
-        <meta name="twitter:image" content="https://aimbot.laravel.cloud/images/og-image.png">
+        <meta name="twitter:image" content="https://aintento.laravel.cloud/images/og-image.png">
 
         <!-- Favicon -->
         <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
@@ -59,7 +59,7 @@
             "provider": {
                 "@type": "Organization",
                 "name": "AIntento",
-                "url": "https://aimbot.laravel.cloud"
+                "url": "https://aintento.laravel.cloud"
             }
         }
         </script>

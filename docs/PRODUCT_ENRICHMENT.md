@@ -304,7 +304,7 @@ php artisan tinker
 
 ### Діагностичний endpoint
 ```bash
-curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_index_stats'
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_index_stats'
 ```
 
 ## 🛠️ TODO / Roadmap
@@ -384,10 +384,10 @@ $slang = $dict->getSlangForType('helmet');
 
 ```bash
 # Отримати quality score та статистику
-curl "https://aimbot.laravel.cloud/api/diagnostic/ai-index-stats?key=..."
+curl "https://aintento.laravel.cloud/api/diagnostic/ai-index-stats?key=..."
 
 # Отримати список проблем
-curl "https://aimbot.laravel.cloud/api/diagnostic/ai-index-problems?key=..."
+curl "https://aintento.laravel.cloud/api/diagnostic/ai-index-problems?key=..."
 ```
 
 ### Метрики якості

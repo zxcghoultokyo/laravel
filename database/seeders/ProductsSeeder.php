@@ -21,7 +21,7 @@ class ProductsSeeder extends Seeder
         
         if (!file_exists($file)) {
             $this->command->warn("File not found: $file");
-            $this->command->info("Download with: curl -s 'https://aimbot.laravel.cloud/api/debug/products?limit=2321' > $file");
+            $this->command->info("Download with: curl -s 'https://aintento.laravel.cloud/api/debug/products?limit=2321' > $file");
             return;
         }
 

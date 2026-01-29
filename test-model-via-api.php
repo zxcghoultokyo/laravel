@@ -4,7 +4,7 @@
  * Порівняння якості відповідей gpt-4o vs gpt-4o-mini vs gpt-5.1
  */
 
-$baseUrl = 'https://aimbot.laravel.cloud';
+$baseUrl = 'https://aintento.laravel.cloud';
 $apiKey = 'default_api_key_change_me_in_production';
 
 // Тестові кейси

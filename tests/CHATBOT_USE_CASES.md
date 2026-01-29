@@ -316,7 +316,7 @@ PRODUCTS: 3
 
 ```bash
 # Базовий тест через curl
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"ВАШЕ_ПИТАННЯ","session_id":"test_'$(date +%s)'"}' \
   | python3 -c "import sys, json; d=json.load(sys.stdin); print('TEXT:', d.get('text','')); print('PRODUCTS:', len(d.get('data',{}).get('products',[])))"
@@ -333,6 +333,6 @@ curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
 
 ## 📝 Нотатки
 
-- Тести виконуються на production: `https://aimbot.laravel.cloud`
+- Тести виконуються на production: `https://aintento.laravel.cloud`
 - Tenant за замовчуванням: 2 (Contractor)
 - Для інших тенантів: додати `?tenant_id=X` в query string

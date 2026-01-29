@@ -1302,18 +1302,18 @@ TBD
 
 ```bash
 # Базовий тест
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"ВАШЕ_ПИТАННЯ","session_id":"test_'$(date +%s)'"}' \
   | python3 -c "import sys, json; d=json.load(sys.stdin); print('TEXT:', d.get('text','')); print('PRODUCTS:', len(d.get('data',{}).get('products',[])))"
 
 # Тест з контекстом (2 повідомлення)
 SESSION="ctx_$(date +%s)"
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"ПЕРШЕ_ПОВІДОМЛЕННЯ","session_id":"'$SESSION'"}'
 sleep 2
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"ДРУГЕ_ПОВІДОМЛЕННЯ","session_id":"'$SESSION'"}'
 ```

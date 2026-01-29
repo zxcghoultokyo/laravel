@@ -10,7 +10,7 @@ export const DEBUG = true;
 const CURRENT_SCRIPT = document.currentScript;
 
 // Determine API base URL from script src
-let baseUrl = 'https://aimbot.laravel.cloud';
+let baseUrl = 'https://aintento.laravel.cloud';
 if (CURRENT_SCRIPT?.src) {
     try {
         const scriptUrl = new URL(CURRENT_SCRIPT.src);

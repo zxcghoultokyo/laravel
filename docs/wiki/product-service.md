@@ -230,7 +230,7 @@ php artisan sync:horoshop-products --limit=500
 
 ### Manual Sync (HTTP)
 ```bash
-curl "https://aimbot.laravel.cloud/api/admin/jobs/sync-horoshop?token=SECRET&mode=sync&limit=200"
+curl "https://aintento.laravel.cloud/api/admin/jobs/sync-horoshop?token=SECRET&mode=sync&limit=200"
 ```
 
 **Response**:

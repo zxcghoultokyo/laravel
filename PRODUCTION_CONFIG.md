@@ -8,7 +8,7 @@ APP_KEY=base64:YOUR_APP_KEY_HERE
 APP_ENV=production
 APP_DEBUG=false
 APP_NAME=AIntento
-APP_URL=https://aimbot.laravel.cloud
+APP_URL=https://aintento.laravel.cloud
 ```
 
 ### OpenAI Integration
@@ -37,7 +37,7 @@ HOROSHOP_API_PASSWORD=your_password
 ```bash
 WAYFORPAY_MERCHANT_ACCOUNT=your_merchant
 WAYFORPAY_MERCHANT_SECRET=your_secret
-WAYFORPAY_WEBHOOK_URL=https://aimbot.laravel.cloud/api/billing/webhook/wayforpay
+WAYFORPAY_WEBHOOK_URL=https://aintento.laravel.cloud/api/billing/webhook/wayforpay
 ```
 
 ### Caching & Queue
@@ -84,10 +84,10 @@ curl -X POST https://your-meili.fly.dev/indexes/products/search \
 ### 4. Check Chat via API
 ```bash
 # SSE Stream
-curl "https://aimbot.laravel.cloud/api/chat/stream?message=привіт&session_id=test123&widget_key=YOUR_KEY"
+curl "https://aintento.laravel.cloud/api/chat/stream?message=привіт&session_id=test123&widget_key=YOUR_KEY"
 
 # POST JSON
-curl -X POST https://aimbot.laravel.cloud/api/chat \
+curl -X POST https://aintento.laravel.cloud/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"плитоноска","session_id":"test","widget_key":"YOUR_KEY"}'
 ```

@@ -106,17 +106,17 @@
 
 ```bash
 # Тест 1
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "якого кольору level 7 ecwcs сша оригінал?"}' | jq -r '.data.text'
 
 # Тест 2
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "яка щільність кордури на crye precision?"}' | jq -r '.data.text'
 
 # Тест 3
-curl -s -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message": "скільки важить бронеплита 4 класу?"}' | jq -r '.data.text'
 ```

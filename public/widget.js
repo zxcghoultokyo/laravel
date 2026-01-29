@@ -4,7 +4,7 @@
  * SSE Streaming support for real-time responses
  * 
  * Usage: <div id="aintento-chat" data-token="YOUR_TOKEN"></div>
- *        <script src="https://aimbot.laravel.cloud/widget.js?v=2.3.7"></script>
+ *        <script src="https://aintento.laravel.cloud/widget.js"></script>
  * 
  * API: window.openChat() - opens the chat widget
  *      window.aintentoClose() - closes the chat widget
@@ -19,7 +19,7 @@
     const CURRENT_SCRIPT = document.currentScript;
     
     // Determine API base URL from script src
-    let BASE_URL = 'https://aimbot.laravel.cloud';
+    let BASE_URL = 'https://aintento.laravel.cloud';
     if (CURRENT_SCRIPT && CURRENT_SCRIPT.src) {
         try {
             const scriptUrl = new URL(CURRENT_SCRIPT.src);
@@ -1060,7 +1060,7 @@
                             ">➤</button>
                         </div>
                         <div style="text-align: center; margin-top: 8px; font-size: 10px; color: #9ca3af;">
-                            Powered by <a href="https://aimbot.laravel.cloud/" target="_blank" style="color: #6b7280; text-decoration: none;">Aintento</a> AI
+                            Powered by <a href="https://aintento.com/" target="_blank" style="color: #6b7280; text-decoration: none;">Aintento</a> AI
                         </div>
                     </div>
                 </div>

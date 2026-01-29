@@ -68,25 +68,25 @@ php artisan brands:sync --tenant={tenant_id}
 ### Phase 4: AI обробка
 ```bash
 # 7. AI enrichment продуктів
-curl -X POST "https://aimbot.laravel.cloud/api/diagnostic/run-enrichment?key=diagnostic_secret_key_2025&tenant_id={tenant_id}&batch_size=100"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/run-enrichment?key=diagnostic_secret_key_2025&tenant_id={tenant_id}&batch_size=100"
 
 # 8. Почекати поки enrichment закінчиться (перевірити)
-curl "https://aimbot.laravel.cloud/api/diagnostic/ai-enrich-stats?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
+curl "https://aintento.laravel.cloud/api/diagnostic/ai-enrich-stats?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
 ```
 
 ### Phase 5: Пошукова індексація
 ```bash
 # 9. Reindex в Meilisearch (після enrichment!)
-curl -X POST "https://aimbot.laravel.cloud/api/diagnostic/reindex-meili?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/reindex-meili?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
 ```
 
 ### Phase 6: Перевірка
 ```bash
 # 10. Перевірити статистику
-curl "https://aimbot.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025&tenant_id={tenant_id}"
 
 # 11. Тестовий чат
-curl -X POST "https://aimbot.laravel.cloud/api/chat" \
+curl -X POST "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
   -d '{"message":"покажи товари","session_id":"onboarding-test","tenant_id":{tenant_id}}'
 ```
@@ -109,7 +109,7 @@ curl -X POST "https://aimbot.laravel.cloud/api/chat" \
 **Причина**: Забули запустити `categories:rebuild` після sync
 **Рішення**: 
 ```bash
-curl -X POST "https://aimbot.laravel.cloud/api/diagnostic/rebuild-categories?key=...&tenant_id=X"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/rebuild-categories?key=...&tenant_id=X"
 ```
 
 ### 2. Пошук не працює

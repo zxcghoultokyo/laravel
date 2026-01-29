@@ -6,7 +6,7 @@
  */
 
 $tenantId = 9;
-$baseUrl = 'https://aimbot.laravel.cloud';
+$baseUrl = 'https://aintento.laravel.cloud';
 $timeout = 60;
 
 $testCases = [

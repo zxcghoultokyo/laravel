@@ -105,6 +105,34 @@ SessionResolver::resolveSessionId($chatSessionId);  // int → string
 - `ToneService`: tone settings (official/spartan/friendly). [app/Services/Ai/ToneService.php](app/Services/Ai/ToneService.php)
 - `MeiliProductSearchTool`: Meilisearch with Eloquent fallback. [app/Services/Agent/Tools/MeiliProductSearchTool.php](app/Services/Agent/Tools/MeiliProductSearchTool.php)
 - `ProductDetailsTool`: full product cards with images. [app/Services/Agent/Tools/ProductDetailsTool.php](app/Services/Agent/Tools/ProductDetailsTool.php)
+- `BrandDetectionService`: brand transliteration & detection. [app/Services/Search/BrandDetectionService.php](app/Services/Search/BrandDetectionService.php)
+
+## 🔤 Brand Detection & Transliteration
+
+`BrandDetectionService` handles Ukrainian slang/transliteration → canonical brand names:
+
+**File:** [app/Services/Search/BrandDetectionService.php](app/Services/Search/BrandDetectionService.php)
+
+**Supported transliterations:**
+| Input (Ukrainian/Latin slang) | Output (Brand) |
+|-------------------------------|----------------|
+| `опс кор`, `ops core`, `opscore` | `Ops-Core` |
+| `саломон`, `salomon` | `Salomon` |
+| `пелтор`, `peltor` | `Peltor` |
+| `кріптек`, `kryptek` | `Kryptek` |
+| `мілтек`, `милтек`, `mil-tec` | `Mil-Tec` |
+| `хелікон`, `helikon` | `Helikon-Tex` |
+| `кондор`, `condor` | `Condor` |
+| `тарга`, `targa` | `Targa` |
+
+**Usage in agents:**
+```php
+$brandService = app(BrandDetectionService::class);
+$result = $brandService->detectBrand($query);
+// Returns: ['brand' => 'Ops-Core', 'enhanced_query' => 'шолом Ops-Core', 'original' => 'шолом опс кор']
+```
+
+**Adding new brands:** Edit `BRAND_TRANSLITERATION` constant in `BrandDetectionService.php`
 
 **Legacy (deprecated)**:
 - `AgentOrchestrator`: old plan-execute-respond flow. [app/Services/Agent/AgentOrchestrator.php](app/Services/Agent/AgentOrchestrator.php)

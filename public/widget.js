@@ -1322,9 +1322,8 @@
             addMessage(messages, message, 'user', state.sessionId, true);
             if (!customMessage) input.value = '';
 
-            // Use non-streaming by default (MinimalAgent is more reliable)
-            // Streaming can be enabled via settings.enable_streaming = true
-            const useStreaming = settings.enable_streaming === true;
+            // Check if streaming is enabled (default: true)
+            const useStreaming = settings.enable_streaming !== false;
             
             if (useStreaming) {
                 sendMessageStreaming(message);
@@ -1767,10 +1766,10 @@
             state.operatorMode = false;
         }
         
-        // Fallback fetch version (non-streaming) - uses MinimalAgent (v2)
+        // Fallback fetch version (non-streaming)
         function sendMessageFetch(message) {
             const loader = addLoader(messages);
-            const chatApiUrl = BASE_URL + '/api/chat/v2';
+            const chatApiUrl = BASE_URL + '/api/chat';
 
             fetch(chatApiUrl, {
                 method: 'POST',

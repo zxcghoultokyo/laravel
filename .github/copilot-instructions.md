@@ -152,11 +152,47 @@ Data & Models
 
 Jobs & Queues
 - Meili indexing: [app/Jobs/IndexProductsToMeiliJob.php](app/Jobs/IndexProductsToMeiliJob.php) (supports legacy `chunk`).
+- AI enrichment: [app/Jobs/AnalyzeProductsWithAiJob.php](app/Jobs/AnalyzeProductsWithAiJob.php) — generates keywords, slang, synonyms via GPT-4o-mini.
+- Tenant onboarding: [app/Jobs/OnboardTenantJob.php](app/Jobs/OnboardTenantJob.php) — orchestrates full tenant setup.
 - Category scenarios/scripts and index rebuild jobs live in [app/Jobs](app/Jobs).
 - Queue runs alongside dev server; production uses `meili,default` queues.
 
+## 🚀 Tenant Onboarding Flow
+
+When a new tenant registers and connects their Horoshop store, `OnboardTenantJob` runs:
+
+**Steps (with weights for progress):**
+1. `horoshop_sync` (25%) — Sync products from Horoshop API
+2. `categories_rebuild` (10%) — Build category tree from products
+3. `brands_sync` (5%) — Extract and save brands
+4. `ai_enrichment` (40%) — AI analysis of all products (keywords, slang, categories)
+5. `meili_indexing` (20%) — Index products in Meilisearch
+
+**Progress Tracking:**
+- Model: [app/Models/TenantOnboardingProgress.php](app/Models/TenantOnboardingProgress.php)
+- Livewire component: [app/Livewire/OnboardingProgress.php](app/Livewire/OnboardingProgress.php)
+- View: [resources/views/livewire/onboarding-progress.blade.php](resources/views/livewire/onboarding-progress.blade.php)
+
+**Key methods:**
+```php
+TenantOnboardingProgress::forTenant($tenantId);  // Get or create
+$progress->start();                              // Mark as in_progress
+$progress->updateStep('ai_enrichment', 'in_progress', 50, 'Analyzing...');
+$progress->complete();                           // Mark all done
+$progress->fail($errorMessage);                  // Mark as failed
+```
+
+**Real-time updates:** Jobs update progress directly:
+- `AnalyzeProductsWithAiJob` calls `updateOnboardingProgress()` after each batch
+- `IndexProductsToMeiliJob` calls `updateMeiliProgress()` during chunks
+- Livewire polls every 3 seconds via `wire:poll.3000ms`
+
+**AI Enrichment costs (~gpt-4o-mini):**
+- ~$0.14 per 500 products (~6 грн)
+- ~1 hour for 500 products (with rate limiting)
+
 Config & Env
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt‑5.1), `OPENAI_BASE_URL`. See [config/services.php](config/services.php).
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt-4.1-mini for chat, gpt-4o-mini for enrichment). See [config/services.php](config/services.php).
 - Meili: `MEILI_ENABLED`, `MEILI_HOST`, `MEILI_MASTER_KEY`, index name in [config/meilisearch.php](config/meilisearch.php).
 - Horoshop: `HOROSHOP_DOMAIN`, `HOROSHOP_API_LOGIN`, `HOROSHOP_API_PASSWORD`.
 

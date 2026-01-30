@@ -88,9 +88,12 @@ class MeiliProductSearchTool
         try {
             $index = $this->meiliClient->client()->index('products');
             
-            // Request more results to allow for deduplication by title
-            // Since variants (size/color) are separate docs, we need 5x to get enough unique models
-            $meiliLimit = $limit * 5;
+            // Determine how many results to request from Meili
+            // For queries that need heavy post-filtering (helmets, plate carriers),
+            // we need more raw results to ensure we find the actual products
+            $queryLower = mb_strtolower($query);
+            $meiliMultiplier = $this->getMeiliLimitMultiplier($queryLower);
+            $meiliLimit = $limit * $meiliMultiplier;
             
             // First: transliterate cyrillic brand names to latin (e.g., "опс кор" → "Ops-Core")
             $normalizedQuery = $this->brandDetection->normalizeBrandsInQuery($query);
@@ -360,6 +363,34 @@ class MeiliProductSearchTool
         }
         
         return null;
+    }
+
+    /**
+     * Get the Meili limit multiplier based on query type.
+     * 
+     * Some queries need more raw results because:
+     * - High-popularity accessories rank above actual products
+     * - AI enrichment may have misclassified some products
+     * - We need enough results to find actual matches after filtering
+     * 
+     * @return int Multiplier for meiliLimit (5 = default, 15 = heavy filtering needed)
+     */
+    private function getMeiliLimitMultiplier(string $queryLower): int
+    {
+        // Queries that need heavy post-filtering due to accessories ranking high
+        $heavyFilteringPatterns = [
+            '/(шолом|каска|helmet)/ui',           // Helmets: many accessories (mounts, covers, pads)
+            '/(плитоноск|plate\s*carrier)/ui',    // Plate carriers: pouches, panels rank high
+            '/(бронежилет|жилет)/ui',             // Body armor: accessories mixed in
+        ];
+        
+        foreach ($heavyFilteringPatterns as $pattern) {
+            if (preg_match($pattern, $queryLower)) {
+                return 15; // Need 15x to find actual products after filtering
+            }
+        }
+        
+        return 5; // Default: 5x for size/color variants dedup
     }
 
     /**

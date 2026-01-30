@@ -599,16 +599,19 @@ CONTEXT;
         $intro = $structuredResponse['intro'] ?? '';
         $intro = $this->personalizeIntro($intro, $originalMessage, $products);
 
-        // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant fallback products
+        // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant products
         // This prevents showing термобілизна when GPT says "немає наборів для чищення"
+        // NOTE: We trust GPT's judgment - if it says "no products", clear them even if search returned results
+        // because search might return irrelevant products that GPT correctly identified as wrong
         $finalProducts = $structuredResponse['products'] ?? array_slice($products, 0, 5);
         $finalMessages = $structuredResponse['messages'] ?? [];
         
-        if ($this->textIndicatesNoResults($intro) && !$searchFoundProducts) {
-            Log::warning('FunctionCallingAgent: GPT text indicates no results found, clearing fallback products', [
+        if ($this->textIndicatesNoResults($intro)) {
+            Log::warning('FunctionCallingAgent: GPT text indicates no results found, clearing products', [
                 'intro' => mb_substr($intro, 0, 100),
                 'original_message' => $originalMessage,
                 'was_products' => count($finalProducts),
+                'search_found_products' => $searchFoundProducts,
             ]);
             $finalProducts = [];
             // Remove product messages, keep only text

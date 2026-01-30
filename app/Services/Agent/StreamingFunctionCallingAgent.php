@@ -376,14 +376,17 @@ CONTEXT;
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
 
-            // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant fallback products
+            // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant products
             // This prevents showing термобілизна when GPT says "немає наборів для чищення"
+            // NOTE: We trust GPT's judgment - if it says "no products", clear them even if search returned results
+            // because search might return irrelevant products that GPT correctly identified as wrong
             $shouldShowProducts = true;
-            if ($this->textIndicatesNoResults($introText) && !$searchFoundProducts) {
-                Log::warning('StreamingAgent: GPT text indicates no results, clearing fallback products', [
+            if ($this->textIndicatesNoResults($introText)) {
+                Log::warning('StreamingAgent: GPT text indicates no results, clearing products', [
                     'intro' => mb_substr($introText, 0, 100),
                     'original_message' => $normalizedMessage,
                     'was_products' => count($responseProducts),
+                    'search_found_products' => $searchFoundProducts,
                 ]);
                 $shouldShowProducts = false;
                 $responseProducts = [];

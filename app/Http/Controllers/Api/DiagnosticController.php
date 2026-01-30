@@ -598,6 +598,7 @@ class DiagnosticController extends Controller
     /**
      * GET /api/diagnostic/test-chat?q=рукавички тактичні
      * Test chat search without AI (just Meili + processing)
+     * Now with detailed debug info to trace what happens at each step
      */
     public function testChat(Request $request): JsonResponse
     {
@@ -606,6 +607,7 @@ class DiagnosticController extends Controller
         }
 
         $query = $request->query('q', '');
+        $tenantId = $request->query('tenant_id', 2); // Default to tenant 2 for debugging
 
         if (!$query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
@@ -613,11 +615,33 @@ class DiagnosticController extends Controller
 
         try {
             $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
-            $results = $searchTool->search($query, [], 20);
+            
+            // Get tenant info for debug
+            $currentTenantId = $searchTool->getCurrentTenantId();
+            
+            // Pass tenant_id in filters
+            $filters = ['tenant_id' => (int)$tenantId];
+            $results = $searchTool->search($query, $filters, 20);
+            
+            // Also get raw Meili results for comparison
+            $meili = app(\App\Services\Search\MeiliClient::class);
+            $index = $meili->client()->index('products');
+            $rawMeili = $index->search($query, [
+                'limit' => 5,
+                'filter' => "tenant_id = {$tenantId} AND in_stock = true",
+                'attributesToRetrieve' => ['id', 'title', 'ai_product_type'],
+            ])->getHits();
 
             return response()->json([
                 'query' => $query,
+                'tenant_id_requested' => (int)$tenantId,
+                'tenant_id_from_context' => $currentTenantId,
                 'count' => count($results),
+                'raw_meili_count' => count($rawMeili),
+                'raw_meili_sample' => array_map(fn($h) => [
+                    'id' => $h['id'] ?? null,
+                    'ai_product_type' => $h['ai_product_type'] ?? '__missing__',
+                ], array_slice($rawMeili, 0, 5)),
                 'products' => array_map(fn($p) => [
                     'id' => $p['id'] ?? null,
                     'title' => $p['title'] ?? null,
@@ -630,6 +654,7 @@ class DiagnosticController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'query' => $query,
             ], 500);
         }

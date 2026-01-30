@@ -804,6 +804,25 @@ class DiagnosticController extends Controller
             $trace['step3_filtered_out_count'] = count($filteredOut);
             $trace['step3_filtered_out_sample'] = array_slice($filteredOut, 0, 5);
             
+            // Step 4: Check if shouldFilter would be true
+            $isMainProductQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate.?carrier|бронежилет|жилет)/ui', $queryLower);
+            $shouldFilter = (count($mainProducts) >= 1 && $isMainProductQuery) || (count($mainProducts) >= 2);
+            $trace['step4_shouldFilter'] = $shouldFilter;
+            $trace['step4_isMainProductQuery'] = (bool)$isMainProductQuery;
+            $trace['step4_mainCount'] = count($mainProducts);
+            
+            // Step 5: What would MeiliProductSearchTool.search() actually return?
+            $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
+            $toolFilters = ['tenant_id' => $tenantId];
+            $toolResults = $searchTool->search($query, $toolFilters, 20);
+            
+            $trace['step5_meili_tool_results_count'] = count($toolResults);
+            $trace['step5_meili_tool_results'] = array_map(fn($p) => [
+                'id' => $p['id'] ?? null,
+                'ai_product_type' => $p['ai_product_type'] ?? '__missing__',
+                'title' => mb_substr($p['title'] ?? '', 0, 40),
+            ], array_slice($toolResults, 0, 5));
+            
             return response()->json([
                 'query' => $query,
                 'tenant_id' => $tenantId,

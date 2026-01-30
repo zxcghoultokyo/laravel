@@ -238,6 +238,26 @@ class MeiliProductSearchTool
                 }
             }
             
+            // Retry without ai_product_type filter if we got zero hits
+            // This handles cases where AI enrichment hasn't classified products yet
+            $shouldRetryWithoutTypeFilter = $accessoryFilter && count($hits) === 0;
+            if ($shouldRetryWithoutTypeFilter) {
+                Log::info('MeiliProductSearchTool: retrying without ai_product_type filter', [
+                    'reason' => 'zero_hits_with_type_filter',
+                    'removed_filter' => $accessoryFilter,
+                ]);
+                $filterPartsNoType = array_filter($filterParts, fn($f) => !str_contains($f, 'ai_product_type'));
+                $filterStringNoType = implode(' AND ', $filterPartsNoType);
+                if ($filterStringNoType) {
+                    $searchParams['filter'] = $filterStringNoType;
+                } else {
+                    unset($searchParams['filter']);
+                }
+                $result = $index->search($enhancedQuery, $searchParams);
+                $hits = $result->getHits();
+                Log::info('MeiliProductSearchTool: retry without type filter returned', ['count' => count($hits)]);
+            }
+            
             // ALWAYS post-filter by color if color filter was requested
             // This catches cases where color_norm is wrong/missing in index
             if (!empty($filters['color']) && count($hits) > 0) {

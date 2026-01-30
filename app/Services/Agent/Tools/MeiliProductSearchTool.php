@@ -428,8 +428,16 @@ class MeiliProductSearchTool
             'accessory_count' => $accessoryCount,
         ]);
         
-        // If we have at least 2 main products, filter out accessories
-        if ($mainCount >= 2) {
+        // Determine if query is specifically asking for a main product type (not accessories)
+        // If user asks "шоломи" or "плитоноски" - they want main products, not accessories
+        $isMainProductQuery = preg_match('/\b(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет|жилет)\b/ui', $queryLower);
+        
+        // Filter out accessories if:
+        // 1. We have at least 1 main product AND user is asking for main products OR
+        // 2. We have at least 2 main products (old logic)
+        $shouldFilter = ($mainCount >= 1 && $isMainProductQuery) || ($mainCount >= 2);
+        
+        if ($shouldFilter) {
             $filtered = array_filter($hits, function ($hit) use ($isAccessoryType) {
                 $type = $hit['ai_product_type'] ?? '__unknown__';
                 $cat = $hit['category_path'] ?? null;
@@ -441,9 +449,10 @@ class MeiliProductSearchTool
                 'query' => $query,
                 'before' => count($hits),
                 'after' => count($filtered),
+                'is_main_product_query' => $isMainProductQuery,
             ]);
             
-            if (count($filtered) >= 2) {
+            if (count($filtered) >= 1) {
                 return array_values($filtered);
             }
         }

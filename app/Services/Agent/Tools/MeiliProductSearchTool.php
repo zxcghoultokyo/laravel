@@ -360,9 +360,9 @@ class MeiliProductSearchTool
             'dominant_count' => $dominantCount,
         ]);
         
-        // Use ai_product_type AND category_path to determine what's an accessory
-        // Combines AI enrichment types with category structure for better accuracy
-        $isAccessoryType = function($type, ?string $categoryPath = null) {
+        // Use ai_product_type, category_path, AND title to determine what's an accessory
+        // Combines AI enrichment types with category structure and title patterns for better accuracy
+        $isAccessoryType = function($type, ?string $categoryPath = null, ?string $title = null) {
             if (empty($type) || $type === '__unknown__') return true;
             $t = mb_strtolower($type);
             
@@ -378,6 +378,25 @@ class MeiliProductSearchTool
                 }
             }
             
+            // Check title for accessory patterns (critical when category is wrong!)
+            // Many accessories are placed in "Бронезахист/Шоломи" instead of "Аксесуари"
+            if ($title) {
+                $titleLower = mb_strtolower($title);
+                // Accessory patterns in Ukrainian/English
+                $accessoryTitlePatterns = [
+                    'кріплення', 'адаптер', 'планка', 'подушк', 'противаг',
+                    'кавер', 'чохол', 'велкро', 'панел', 'тримач',
+                    'маска', 'візор', 'visor', 'mount', 'adapter', 'cover',
+                    'pad', 'panel', 'strap', 'clip', 'rail',
+                    'захист обличчя', 'захист нижньої',
+                ];
+                foreach ($accessoryTitlePatterns as $pattern) {
+                    if (str_contains($titleLower, $pattern)) {
+                        return true;
+                    }
+                }
+            }
+            
             // AI enrichment marks accessories with these patterns in ai_product_type
             return str_contains($t, 'accessory') 
                 || str_contains($t, 'adapter')
@@ -389,13 +408,14 @@ class MeiliProductSearchTool
                 || str_starts_with($t, 'side_');
         };
         
-        // Recount with proper category-aware detection
+        // Recount with proper category-aware and title-aware detection
         $mainCount = 0;
         $accessoryCount = 0;
         foreach ($hits as $hit) {
             $type = $hit['ai_product_type'] ?? '__unknown__';
             $cat = $hit['category_path'] ?? null;
-            if ($isAccessoryType($type, $cat)) {
+            $title = $hit['title'] ?? null;
+            if ($isAccessoryType($type, $cat, $title)) {
                 $accessoryCount++;
             } else {
                 $mainCount++;
@@ -413,7 +433,8 @@ class MeiliProductSearchTool
             $filtered = array_filter($hits, function ($hit) use ($isAccessoryType) {
                 $type = $hit['ai_product_type'] ?? '__unknown__';
                 $cat = $hit['category_path'] ?? null;
-                return !$isAccessoryType($type, $cat);
+                $title = $hit['title'] ?? null;
+                return !$isAccessoryType($type, $cat, $title);
             });
             
             Log::info('MeiliProductSearchTool: filtered accessories', [
@@ -429,8 +450,8 @@ class MeiliProductSearchTool
         
         // Fallback: sort by putting main products first, accessories last
         usort($hits, function ($a, $b) use ($isAccessoryType) {
-            $aIsAccessory = $isAccessoryType($a['ai_product_type'] ?? '__unknown__', $a['category_path'] ?? null);
-            $bIsAccessory = $isAccessoryType($b['ai_product_type'] ?? '__unknown__', $b['category_path'] ?? null);
+            $aIsAccessory = $isAccessoryType($a['ai_product_type'] ?? '__unknown__', $a['category_path'] ?? null, $a['title'] ?? null);
+            $bIsAccessory = $isAccessoryType($b['ai_product_type'] ?? '__unknown__', $b['category_path'] ?? null, $b['title'] ?? null);
             
             if ($aIsAccessory === $bIsAccessory) {
                 return 0;

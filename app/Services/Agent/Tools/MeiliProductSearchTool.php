@@ -1353,7 +1353,7 @@ class MeiliProductSearchTool
         
         // 2. Use QueryExpander for product type normalization via product_synonyms table
         // This handles domain-specific synonyms configured per tenant
-        $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk', null, $this->tenantId);
+        $expanded = $this->queryExpander->expandQueryWithDomainSynonyms($q, 'uk', null, $this->getCurrentTenantId());
         
         // 3. Limit expansion - don't add too many words (causes AND problem)
         // Only keep first 2-3 synonym additions

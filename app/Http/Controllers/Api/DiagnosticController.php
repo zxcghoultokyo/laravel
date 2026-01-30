@@ -614,42 +614,71 @@ class DiagnosticController extends Controller
         }
 
         try {
-            $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
-            
-            // Get tenant info for debug
-            $currentTenantId = $searchTool->getCurrentTenantId();
-            
-            // Pass tenant_id in filters
-            $filters = ['tenant_id' => (int)$tenantId];
-            $results = $searchTool->search($query, $filters, 20);
-            
-            // Also get raw Meili results for comparison
+            // STEP 1: Direct Meili search with same filter as MeiliProductSearchTool
             $meili = app(\App\Services\Search\MeiliClient::class);
             $index = $meili->client()->index('products');
-            $rawMeili = $index->search($query, [
+            
+            // Build the same filter that MeiliProductSearchTool would build
+            $queryLower = mb_strtolower($query);
+            $accessoryFilter = null;
+            if (preg_match('/(шолом|каска|helmet)/ui', $queryLower)) {
+                $accessoryFilter = "ai_product_type IN ['helmet', 'ballistic_helmet', 'tactical_helmet']";
+            }
+            
+            $meiliFilter = "tenant_id = {$tenantId} AND in_stock = true";
+            if ($accessoryFilter) {
+                $meiliFilter .= " AND " . $accessoryFilter;
+            }
+            
+            $rawMeiliWithFilter = $index->search($query, [
+                'limit' => 10,
+                'filter' => $meiliFilter,
+                'attributesToRetrieve' => ['id', 'title', 'ai_product_type', 'category_path'],
+            ])->getHits();
+            
+            // STEP 2: Direct Meili without ai_product_type filter for comparison
+            $rawMeiliNoFilter = $index->search($query, [
                 'limit' => 5,
                 'filter' => "tenant_id = {$tenantId} AND in_stock = true",
                 'attributesToRetrieve' => ['id', 'title', 'ai_product_type'],
             ])->getHits();
+            
+            // STEP 3: Run MeiliProductSearchTool.search()
+            $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
+            $currentTenantId = $searchTool->getCurrentTenantId();
+            $filters = ['tenant_id' => (int)$tenantId];
+            $results = $searchTool->search($query, $filters, 20);
 
             return response()->json([
                 'query' => $query,
                 'tenant_id_requested' => (int)$tenantId,
                 'tenant_id_from_context' => $currentTenantId,
-                'count' => count($results),
-                'raw_meili_count' => count($rawMeili),
-                'raw_meili_sample' => array_map(fn($h) => [
+                'meili_filter_used' => $meiliFilter,
+                'accessory_filter' => $accessoryFilter,
+                
+                // Raw Meili WITH ai_product_type filter
+                'raw_meili_with_filter_count' => count($rawMeiliWithFilter),
+                'raw_meili_with_filter' => array_map(fn($h) => [
+                    'id' => $h['id'] ?? null,
+                    'title' => mb_substr($h['title'] ?? '', 0, 50),
+                    'ai_product_type' => $h['ai_product_type'] ?? '__missing__',
+                ], array_slice($rawMeiliWithFilter, 0, 5)),
+                
+                // Raw Meili WITHOUT ai_product_type filter
+                'raw_meili_no_filter_count' => count($rawMeiliNoFilter),
+                'raw_meili_no_filter' => array_map(fn($h) => [
                     'id' => $h['id'] ?? null,
                     'ai_product_type' => $h['ai_product_type'] ?? '__missing__',
-                ], array_slice($rawMeili, 0, 5)),
-                'products' => array_map(fn($p) => [
+                ], array_slice($rawMeiliNoFilter, 0, 5)),
+                
+                // MeiliProductSearchTool results
+                'meili_tool_count' => count($results),
+                'meili_tool_results' => array_map(fn($p) => [
                     'id' => $p['id'] ?? null,
-                    'title' => $p['title'] ?? null,
-                    'price' => $p['price'] ?? null,
+                    'title' => mb_substr($p['title'] ?? '', 0, 50),
+                    'ai_product_type' => $p['ai_product_type'] ?? '__missing__',
                     'category_path' => $p['category_path'] ?? null,
-                    'ai_product_type' => $p['ai_product_type'] ?? null,
-                    'brand' => $p['brand'] ?? null,
-                ], $results),
+                ], array_slice($results, 0, 5)),
             ]);
         } catch (\Exception $e) {
             return response()->json([

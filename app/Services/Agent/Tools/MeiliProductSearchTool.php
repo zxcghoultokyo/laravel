@@ -451,8 +451,9 @@ class MeiliProductSearchTool
                     'кріплення', 'адаптер', 'планка', 'подушк', 'противаг',
                     'кавер', 'чохол', 'велкро', 'панел', 'тримач',
                     'маска', 'візор', 'visor', 'mount', 'adapter', 'cover',
-                    'pad', 'panel', 'strap', 'clip', 'rail',
-                    'захист обличчя', 'захист нижньої',
+                    'pad', 'panel', 'strap', 'clip', 'rail', 'ліхтар',
+                    'захист обличчя', 'захист нижньої', 'набір', 'комплект монтаж',
+                    'система захист', 'липучк', 'нейлонов', 'платформ',
                 ];
                 foreach ($accessoryTitlePatterns as $pattern) {
                     if (str_contains($titleLower, $pattern)) {
@@ -497,17 +498,49 @@ class MeiliProductSearchTool
         // Note: \b word boundaries don't work with Cyrillic in PHP regex
         $isMainProductQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет|жилет)/ui', $queryLower);
         
+        // Extract the main product keyword from query for title matching
+        $mainProductKeywords = [];
+        if (preg_match('/(шолом|каска|helmet)/ui', $queryLower)) {
+            $mainProductKeywords = ['шолом', 'каска', 'helmet', 'fast', 'mich', 'ach'];
+        } elseif (preg_match('/(плитоноск|plate\s*carrier)/ui', $queryLower)) {
+            $mainProductKeywords = ['плитоноска', 'плитоноска', 'plate carrier', 'плейт'];
+        } elseif (preg_match('/(бронежилет|жилет)/ui', $queryLower)) {
+            $mainProductKeywords = ['бронежилет', 'жилет', 'vest'];
+        }
+        
         // Filter out accessories if:
         // 1. We have at least 1 main product AND user is asking for main products OR
         // 2. We have at least 2 main products (old logic)
         $shouldFilter = ($mainCount >= 1 && $isMainProductQuery) || ($mainCount >= 2);
         
         if ($shouldFilter) {
-            $filtered = array_filter($hits, function ($hit) use ($isAccessoryType) {
+            $filtered = array_filter($hits, function ($hit) use ($isAccessoryType, $mainProductKeywords) {
                 $type = $hit['ai_product_type'] ?? '__unknown__';
                 $cat = $hit['category_path'] ?? null;
                 $title = $hit['title'] ?? null;
-                return !$isAccessoryType($type, $cat, $title);
+                
+                // First: must not be an accessory
+                if ($isAccessoryType($type, $cat, $title)) {
+                    return false;
+                }
+                
+                // Second: if we have main product keywords, title MUST contain one of them
+                // This prevents unrelated products (plates, headphones) from appearing in helmet results
+                if (!empty($mainProductKeywords) && $title) {
+                    $titleLower = mb_strtolower($title);
+                    $hasKeyword = false;
+                    foreach ($mainProductKeywords as $keyword) {
+                        if (str_contains($titleLower, $keyword)) {
+                            $hasKeyword = true;
+                            break;
+                        }
+                    }
+                    if (!$hasKeyword) {
+                        return false;
+                    }
+                }
+                
+                return true;
             });
             
             Log::info('MeiliProductSearchTool: filtered accessories', [
@@ -515,6 +548,7 @@ class MeiliProductSearchTool
                 'before' => count($hits),
                 'after' => count($filtered),
                 'is_main_product_query' => $isMainProductQuery,
+                'keywords' => $mainProductKeywords,
             ]);
             
             if (count($filtered) >= 1) {

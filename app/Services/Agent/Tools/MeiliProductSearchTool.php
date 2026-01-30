@@ -338,27 +338,36 @@ class MeiliProductSearchTool
     /**
      * Build Meili filter to exclude accessory types when searching for main products.
      * Returns null if no filtering needed, otherwise returns filter string.
+     * 
+     * Strategy: Use POSITIVE filtering (IN) for main product types rather than
+     * excluding accessories. This is more reliable because:
+     * 1. Word "шолом" appears in search_index of accessories ("кріплення НА шолом")
+     * 2. Ranking rules alone can't distinguish between "шолом" (product) and "на шолом" (accessory)
+     * 3. AI enrichment correctly marks actual helmets as "helmet" type
      */
     private function buildAccessoryExclusionFilter(string $queryLower): ?string
     {
-        // Define main product queries and their accessory types to exclude
+        // Define main product queries and their ALLOWED product types (positive filtering)
+        // This is more reliable than excluding accessories because the main type is well-defined
         $mainProductPatterns = [
-            // Helmets: exclude helmet accessories
+            // Helmets: only include actual helmets
             '/(шолом|каска|helmet)/ui' => [
-                'helmet_accessory', 'helmet_mount', 'helmet_cover', 'helmet_pads',
-                'helmet_attachment', 'helmet_light', 'helmet_visor',
+                'include' => ['helmet', 'ballistic_helmet', 'tactical_helmet'],
             ],
-            // Plate carriers: exclude plate carrier accessories
-            '/(плитоноск|plate\s*carrier|бронежилет|жилет)/ui' => [
-                'plate_carrier_accessory', 'pouch', 'panel', 'cummerbund',
+            // Plate carriers: include main products
+            '/(плитоноск|plate\s*carrier)/ui' => [
+                'include' => ['plate_carrier', 'tactical_vest', 'body_armor'],
             ],
         ];
         
-        foreach ($mainProductPatterns as $pattern => $excludeTypes) {
+        foreach ($mainProductPatterns as $pattern => $config) {
             if (preg_match($pattern, $queryLower)) {
-                // Build NOT IN filter for accessory types
-                $excludeList = array_map(fn($t) => "'{$t}'", $excludeTypes);
-                return 'ai_product_type NOT IN [' . implode(', ', $excludeList) . ']';
+                // Use positive IN filter - more reliable than NOT IN
+                $includeTypes = $config['include'] ?? [];
+                if (!empty($includeTypes)) {
+                    $includeList = array_map(fn($t) => "'{$t}'", $includeTypes);
+                    return 'ai_product_type IN [' . implode(', ', $includeList) . ']';
+                }
             }
         }
         

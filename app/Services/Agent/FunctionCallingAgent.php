@@ -449,6 +449,7 @@ CONTEXT;
         // Track if search_products found anything - to prevent irrelevant fallback
         $searchFoundProducts = false;
         $searchWasCalled = false;
+        $searchQuery = null;  // Track what GPT actually searched for (debug)
 
         $isTriggerQuery = $this->detectTriggerQuery($originalMessage);
         
@@ -472,10 +473,18 @@ CONTEXT;
 
             $result = $this->executeTool($functionName, $args);
             
-            // Track search results
+            // Track search results and the actual query used
             if ($functionName === 'search_products') {
                 $searchWasCalled = true;
                 $searchFoundProducts = !empty($result['products']);
+                $searchQuery = $args['query'] ?? null;
+                
+                // Log important debug info about search
+                Log::info('FunctionCallingAgent: search_products result', [
+                    'query_from_gpt' => $searchQuery,
+                    'products_found' => count($result['products'] ?? []),
+                    'first_product_title' => $result['products'][0]['title'] ?? null,
+                ]);
             }
 
             // Filter out already shown products ONLY when explicitly requested (for "покажи ще" type requests)
@@ -617,6 +626,7 @@ CONTEXT;
                 'products_found' => count($finalProducts),
                 'outro' => $outro,
                 'is_trigger' => $isTriggerQuery,
+                'search_query' => $searchQuery ?? null,  // Debug: what GPT actually searched for
             ],
         ];
     }

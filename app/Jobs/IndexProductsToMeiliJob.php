@@ -556,31 +556,39 @@ class IndexProductsToMeiliJob implements ShouldQueue
             'рівень' => ['level', 'левел', 'лвл', 'lvl'],
         ];
         
-        // Load dynamic synonyms from ProductSynonym table
+        // Load dynamic synonyms from ProductSynonym table (relational: product_type + synonym)
         try {
             $dbSynonyms = ProductSynonym::query()
-                ->select('product_type', 'synonyms')
+                ->where('is_active', true)
+                ->select('product_type', 'synonym')
                 ->get();
             
             foreach ($dbSynonyms as $row) {
-                $type = mb_strtolower(trim($row->product_type));
-                $synonymsList = is_array($row->synonyms) ? $row->synonyms : json_decode($row->synonyms, true) ?? [];
+                $type = mb_strtolower(trim($row->product_type ?? ''));
+                $synonym = mb_strtolower(trim($row->synonym ?? ''));
                 
-                if (empty($type) || empty($synonymsList)) {
+                if (empty($type) || empty($synonym)) {
                     continue;
                 }
                 
-                // Merge with existing or add new
-                if (isset($baseSynonyms[$type])) {
-                    $baseSynonyms[$type] = array_values(array_unique(
-                        array_merge($baseSynonyms[$type], $synonymsList)
-                    ));
-                } else {
-                    $baseSynonyms[$type] = array_values(array_unique($synonymsList));
+                // Add synonym to product_type group
+                if (!isset($baseSynonyms[$type])) {
+                    $baseSynonyms[$type] = [];
+                }
+                if (!in_array($synonym, $baseSynonyms[$type])) {
+                    $baseSynonyms[$type][] = $synonym;
+                }
+                
+                // Also add reverse mapping: synonym -> product_type
+                if (!isset($baseSynonyms[$synonym])) {
+                    $baseSynonyms[$synonym] = [];
+                }
+                if (!in_array($type, $baseSynonyms[$synonym])) {
+                    $baseSynonyms[$synonym][] = $type;
                 }
             }
             
-            echo "📚 Loaded " . count($dbSynonyms) . " synonym groups from database\n";
+            echo "📚 Loaded " . count($dbSynonyms) . " synonyms from database\n";
             
         } catch (\Throwable $e) {
             echo "⚠️  Could not load ProductSynonym: {$e->getMessage()}\n";

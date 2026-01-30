@@ -100,7 +100,7 @@ class IndexProductsToMeiliJob implements ShouldQueue
         try {
             $index->updateSettings([
                 'filterableAttributes' => array_values(array_unique([
-                    'tenant_id', 'has_ai_type', 'has_ai_category', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price',
+                    'tenant_id', 'has_ai_type', 'has_ai_category', 'ai_product_type', 'brand', 'color', 'color_norm', 'size', 'in_stock', 'quantity', 'display_in_showcase', 'price', 'category_path',
                 ])),
                 'sortableAttributes' => [
                     'popularity',

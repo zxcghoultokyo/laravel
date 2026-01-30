@@ -1334,13 +1334,8 @@ PROMPT;
         if (!empty($args['brand'])) $filters['brand'] = $args['brand'];
         if ($sortBy !== 'relevance') $filters['sort_by'] = $sortBy;
 
-        // Request more to have room after filtering
-        // For main product queries (helmets, plate carriers) we need MORE results
-        // because Meili returns many accessories with high popularity first
-        $queryLower = mb_strtolower($query);
-        $isMainProductQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)/ui', $queryLower);
-        $multiplier = $isMainProductQuery ? 15 : 3;  // 15x for helmets etc, 3x for normal
-        $requestLimit = $limit * $multiplier + count($this->shownProductIds);
+        // Request more to have room after filtering and deduplication
+        $requestLimit = $limit * 5 + count($this->shownProductIds);
         $results = $this->searchTool->search($query, $filters, $requestLimit);
 
         // Filter by exclude text

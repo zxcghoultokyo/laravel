@@ -132,10 +132,13 @@ class MeiliProductSearchTool
                 $filterParts[] = "color_norm = '{$canonical}'";
             }
             
-            // Camo filter (would need to be in products table)
-            // if (!empty($filters['camo'])) {
-            //     $filterParts[] = "camo = '{$filters['camo']}'";
-            // }
+            // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
+            // This is done at Meili level for efficiency - no need to fetch accessories just to filter them out
+            $queryLower = mb_strtolower($query);
+            $accessoryFilter = $this->buildAccessoryExclusionFilter($queryLower);
+            if ($accessoryFilter) {
+                $filterParts[] = $accessoryFilter;
+            }
             
             // If explicit brand-ONLY search — strictly filter by brand in Meili
             // BUT don't filter if query contains multiple words (likely model/series name)
@@ -327,6 +330,36 @@ class MeiliProductSearchTool
             // Fallback to Eloquent search
             return $this->eloquentFallback($query, $filters, $limit);
         }
+    }
+
+    /**
+     * Build Meili filter to exclude accessory types when searching for main products.
+     * Returns null if no filtering needed, otherwise returns filter string.
+     */
+    private function buildAccessoryExclusionFilter(string $queryLower): ?string
+    {
+        // Define main product queries and their accessory types to exclude
+        $mainProductPatterns = [
+            // Helmets: exclude helmet accessories
+            '/(шолом|каска|helmet)/ui' => [
+                'helmet_accessory', 'helmet_mount', 'helmet_cover', 'helmet_pads',
+                'helmet_attachment', 'helmet_light', 'helmet_visor',
+            ],
+            // Plate carriers: exclude plate carrier accessories
+            '/(плитоноск|plate\s*carrier|бронежилет|жилет)/ui' => [
+                'plate_carrier_accessory', 'pouch', 'panel', 'cummerbund',
+            ],
+        ];
+        
+        foreach ($mainProductPatterns as $pattern => $excludeTypes) {
+            if (preg_match($pattern, $queryLower)) {
+                // Build NOT IN filter for accessory types
+                $excludeList = array_map(fn($t) => "'{$t}'", $excludeTypes);
+                return 'ai_product_type NOT IN [' . implode(', ', $excludeList) . ']';
+            }
+        }
+        
+        return null;
     }
 
     /**

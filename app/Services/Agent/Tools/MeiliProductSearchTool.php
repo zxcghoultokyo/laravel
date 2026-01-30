@@ -210,6 +210,19 @@ class MeiliProductSearchTool
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
             
+            // DEBUG: Log raw hits to see if ai_product_type is present
+            if (count($hits) > 0) {
+                $debugHits = array_map(fn($h) => [
+                    'id' => $h['id'] ?? null,
+                    'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
+                    'title_short' => mb_substr($h['title'] ?? '', 0, 30),
+                ], array_slice($hits, 0, 3));
+                Log::info('MeiliProductSearchTool: raw hits sample (before any processing)', [
+                    'count' => count($hits),
+                    'sample' => $debugHits,
+                ]);
+            }
+            
             // Retry without color filter if no hits OR if color_norm might be unreliable
             $shouldRetryWithoutColor = !empty($filters['color']) && (
                 count($hits) === 0 || 
@@ -346,6 +359,18 @@ class MeiliProductSearchTool
                 Log::info('MeiliProductSearchTool: skipping semantic fallback for category query', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
+                ]);
+            }
+            
+            // DEBUG: Log final results to see if ai_product_type survived
+            if (count($filtered) > 0) {
+                $debugFiltered = array_map(fn($h) => [
+                    'id' => $h['id'] ?? null,
+                    'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
+                ], array_slice($filtered, 0, 3));
+                Log::info('MeiliProductSearchTool: final results sample (before return)', [
+                    'count' => count($filtered),
+                    'sample' => $debugFiltered,
                 ]);
             }
             

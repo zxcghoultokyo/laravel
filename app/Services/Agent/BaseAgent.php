@@ -1427,7 +1427,8 @@ PROMPT;
         $queryLower = mb_strtolower($query);
         
         // Only filter for main product queries
-        if (!preg_match('/\b(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)\b/ui', $queryLower)) {
+        // Note: \b word boundaries don't work with Cyrillic, so we use simple contains
+        if (!preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)/ui', $queryLower)) {
             return $results;
         }
 

@@ -430,7 +430,8 @@ class MeiliProductSearchTool
         
         // Determine if query is specifically asking for a main product type (not accessories)
         // If user asks "шоломи" or "плитоноски" - they want main products, not accessories
-        $isMainProductQuery = preg_match('/\b(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет|жилет)\b/ui', $queryLower);
+        // Note: \b word boundaries don't work with Cyrillic in PHP regex
+        $isMainProductQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет|жилет)/ui', $queryLower);
         
         // Filter out accessories if:
         // 1. We have at least 1 main product AND user is asking for main products OR

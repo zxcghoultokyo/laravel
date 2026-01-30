@@ -218,6 +218,52 @@ curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secr
 
 Full docs: [docs/DIAGNOSTIC_API.md](docs/DIAGNOSTIC_API.md)
 
+## 🧪 TESTING CHAT — START HERE FIRST!
+
+**IMPORTANT: Always test via Chat API first, not diagnostic endpoints!**
+
+**Tenant 2 (attack.kiev.ua) token:** `zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj`
+
+### Quick test command (USE THIS FIRST):
+```bash
+# Test any query - this is the ONLY command you need to start with
+curl -s "https://aintento.laravel.cloud/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "YOUR_QUERY_HERE", "session_id": "test_'$(date +%s)'", "token": "zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+print('source:', d.get('meta',{}).get('source','GPT'))
+print('type:', d.get('type'))
+print('products:', len(d.get('products',[])))
+print('text:', d.get('text','')[:150])
+for p in d.get('products',[])[:3]:
+    print(f\"  - {p.get('title','')[:50]}\")
+"
+```
+
+### Examples that WORK:
+```bash
+# Single word → short_query_handler (fast, no GPT)
+"шоломи"     → 3 products ✓
+"підсумки"   → products ✓
+"берці"      → products ✓
+
+# Multi-word → GPT (with intro text)
+"покажи шоломи"      → GPT with intro ✓
+"що беруть взимку"   → GPT semantic search ✓
+```
+
+### Response structure:
+- `meta.source`: `short_query_handler` (1 word) or `GPT` (2+ words)
+- `type`: `products` or `text`
+- `products`: array with `title`, `price`, `images`, etc.
+- `text`: intro/outro text from GPT
+
+### ONLY if Chat API fails, then check:
+1. Diagnostic search-db (does product exist?)
+2. Diagnostic search-meili (is it indexed?)
+3. Logs via `php artisan pail`
+
 Developer Workflows
 - Dev loop: `composer run dev` (PHP server, queue listener, logs, Vite).
 - Tests: `composer run test` (SQLite in‑memory). Quick agent smoke: `php test-agent.php`.

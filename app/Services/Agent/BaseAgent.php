@@ -179,8 +179,9 @@ abstract class BaseAgent
     }
 
     /**
-     * Handle short queries (1-3 words) that likely represent product types.
-     * Universal approach - works for any product niche without hardcoding.
+     * Handle single-word queries that likely represent product types.
+     * Universal approach - works for any language without patterns.
+     * Multi-word queries go to GPT for proper context understanding.
      */
     protected function handleShortProductQuery(string $message): ?array
     {
@@ -188,34 +189,21 @@ abstract class BaseAgent
         $words = preg_split('/\s+/u', $lower);
         $wordCount = count($words);
         
-        // Only process short queries (1-3 words)
-        if ($wordCount > 3 || $wordCount < 1) {
+        // Only process SINGLE word queries - everything else goes to GPT
+        // This is universal for any language without needing patterns
+        if ($wordCount !== 1) {
             return null;
         }
         
-        // Skip greetings, questions, and common phrases - let GPT handle these
-        $skipPatterns = [
-            '/^(привіт|hello|hi|вітаю|доброго|добрий|hey|ку|привет|здрастуй|салют)/ui',
-            '/^(дякую|спасибі|thanks|thank|дякуємо|спасибо)/ui',
-            '/^(допоможіть|help|допомога|підкажіть|помогите|подскажите)/ui',
-            '/^(що|як|яка?|скільки|де|коли|чому|навіщо)/ui', // Ukrainian questions
-            '/^(что|как|какой|сколько|где|когда|почему|зачем)/ui', // Russian questions
-            '/(берут|беруть|взять|брать|купують|покупают)/ui', // "what do people buy" type questions
-            '/^(так|ні|окей|ok|добре|зрозуміло|ясно|ок|да|нет)/ui',
-            '/^(хочу|мені\s+потрібно|шукаю|мне\s+нужно|ищу)/ui', // Let GPT handle these with context
-        ];
-        
-        foreach ($skipPatterns as $pattern) {
-            if (preg_match($pattern, $lower)) {
-                return null;
-            }
+        // Skip very short words (likely typos or particles)
+        if (mb_strlen($lower) < 3) {
+            return null;
         }
         
-        // If it's a single/short noun-like query, try searching directly
-        // This handles cases like "підсумки", "рукавички", "берці" etc.
-        Log::info('BaseAgent: attempting short query direct search', [
+        // If it's a single noun-like query, try searching directly
+        // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
+        Log::info('BaseAgent: attempting single-word direct search', [
             'message' => $message,
-            'word_count' => $wordCount,
         ]);
         
         $products = $this->searchTool->search($message, [], 3);

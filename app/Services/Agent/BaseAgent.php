@@ -167,6 +167,84 @@ abstract class BaseAgent
             }
         }
         
+        // UNIVERSAL SHORT QUERY HANDLER
+        // If message is 1-3 words and looks like a product type/category, search directly.
+        // This prevents GPT from asking "уточніть запит" for valid product queries like "підсумки".
+        $shortQueryResult = $this->handleShortProductQuery($message);
+        if ($shortQueryResult) {
+            return $shortQueryResult;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Handle short queries (1-3 words) that likely represent product types.
+     * Universal approach - works for any product niche without hardcoding.
+     */
+    protected function handleShortProductQuery(string $message): ?array
+    {
+        $lower = mb_strtolower(trim($message));
+        $words = preg_split('/\s+/u', $lower);
+        $wordCount = count($words);
+        
+        // Only process short queries (1-3 words)
+        if ($wordCount > 3 || $wordCount < 1) {
+            return null;
+        }
+        
+        // Skip greetings and common phrases
+        $skipPatterns = [
+            '/^(привіт|hello|hi|вітаю|доброго|добрий|hey|ку|привет|здрастуй|салют)/ui',
+            '/^(дякую|спасибі|thanks|thank|дякуємо)/ui',
+            '/^(допоможіть|help|допомога|підкажіть)/ui',
+            '/^(що|как|яка?|скільки|де|коли|чому|навіщо)/ui', // Questions
+            '/^(так|ні|окей|ok|добре|зрозуміло|ясно|ок)/ui',
+            '/^(хочу|мені\s+потрібно|шукаю)/ui', // Let GPT handle these with context
+        ];
+        
+        foreach ($skipPatterns as $pattern) {
+            if (preg_match($pattern, $lower)) {
+                return null;
+            }
+        }
+        
+        // If it's a single/short noun-like query, try searching directly
+        // This handles cases like "підсумки", "рукавички", "берці" etc.
+        Log::info('BaseAgent: attempting short query direct search', [
+            'message' => $message,
+            'word_count' => $wordCount,
+        ]);
+        
+        $products = $this->searchTool->search($message, [], 3);
+        
+        if (!empty($products)) {
+            // Determine language for response
+            $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
+            $intro = $isEnglish 
+                ? "Here's what I found:"
+                : "Ось що я знайшов:";
+            
+            Log::info('BaseAgent: short query direct search succeeded', [
+                'message' => $message,
+                'products_found' => count($products),
+            ]);
+            
+            return [
+                'message' => $intro,
+                'products' => $products,
+                'messages' => [
+                    ['type' => 'text', 'content' => $intro],
+                    ['type' => 'products', 'products' => $products],
+                ],
+                'meta' => [
+                    'intent' => 'product_search',
+                    'agent' => 'function_calling',
+                    'source' => 'short_query_handler',
+                ],
+            ];
+        }
+        
         return null;
     }
 

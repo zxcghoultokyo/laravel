@@ -79,6 +79,10 @@ class MeiliProductSearchTool
             'used_semantic' => false,
             'used_slang' => false,
             'variant' => 'treatment', // default
+            'filter_used' => null,
+            'enhanced_query' => null,
+            'raw_hits_count' => 0,
+            'retry_without_type' => false,
         ];
         
         // Get A/B variant features
@@ -197,6 +201,10 @@ class MeiliProductSearchTool
                 $searchParams['filter'] = $filterString;
             }
             
+            // Save to searchMeta for debugging
+            $this->searchMeta['filter_used'] = $filterString;
+            $this->searchMeta['enhanced_query'] = $enhancedQuery;
+            
             Log::info('MeiliProductSearchTool: searching', [
                 'original_query' => $query,
                 'is_brand_search' => $brandInfo['is_brand'],
@@ -209,6 +217,9 @@ class MeiliProductSearchTool
             
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
+            
+            // Save raw hits count for debugging
+            $this->searchMeta['raw_hits_count'] = count($hits);
             
             // DEBUG: Log raw hits to see if ai_product_type is present
             if (count($hits) > 0) {
@@ -255,6 +266,7 @@ class MeiliProductSearchTool
             // This handles cases where AI enrichment hasn't classified products yet
             $shouldRetryWithoutTypeFilter = $accessoryFilter && count($hits) === 0;
             if ($shouldRetryWithoutTypeFilter) {
+                $this->searchMeta['retry_without_type'] = true;
                 Log::info('MeiliProductSearchTool: retrying without ai_product_type filter', [
                     'reason' => 'zero_hits_with_type_filter',
                     'removed_filter' => $accessoryFilter,
@@ -268,6 +280,7 @@ class MeiliProductSearchTool
                 }
                 $result = $index->search($enhancedQuery, $searchParams);
                 $hits = $result->getHits();
+                $this->searchMeta['raw_hits_count_after_retry'] = count($hits);
                 Log::info('MeiliProductSearchTool: retry without type filter returned', ['count' => count($hits)]);
             }
             

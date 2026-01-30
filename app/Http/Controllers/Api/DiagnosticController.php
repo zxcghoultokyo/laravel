@@ -815,8 +815,10 @@ class DiagnosticController extends Controller
             $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
             $toolFilters = ['tenant_id' => $tenantId];
             $toolResults = $searchTool->search($query, $toolFilters, 20);
+            $searchMeta = $searchTool->getSearchMeta();
             
             $trace['step5_meili_tool_results_count'] = count($toolResults);
+            $trace['step5_meili_tool_search_meta'] = $searchMeta;
             $trace['step5_meili_tool_results'] = array_map(fn($p) => [
                 'id' => $p['id'] ?? null,
                 'ai_product_type' => $p['ai_product_type'] ?? '__missing__',

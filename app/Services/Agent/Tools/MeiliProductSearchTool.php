@@ -398,6 +398,10 @@ class MeiliProductSearchTool
                 'query' => $query
             ]);
             
+            // Record error in searchMeta for debugging
+            $this->searchMeta['error'] = $e->getMessage();
+            $this->searchMeta['used_eloquent_fallback'] = true;
+            
             // Fallback to Eloquent search
             return $this->eloquentFallback($query, $filters, $limit);
         }

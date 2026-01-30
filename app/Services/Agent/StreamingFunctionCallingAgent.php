@@ -376,6 +376,20 @@ CONTEXT;
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
 
+            // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant fallback products
+            // This prevents showing термобілизна when GPT says "немає наборів для чищення"
+            $shouldShowProducts = true;
+            if ($this->textIndicatesNoResults($introText) && !$searchFoundProducts) {
+                Log::warning('StreamingAgent: GPT text indicates no results, clearing fallback products', [
+                    'intro' => mb_substr($introText, 0, 100),
+                    'original_message' => $normalizedMessage,
+                    'was_products' => count($responseProducts),
+                ]);
+                $shouldShowProducts = false;
+                $responseProducts = [];
+                $responseIntent = 'text';
+            }
+
             // Send intro text with typing effect
             if (!empty($introText)) {
                 $introChunks = mb_str_split($introText, 3);
@@ -385,8 +399,8 @@ CONTEXT;
                 }
             }
 
-            // Send products
-            if (!empty($structured['products'])) {
+            // Send products (only if not blocked by no-results detection)
+            if ($shouldShowProducts && !empty($structured['products'])) {
                 yield ['type' => 'products', 'data' => [
                     'products' => $structured['products'],
                     'count' => count($structured['products']),
@@ -614,6 +628,34 @@ CONTEXT;
         }
 
         yield ['type' => 'done', 'data' => ['session_id' => null]];
+    }
+
+    /**
+     * Check if GPT's text indicates that no relevant products were found.
+     * Used to prevent showing irrelevant fallback products when GPT explicitly says "not found".
+     */
+    private function textIndicatesNoResults(string $text): bool
+    {
+        $noResultsPatterns = [
+            '/на жаль.*(немає|нема|відсутн|не знайш)/ui',
+            '/не (знайш|вдалося знайти)/ui',
+            '/не маю (таких|подібних|відповідних)/ui',
+            '/не мож[уе] знайти/ui',
+            '/немає в наявності/ui',
+            '/відсутні (в|у) наявності/ui',
+            '/не (маємо|має)/ui',
+            '/sorry.*(no|couldn\'t|can\'t find)/ui',
+            '/не вдалося/ui',
+            '/не маємо товарів/ui',
+        ];
+
+        foreach ($noResultsPatterns as $pattern) {
+            if (preg_match($pattern, $text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

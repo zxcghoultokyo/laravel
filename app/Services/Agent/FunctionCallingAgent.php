@@ -590,19 +590,63 @@ CONTEXT;
         $intro = $structuredResponse['intro'] ?? '';
         $intro = $this->personalizeIntro($intro, $originalMessage, $products);
 
+        // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant fallback products
+        // This prevents showing термобілизна when GPT says "немає наборів для чищення"
+        $finalProducts = $structuredResponse['products'] ?? array_slice($products, 0, 5);
+        $finalMessages = $structuredResponse['messages'] ?? [];
+        
+        if ($this->textIndicatesNoResults($intro) && !$searchFoundProducts) {
+            Log::warning('FunctionCallingAgent: GPT text indicates no results found, clearing fallback products', [
+                'intro' => mb_substr($intro, 0, 100),
+                'original_message' => $originalMessage,
+                'was_products' => count($finalProducts),
+            ]);
+            $finalProducts = [];
+            // Remove product messages, keep only text
+            $finalMessages = array_filter($finalMessages, fn($m) => ($m['type'] ?? '') !== 'product');
+        }
+
         return [
             'message' => $intro,
-            'products' => $structuredResponse['products'] ?? array_slice($products, 0, 5),
-            'messages' => $structuredResponse['messages'] ?? [],
+            'products' => $finalProducts,
+            'messages' => $finalMessages,
             'meta' => [
-                'intent' => 'product_search',
+                'intent' => count($finalProducts) > 0 ? 'product_search' : 'text',
                 'agent' => 'function_calling',
                 'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
-                'products_found' => count($products),
+                'products_found' => count($finalProducts),
                 'outro' => $outro,
                 'is_trigger' => $isTriggerQuery,
             ],
         ];
+    }
+
+    /**
+     * Check if GPT's text indicates that no relevant products were found.
+     * Used to prevent showing irrelevant fallback products when GPT explicitly says "not found".
+     */
+    private function textIndicatesNoResults(string $text): bool
+    {
+        $noResultsPatterns = [
+            '/на жаль.*(немає|нема|відсутн|не знайш)/ui',
+            '/не (знайш|вдалося знайти)/ui',
+            '/не маю (таких|подібних|відповідних)/ui',
+            '/не мож[уе] знайти/ui',
+            '/немає в наявності/ui',
+            '/відсутні (в|у) наявності/ui',
+            '/не (маємо|має)/ui',
+            '/sorry.*(no|couldn\'t|can\'t find)/ui',
+            '/не вдалося/ui',
+            '/не маємо товарів/ui',
+        ];
+
+        foreach ($noResultsPatterns as $pattern) {
+            if (preg_match($pattern, $text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

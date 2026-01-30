@@ -108,17 +108,18 @@ class IndexProductsToMeiliJob implements ShouldQueue
                     'price',
                     'updated_at_ts',
                 ],
-                // Custom ranking rules: orders/popularity boost for popular products
-                // Orders boost comes after basic text matching but before fine-tuning
+                // Ranking rules: relevance first, then popularity as tiebreaker
+                // IMPORTANT: popularity/orders MUST come AFTER attribute/proximity
+                // Otherwise popular but irrelevant products rank higher than relevant ones
                 'rankingRules' => [
-                    'words',              // Basic word matching
-                    'typo',               // Typo tolerance
-                    'orders_count:desc',  // More orders = better ranking (sales priority)
-                    'popularity:desc',    // Higher popularity = better ranking
-                    'proximity',          // Word proximity
-                    'attribute',          // Attribute position
-                    'sort',               // Explicit sort
-                    'exactness',          // Exact matches
+                    'words',              // 1. Basic word matching (MUST be first)
+                    'typo',               // 2. Typo tolerance
+                    'proximity',          // 3. How close query words are in document
+                    'attribute',          // 4. Which field matched (title > description)
+                    'exactness',          // 5. Exact vs prefix matches
+                    'orders_count:desc',  // 6. Popular products as tiebreaker
+                    'popularity:desc',    // 7. Secondary popularity metric
+                    'sort',               // 8. Explicit sort parameter
                 ],
                 'searchableAttributes' => [
                     // Primary fields (highest priority)

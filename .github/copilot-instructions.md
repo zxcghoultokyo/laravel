@@ -259,6 +259,20 @@ for p in d.get('products',[])[:3]:
 - `products`: array with `title`, `price`, `images`, etc.
 - `text`: intro/outro text from GPT
 
+### Check chat history by session_id:
+```bash
+# Session ID from widget looks like: session_1769774712506_ppwhomvek
+curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/session_1769774712506_ppwhomvek?key=diagnostic_secret_key_2025" | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+print('messages:', d.get('message_count', 0))
+for m in d.get('messages', [])[-5:]:
+    role = m.get('role','')
+    content = m.get('content','')[:100]
+    print(f'{role}: {content}')
+"
+```
+
 ### ONLY if Chat API fails, then check:
 1. Diagnostic search-db (does product exist?)
 2. Diagnostic search-meili (is it indexed?)

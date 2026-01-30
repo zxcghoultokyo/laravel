@@ -310,9 +310,14 @@ class MeiliProductSearchTool
             
             // If keyword search returned few results, try semantic search fallback
             // BUT only if A/B variant allows semantic search
+            // IMPORTANT: Skip semantic fallback for specific category queries (helmets, plate carriers, etc.)
+            // because semantic search often returns unrelated products
             $semanticEnabled = $features['semantic_search'] ?? true;
             
-            if (count($filtered) < 3 && $semanticEnabled && $this->semanticSearch?->isAvailable()) {
+            // Detect if this is a specific category query where we should NOT use semantic fallback
+            $isCategoryQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate.?carrier|бронежилет|жилет)/ui', $query);
+            
+            if (count($filtered) < 3 && $semanticEnabled && !$isCategoryQuery && $this->semanticSearch?->isAvailable()) {
                 Log::info('MeiliProductSearchTool: trying semantic search fallback', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
@@ -337,6 +342,11 @@ class MeiliProductSearchTool
                         }
                     }
                 }
+            } elseif ($isCategoryQuery && count($filtered) < 3) {
+                Log::info('MeiliProductSearchTool: skipping semantic fallback for category query', [
+                    'keyword_results' => count($filtered),
+                    'query' => $query,
+                ]);
             }
             
             // Track search for A/B testing

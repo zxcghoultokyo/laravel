@@ -392,23 +392,49 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 1. "product_type": основний тип товару англійською (ОБОВ'ЯЗКОВО!)
    
-   КРИТИЧНО - РОЗРІЗНЯЙ ОСНОВНИЙ ТОВАР від АКСЕСУАРІВ:
+   ⚠️ КРИТИЧНО - ВИЗНАЧАЙ ТИП ПО НАЗВІ (title), А НЕ ПО КАТЕГОРІЇ!
+   Категорія може бути неправильною - аксесуари часто лежать в основній категорії.
    
-   ШОЛОМИ:
-   - "helmet" - ТІЛЬКИ справжні балістичні/тактичні шоломи
-   - "helmet_cover" - кавери, чохли на шолом
-   - "helmet_pads" - подушки, накладки всередину шолома
-   - "helmet_mount" - кріплення, адаптери, планки НА шолом
-   - "helmet_accessory" - інші аксесуари для шоломів
+   🎯 ПРАВИЛА ВИЗНАЧЕННЯ ТИПУ ДЛЯ ШОЛОМІВ:
    
-   ПЛИТОНОСКИ:
-   - "plate_carrier" - ТІЛЬКИ справжні плитоноски/бронежилети
-   - "pouch" - підсумки для магазинів, медичні, утилітарні
-   - "armor_plate" - бронеплити
-   - "side_plate" - бокові плити
+   Якщо в назві є ці слова → ЦЕ АКСЕСУАР, НЕ ШОЛОМ:
+   - "кріплення", "адаптер", "mount", "adapter" → "helmet_mount"
+   - "подушк", "pad", "накладк" → "helmet_pads" 
+   - "кавер", "чохол", "cover" → "helmet_cover"
+   - "планка", "rail", "рейка" → "helmet_mount"
+   - "противаг", "counterweight" → "helmet_accessory"
+   - "велкро", "velcro", "панел" → "helmet_accessory"
+   - "візор", "visor", "маска" → "helmet_accessory"
+   - "тримач", "holder" → "helmet_mount"
+   - "ліхтар", "flashlight" для шолома → "helmet_accessory"
+   
+   ТІЛЬКИ якщо назва містить "шолом", "каска", "helmet", "FAST", "MICH", "ACH" 
+   БЕЗ слів-аксесуарів вище → тоді "helmet"
+   
+   Приклади правильної класифікації:
+   ❌ "Кріплення на шолом" → "helmet_mount" (НЕ helmet!)
+   ❌ "Подушки для шоломів" → "helmet_pads" (НЕ helmet!)
+   ❌ "Кавер тактичний для шолому" → "helmet_cover" (НЕ helmet!)
+   ❌ "Планка Пікатінні на шолом" → "helmet_mount" (НЕ helmet!)
+   ❌ "Противага для шолома" → "helmet_accessory" (НЕ helmet!)
+   ❌ "Балістична маска-візор" → "helmet_accessory" (НЕ helmet!)
+   ✅ "Шолом Ops-Core FAST" → "helmet" 
+   ✅ "Балістичний шолом Sestan" → "helmet"
+   ✅ "Кевларова каска" → "helmet"
+   
+   🎯 АНАЛОГІЧНО ДЛЯ ПЛИТОНОСОК:
+   - "підсумок", "pouch" → "pouch" (НЕ plate_carrier!)
+   - "плита", "plate" (окремо) → "armor_plate"
+   - "бокова плита", "side plate" → "side_plate"
+   - "cummerbund", "камербанд" → "plate_carrier_accessory"
+   
+   ТІЛЬКИ справжні плитоноски/жилети → "plate_carrier"
+   
+   ІНШІ ТИПИ:
    
    ВІЙСЬКОВЕ/ТАКТИЧНЕ:
    - boots, gloves, uniform, backpack, holster, tourniquet, first_aid_kit, radio, flashlight, knife
+   - active_headset (активні навушники типу Peltor, Comtac)
    
    ЕЛЕКТРОНІКА:
    - smartphone, laptop, tablet, headphones, earbuds, smartwatch, camera, tv, speaker, charger, cable, powerbank
@@ -417,29 +443,6 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
    ОДЯГ:
    - jacket, pants, shirt, dress, skirt, shoes, sneakers, coat, hoodie, sweater, t_shirt, jeans
    - belt, scarf, hat, gloves_fashion, socks - АКСЕСУАРИ одягу
-   
-   КОСМЕТИКА/КРАСА:
-   - perfume, lipstick, mascara, foundation, skincare, shampoo, conditioner, nail_polish, makeup_brush
-   
-   ДИТЯЧЕ:
-   - toy, stroller, baby_clothes, diaper, feeding_bottle, pacifier, crib
-   
-   ДІМ:
-   - furniture, sofa, bed, table, chair, lamp, mattress, pillow, blanket, curtain, rug
-   - kitchenware, pan, pot, knife_kitchen, plates, cups
-   - decor, vase, picture_frame, candle
-   
-   СПОРТ:
-   - bicycle, treadmill, dumbbell, yoga_mat, sports_shoes, sportswear, gym_bag, fitness_tracker
-   
-   ЇЖА/НАПОЇ:
-   - coffee, tea, chocolate, snack, supplement, vitamin
-   
-   КНИГИ/КАНЦЕЛЯРІЯ:
-   - book, notebook, pen, pencil, backpack_school
-   
-   ІНСТРУМЕНТИ:
-   - drill, hammer, screwdriver, saw, measuring_tape, toolbox
 
 2. "ai_category": загальна категорія англійською (ОБОВ'ЯЗКОВО!)
    ВАЖЛИВО: Аксесуари мають категорію "accessories"!
@@ -448,38 +451,25 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 3. "keywords": масив 10-20 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку.
    Включи: назву, бренд, тип, призначення, характеристики, синоніми.
-   Приклади:
-   - Телефон: ["iphone", "айфон", "смартфон", "телефон", "apple", "smartphone"]
-   - Крем: ["крем для обличчя", "зволожуючий", "moisturizer", "skincare", "догляд"]
-   - Кросівки: ["кросівки", "nike", "найк", "sneakers", "спортивне взуття", "running"]
 
 4. "slang": масив 5-10 сленгових назв УКРАЇНСЬКОЮ як шукають реальні люди.
-   Приклади:
-   - Телефон: ["мобілка", "труба", "телефончик", "звонилка"]
-   - Ноутбук: ["ноут", "бук", "лептоп", "комп"]
-   - Кросівки: ["кроси", "тапки", "найки", "сніки"]
-   - Навушники: ["вуха", "наушники", "подси", "ейрподси"]
-   - Плитоноска: ["плитка", "бронік", "броня", "pc"]
 
 5. "synonyms": масив синонімів назви товару (варіанти написання, переклади)
 
-6. "search_queries": масив 5-10 ТИПОВИХ ПОШУКОВИХ ЗАПИТІВ українською як їх пише користувач.
-   Приклад: ["купити iphone", "який телефон краще", "смартфон до 20000", "телефон для мами"]
+6. "search_queries": масив 5-10 ТИПОВИХ ПОШУКОВИХ ЗАПИТІВ українською
 
-7. "materials": масив матеріалів якщо є (glass, aluminum, plastic, cordura, nylon, leather, cotton, etc)
+7. "materials": масив матеріалів якщо є (glass, aluminum, cordura, nylon, leather, etc)
 
-8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, ДСТУ, ISO, CE, etc)
+8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, etc)
 
-9. "usage": масив призначення (everyday, work, gaming, sport, travel, gift, professional, military, outdoor, etc)
+9. "usage": масив призначення (everyday, work, military, outdoor, etc)
 
 КРИТИЧНО ВАЖЛИВО:
 - product_type та ai_category ОБОВ'ЯЗКОВІ - НІКОЛИ не повертай null!
-- АКСЕСУАРИ завжди мають окремий product_type (phone_case, helmet_mount, NOT smartphone, NOT helmet!)
-- Якщо категорія містить "Аксесуар" - це ТОЧНО аксесуар, встанови відповідний тип
-- Визнач тип товару з назви та категорії навіть якщо опис порожній
+- АКСЕСУАРИ завжди мають окремий product_type!
+- ВИЗНАЧАЙ ТИП ПО НАЗВІ ТОВАРУ, НЕ ПО КАТЕГОРІЇ!
+- Якщо назва містить "кріплення/адаптер/кавер/подушки/планка" - це АКСЕСУАР!
 - Всі ключові слова МАЛИМИ ЛІТЕРАМИ
-- Keywords має включати СИНОНІМИ та ПЕРЕКЛАДИ (укр + англ)
-- Slang має бути РЕАЛЬНИМ жаргоном який використовують люди в Україні
 
 Відповідай ТІЛЬКИ валідним JSON без markdown.
 PROMPT;

@@ -758,6 +758,52 @@ class DiagnosticController extends Controller
                 'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
             ], array_slice($hits, 0, 5));
             
+            // STEP 3: Simulate filterAccessories logic
+            $accessoryTitlePatterns = [
+                'кріплення', 'адаптер', 'планка', 'подушк', 'противаг',
+                'кавер', 'чохол', 'велкро', 'панел', 'тримач',
+                'маска', 'візор', 'visor', 'mount', 'adapter', 'cover',
+                'pad', 'panel', 'strap', 'clip', 'rail', 'ліхтар',
+                'захист обличчя', 'захист нижньої', 'набір', 'комплект монтаж',
+                'система захист', 'липучк', 'нейлонов', 'платформ',
+            ];
+            
+            $mainProducts = [];
+            $filteredOut = [];
+            
+            foreach ($hits as $hit) {
+                $titleLower = mb_strtolower($hit['title'] ?? '');
+                $isAccessory = false;
+                $matchedPattern = null;
+                
+                foreach ($accessoryTitlePatterns as $pattern) {
+                    if (str_contains($titleLower, $pattern)) {
+                        $isAccessory = true;
+                        $matchedPattern = $pattern;
+                        break;
+                    }
+                }
+                
+                if ($isAccessory) {
+                    $filteredOut[] = [
+                        'id' => $hit['id'],
+                        'title' => mb_substr($hit['title'] ?? '', 0, 50),
+                        'matched_pattern' => $matchedPattern,
+                    ];
+                } else {
+                    $mainProducts[] = [
+                        'id' => $hit['id'],
+                        'title' => mb_substr($hit['title'] ?? '', 0, 50),
+                        'ai_product_type' => $hit['ai_product_type'] ?? '__unknown__',
+                    ];
+                }
+            }
+            
+            $trace['step3_main_products_count'] = count($mainProducts);
+            $trace['step3_main_products'] = array_slice($mainProducts, 0, 10);
+            $trace['step3_filtered_out_count'] = count($filteredOut);
+            $trace['step3_filtered_out_sample'] = array_slice($filteredOut, 0, 5);
+            
             return response()->json([
                 'query' => $query,
                 'tenant_id' => $tenantId,

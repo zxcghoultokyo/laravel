@@ -101,6 +101,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/variants/{parentArticle}', [\App\Http\Controllers\Api\DiagnosticController::class, 'variants']);
     Route::get('/category-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryProducts']);
     Route::get('/test-chat', [\App\Http\Controllers\Api\DiagnosticController::class, 'testChat']);
+    Route::get('/trace-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'traceMeili']);
     Route::get('/sync-sample', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncSample']);
     Route::post('/reindex-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'reindexMeili']);
     Route::post('/ai-enrich', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrich']);

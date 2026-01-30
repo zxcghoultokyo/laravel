@@ -688,6 +688,89 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+    
+    /**
+     * GET /api/diagnostic/trace-meili?q=...&tenant_id=2
+     * Step-by-step trace of MeiliProductSearchTool to find where ai_product_type is lost
+     */
+    public function traceMeili(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $query = $request->query('q', '');
+        $tenantId = (int)$request->query('tenant_id', 2);
+
+        if (!$query) {
+            return response()->json(['error' => 'Missing q parameter'], 400);
+        }
+
+        $trace = [];
+        
+        try {
+            $meili = app(\App\Services\Search\MeiliClient::class);
+            $index = $meili->client()->index('products');
+            
+            // Build filter
+            $filterParts = ["tenant_id = {$tenantId}", "in_stock = true"];
+            $queryLower = mb_strtolower($query);
+            
+            // Add helmet filter if query matches
+            if (preg_match('/(шолом|каска|helmet)/ui', $queryLower)) {
+                $filterParts[] = "ai_product_type IN ['helmet', 'ballistic_helmet', 'tactical_helmet']";
+            }
+            
+            $filterString = implode(' AND ', $filterParts);
+            $trace['filter'] = $filterString;
+            
+            // Search
+            $searchParams = [
+                'limit' => 20,
+                'filter' => $filterString,
+                'attributesToRetrieve' => [
+                    'id', 'article', 'parent_article', 'title', 'price',
+                    'category_path', 'in_stock', 'popularity', 'orders_count',
+                    'ai_product_type', 'ai_keywords', 'display_in_showcase', 'brand',
+                ],
+            ];
+            
+            $result = $index->search($query, $searchParams);
+            $hits = $result->getHits();
+            
+            $trace['step1_raw_hits'] = array_map(fn($h) => [
+                'id' => $h['id'] ?? null,
+                'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
+                'title' => mb_substr($h['title'] ?? '', 0, 40),
+            ], array_slice($hits, 0, 5));
+            $trace['step1_count'] = count($hits);
+            
+            // Apply __unknown__ for empty ai_product_type (like MeiliProductSearchTool does)
+            foreach ($hits as &$hit) {
+                if (empty($hit['ai_product_type'])) {
+                    $hit['ai_product_type'] = '__unknown__';
+                }
+            }
+            unset($hit); // Important: unset reference!
+            
+            $trace['step2_after_unknown_default'] = array_map(fn($h) => [
+                'id' => $h['id'] ?? null,
+                'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
+            ], array_slice($hits, 0, 5));
+            
+            return response()->json([
+                'query' => $query,
+                'tenant_id' => $tenantId,
+                'trace' => $trace,
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ], 500);
+        }
+    }
 
     /**
      * GET /api/diagnostic/sync-sample?article=xxx

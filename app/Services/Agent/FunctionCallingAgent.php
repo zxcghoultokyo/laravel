@@ -445,6 +445,10 @@ CONTEXT;
     {
         $products = [];
         $toolResults = [];
+        
+        // Track if search_products found anything - to prevent irrelevant fallback
+        $searchFoundProducts = false;
+        $searchWasCalled = false;
 
         $isTriggerQuery = $this->detectTriggerQuery($originalMessage);
         
@@ -467,6 +471,12 @@ CONTEXT;
             ]);
 
             $result = $this->executeTool($functionName, $args);
+            
+            // Track search results
+            if ($functionName === 'search_products') {
+                $searchWasCalled = true;
+                $searchFoundProducts = !empty($result['products']);
+            }
 
             // Filter out already shown products ONLY when explicitly requested (for "покажи ще" type requests)
             // Regular searches should show all matching products, even if shown before
@@ -491,8 +501,26 @@ CONTEXT;
             }
 
             // Collect products from search tools
-            if (in_array($functionName, ['search_products', 'get_popular_products']) && !empty($result['products'])) {
+            // BUT: If search_products was called and found nothing, do NOT use get_popular_products as fallback
+            // This prevents showing термобілизна when user asked for "набір для чищення зброї"
+            if ($functionName === 'search_products' && !empty($result['products'])) {
                 $products = array_merge($products, $result['products']);
+            } elseif ($functionName === 'get_popular_products' && !empty($result['products'])) {
+                // Only use popular products if:
+                // 1. search_products was NOT called (user asked for "популярне", "топ")
+                // 2. OR search_products DID find products (user asked "покажи ще популярних підсумків")
+                if (!$searchWasCalled || $searchFoundProducts) {
+                    $products = array_merge($products, $result['products']);
+                } else {
+                    Log::warning('FunctionCallingAgent: BLOCKED get_popular_products fallback - search found nothing, not showing random products', [
+                        'original_message' => $originalMessage,
+                    ]);
+                    // Clear products from tool result to not confuse GPT
+                    $result['products'] = [];
+                    $result['count'] = 0;
+                    $result['blocked'] = true;
+                    $result['reason'] = 'Search found no results, not showing random fallback products';
+                }
             }
             if ($functionName === 'get_product_details' && !empty($result['product'])) {
                 $products[] = $result['product'];

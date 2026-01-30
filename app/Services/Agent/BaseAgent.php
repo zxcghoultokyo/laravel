@@ -1364,6 +1364,10 @@ PROMPT;
             $results = array_values($results);
         }
 
+        // Filter accessories when searching for main product types (шоломи, плитоноски, etc.)
+        // This is a safety net in case MeiliProductSearchTool filters don't work
+        $results = $this->filterAccessoriesFromResults($results, $query);
+
         $results = array_slice($results, 0, $limit);
 
         // Get full product cards with images
@@ -1408,6 +1412,77 @@ PROMPT;
         }
 
         return ['products' => $results, 'count' => count($results), 'query' => $query];
+    }
+
+    /**
+     * Filter out accessory products when user is searching for main products.
+     * Safety net for when MeiliProductSearchTool's filterAccessories doesn't work.
+     */
+    protected function filterAccessoriesFromResults(array $results, string $query): array
+    {
+        if (empty($results)) {
+            return $results;
+        }
+
+        $queryLower = mb_strtolower($query);
+        
+        // Only filter for main product queries
+        if (!preg_match('/\b(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)\b/ui', $queryLower)) {
+            return $results;
+        }
+
+        // Accessory patterns in titles
+        $accessoryPatterns = [
+            'кріплення', 'адаптер', 'планка', 'подушк', 'противаг',
+            'кавер', 'чохол', 'велкро', 'панел', 'тримач',
+            'маска', 'візор', 'visor', 'mount', 'adapter', 'cover',
+            'pad', 'panel', 'strap', 'clip', 'rail', 'ліхтар',
+            'захист обличчя', 'захист нижньої', 'кишен', 'pouch',
+            'навушник', 'peltor', 'earmor', 'headset',
+        ];
+
+        // Filter products
+        $mainProducts = [];
+        $accessories = [];
+        
+        foreach ($results as $product) {
+            $title = mb_strtolower($product['title'] ?? '');
+            $category = mb_strtolower($product['category_path'] ?? '');
+            
+            $isAccessory = false;
+            
+            // Check category first
+            if (str_contains($category, 'аксесуар') || str_contains($category, 'комплектуюч')) {
+                $isAccessory = true;
+            }
+            
+            // Check title patterns
+            if (!$isAccessory) {
+                foreach ($accessoryPatterns as $pattern) {
+                    if (str_contains($title, $pattern)) {
+                        $isAccessory = true;
+                        break;
+                    }
+                }
+            }
+            
+            if ($isAccessory) {
+                $accessories[] = $product;
+            } else {
+                $mainProducts[] = $product;
+            }
+        }
+
+        Log::info('BaseAgent::filterAccessoriesFromResults', [
+            'query' => $query,
+            'total' => count($results),
+            'main' => count($mainProducts),
+            'accessories' => count($accessories),
+            'main_titles' => array_map(fn($p) => $p['title'] ?? '', array_slice($mainProducts, 0, 5)),
+        ]);
+
+        // Return main products if we have any, otherwise return all
+        return !empty($mainProducts) ? $mainProducts : $results;
     }
 
     /**

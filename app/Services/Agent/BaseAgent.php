@@ -1277,7 +1277,7 @@ PROMPT;
                 'type' => 'function',
                 'function' => [
                     'name' => 'get_popular_products',
-                    'description' => 'Хіти продажів. БЕЗ category = ТОП ВСЬОГО МАГАЗИНУ. З category = топ категорії.',
+                    'description' => 'Хіти продажів БЕЗ фільтрів. ТІЛЬКИ для "що популярне", "хіти", "топ продажів". НЕ ВИКОРИСТОВУЙ для сезонних запитів (зима/літо) — для них search_products!',
                     'parameters' => [
                         'type' => 'object',
                         'properties' => [
@@ -1380,6 +1380,11 @@ PROMPT;
      */
     protected function executeTool(string $name, array $args): array
     {
+        Log::info('BaseAgent: executing tool', [
+            'tool' => $name,
+            'args' => $args,
+        ]);
+        
         return match ($name) {
             'search_products' => $this->toolSearchProducts($args),
             'get_popular_products' => $this->toolGetPopularProducts($args),

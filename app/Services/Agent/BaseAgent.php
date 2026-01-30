@@ -193,14 +193,16 @@ abstract class BaseAgent
             return null;
         }
         
-        // Skip greetings and common phrases
+        // Skip greetings, questions, and common phrases - let GPT handle these
         $skipPatterns = [
             '/^(привіт|hello|hi|вітаю|доброго|добрий|hey|ку|привет|здрастуй|салют)/ui',
-            '/^(дякую|спасибі|thanks|thank|дякуємо)/ui',
-            '/^(допоможіть|help|допомога|підкажіть)/ui',
-            '/^(що|как|яка?|скільки|де|коли|чому|навіщо)/ui', // Questions
-            '/^(так|ні|окей|ok|добре|зрозуміло|ясно|ок)/ui',
-            '/^(хочу|мені\s+потрібно|шукаю)/ui', // Let GPT handle these with context
+            '/^(дякую|спасибі|thanks|thank|дякуємо|спасибо)/ui',
+            '/^(допоможіть|help|допомога|підкажіть|помогите|подскажите)/ui',
+            '/^(що|як|яка?|скільки|де|коли|чому|навіщо)/ui', // Ukrainian questions
+            '/^(что|как|какой|сколько|где|когда|почему|зачем)/ui', // Russian questions
+            '/(берут|беруть|взять|брать|купують|покупают)/ui', // "what do people buy" type questions
+            '/^(так|ні|окей|ok|добре|зрозуміло|ясно|ок|да|нет)/ui',
+            '/^(хочу|мені\s+потрібно|шукаю|мне\s+нужно|ищу)/ui', // Let GPT handle these with context
         ];
         
         foreach ($skipPatterns as $pattern) {
@@ -219,6 +221,14 @@ abstract class BaseAgent
         $products = $this->searchTool->search($message, [], 3);
         
         if (!empty($products)) {
+            // Get full product cards with images (same as toolSearchProducts)
+            $ids = array_column($products, 'id');
+            $tenantId = $this->searchTool->getCurrentTenantId();
+            $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+            if (!empty($cards)) {
+                $products = $cards;
+            }
+            
             // Determine language for response
             $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
             $intro = $isEnglish 

@@ -21,6 +21,11 @@ class IndexProductsToMeiliJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
+     * The queue the job should be sent to.
+     */
+    public $queue = 'meili';
+
+    /**
      * Backward-compat: старі job-и могли серіалізувати "chunk".
      */
     public int $chunkSize = 500;

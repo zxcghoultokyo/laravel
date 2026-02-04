@@ -315,14 +315,16 @@ class OnboardTenantJob implements ShouldQueue
             'products_count' => $productsWithoutAi,
         ]);
 
-        // Dispatch first batch - it will auto-dispatch subsequent batches
+        // Dispatch first batch to DIFFERENT queue (meili) so it runs in parallel
+        // OnboardTenantJob runs on 'default', AnalyzeProductsWithAiJob on 'meili'
+        // Worker processes both: --queue=default,meili
         AnalyzeProductsWithAiJob::dispatch(
             batchSize: 50,
             offset: 0,
             forceReanalyze: false,
             tenantId: $this->tenantId,
             singleBatchOnly: false  // Allow auto-dispatch of next batches
-        );
+        )->onQueue('meili');  // Use different queue to avoid blocking!
 
         // Poll for completion with progress updates
         // Max 10 minutes wait - if not done, continue with other steps

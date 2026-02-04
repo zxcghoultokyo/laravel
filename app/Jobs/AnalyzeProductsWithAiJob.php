@@ -31,6 +31,12 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * The queue the job should be sent to.
+     * Must be different from OnboardTenantJob's queue (default) to avoid blocking.
+     */
+    public $queue = 'meili';
+
     public int $timeout = 600; // 10 minutes for batch with rate limiting delays
     public int $tries = 3;
 
@@ -182,7 +188,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
                 offset: $this->offset + $this->batchSize,
                 forceReanalyze: $this->forceReanalyze,
                 tenantId: $this->tenantId  // CRITICAL: pass tenant_id to next batch
-            )->delay(now()->addSeconds(2));
+            )->onQueue('meili')->delay(now()->addSeconds(2));
         }
     }
 

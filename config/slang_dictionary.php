@@ -240,11 +240,14 @@ return [
     ],
     
     // === КОМПЛЕКТИ / LOADOUT ===
+    // NOTE: "набір" and "комплект" are too generic - they appear in many product names
+    // like "набір для чищення", "комплект термобілизни", etc.
+    // Only match specific loadout terms, not generic ones!
     'loadout' => [
-        'slang' => ['лоадаут', 'лоад-аут', 'сетап', 'спорядження', 'набір', 'комплект'],
+        'slang' => ['лоадаут', 'лоад-аут', 'сетап', 'спорядження'],
         'synonyms' => ['повний комплект', 'тактичний набір', 'спорядження бійця'],
         'typos' => ['лоадоут', 'лоудаут', 'load out'],
-        'en' => ['loadout', 'load-out', 'setup', 'kit', 'gear set'],
+        'en' => ['loadout', 'load-out', 'setup', 'gear set'],
     ],
     
     'starter_kit' => [

@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tenants', function (Blueprint $table) {
-            $table->timestamp('onboarding_completed_at')->nullable()->after('api_key');
+            $table->timestamp('onboarding_completed_at')->nullable();
         });
     }
 

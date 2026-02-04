@@ -1,0 +1,9 @@
+# Laravel Cloud Workers Configuration
+# Documentation: https://cloud.laravel.com/docs/workers
+
+workers:
+  queue-worker:
+    command: "php artisan queue:work --queue=default,meili --tries=3 --timeout=120 --sleep=3 --max-jobs=100"
+    processes: 1
+    memory: 256
+    timeout: 120

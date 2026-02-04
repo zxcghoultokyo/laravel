@@ -6055,6 +6055,56 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/fix-onboarding-progress/{tenantId}
+     * Force update onboarding progress with real AI enrichment counts
+     */
+    public function fixOnboardingProgress(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
+        if (!$progress) {
+            return response()->json(['error' => 'No progress record found'], 404);
+        }
+
+        // Get real counts
+        $totalProducts = DB::table('products')
+            ->where('tenant_id', $tenantId)
+            ->where('in_stock', true)
+            ->count();
+
+        $enrichedCount = DB::table('product_ai_index')
+            ->join('products', 'products.id', '=', 'product_ai_index.product_id')
+            ->where('products.tenant_id', $tenantId)
+            ->whereNotNull('product_ai_index.keywords')
+            ->count();
+
+        $percent = $totalProducts > 0 
+            ? min(95, (int) round($enrichedCount / $totalProducts * 100))
+            : 0;
+
+        $detail = "AI аналіз: {$enrichedCount} з {$totalProducts} товарів";
+
+        // Force update
+        $progress->updateStep('ai_enrichment', 'in_progress', $percent, $detail, [
+            'total' => $totalProducts,
+            'enriched' => $enrichedCount,
+            'processed' => $enrichedCount,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'tenant_id' => $tenantId,
+            'enriched' => $enrichedCount,
+            'total' => $totalProducts,
+            'percent' => $percent,
+            'detail' => $detail,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/categories-by-tenant
      * List categories grouped by tenant
      */

@@ -40,11 +40,22 @@ class OnboardingProgress extends Component
             return;
         }
 
+        // CRITICAL: Use fresh() to bypass any caching and get latest data from DB
         $progressModel = TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
         
         if ($progressModel) {
+            // Force refresh from database to get latest values
+            $progressModel->refresh();
             $this->progress = $progressModel->toProgressArray();
             $this->showStartButton = false;
+            
+            // Debug log to track polling issues
+            \Log::debug('OnboardingProgress::loadProgress', [
+                'tenant_id' => $tenant->id,
+                'status' => $this->progress['status'] ?? 'unknown',
+                'overall_percent' => $this->progress['overall_percent'] ?? 0,
+                'current_step' => $this->progress['current_step'] ?? null,
+            ]);
         } else {
             // Check if tenant has products OR onboarding already started
             $hasProducts = $tenant->products()->count() > 0;

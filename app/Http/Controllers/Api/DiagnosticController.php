@@ -6069,7 +6069,7 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
-        // Get real counts
+        // Get real counts (in_stock only)
         $totalProducts = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->where('in_stock', true)
@@ -6078,6 +6078,7 @@ class DiagnosticController extends Controller
         $enrichedCount = DB::table('product_ai_index')
             ->join('products', 'products.id', '=', 'product_ai_index.product_id')
             ->where('products.tenant_id', $tenantId)
+            ->where('products.in_stock', true)
             ->whereNotNull('product_ai_index.keywords')
             ->count();
 
@@ -6119,7 +6120,7 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
-        // Get current AI enrichment stats
+        // Get current AI enrichment stats (in_stock only)
         $totalProducts = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->where('in_stock', true)
@@ -6128,6 +6129,7 @@ class DiagnosticController extends Controller
         $enrichedCount = DB::table('product_ai_index')
             ->join('products', 'products.id', '=', 'product_ai_index.product_id')
             ->where('products.tenant_id', $tenantId)
+            ->where('products.in_stock', true)
             ->whereNotNull('product_ai_index.keywords')
             ->count();
 

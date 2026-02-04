@@ -197,16 +197,17 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             return;
         }
 
-        // Count total products for this tenant
+        // Count total products for this tenant (in_stock only)
         $totalProducts = Product::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $this->tenantId)
             ->where('in_stock', true)
             ->count();
 
-        // Count enriched products
+        // Count enriched products (in_stock only to match total)
         $enrichedCount = ProductAiIndex::whereHas('product', function ($q) {
             $q->withoutGlobalScope(TenantScope::class)
-                ->where('tenant_id', $this->tenantId);
+                ->where('tenant_id', $this->tenantId)
+                ->where('in_stock', true);
         })->whereNotNull('keywords')->count();
 
         // Calculate progress
@@ -243,7 +244,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             return;
         }
 
-        // Count final stats
+        // Count final stats (in_stock only)
         $totalProducts = Product::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $this->tenantId)
             ->where('in_stock', true)
@@ -251,7 +252,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         $enrichedCount = ProductAiIndex::whereHas('product', function ($q) {
             $q->withoutGlobalScope(TenantScope::class)
-                ->where('tenant_id', $this->tenantId);
+                ->where('tenant_id', $this->tenantId)
+                ->where('in_stock', true);
         })->whereNotNull('keywords')->count();
 
         $detail = "AI аналіз завершено: {$enrichedCount} товарів оброблено";

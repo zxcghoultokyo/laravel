@@ -47,5 +47,30 @@
         
         @stack('scripts')
         @livewireScripts
+        
+        <!-- Global 419 (Session Expired) handler - auto redirect to login -->
+        <script>
+            // Handle 419 for fetch requests
+            const originalFetch = window.fetch;
+            window.fetch = function(...args) {
+                return originalFetch.apply(this, args).then(response => {
+                    if (response.status === 419) {
+                        window.location.href = '{{ route("login") }}';
+                    }
+                    return response;
+                });
+            };
+            
+            // Handle 419 for Livewire
+            document.addEventListener('livewire:init', () => {
+                Livewire.hook('request', ({ fail }) => {
+                    fail(({ status }) => {
+                        if (status === 419) {
+                            window.location.href = '{{ route("login") }}';
+                        }
+                    });
+                });
+            });
+        </script>
     </body>
 </html>

@@ -60,6 +60,21 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        // Handle CSRF token expiration (419) - redirect to login instead of showing error page
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            // For API requests - return JSON error
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'error' => 'session_expired',
+                    'message' => 'Сесія закінчилась. Будь ласка, оновіть сторінку.',
+                ], 419);
+            }
+            
+            // For web requests - redirect to login with message
+            return redirect()->route('login')
+                ->with('warning', 'Сесія закінчилась. Будь ласка, увійдіть знову.');
+        });
+        
         // Handle throttle (rate limit) exceptions with user-friendly message
         $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, $request) {
             if ($request->is('api/*')) {

@@ -306,7 +306,7 @@ class OnboardTenantJob implements ShouldQueue
 
     /**
      * Run AI enrichment asynchronously (for large catalogs 200+ products)
-     * Dispatches batches to queue and polls for completion
+     * Dispatches batches to queue and polls for completion (with reasonable timeout)
      */
     protected function runAiEnrichmentAsync(int $productsWithoutAi): void
     {
@@ -325,7 +325,9 @@ class OnboardTenantJob implements ShouldQueue
         );
 
         // Poll for completion with progress updates
-        $maxWaitSeconds = 1800; // 30 minutes max wait
+        // Max 10 minutes wait - if not done, continue with other steps
+        // AI enrichment will continue in background via queue
+        $maxWaitSeconds = 600; // 10 minutes max wait (reduced from 30 min)
         $startTime = time();
         $lastProcessed = 0;
         $stuckCounter = 0;
@@ -358,11 +360,11 @@ class OnboardTenantJob implements ShouldQueue
                 break;
             }
 
-            // Check if stuck (no progress for 2 minutes - AI batches can pause between runs)
+            // Check if stuck (no progress for 1 minute)
             if ($enrichedCount === $lastProcessed) {
                 $stuckCounter++;
-                if ($stuckCounter >= 12) { // 12 * 10 sec = 120 seconds (2 minutes)
-                    Log::warning('OnboardTenantJob: AI enrichment appears stuck, continuing', [
+                if ($stuckCounter >= 6) { // 6 * 10 sec = 60 seconds (1 minute)
+                    Log::warning('OnboardTenantJob: AI enrichment appears stuck or still queued, continuing with other steps', [
                         'tenant_id' => $this->tenantId,
                         'enriched' => $enrichedCount,
                         'total' => $productsWithoutAi,
@@ -373,6 +375,21 @@ class OnboardTenantJob implements ShouldQueue
                 $stuckCounter = 0;
                 $lastProcessed = $enrichedCount;
             }
+        }
+
+        // Log if we timed out but AI is still running
+        $finalEnrichedCount = \App\Models\ProductAiIndex::whereHas('product', function ($q) {
+            $q->withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('tenant_id', $this->tenantId);
+        })->count();
+        
+        if ($finalEnrichedCount < $productsWithoutAi) {
+            Log::info('OnboardTenantJob: AI enrichment still in progress, continuing with other steps', [
+                'tenant_id' => $this->tenantId,
+                'enriched' => $finalEnrichedCount,
+                'total' => $productsWithoutAi,
+                'percent' => round($finalEnrichedCount / $productsWithoutAi * 100),
+            ]);
         }
 
         $this->finalizeAiEnrichment($productsWithoutAi);

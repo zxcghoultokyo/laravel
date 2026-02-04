@@ -6145,6 +6145,63 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/generate-synonyms/{tenantId}
+     * Generate product synonyms for a tenant
+     */
+    public function generateSynonyms(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenant = \App\Models\Tenant::withoutGlobalScopes()->find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        // Count categories
+        $categoryCount = DB::table('products')
+            ->where('tenant_id', $tenantId)
+            ->whereNotNull('category_path')
+            ->where('category_path', '!=', '')
+            ->distinct()
+            ->count('category_path');
+
+        if ($categoryCount === 0) {
+            return response()->json([
+                'success' => false,
+                'error' => 'No categories found for this tenant',
+            ]);
+        }
+
+        // Run synonyms generation
+        try {
+            \Illuminate\Support\Facades\Artisan::call('synonyms:products', [
+                '--tenant' => $tenantId,
+                '--force' => false,
+            ]);
+
+            $output = \Illuminate\Support\Facades\Artisan::output();
+            
+            // Count generated synonyms
+            $synonymsCount = \App\Models\ProductSynonym::where('tenant_id', $tenantId)->count();
+
+            return response()->json([
+                'success' => true,
+                'tenant_id' => $tenantId,
+                'categories_count' => $categoryCount,
+                'synonyms_count' => $synonymsCount,
+                'output' => $output,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * GET /api/diagnostic/categories-by-tenant
      * List categories grouped by tenant
      */

@@ -6119,7 +6119,7 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
-        $tenant = \App\Models\Tenant::find($tenantId);
+        $tenant = \App\Models\Tenant::withoutGlobalScopes()->find($tenantId);
         if (!$tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
@@ -6132,13 +6132,15 @@ class DiagnosticController extends Controller
 
         // Mark entire onboarding as completed
         $progress->complete();
-        $tenant->update(['onboarding_completed_at' => now()]);
+        
+        $now = now();
+        DB::table('tenants')->where('id', $tenantId)->update(['onboarding_completed_at' => $now]);
 
         return response()->json([
             'success' => true,
             'tenant_id' => $tenantId,
             'message' => 'Onboarding marked as completed',
-            'onboarding_completed_at' => $tenant->fresh()->onboarding_completed_at,
+            'onboarding_completed_at' => $now->toDateTimeString(),
         ]);
     }
 

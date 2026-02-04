@@ -31,12 +31,6 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    /**
-     * The queue the job should be sent to.
-     * Must be different from OnboardTenantJob's queue (default) to avoid blocking.
-     */
-    public $queue = 'meili';
-
     public int $timeout = 600; // 10 minutes for batch with rate limiting delays
     public int $tries = 3;
 
@@ -56,7 +50,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         public ?int $tenantId = null,
         public bool $singleBatchOnly = false
     ) {
-        $this->onQueue('default');
+        // Use meili queue to avoid blocking OnboardTenantJob on default queue
+        $this->onQueue('meili');
     }
 
     public function handle(): void

@@ -21,11 +21,6 @@ class IndexProductsToMeiliJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * The queue the job should be sent to.
-     */
-    public $queue = 'meili';
-
-    /**
      * Backward-compat: старі job-и могли серіалізувати "chunk".
      */
     public int $chunkSize = 500;
@@ -52,9 +47,8 @@ class IndexProductsToMeiliJob implements ShouldQueue
     {
         $this->tenantId = $tenantId;
         $this->chunkSize = max(50, (int) $chunkSize);
-        // Use default queue - ensure queue worker processes this
-        // If you have separate meili queue worker, change back to 'meili'
-        $this->onQueue('default');
+        // Use meili queue to avoid blocking OnboardTenantJob on default queue
+        $this->onQueue('meili');
     }
 
     protected function effectiveChunkSize(): int

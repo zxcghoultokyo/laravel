@@ -6105,6 +6105,44 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/complete-onboarding/{tenantId}
+     * Skip synonyms step and mark onboarding as completed
+     */
+    public function completeOnboarding(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
+        if (!$progress) {
+            return response()->json(['error' => 'No progress record found'], 404);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (!$tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        // Mark synonyms as completed (skipped)
+        $progress->updateStep('synonyms_generation', 'completed', 100,
+            'Синоніми пропущені (ручне завершення)',
+            ['skipped' => true]
+        );
+
+        // Mark entire onboarding as completed
+        $progress->complete();
+        $tenant->update(['onboarding_completed_at' => now()]);
+
+        return response()->json([
+            'success' => true,
+            'tenant_id' => $tenantId,
+            'message' => 'Onboarding marked as completed',
+            'onboarding_completed_at' => $tenant->fresh()->onboarding_completed_at,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/categories-by-tenant
      * List categories grouped by tenant
      */

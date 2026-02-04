@@ -119,6 +119,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/dispatch-onboard/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'dispatchOnboard']);
     Route::get('/onboarding-status/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'onboardingStatus']);
     Route::post('/fix-onboarding-progress/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOnboardingProgress']);
+    Route::post('/complete-onboarding/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'completeOnboarding']);
     Route::get('/categories-by-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoriesByTenant']);
     Route::get('/horoshop-stock-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopStockCount']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);

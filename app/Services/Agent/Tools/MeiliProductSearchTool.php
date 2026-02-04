@@ -331,6 +331,39 @@ class MeiliProductSearchTool
                 $filtered = $hits;
             }
             
+            // RETRY WITH SIMPLIFIED QUERY if few/no results
+            // Remove generic words like "набір", "засіб", "для" and search by core terms
+            if (count($filtered) < 3 && !empty($query)) {
+                $simplifiedQuery = $this->simplifyQuery($query);
+                if ($simplifiedQuery && $simplifiedQuery !== $enhancedQuery) {
+                    Log::info('MeiliProductSearchTool: retrying with simplified query', [
+                        'original' => $enhancedQuery,
+                        'simplified' => $simplifiedQuery,
+                        'original_results' => count($filtered),
+                    ]);
+                    
+                    $this->searchMeta['retry_simplified_query'] = $simplifiedQuery;
+                    
+                    $retryResult = $index->search($simplifiedQuery, $searchParams);
+                    $retryHits = $retryResult->getHits();
+                    
+                    if (count($retryHits) > count($filtered)) {
+                        Log::info('MeiliProductSearchTool: simplified query found more results', [
+                            'simplified_results' => count($retryHits),
+                        ]);
+                        // Apply same filtering
+                        foreach ($retryHits as &$hit) {
+                            if (empty($hit['ai_product_type'])) {
+                                $hit['ai_product_type'] = '__unknown__';
+                            }
+                        }
+                        $filtered = $this->filterAccessories($retryHits, $simplifiedQuery);
+                        $filtered = $this->filterByTitleRelevance($filtered, $simplifiedQuery);
+                        $filtered = $this->dedupeByTitle($filtered, $limit);
+                    }
+                }
+            }
+            
             // Deduplicate by title to show different models (not just size/color variants)
             $filtered = $this->dedupeByTitle($filtered, $limit);
             
@@ -1198,6 +1231,63 @@ class MeiliProductSearchTool
         }
 
         return $images;
+    }
+
+    /**
+     * Simplify query by removing generic words that don't help search.
+     * Used for retry when original query returns no/few results.
+     * 
+     * Examples:
+     * - "набір для чищення зброї" → "чищення зброї cleaning"
+     * - "засіб для догляду за взуттям" → "догляд взуття"
+     * - "комплект термобілизни" → "термобілизна"
+     */
+    private function simplifyQuery(string $query): ?string
+    {
+        $q = mb_strtolower(trim($query));
+        
+        // Words to remove (too generic, don't exist in product titles)
+        $removeWords = [
+            'набір', 'набори', 'наборів',
+            'комплект', 'комплекти', 'комплектів',
+            'засіб', 'засоби', 'засобів',
+            'для', 'та', 'і', 'або', 'з', 'із', 'на', 'в', 'у',
+            'купити', 'замовити', 'знайти', 'покажи', 'показати',
+            'хочу', 'потрібно', 'потрібен', 'потрібна',
+            'який', 'яка', 'яке', 'які',
+            'будь', 'ласка', 'мені',
+        ];
+        
+        $words = preg_split('/\s+/', $q);
+        $filtered = array_filter($words, fn($w) => !in_array($w, $removeWords) && mb_strlen($w) > 2);
+        
+        if (empty($filtered)) {
+            return null;
+        }
+        
+        $simplified = implode(' ', $filtered);
+        
+        // Add English equivalents for better Meili matching
+        $translations = [
+            'чищення' => 'cleaning',
+            'догляд' => 'care',
+            'зброї' => 'weapon gun',
+            'взуття' => 'boots shoes',
+            'одяг' => 'clothes',
+        ];
+        
+        foreach ($translations as $uk => $en) {
+            if (str_contains($simplified, $uk) && !str_contains($simplified, $en)) {
+                $simplified .= ' ' . $en;
+            }
+        }
+        
+        Log::debug('MeiliProductSearchTool: simplified query', [
+            'original' => $query,
+            'simplified' => $simplified,
+        ]);
+        
+        return $simplified;
     }
 
     /**

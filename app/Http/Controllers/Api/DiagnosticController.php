@@ -6105,6 +6105,58 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/restart-ai-enrichment/{tenantId}
+     * Reset AI enrichment step to in_progress so job can update it
+     */
+    public function restartAiEnrichment(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
+        if (!$progress) {
+            return response()->json(['error' => 'No progress record found'], 404);
+        }
+
+        // Get current AI enrichment stats
+        $totalProducts = DB::table('products')
+            ->where('tenant_id', $tenantId)
+            ->where('in_stock', true)
+            ->count();
+
+        $enrichedCount = DB::table('product_ai_index')
+            ->join('products', 'products.id', '=', 'product_ai_index.product_id')
+            ->where('products.tenant_id', $tenantId)
+            ->whereNotNull('product_ai_index.keywords')
+            ->count();
+
+        $percent = $totalProducts > 0 
+            ? min(95, (int) round($enrichedCount / $totalProducts * 100))
+            : 0;
+
+        // Reset to in_progress
+        $progress->status = 'in_progress';
+        $progress->save();
+
+        $progress->updateStep('ai_enrichment', 'in_progress', $percent, 
+            "AI аналіз: {$enrichedCount} з {$totalProducts} товарів", [
+            'total' => $totalProducts,
+            'enriched' => $enrichedCount,
+            'processed' => $enrichedCount,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'tenant_id' => $tenantId,
+            'status' => 'in_progress',
+            'enriched' => $enrichedCount,
+            'total' => $totalProducts,
+            'percent' => $percent,
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/complete-onboarding/{tenantId}
      * Skip synonyms step and mark onboarding as completed
      */

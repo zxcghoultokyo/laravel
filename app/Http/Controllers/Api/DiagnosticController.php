@@ -6191,7 +6191,7 @@ class DiagnosticController extends Controller
                 'tenant_id' => $tenantId,
                 'categories_count' => $categoryCount,
                 'synonyms_count' => $synonymsCount,
-                'output' => $output,
+                'output' => mb_convert_encoding($output, 'UTF-8', 'UTF-8'),
             ]);
         } catch (\Throwable $e) {
             return response()->json([

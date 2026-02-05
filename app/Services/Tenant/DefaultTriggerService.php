@@ -335,6 +335,123 @@ class DefaultTriggerService
                 'max_per_day' => 2,
                 'cooldown_minutes' => 120,
             ],
+
+            // ========================================
+            // URL PATTERN TRIGGERS (WandB-style contextual)
+            // ========================================
+
+            // 14. URL Pattern - Category context (WandB-style)
+            [
+                'name' => 'Контекст категорії',
+                'trigger_type' => ProactiveTriggerRule::TYPE_URL_PATTERN,
+                'is_enabled' => true,
+                'priority' => 35,
+                'conditions' => [
+                    'url_contains' => ['/category/', '/c/'], // Category pages
+                    'delay_seconds' => 8,
+                    'min_time_on_page' => 5,
+                ],
+                'message' => "👀 Бачу, ви переглядаєте «{{category}}».\n\nМаєте питання або хочете допомогу з вибором?",
+                'button_text' => 'Так, допоможіть',
+                'icon' => '💬',
+                'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,
+                'action_config' => [
+                    'include_category_context' => true,
+                    'auto_greet' => true,
+                ],
+                'max_per_session' => 1,
+                'max_per_day' => 2,
+                'cooldown_minutes' => 60,
+            ],
+
+            // 15. URL Pattern - Search results
+            [
+                'name' => 'Контекст пошуку',
+                'trigger_type' => ProactiveTriggerRule::TYPE_URL_PATTERN,
+                'is_enabled' => true,
+                'priority' => 36,
+                'conditions' => [
+                    'url_contains' => ['/search', '?q=', '?query='],
+                    'delay_seconds' => 10,
+                ],
+                'message' => "🔍 Шукаєте щось конкретне?\n\nДопоможу знайти — просто опишіть, що потрібно!",
+                'button_text' => 'Допоможіть знайти',
+                'icon' => '🔍',
+                'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT,
+                'action_config' => ['initial_message' => 'Допоможіть знайти товар'],
+                'max_per_session' => 1,
+                'max_per_day' => 2,
+                'cooldown_minutes' => 60,
+            ],
+
+            // 16. URL Pattern - Sale/promo pages
+            [
+                'name' => 'Сторінка акції',
+                'trigger_type' => ProactiveTriggerRule::TYPE_URL_PATTERN,
+                'is_enabled' => true,
+                'priority' => 37,
+                'conditions' => [
+                    'url_contains' => ['/sale', '/promo', '/акція', '/знижки', '/розпродаж'],
+                    'delay_seconds' => 6,
+                ],
+                'message' => "🔥 Бачу, ви на сторінці акцій!\n\nПідкажу найкращі пропозиції саме для вас?",
+                'button_text' => 'Покажіть топ',
+                'icon' => '🔥',
+                'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,
+                'action_config' => [
+                    'filter_sale' => true,
+                    'sort_by' => 'discount',
+                ],
+                'max_per_session' => 1,
+                'max_per_day' => 2,
+                'cooldown_minutes' => 60,
+            ],
+
+            // ========================================
+            // PAGE SCROLL TRIGGERS (engagement-based)
+            // ========================================
+
+            // 17. Scroll depth - Product description
+            [
+                'name' => 'Прочитав опис товару',
+                'trigger_type' => ProactiveTriggerRule::TYPE_PAGE_SCROLL,
+                'is_enabled' => true,
+                'priority' => 40,
+                'conditions' => [
+                    'page_types' => ['product'],
+                    'scroll_depth_percent' => 60,  // Scrolled 60% of page
+                    'min_time_on_page' => 15,
+                ],
+                'message' => "📖 Бачу, зацікавились товаром!\n\nЗалишились питання? Відповім за хвилину!",
+                'button_text' => 'Запитати',
+                'icon' => '❓',
+                'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,
+                'action_config' => ['include_product_context' => true],
+                'max_per_session' => 1,
+                'max_per_day' => 3,
+                'cooldown_minutes' => 30,
+            ],
+
+            // 18. Scroll depth - Category bottom (didn't find)
+            [
+                'name' => 'Прокрутив до кінця категорії',
+                'trigger_type' => ProactiveTriggerRule::TYPE_PAGE_SCROLL,
+                'is_enabled' => true,
+                'priority' => 41,
+                'conditions' => [
+                    'page_types' => ['category'],
+                    'scroll_depth_percent' => 85,  // Almost bottom
+                    'min_time_on_page' => 20,
+                ],
+                'message' => "🤔 Не знайшли потрібне?\n\nОпишіть що шукаєте — підберу варіанти!",
+                'button_text' => 'Допоможіть',
+                'icon' => '🎯',
+                'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,
+                'action_config' => ['include_category_context' => true],
+                'max_per_session' => 1,
+                'max_per_day' => 2,
+                'cooldown_minutes' => 45,
+            ],
         ];
     }
 

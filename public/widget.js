@@ -3641,12 +3641,17 @@
             this.setupActivityTracker();
             this.setupVariantSelectionDetector();
             this.setupReturningVisitorDetector();
+            this.setupUrlPatternDetector();
+            this.setupPageScrollDetector();
             
             // Check UTM triggers on page load (wait for rules to load)
             setTimeout(() => this.checkUtmTriggers(), 2000);
             
             // Check returning visitor trigger
             setTimeout(() => this.checkReturningVisitorTrigger(), 3000);
+            
+            // Check URL pattern triggers on page load
+            setTimeout(() => this.checkUrlPatternTriggers(), 4000);
             
             log('ProactiveTriggers: Initialized');
         },
@@ -4337,6 +4342,33 @@
                             message = `Покажи топ в "${category}"`;
                         }
                         break;
+                    
+                    case 'url_pattern':
+                        // WandB-style contextual trigger based on URL
+                        const url = window.location.href.toLowerCase();
+                        if (url.includes('/sale') || url.includes('/promo') || url.includes('/знижки')) {
+                            message = 'Покажи найкращі акційні пропозиції';
+                        } else if (url.includes('/search') || url.includes('?q=')) {
+                            message = 'Допоможіть знайти товар';
+                        } else if (category) {
+                            message = `Допоможіть обрати в категорії "${category}"`;
+                        } else if (product) {
+                            message = `Маю питання про "${this.truncate(product, 50)}"`;
+                        } else {
+                            message = 'Допоможіть знайти потрібний товар';
+                        }
+                        break;
+                        
+                    case 'page_scroll':
+                        // User scrolled deep - engaged with content
+                        if (pageType === 'product' && product) {
+                            message = `Маю питання про "${this.truncate(product, 50)}"`;
+                        } else if (pageType === 'category' && category) {
+                            message = `Допоможіть знайти в "${category}"`;
+                        } else {
+                            message = 'У мене є питання';
+                        }
+                        break;
                 }
                 
                 // Fallback to rule's initial_message
@@ -4761,6 +4793,95 @@
                     }
                 }, delay);
             }
+        },
+        
+        // URL Pattern detector (WandB-style contextual)
+        setupUrlPatternDetector: function() {
+            log('ProactiveTriggers: URL pattern detector setup');
+        },
+        
+        // Check URL pattern triggers
+        checkUrlPatternTriggers: function() {
+            const url = window.location.href.toLowerCase();
+            const pathname = window.location.pathname.toLowerCase();
+            
+            log('ProactiveTriggers: Checking URL pattern triggers', { url, pathname });
+            
+            // Find matching URL pattern rule
+            const rule = this.findMatchingRule('url_pattern', { url, pathname });
+            if (rule && this.canShowTrigger('url_pattern')) {
+                // Check URL conditions
+                const conditions = rule.conditions || {};
+                const urlContains = conditions.url_contains || [];
+                
+                // Check if URL matches any pattern
+                let matches = false;
+                if (Array.isArray(urlContains)) {
+                    matches = urlContains.some(pattern => 
+                        url.includes(pattern.toLowerCase()) || pathname.includes(pattern.toLowerCase())
+                    );
+                } else if (typeof urlContains === 'string') {
+                    matches = url.includes(urlContains.toLowerCase()) || pathname.includes(urlContains.toLowerCase());
+                }
+                
+                if (matches) {
+                    // Delay from conditions (default 8 seconds)
+                    const delay = (conditions.delay_seconds || 8) * 1000;
+                    const minTimeOnPage = (conditions.min_time_on_page || 5) * 1000;
+                    
+                    setTimeout(() => {
+                        const timeOnPage = Date.now() - this.state.pageStartTime;
+                        if (timeOnPage >= minTimeOnPage && this.canShowTrigger('url_pattern')) {
+                            log('ProactiveTriggers: URL pattern trigger matched', { url, pattern: urlContains });
+                            this.showTrigger(rule, {
+                                trigger_reason: 'url_pattern_match',
+                                url: url
+                            });
+                        }
+                    }, delay);
+                }
+            }
+        },
+        
+        // Page scroll detector
+        setupPageScrollDetector: function() {
+            let maxScrollDepth = 0;
+            let scrollTriggerFired = false;
+            
+            window.addEventListener('scroll', () => {
+                if (scrollTriggerFired) return;
+                
+                // Calculate scroll depth percentage
+                const scrollTop = window.scrollY;
+                const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+                const scrollPercent = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+                
+                if (scrollPercent > maxScrollDepth) {
+                    maxScrollDepth = scrollPercent;
+                }
+                
+                // Find matching scroll rule
+                const rule = this.findMatchingRule('page_scroll');
+                if (rule && this.canShowTrigger('page_scroll')) {
+                    const conditions = rule.conditions || {};
+                    const requiredDepth = conditions.scroll_depth_percent || 60;
+                    const minTimeOnPage = (conditions.min_time_on_page || 15) * 1000;
+                    
+                    if (maxScrollDepth >= requiredDepth) {
+                        const timeOnPage = Date.now() - this.state.pageStartTime;
+                        if (timeOnPage >= minTimeOnPage) {
+                            scrollTriggerFired = true;
+                            log('ProactiveTriggers: Page scroll trigger at', maxScrollDepth + '%');
+                            this.showTrigger(rule, {
+                                trigger_reason: 'scroll_depth',
+                                scroll_depth: Math.round(maxScrollDepth)
+                            });
+                        }
+                    }
+                }
+            }, { passive: true });
+            
+            log('ProactiveTriggers: Page scroll detector setup');
         },
         
         // Notify that chat was opened (pause triggers)

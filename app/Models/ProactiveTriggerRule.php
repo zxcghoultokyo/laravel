@@ -52,6 +52,8 @@ class ProactiveTriggerRule extends Model
     public const TYPE_UTM_CAMPAIGN = 'utm_campaign';
     public const TYPE_RETURNING_VISITOR = 'returning_visitor';
     public const TYPE_PDP_NO_VARIANT = 'pdp_no_variant';
+    public const TYPE_URL_PATTERN = 'url_pattern';  // WandB-style contextual triggers
+    public const TYPE_PAGE_SCROLL = 'page_scroll';   // Trigger on scroll depth
 
     // Action types
     public const ACTION_OPEN_CHAT = 'open_chat';

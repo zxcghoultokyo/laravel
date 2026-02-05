@@ -103,14 +103,39 @@ class OnboardingProgress extends Component
     }
 
     /**
-     * Polling to refresh progress every 3 seconds while in progress or pending
+     * Polling to refresh progress every 3 seconds while in progress, pending, or AI still running
      */
     public function getPollingInterval(): ?int
     {
-        if ($this->progress && in_array($this->progress['status'], ['in_progress', 'pending'])) {
+        if (!$this->progress) {
+            return null;
+        }
+        
+        // Poll if status is in_progress or pending
+        if (in_array($this->progress['status'], ['in_progress', 'pending'])) {
             return 3000; // 3 seconds
         }
+        
+        // Also poll if onboarding completed but AI enrichment still in progress
+        $aiStep = $this->progress['steps']['ai_enrichment'] ?? null;
+        if ($aiStep && $aiStep['status'] === 'in_progress') {
+            return 5000; // 5 seconds for background AI
+        }
+        
         return null;
+    }
+
+    /**
+     * Check if AI enrichment is still running in background
+     */
+    public function isAiInProgress(): bool
+    {
+        if (!$this->progress) {
+            return false;
+        }
+        
+        $aiStep = $this->progress['steps']['ai_enrichment'] ?? null;
+        return $aiStep && $aiStep['status'] === 'in_progress';
     }
 
     public function render()
@@ -120,6 +145,7 @@ class OnboardingProgress extends Component
         
         return view('livewire.onboarding-progress', [
             'pollingInterval' => $this->getPollingInterval(),
+            'aiInProgress' => $this->isAiInProgress(),
         ]);
     }
 }

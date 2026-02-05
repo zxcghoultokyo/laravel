@@ -43,7 +43,11 @@
                 <div>
                     <h3 class="font-semibold text-gray-900">
                         @if($progress['status'] === 'completed')
-                            Налаштування завершено!
+                            @if($aiInProgress ?? false)
+                                Онбординг успішно завершено!
+                            @else
+                                Налаштування завершено!
+                            @endif
                         @elseif($progress['status'] === 'failed')
                             Помилка налаштування
                         @elseif($progress['status'] === 'in_progress')
@@ -54,7 +58,15 @@
                             Очікує запуску
                         @endif
                     </h3>
-                    @if($progress['current_step_detail'])
+                    @if($aiInProgress ?? false)
+                        <p class="text-sm text-amber-600 flex items-center">
+                            <svg class="w-4 h-4 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            AI збагачення ще виконується у фоні...
+                        </p>
+                    @elseif($progress['current_step_detail'])
                         <p class="text-sm text-gray-500">{{ $progress['current_step_detail'] }}</p>
                     @endif
                 </div>

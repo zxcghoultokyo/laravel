@@ -399,6 +399,7 @@ class OnboardTenantJob implements ShouldQueue
 
     /**
      * Finalize AI enrichment step
+     * Note: If not all products enriched, keeps status as 'in_progress' - AI job will continue in background
      */
     protected function finalizeAiEnrichment(int $originalCount): void
     {
@@ -407,10 +408,29 @@ class OnboardTenantJob implements ShouldQueue
                 ->where('tenant_id', $this->tenantId);
         })->count();
 
-        $this->progress->updateStep('ai_enrichment', 'completed', 100,
-            "AI аналіз завершено: {$enrichedCount} товарів оброблено",
-            ['total' => $originalCount, 'processed' => $enrichedCount, 'enriched' => $enrichedCount]
-        );
+        $percent = $originalCount > 0 
+            ? (int) round($enrichedCount / $originalCount * 100)
+            : 100;
+
+        // If less than 95% enriched, keep as in_progress - AI job continues in background
+        if ($percent < 95) {
+            $this->progress->updateStep('ai_enrichment', 'in_progress', $percent,
+                "AI аналіз: {$enrichedCount} з {$originalCount} товарів (продовжується у фоні)",
+                ['total' => $originalCount, 'processed' => $enrichedCount, 'enriched' => $enrichedCount]
+            );
+            
+            Log::info('OnboardTenantJob: AI enrichment continuing in background', [
+                'tenant_id' => $this->tenantId,
+                'enriched' => $enrichedCount,
+                'total' => $originalCount,
+                'percent' => $percent,
+            ]);
+        } else {
+            $this->progress->updateStep('ai_enrichment', 'completed', 100,
+                "AI аналіз завершено: {$enrichedCount} товарів оброблено",
+                ['total' => $originalCount, 'processed' => $enrichedCount, 'enriched' => $enrichedCount]
+            );
+        }
     }
 
     /**

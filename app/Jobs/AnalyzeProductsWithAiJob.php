@@ -189,12 +189,20 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
     /**
      * Update onboarding progress with current AI enrichment stats
+     * Note: Updates even if onboarding is "completed" - AI runs in background
      */
     private function updateOnboardingProgress(int $batchAnalyzed): void
     {
         $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
         
-        if (!$progress || $progress->status !== 'in_progress') {
+        if (!$progress) {
+            return;
+        }
+
+        // Allow updates even if onboarding is "completed" - AI enrichment continues in background
+        // Only skip if AI step itself is already marked as completed with 100%
+        $aiStep = $progress->steps['ai_enrichment'] ?? null;
+        if ($aiStep && $aiStep['status'] === 'completed' && ($aiStep['percent'] ?? 0) >= 100) {
             return;
         }
 
@@ -278,21 +286,22 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
     /**
      * Trigger Meilisearch indexing after AI enrichment completes
+     * Note: Triggers even if onboarding status is "completed" - ensures products are searchable
      */
     private function triggerMeiliIndexing(): void
     {
         $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
         
-        if (!$progress || $progress->status !== 'in_progress') {
+        if (!$progress) {
             return;
         }
 
-        // Check if meili step hasn't started yet
+        // Check if meili step hasn't started yet or is still pending
         $steps = $progress->steps ?? [];
         $meiliStep = $steps['meili_indexing'] ?? null;
         
-        if ($meiliStep && $meiliStep['status'] !== 'pending') {
-            // Meili already started or completed
+        if ($meiliStep && in_array($meiliStep['status'], ['completed', 'in_progress'])) {
+            // Meili already running or completed
             return;
         }
 

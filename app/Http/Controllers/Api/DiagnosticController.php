@@ -6709,4 +6709,59 @@ class DiagnosticController extends Controller
             'view:clear' => 'Clear view cache',
         ];
     }
+
+    /**
+     * GET /api/diagnostic/trigger-stats/{tenantId}
+     * Get proactive trigger rules with statistics for a tenant
+     */
+    public function triggerStats(Request $request, int $tenantId): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $triggers = \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)
+            ->orderBy('priority')
+            ->get();
+
+        if ($triggers->isEmpty()) {
+            return response()->json([
+                'tenant_id' => $tenantId,
+                'total' => 0,
+                'message' => 'No triggers found. Use POST /api/diagnostic/seed-triggers to create defaults.',
+                'triggers' => [],
+            ]);
+        }
+
+        $stats = [
+            'total' => $triggers->count(),
+            'enabled' => $triggers->where('is_enabled', true)->count(),
+            'total_shown' => $triggers->sum('shown_count'),
+            'total_clicked' => $triggers->sum('clicked_count'),
+            'total_converted' => $triggers->sum('converted_count'),
+        ];
+
+        $triggerData = $triggers->map(function ($t) {
+            return [
+                'id' => $t->id,
+                'name' => $t->name,
+                'type' => $t->trigger_type,
+                'enabled' => $t->is_enabled,
+                'priority' => $t->priority,
+                'shown' => $t->shown_count,
+                'clicked' => $t->clicked_count,
+                'converted' => $t->converted_count,
+                'ctr' => $t->shown_count > 0 ? round($t->clicked_count / $t->shown_count * 100, 1) . '%' : '0%',
+                'conditions' => $t->conditions,
+                'message_preview' => mb_substr(str_replace("\n", " ", $t->message), 0, 80),
+            ];
+        });
+
+        return response()->json([
+            'tenant_id' => $tenantId,
+            'stats' => $stats,
+            'triggers' => $triggerData,
+        ]);
+    }
 }
+

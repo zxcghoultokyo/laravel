@@ -327,9 +327,17 @@ class OnboardTenantJob implements ShouldQueue
         )->onQueue('meili');  // Use different queue to avoid blocking!
 
         // Poll for completion with progress updates
-        // Max 10 minutes wait - if not done, continue with other steps
-        // AI enrichment will continue in background via queue
-        $maxWaitSeconds = 600; // 10 minutes max wait (reduced from 30 min)
+        // Calculate reasonable timeout: ~6 seconds per product (with rate limiting)
+        // 400 products = ~40 minutes, add buffer = 60 minutes max
+        $estimatedMinutes = max(30, (int) ceil($productsWithoutAi * 6 / 60));
+        $maxWaitSeconds = min(3600, $estimatedMinutes * 60); // Max 60 min
+        
+        Log::info('OnboardTenantJob: Waiting for AI enrichment', [
+            'tenant_id' => $this->tenantId,
+            'products' => $productsWithoutAi,
+            'max_wait_minutes' => $maxWaitSeconds / 60,
+        ]);
+        
         $startTime = time();
         $lastProcessed = 0;
         $stuckCounter = 0;
@@ -362,11 +370,11 @@ class OnboardTenantJob implements ShouldQueue
                 break;
             }
 
-            // Check if stuck (no progress for 1 minute)
+            // Check if stuck (no progress for 3 minutes - AI batches can have delays)
             if ($enrichedCount === $lastProcessed) {
                 $stuckCounter++;
-                if ($stuckCounter >= 6) { // 6 * 10 sec = 60 seconds (1 minute)
-                    Log::warning('OnboardTenantJob: AI enrichment appears stuck or still queued, continuing with other steps', [
+                if ($stuckCounter >= 18) { // 18 * 10 sec = 180 seconds (3 minutes)
+                    Log::warning('OnboardTenantJob: AI enrichment appears stuck, continuing with other steps', [
                         'tenant_id' => $this->tenantId,
                         'enriched' => $enrichedCount,
                         'total' => $productsWithoutAi,

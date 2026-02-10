@@ -202,38 +202,62 @@ abstract class BaseAgent
         
         // For 2-word queries, check if it contains a known category
         // This allows "білизна жіноча", "куртка зимова" etc.
+        $searchQuery = $message; // Default to full message
         if ($wordCount === 2) {
             $categories = [
-                'куртк', 'берц', 'штан', 'футболк', 'шолом', 'навушник',
-                'плитонос', 'рюкзак', 'підсум', 'термобіл', 'білизн',
-                'шевр', 'бронежилет', 'бронеплат', 'рукавиц', 'бал',
-                'окуляр', 'ремен', 'пояс', 'панам', 'шапк', 'кепк',
+                'куртк' => 'куртки',
+                'берц' => 'берці',
+                'штан' => 'штани',
+                'футболк' => 'футболки',
+                'шолом' => 'шоломи',
+                'навушник' => 'навушники',
+                'плитонос' => 'плитоноски',
+                'рюкзак' => 'рюкзаки',
+                'підсум' => 'підсумки',
+                'термобіл' => 'термобілизна',
+                'білизн' => 'термобілизна',
+                'шевр' => 'шеврони',
+                'бронежилет' => 'бронежилети',
+                'бронеплат' => 'бронеплати',
+                'рукавиц' => 'рукавиці',
+                'балаклав' => 'балаклави',
+                'окуляр' => 'окуляри',
+                'ремен' => 'ремені',
+                'пояс' => 'пояси',
+                'панам' => 'панами',
+                'шапк' => 'шапки',
+                'кепк' => 'кепки',
             ];
             
-            $hasCategory = false;
-            foreach ($categories as $cat) {
+            $foundCategory = null;
+            foreach ($categories as $cat => $canonical) {
                 if (mb_stripos($lower, $cat) !== false) {
-                    $hasCategory = true;
+                    $foundCategory = $canonical;
                     break;
                 }
             }
             
             // If no category found in 2-word query, let GPT handle it
-            if (!$hasCategory) {
+            if (!$foundCategory) {
                 return null;
             }
+            
+            // Use canonical category for search instead of full query
+            // This ensures "білизна жіноча" searches for "термобілизна"
+            $searchQuery = $foundCategory;
         }
         
         // If it's a single noun-like query, try searching directly
         // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
         Log::info('BaseAgent::handleShortProductQuery attempting search', [
             'message' => $message,
+            'search_query' => $searchQuery,
             'shown_ids_count' => count($this->shownProductIds),
         ]);
         
         // Request more products to allow excluding shown ones
         $requestLimit = 3 + count($this->shownProductIds);
-        $products = $this->searchTool->search($message, [], $requestLimit);
+        $products = $this->searchTool->search($searchQuery, [], $requestLimit);
         
         Log::info('BaseAgent::handleShortProductQuery raw search results', [
             'message' => $message,

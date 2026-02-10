@@ -38,7 +38,8 @@ class ReanalyzeHelmetProducts extends Command
         }
 
         // Find products that need re-analysis
-        // Category contains "Аксесуар" but ai_product_type is "helmet" (incorrect)
+        // Either: category contains "Аксесуар" OR title contains accessory keywords
+        // but ai_product_type is "helmet" (incorrect)
         $query = ProductAiIndex::with('product')
             ->whereHas('product', function ($q) use ($tenantId) {
                 $q->withoutGlobalScope(TenantScope::class)
@@ -48,10 +49,24 @@ class ReanalyzeHelmetProducts extends Command
                     $q->where('tenant_id', $tenantId);
                 }
                 
-                // Products in "Аксесуари на шоломи" category
+                // Products that are accessories based on category OR title
                 $q->where(function ($sq) {
+                    // Category-based detection
                     $sq->where('category_path', 'like', '%Аксесуар%шолом%')
-                       ->orWhere('category_path', 'like', '%Комплектуюч%шолом%');
+                       ->orWhere('category_path', 'like', '%Комплектуюч%шолом%')
+                       // Title-based detection (accessory keywords)
+                       ->orWhere('title', 'like', '%кріплення%')
+                       ->orWhere('title', 'like', '%адаптер%')
+                       ->orWhere('title', 'like', '%mount%')
+                       ->orWhere('title', 'like', '%тримач%')
+                       ->orWhere('title', 'like', '%подушк%')
+                       ->orWhere('title', 'like', '%pad%')
+                       ->orWhere('title', 'like', '%накладк%')
+                       ->orWhere('title', 'like', '%кавер%')
+                       ->orWhere('title', 'like', '%cover%')
+                       ->orWhere('title', 'like', '%планка%')
+                       ->orWhere('title', 'like', '%рейка%')
+                       ->orWhere('title', 'like', '%чебурашк%');
                 });
             })
             // Currently incorrectly classified as "helmet"

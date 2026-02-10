@@ -391,70 +391,64 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
     private function buildPrompt(string $title, string $description, string $category, string $characteristics): string
     {
+        // Pre-detect accessory keywords to give GPT a strong hint
+        $titleLower = mb_strtolower($title);
+        $isLikelyAccessory = preg_match('/кріплення|адаптер|mount|adapter|подушк|pad|накладк|кавер|чохол|cover|планка|rail|рейка|тримач|holder|противаг|панел|velcro/ui', $titleLower);
+        $accessoryHint = $isLikelyAccessory 
+            ? "\n\n🚨 УВАГА! Назва містить слово-аксесуар! product_type НЕ МОЖЕ бути 'helmet' або 'plate_carrier'!\n" 
+            : '';
+        
         return <<<PROMPT
 Проаналізуй цей товар та згенеруй JSON для пошукового індексу.
-
+{$accessoryHint}
 ТОВАР:
 Назва: {$title}
 Категорія: {$category}
 Опис: {$description}
 Характеристики: {$characteristics}
 
+🚨 ПЕРШЕ ПРАВИЛО (ОБОВ'ЯЗКОВЕ):
+Перевір назву на слова-аксесуари ПЕРЕД класифікацією:
+- "кріплення/адаптер/mount/adapter" → helmet_mount або plate_carrier_mount
+- "подушк/pad/накладк" → helmet_pads
+- "кавер/чохол/cover" → helmet_cover або plate_carrier_cover  
+- "планка/rail/рейка/тримач/holder" → helmet_mount
+- "панел/velcro/cummerbund/камербанд" → plate_carrier_accessory
+- "підсумок/pouch" → pouch
+Якщо назва містить будь-яке з цих слів → ЦЕ АКСЕСУАР!
+
 Згенеруй JSON з полями:
 
-1. "product_type": основний тип товару англійською (ОБОВ'ЯЗКОВО!)
+1. "product_type": тип товару англійською (ОБОВ'ЯЗКОВО!)
    
-   ⚠️ КРИТИЧНО - ВИЗНАЧАЙ ТИП ПО НАЗВІ (title), А НЕ ПО КАТЕГОРІЇ!
-   Категорія може бути неправильною - аксесуари часто лежать в основній категорії.
+   ⛔ ЗАБОРОНЕНО використовувати "helmet" якщо в назві є:
+   кріплення, адаптер, mount, adapter, подушк, pad, накладк, кавер, 
+   чохол, cover, планка, rail, рейка, тримач, holder, противаг, панел
    
-   🎯 ПРАВИЛА ВИЗНАЧЕННЯ ТИПУ ДЛЯ ШОЛОМІВ:
+   ⛔ ЗАБОРОНЕНО використовувати "plate_carrier" якщо в назві є:
+   підсумок, pouch, плита окремо, cummerbund, камербанд, панел
    
-   Якщо в назві є ці слова → ЦЕ АКСЕСУАР, НЕ ШОЛОМ:
-   - "кріплення", "адаптер", "mount", "adapter" → "helmet_mount"
-   - "подушк", "pad", "накладк" → "helmet_pads" 
-   - "кавер", "чохол", "cover" → "helmet_cover"
-   - "планка", "rail", "рейка" → "helmet_mount"
-   - "противаг", "counterweight" → "helmet_accessory"
-   - "велкро", "velcro", "панел" → "helmet_accessory"
-   - "візор", "visor", "маска" → "helmet_accessory"
-   - "тримач", "holder" → "helmet_mount"
-   - "ліхтар", "flashlight" для шолома → "helmet_accessory"
+   ✅ ПРАВИЛЬНІ ТИПИ ДЛЯ АКСЕСУАРІВ:
+   - "Кріплення ПНБ на шолом" → "helmet_mount"
+   - "Тримач навісного обладнання" → "helmet_mount"
+   - "Демпферна подушка PAD" → "helmet_pads"
+   - "Адаптер Earmor ARC" → "helmet_mount"
+   - "Кріплення чебурашки" → "helmet_mount"
+   - "Підсумок для магазинів" → "pouch"
    
-   ТІЛЬКИ якщо назва містить "шолом", "каска", "helmet", "FAST", "MICH", "ACH" 
-   БЕЗ слів-аксесуарів вище → тоді "helmet"
+   ✅ ТІЛЬКИ ЦІ ТОВАРИ = "helmet":
+   - Повноцінний шолом (Ops-Core, FAST, MICH, Sestan)
+   - Каска, балістичний/тактичний шолом
    
-   Приклади правильної класифікації:
-   ❌ "Кріплення на шолом" → "helmet_mount" (НЕ helmet!)
-   ❌ "Подушки для шоломів" → "helmet_pads" (НЕ helmet!)
-   ❌ "Кавер тактичний для шолому" → "helmet_cover" (НЕ helmet!)
-   ❌ "Планка Пікатінні на шолом" → "helmet_mount" (НЕ helmet!)
-   ❌ "Противага для шолома" → "helmet_accessory" (НЕ helmet!)
-   ❌ "Балістична маска-візор" → "helmet_accessory" (НЕ helmet!)
-   ✅ "Шолом Ops-Core FAST" → "helmet" 
-   ✅ "Балістичний шолом Sestan" → "helmet"
-   ✅ "Кевларова каска" → "helmet"
-   
-   🎯 АНАЛОГІЧНО ДЛЯ ПЛИТОНОСОК:
-   - "підсумок", "pouch" → "pouch" (НЕ plate_carrier!)
-   - "плита", "plate" (окремо) → "armor_plate"
-   - "бокова плита", "side plate" → "side_plate"
-   - "cummerbund", "камербанд" → "plate_carrier_accessory"
-   
-   ТІЛЬКИ справжні плитоноски/жилети → "plate_carrier"
+   ✅ ТІЛЬКИ ЦІ ТОВАРИ = "plate_carrier":
+   - Повноцінний плитоносець/жилет
    
    ІНШІ ТИПИ:
-   
-   ВІЙСЬКОВЕ/ТАКТИЧНЕ:
-   - boots, gloves, uniform, backpack, holster, tourniquet, first_aid_kit, radio, flashlight, knife
-   - active_headset (активні навушники типу Peltor, Comtac)
-   
-   ЕЛЕКТРОНІКА:
-   - smartphone, laptop, tablet, headphones, earbuds, smartwatch, camera, tv, speaker, charger, cable, powerbank
-   - phone_case, screen_protector, laptop_bag - АКСЕСУАРИ!
-   
-   ОДЯГ:
-   - jacket, pants, shirt, dress, skirt, shoes, sneakers, coat, hoodie, sweater, t_shirt, jeans
-   - belt, scarf, hat, gloves_fashion, socks - АКСЕСУАРИ одягу
+   - armor_plate, side_plate (плити)
+   - pouch (підсумки)
+   - plate_carrier_accessory (камербанд, панелі)
+   - boots, gloves, uniform, backpack, holster, tourniquet, flashlight, knife
+   - active_headset (Peltor, Comtac)
 
 2. "ai_category": загальна категорія англійською (ОБОВ'ЯЗКОВО!)
    ВАЖЛИВО: Аксесуари мають категорію "accessories"!

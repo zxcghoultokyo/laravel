@@ -86,6 +86,16 @@ class StreamingFunctionCallingAgent extends BaseAgent
             ]);
         }
 
+        // CRITICAL: Load shown product IDs FIRST - needed for all handlers
+        // This must happen before handleImplicitQuery and handleFollowUpQuestion
+        $this->shownProductIds = $this->extractShownProductIds($sessionId);
+        
+        Log::info('StreamingAgent: loaded shown product IDs early', [
+            'session_id' => $sessionId,
+            'shown_ids_count' => count($this->shownProductIds),
+            'shown_ids' => array_slice($this->shownProductIds, 0, 10), // Log first 10
+        ]);
+
         // PRE-PROCESS: Handle follow-up questions about previously shown products
         $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
         if ($followUpResult) {
@@ -153,8 +163,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Load detailed product info for follow-up questions
         $productDetails = $isFreshQuery ? '' : $this->loadRecentProductDetails($sessionId);
 
-        // Load shown product IDs to exclude from subsequent searches
-        $this->shownProductIds = $this->extractShownProductIds($sessionId);
+        // NOTE: shownProductIds already loaded early (before handleImplicitQuery)
         
         // Set current message for modular prompt building
         $this->currentMessage = $normalizedMessage;

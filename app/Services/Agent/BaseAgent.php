@@ -202,11 +202,36 @@ abstract class BaseAgent
         
         // If it's a single noun-like query, try searching directly
         // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
-        Log::info('BaseAgent: attempting single-word direct search', [
+        Log::info('BaseAgent::handleShortProductQuery attempting search', [
             'message' => $message,
+            'shown_ids_count' => count($this->shownProductIds),
         ]);
         
-        $products = $this->searchTool->search($message, [], 3);
+        // Request more products to allow excluding shown ones
+        $requestLimit = 3 + count($this->shownProductIds);
+        $products = $this->searchTool->search($message, [], $requestLimit);
+        
+        Log::info('BaseAgent::handleShortProductQuery raw search results', [
+            'message' => $message,
+            'raw_count' => count($products),
+            'raw_ids' => array_column(array_slice($products, 0, 10), 'id'),
+        ]);
+        
+        // Exclude already shown products for variety
+        if (!empty($this->shownProductIds) && !empty($products)) {
+            $beforeCount = count($products);
+            $products = array_filter($products, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
+            $products = array_values($products);
+            
+            Log::info('BaseAgent::handleShortProductQuery excluded shown', [
+                'before' => $beforeCount,
+                'after' => count($products),
+                'shown_ids' => array_slice($this->shownProductIds, 0, 5),
+            ]);
+        }
+        
+        // Limit to 3
+        $products = array_slice($products, 0, 3);
         
         if (!empty($products)) {
             // Get full product cards with images (same as toolSearchProducts)
@@ -1456,9 +1481,24 @@ PROMPT;
         // Exclude already shown products ONLY if explicitly requested (for "покажи ще")
         // By default, allow showing same products again (for repeated queries)
         $excludeShown = $args['exclude_shown'] ?? false;
+        $beforeExcludeCount = count($results);
         if ($excludeShown && !empty($this->shownProductIds) && !empty($results)) {
             $results = array_filter($results, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
             $results = array_values($results);
+            
+            Log::info('BaseAgent::toolSearchProducts exclude_shown filter', [
+                'exclude_shown' => $excludeShown,
+                'shown_ids_count' => count($this->shownProductIds),
+                'shown_ids' => array_slice($this->shownProductIds, 0, 5),
+                'before_filter' => $beforeExcludeCount,
+                'after_filter' => count($results),
+            ]);
+        } else {
+            Log::info('BaseAgent::toolSearchProducts exclude_shown NOT applied', [
+                'exclude_shown' => $excludeShown,
+                'shown_ids_count' => count($this->shownProductIds),
+                'results_count' => count($results),
+            ]);
         }
 
         // Filter accessories when searching for main product types (шоломи, плитоноски, etc.)
@@ -1507,6 +1547,15 @@ PROMPT;
                 ];
             }
         }
+
+        Log::info('BaseAgent::toolSearchProducts FINAL result', [
+            'query' => $query,
+            'filters' => $filters,
+            'exclude_shown' => $excludeShown,
+            'results_count' => count($results),
+            'result_ids' => array_column(array_slice($results, 0, 5), 'id'),
+            'result_titles' => array_map(fn($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
+        ]);
 
         return ['products' => $results, 'count' => count($results), 'query' => $query];
     }

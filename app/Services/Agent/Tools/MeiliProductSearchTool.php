@@ -125,12 +125,23 @@ class MeiliProductSearchTool
             // Only include in-stock products
             $filterParts[] = 'in_stock = true';
             
-            // Budget filters
-            if (!empty($filters['budget_min'])) {
-                $filterParts[] = "price >= {$filters['budget_min']}";
+            // Budget/Price filters - support both naming conventions
+            // GPT uses price_min/price_max, legacy code uses budget_min/budget_max
+            $priceMin = $filters['price_min'] ?? $filters['budget_min'] ?? null;
+            $priceMax = $filters['price_max'] ?? $filters['budget_max'] ?? null;
+            
+            Log::info('MeiliProductSearchTool: price filters', [
+                'query' => $query,
+                'raw_filters' => $filters,
+                'price_min' => $priceMin,
+                'price_max' => $priceMax,
+            ]);
+            
+            if (!empty($priceMin)) {
+                $filterParts[] = "price >= {$priceMin}";
             }
-            if (!empty($filters['budget_max'])) {
-                $filterParts[] = "price <= {$filters['budget_max']}";
+            if (!empty($priceMax)) {
+                $filterParts[] = "price <= {$priceMax}";
             }
             
             // Color filter: strictly by normalized field
@@ -422,6 +433,17 @@ class MeiliProductSearchTool
             
             // Track search for A/B testing
             $this->trackSearchForAB($query, count($filtered));
+            
+            // FINAL LOG: Full diagnostic output
+            Log::info('MeiliProductSearchTool::search FINAL RETURN', [
+                'query' => $query,
+                'filters_received' => $filters,
+                'filter_string_used' => $filterString ?? 'none',
+                'results_count' => count($filtered),
+                'result_ids' => array_column(array_slice($filtered, 0, 5), 'id'),
+                'result_prices' => array_map(fn($p) => $p['price'] ?? null, array_slice($filtered, 0, 5)),
+                'search_meta' => $this->searchMeta,
+            ]);
             
             return $filtered;
             

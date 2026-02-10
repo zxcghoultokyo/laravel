@@ -77,6 +77,16 @@ class FunctionCallingAgent extends BaseAgent
             ]);
         }
 
+        // CRITICAL: Load shown product IDs FIRST - needed for all handlers
+        // This must happen before handleImplicitQuery and handleFollowUpQuestion
+        $this->shownProductIds = $this->extractShownProductIds($sessionId);
+        
+        Log::info('FunctionCallingAgent: loaded shown product IDs', [
+            'session_id' => $sessionId,
+            'shown_ids_count' => count($this->shownProductIds),
+            'shown_ids' => array_slice($this->shownProductIds, 0, 10), // Log first 10
+        ]);
+
         // PRE-PROCESS: Handle follow-up questions about previously shown products
         // These should NOT trigger search, but answer from context
         $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
@@ -94,11 +104,13 @@ class FunctionCallingAgent extends BaseAgent
         // PRE-PROCESS: Detect implicit queries and search directly
         $implicitSearchResult = $this->handleImplicitQuery($normalizedMessage, $sessionId);
         if ($implicitSearchResult) {
+            Log::info('FunctionCallingAgent: implicit query handled', [
+                'message' => $normalizedMessage,
+                'products_count' => count($implicitSearchResult['products'] ?? []),
+                'source' => $implicitSearchResult['meta']['source'] ?? 'unknown',
+            ]);
             return $implicitSearchResult;
         }
-
-        // Load shown product IDs to exclude from subsequent searches
-        $this->shownProductIds = $this->extractShownProductIds($sessionId);
 
         // Build conversation history
         $messages = $this->buildMessages($normalizedMessage, $context);

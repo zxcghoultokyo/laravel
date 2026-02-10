@@ -167,6 +167,52 @@ abstract class BaseAgent
             }
         }
         
+        // CONFIRMATION WORDS HANDLER
+        // If user says "дозволяю", "давай", "хочу", "можна" - extract category from history and search
+        $confirmationWords = ['дозволяю', 'давай', 'хочу', 'можна', 'показуй', 'покажи', 'будь ласка', 'авжеж', 'гаразд', 'згода'];
+        if (in_array($lower, $confirmationWords) || preg_match('/^(дозволяю|давай|хочу|показуй|покажи)$/ui', $lower)) {
+            // Extract category from history
+            $history = $this->loadConversationHistory($sessionId);
+            $context = $this->extractConversationContext($history);
+            
+            // Parse "Шукає: термобілизна" from context
+            if (preg_match('/Шукає:\s*([^;]+)/u', $context, $matches)) {
+                $searchCategory = trim($matches[1]);
+                Log::info('BaseAgent: confirmation word detected, using context category', [
+                    'message' => $message,
+                    'context' => $context,
+                    'search_category' => $searchCategory,
+                ]);
+                
+                // Search for the category from context
+                $products = $this->searchTool->search($searchCategory, [], 3);
+                
+                if (!empty($products)) {
+                    // Get full product cards
+                    $ids = array_column($products, 'id');
+                    $tenantId = $this->searchTool->getCurrentTenantId();
+                    $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+                    if (!empty($cards)) {
+                        $products = $cards;
+                    }
+                    
+                    return [
+                        'message' => "Ось {$searchCategory}:",
+                        'products' => $products,
+                        'messages' => [
+                            ['type' => 'text', 'content' => "Ось {$searchCategory}:"],
+                            ['type' => 'products', 'products' => $products],
+                        ],
+                        'meta' => [
+                            'intent' => 'product_search',
+                            'agent' => 'function_calling',
+                            'source' => 'confirmation_context_handler',
+                        ],
+                    ];
+                }
+            }
+        }
+        
         // UNIVERSAL SHORT QUERY HANDLER
         // If message is 1-3 words and looks like a product type/category, search directly.
         // This prevents GPT from asking "уточніть запит" for valid product queries like "підсумки".

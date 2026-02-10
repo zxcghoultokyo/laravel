@@ -110,7 +110,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/ai-enrich-batch-sync', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiEnrichBatchSync']);
     Route::get('/sync-logs', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncLogs']);
     Route::post('/cleanup-meili', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupMeili']);
-    Route::post('/cleanup-test-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTestSessions']);
+    Route::get('/cleanup-test-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTestSessions']);
     Route::delete('/cleanup-stale-products', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupStaleProducts']);
     Route::delete('/cleanup-by-api', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupByApi']);
     Route::post('/sync-horoshop', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncHoroshop']);

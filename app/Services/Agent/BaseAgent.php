@@ -189,15 +189,39 @@ abstract class BaseAgent
         $words = preg_split('/\s+/u', $lower);
         $wordCount = count($words);
         
-        // Only process SINGLE word queries - everything else goes to GPT
+        // Handle 1-2 word queries that contain category keywords
         // This is universal for any language without needing patterns
-        if ($wordCount !== 1) {
+        if ($wordCount > 2) {
             return null;
         }
         
         // Skip very short words (likely typos or particles)
         if (mb_strlen($lower) < 3) {
             return null;
+        }
+        
+        // For 2-word queries, check if it contains a known category
+        // This allows "білизна жіноча", "куртка зимова" etc.
+        if ($wordCount === 2) {
+            $categories = [
+                'куртк', 'берц', 'штан', 'футболк', 'шолом', 'навушник',
+                'плитонос', 'рюкзак', 'підсум', 'термобіл', 'білизн',
+                'шевр', 'бронежилет', 'бронеплат', 'рукавиц', 'бал',
+                'окуляр', 'ремен', 'пояс', 'панам', 'шапк', 'кепк',
+            ];
+            
+            $hasCategory = false;
+            foreach ($categories as $cat) {
+                if (mb_stripos($lower, $cat) !== false) {
+                    $hasCategory = true;
+                    break;
+                }
+            }
+            
+            // If no category found in 2-word query, let GPT handle it
+            if (!$hasCategory) {
+                return null;
+            }
         }
         
         // If it's a single noun-like query, try searching directly

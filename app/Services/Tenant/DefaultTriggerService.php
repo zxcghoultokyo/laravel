@@ -97,7 +97,7 @@ class DefaultTriggerService
                 'action_type' => ProactiveTriggerRule::ACTION_OPEN_CHAT_WITH_CONTEXT,
                 'action_config' => [
                     'include_product_context' => true,
-                    'initial_message' => 'Допоможіть підібрати розмір',
+                    'initial_message' => 'Допоможіть підібрати розмір для товару {{product}}',
                 ],
                 'max_per_session' => 1,
                 'max_per_day' => 3,
@@ -149,7 +149,7 @@ class DefaultTriggerService
                 'action_config' => [
                     'quiz_mode' => true,
                     'include_product_context' => true,
-                    'initial_message' => 'Допоможіть підібрати розмір для цього товару',
+                    'initial_message' => 'Допоможіть підібрати розмір для товару {{product}}',
                 ],
                 'max_per_session' => 1,
                 'max_per_day' => 3,
@@ -177,6 +177,7 @@ class DefaultTriggerService
                 'action_config' => [
                     'show_new_in_category' => true,
                     'show_recently_viewed' => true,
+                    'initial_message' => 'Покажи новинки',
                 ],
                 'max_per_session' => 1,
                 'max_per_day' => 1,

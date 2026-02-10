@@ -133,8 +133,8 @@ class StreamingFunctionCallingAgent extends BaseAgent
             if (!empty($implicitResult['products'])) {
                 yield ['type' => 'products', 'data' => ['products' => $implicitResult['products']]];
                 
-                // Log assistant response
-                $this->logAssistantMessage($sessionId, $implicitResult['message'], $implicitResult['products'], 'implicit_search');
+                // Log assistant response (use 'product_search' for proper history loading)
+                $this->logAssistantMessage($sessionId, $implicitResult['message'], $implicitResult['products'], 'product_search');
             }
             
             // End stream

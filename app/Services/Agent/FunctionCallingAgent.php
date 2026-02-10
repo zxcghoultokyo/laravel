@@ -109,6 +109,15 @@ class FunctionCallingAgent extends BaseAgent
                 'products_count' => count($implicitSearchResult['products'] ?? []),
                 'source' => $implicitSearchResult['meta']['source'] ?? 'unknown',
             ]);
+            
+            // Log and save to DB (IMPORTANT: without this, products won't be in history!)
+            $this->logAssistantMessage(
+                $sessionId, 
+                $implicitSearchResult['message'] ?? 'Ось що я знайшов:', 
+                $implicitSearchResult['products'] ?? [], 
+                $implicitSearchResult['meta']['intent'] ?? 'product_search'
+            );
+            
             return $implicitSearchResult;
         }
 

@@ -2370,8 +2370,11 @@ PROMPT;
         $wordCount = count(preg_split('/\s+/u', $msg));
         
         // Short confirmations are NOT fresh queries - they're follow-ups
-        $confirmations = ['так', 'ні', 'добре', 'ок', 'окей', 'зрозумів', 'дякую', 'ще', 'інші', 'більше', 'показуй'];
-        if (in_array($msg, $confirmations) || $wordCount <= 2 && preg_match('/^(ще|інші|більше|показуй)/u', $msg)) {
+        $confirmations = [
+            'так', 'ні', 'добре', 'ок', 'окей', 'зрозумів', 'дякую', 'ще', 'інші', 'більше', 'показуй',
+            'дозволяю', 'хочу', 'давай', 'можна', 'будь ласка', 'звичайно', 'авжеж', 'гаразд', 'згода',
+        ];
+        if (in_array($msg, $confirmations) || $wordCount <= 2 && preg_match('/^(ще|інші|більше|показуй|дозволяю|хочу|давай)/u', $msg)) {
             return false;
         }
         
@@ -2458,6 +2461,16 @@ PROMPT;
                 $userQuestions[] = mb_substr($content, 0, 100);
                 
                 // Extract categories from user queries
+                foreach ($categoryPatterns as $pattern => $category) {
+                    if (preg_match("/($pattern)/ui", $content)) {
+                        $productCategories[] = $category;
+                    }
+                }
+            }
+            
+            // Also extract categories from assistant messages (when bot mentions products)
+            // This catches cases like "є варіанти термобілизни" where user then says "дозволяю"
+            if ($role === 'assistant' && mb_strlen($content) > 10) {
                 foreach ($categoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $content)) {
                         $productCategories[] = $category;

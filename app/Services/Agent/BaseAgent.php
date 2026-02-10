@@ -171,21 +171,78 @@ abstract class BaseAgent
         // If user says "дозволяю", "давай", "хочу", "можна" - extract category from history and search
         $confirmationWords = ['дозволяю', 'давай', 'хочу', 'можна', 'показуй', 'покажи', 'будь ласка', 'авжеж', 'гаразд', 'згода'];
         if (in_array($lower, $confirmationWords) || preg_match('/^(дозволяю|давай|хочу|показуй|покажи)$/ui', $lower)) {
-            // Extract category from history
+            // Extract category from LAST user message that was a product query
             $history = $this->loadConversationHistory($sessionId);
-            $context = $this->extractConversationContext($history);
             
-            // Parse "Шукає: термобілизна" from context
-            if (preg_match('/Шукає:\s*([^;]+)/u', $context, $matches)) {
-                $searchCategory = trim($matches[1]);
-                Log::info('BaseAgent: confirmation word detected, using context category', [
+            // Find the LAST user message that looks like a product query (skip confirmations)
+            $lastProductQuery = null;
+            foreach (array_reverse($history) as $msg) {
+                if (($msg['role'] ?? '') === 'user') {
+                    $content = mb_strtolower($msg['content'] ?? '');
+                    // Skip if message itself is a confirmation word
+                    if (in_array($content, $confirmationWords)) {
+                        continue;
+                    }
+                    // Check if it contains a product category
+                    $categoryPatterns = [
+                        'куртк', 'берц', 'штан', 'футболк', 'шолом', 'навушник',
+                        'плитонос', 'рюкзак', 'підсум', 'термобіл', 'білизн',
+                        'шевр', 'бронежилет', 'бронеплат', 'рукавиц', 'балаклав',
+                        'окуляр', 'ремен', 'пояс', 'панам', 'шапк', 'кепк', 'фліс',
+                    ];
+                    foreach ($categoryPatterns as $cat) {
+                        if (mb_stripos($content, $cat) !== false) {
+                            $lastProductQuery = $msg['content'];
+                            break 2; // Exit both loops
+                        }
+                    }
+                }
+            }
+            
+            if ($lastProductQuery) {
+                Log::info('BaseAgent: confirmation word detected, using last product query', [
                     'message' => $message,
-                    'context' => $context,
-                    'search_category' => $searchCategory,
+                    'last_product_query' => $lastProductQuery,
                 ]);
                 
-                // Search for the category from context
-                $products = $this->searchTool->search($searchCategory, [], 3);
+                // Map to canonical search term (same as handleShortProductQuery)
+                $searchQuery = $lastProductQuery;
+                $categoryMap = [
+                    'куртк' => 'куртки',
+                    'берц' => 'берці',
+                    'штан' => 'штани',
+                    'футболк' => 'футболки',
+                    'шолом' => 'шоломи',
+                    'навушник' => 'навушники',
+                    'плитонос' => 'плитоноски',
+                    'рюкзак' => 'рюкзаки',
+                    'підсум' => 'підсумки',
+                    'термобіл' => 'термобілизна',
+                    'білизн' => 'термобілизна',
+                    'шевр' => 'шеврони',
+                    'бронежилет' => 'бронежилети',
+                    'бронеплат' => 'бронеплати',
+                    'рукавиц' => 'рукавиці',
+                    'балаклав' => 'балаклави',
+                    'окуляр' => 'окуляри',
+                    'ремен' => 'ремені',
+                    'пояс' => 'пояси',
+                    'панам' => 'панами',
+                    'шапк' => 'шапки',
+                    'кепк' => 'кепки',
+                    'фліс' => 'фліс',
+                ];
+                
+                $lowerQuery = mb_strtolower($lastProductQuery);
+                foreach ($categoryMap as $cat => $canonical) {
+                    if (mb_stripos($lowerQuery, $cat) !== false) {
+                        $searchQuery = $canonical;
+                        break;
+                    }
+                }
+                
+                // Search for the canonical category
+                $products = $this->searchTool->search($searchQuery, [], 3);
                 
                 if (!empty($products)) {
                     // Get full product cards
@@ -197,10 +254,10 @@ abstract class BaseAgent
                     }
                     
                     return [
-                        'message' => "Ось {$searchCategory}:",
+                        'message' => "Ось {$searchQuery}:",
                         'products' => $products,
                         'messages' => [
-                            ['type' => 'text', 'content' => "Ось {$searchCategory}:"],
+                            ['type' => 'text', 'content' => "Ось {$searchQuery}:"],
                             ['type' => 'products', 'products' => $products],
                         ],
                         'meta' => [

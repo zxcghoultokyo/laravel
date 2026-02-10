@@ -1705,6 +1705,71 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/cleanup-test-sessions
+     * Delete test chat sessions (test_*, diagnostic_*, debug_*)
+     */
+    public function cleanupTestSessions(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $keepSession = $request->query('keep');
+        $dryRun = $request->query('dry_run', '1') !== '0';
+
+        $query = \App\Models\ChatSession::where(function($q) {
+            $q->where('session_id', 'like', 'test_%')
+              ->orWhere('session_id', 'like', 'diagnostic_%')
+              ->orWhere('session_id', 'like', 'debug_%');
+        });
+
+        if ($keepSession) {
+            $query->where('session_id', '!=', $keepSession);
+        }
+
+        $testSessions = $query->get();
+
+        if ($testSessions->isEmpty()) {
+            return response()->json([
+                'status' => 'ok',
+                'found' => 0,
+                'deleted_sessions' => 0,
+                'deleted_messages' => 0,
+                'message' => 'No test sessions found',
+            ]);
+        }
+
+        $sessionsData = $testSessions->map(fn($s) => [
+            'id' => $s->id,
+            'session_id' => $s->session_id,
+            'tenant_id' => $s->tenant_id,
+            'messages' => $s->messages()->count(),
+            'created_at' => $s->created_at?->format('Y-m-d H:i'),
+        ])->toArray();
+
+        if ($dryRun) {
+            return response()->json([
+                'status' => 'dry_run',
+                'found' => $testSessions->count(),
+                'sessions' => $sessionsData,
+                'message' => 'Dry run - use dry_run=0 to delete',
+            ]);
+        }
+
+        $ids = $testSessions->pluck('id')->toArray();
+        $deletedMessages = \App\Models\ChatMessage::whereIn('chat_session_id', $ids)->delete();
+        $deletedSessions = \App\Models\ChatSession::whereIn('id', $ids)->delete();
+
+        return response()->json([
+            'status' => 'ok',
+            'found' => count($sessionsData),
+            'deleted_sessions' => $deletedSessions,
+            'deleted_messages' => $deletedMessages,
+            'sessions' => $sessionsData,
+        ]);
+    }
+
+    /**
      * DELETE /api/diagnostic/cleanup-stale-products
      * Remove products from DB that were not updated in the last sync
      * Useful when Horoshop has fewer products than DB (removed from showcase)

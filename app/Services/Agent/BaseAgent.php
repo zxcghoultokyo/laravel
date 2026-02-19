@@ -38,6 +38,50 @@ abstract class BaseAgent
     protected PromptModulesService $promptModulesService;
     protected CategoryPatternService $categoryPatternService;
     
+    /**
+     * Service/info pages that are NOT product categories.
+     * Users sometimes navigate to these and trigger auto-message.
+     */
+    protected const SERVICE_CATEGORIES = [
+        'контактна інформація',
+        'контактна информація',
+        'контакти',
+        'контакт',
+        'про нас',
+        'про компанію',
+        'про магазин',
+        'о нас',
+        'о компании',
+        'доставка і оплата',
+        'доставка та оплата',
+        'доставка',
+        'оплата',
+        'повернення',
+        'гарантія',
+        'умови',
+        'політика конфіденційності',
+        'угода користувача',
+        'публічна оферта',
+        'новини',
+        'блог',
+        'статті',
+        'faq',
+        'часті питання',
+        'відгуки',
+        'акції',
+        'розпродаж', 
+        'знижки',
+        'головна',
+        'home',
+        'contact',
+        'about',
+        'about us',
+        'delivery',
+        'payment',
+        'terms',
+        'privacy',
+    ];
+    
     // Context for prompt preset matching
     protected array $currentContext = [];
     
@@ -75,6 +119,76 @@ abstract class BaseAgent
     }
 
     // ============================================================
+    // SERVICE CATEGORY HANDLER
+    // ============================================================
+
+    /**
+     * Check if the query mentions a service/info page instead of product category.
+     * Returns the matched service category name or null.
+     */
+    protected function detectServiceCategory(string $message): ?string
+    {
+        $lower = mb_strtolower(trim($message));
+        
+        // Check for exact match or "категорії X" pattern
+        foreach (self::SERVICE_CATEGORIES as $serviceCategory) {
+            if (mb_stripos($lower, $serviceCategory) !== false) {
+                return $serviceCategory;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Handle queries that mention service/info pages.
+     * Provides helpful response instead of "no products found".
+     */
+    protected function handleServiceCategoryQuery(string $message, string $serviceCategory): array
+    {
+        $lower = mb_strtolower($serviceCategory);
+        
+        // Determine appropriate response based on service type
+        $response = match(true) {
+            str_contains($lower, 'контакт') => 
+                "Контактну інформацію можна знайти на сторінці сайту. Якщо у Вас є питання — напишіть їх тут, я з радістю допоможу! Або зателефонуйте за номером, вказаним на сайті.",
+            str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => 
+                "Інформація про доставку є на відповідній сторінці сайту. Якщо коротко: ми доставляємо по всій Україні Новою Поштою. Чим можу допомогти з товарами?",
+            str_contains($lower, 'оплат') || str_contains($lower, 'payment') => 
+                "Ми приймаємо оплату: картою онлайн, накладений платіж, безготівковий розрахунок для ФОП/юридичних осіб. Що саме Ви шукаєте?",
+            str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => 
+                "Ми спеціалізуємось на тактичному спорядженні та військовому одязі. Якщо шукаєте конкретний товар — просто напишіть, і я підберу найкращі варіанти!",
+            str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => 
+                "Гарантія та умови повернення описані на сайті. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?",
+            str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') => 
+                "Актуальні акції та знижки відображаються на картках товарів. Що саме Вас цікавить? Можу підібрати товари зі знижкою у потрібній категорії.",
+            str_contains($lower, 'faq') || str_contains($lower, 'питан') => 
+                "Задайте своє питання тут — я відповім одразу! Можу допомогти з підбором товару, розмірами, наявністю.",
+            default => 
+                "Це інформаційна сторінка сайту. Якщо шукаєте товари — напишіть що саме, і я підберу найкращі варіанти!",
+        };
+        
+        Log::info('BaseAgent: handled service category query', [
+            'message' => $message,
+            'service_category' => $serviceCategory,
+        ]);
+        
+        return [
+            'message' => $response,
+            'products' => [],
+            'messages' => [
+                ['type' => 'text', 'content' => $response],
+            ],
+            'meta' => [
+                'intent' => 'faq',
+                'agent' => 'function_calling',
+                'source' => 'service_category_handler',
+                'service_category' => $serviceCategory,
+            ],
+        ];
+    }
+
+    // ============================================================
     // IMPLICIT QUERY HANDLER
     // ============================================================
 
@@ -84,6 +198,11 @@ abstract class BaseAgent
      */
     protected function handleImplicitQuery(string $message, ?string $sessionId): ?array
     {
+        // First check for service category queries
+        $serviceCategory = $this->detectServiceCategory($message);
+        if ($serviceCategory) {
+            return $this->handleServiceCategoryQuery($message, $serviceCategory);
+        }
         $lower = mb_strtolower(trim($message));
         
         // Patterns that imply product need without naming the product

@@ -1601,7 +1601,7 @@
                     <div>
                         <div style="background: var(--bg-light); border: 2px solid var(--border-color); border-radius: 24px; padding: 36px;">
                             <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
-                                <div style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; color: white; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">В</div>
+                                <img src="/images/valentyn.jpg" alt="Валентин — засновник AIntento" style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary);">
                                 <div>
                                     <h3 style="font-size: 20px; margin-bottom: 2px;">Валентин</h3>
                                     <span style="color: var(--text-gray); font-size: 14px;">Розробник та засновник AIntento</span>

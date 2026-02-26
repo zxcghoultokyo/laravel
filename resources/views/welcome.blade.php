@@ -1029,6 +1029,16 @@
                     grid-template-columns: 1fr !important;
                     gap: 12px !important;
                 }
+                
+                /* About section mobile */
+                .about-grid {
+                    grid-template-columns: 1fr !important;
+                    gap: 24px !important;
+                }
+                
+                .about-timeline {
+                    padding-left: 20px !important;
+                }
             }
         </style>
     </head>
@@ -1580,6 +1590,89 @@
             </div>
         </section>
 
+        <!-- About / Who's Behind Section -->
+        <section id="about" style="padding: 80px 0; background: white;">
+            <div class="container">
+                <h2 class="section-title" data-aos="fade-up">Хто за цим стоїть</h2>
+                <p class="section-subtitle" data-aos="fade-up" data-aos-delay="100">Не корпорація, не стартап з інвесторами — просто людина, яка знає біль продавця зсередини</p>
+                
+                <div class="about-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 48px;" data-aos="fade-up" data-aos-delay="200">
+                    <!-- Story -->
+                    <div>
+                        <div style="background: var(--bg-light); border: 2px solid var(--border-color); border-radius: 24px; padding: 36px;">
+                            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                                <div style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; color: white; font-weight: 700; font-family: 'Space Grotesk', sans-serif;">В</div>
+                                <div>
+                                    <h3 style="font-size: 20px; margin-bottom: 2px;">Валентин</h3>
+                                    <span style="color: var(--text-gray); font-size: 14px;">Розробник та засновник AIntento</span>
+                                </div>
+                            </div>
+                            
+                            <p style="font-size: 16px; line-height: 1.8; color: var(--text-dark); margin-bottom: 16px;">
+                                Привіт! Мене звати Валентин. Я розробник, але ідея AIntento народилась не з коду — а з реального досвіду в e-commerce.
+                            </p>
+                            <p style="font-size: 16px; line-height: 1.8; color: var(--text-dark); margin-bottom: 16px;">
+                                Я сам займався дропшипінгом, мав свій інтернет-магазин, потім працював у тактичному магазині. Знаю як це — коли клієнт пише "а є щось схоже, але дешевше?" о 23:00, а ти вже не при силах відповідати. Або коли в каталозі 1000+ позицій, і покупець просто не може знайти те, що шукає.
+                            </p>
+                            <p style="font-size: 16px; line-height: 1.8; color: var(--text-dark);">
+                                Тому я будував AIntento не як черговий "AI-стартап" — а з точки зору підприємця, власника магазину. Бот має вирішувати реальні проблеми, а не вражати buzzword-ами.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <!-- Timeline -->
+                    <div>
+                        <div class="about-timeline" style="padding-left: 32px; border-left: 3px solid var(--primary);">
+                            <div style="position: relative; margin-bottom: 32px;">
+                                <div style="position: absolute; left: -43px; top: 2px; width: 24px; height: 24px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <span style="color: white; font-size: 12px;">🛒</span>
+                                </div>
+                                <h4 style="font-size: 16px; color: var(--text-dark); margin-bottom: 6px;">Дропшипінг та свій магазин</h4>
+                                <p style="font-size: 14px; color: var(--text-gray); line-height: 1.6;">Зрозумів головну проблему: покупці губляться у великому каталозі і часто йдуть, не знайшовши потрібне. Живий консультант — дорого і не 24/7.</p>
+                            </div>
+                            
+                            <div style="position: relative; margin-bottom: 32px;">
+                                <div style="position: absolute; left: -43px; top: 2px; width: 24px; height: 24px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <span style="color: white; font-size: 12px;">🎯</span>
+                                </div>
+                                <h4 style="font-size: 16px; color: var(--text-dark); margin-bottom: 6px;">Робота в тактичному магазині</h4>
+                                <p style="font-size: 14px; color: var(--text-gray); line-height: 1.6;">Продавав сам, бачив які питання задають покупці, як шукають товари, що впливає на рішення купити. Цей досвід став фундаментом для бота.</p>
+                            </div>
+                            
+                            <div style="position: relative; margin-bottom: 32px;">
+                                <div style="position: absolute; left: -43px; top: 2px; width: 24px; height: 24px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <span style="color: white; font-size: 12px;">💡</span>
+                                </div>
+                                <h4 style="font-size: 16px; color: var(--text-dark); margin-bottom: 6px;">Ідея AIntento</h4>
+                                <p style="font-size: 14px; color: var(--text-gray); line-height: 1.6;">А що якщо зробити AI-консультанта, який реально знає каталог, розуміє що хоче покупець і може допомогти як живий продавець — але миттєво і 24/7?</p>
+                            </div>
+                            
+                            <div style="position: relative; margin-bottom: 32px;">
+                                <div style="position: absolute; left: -43px; top: 2px; width: 24px; height: 24px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <span style="color: white; font-size: 12px;">🚀</span>
+                                </div>
+                                <h4 style="font-size: 16px; color: var(--text-dark); margin-bottom: 6px;">Перший live-клієнт</h4>
+                                <p style="font-size: 14px; color: var(--text-gray); line-height: 1.6;">Бот вже працює на <a href="https://contractor.kiev.ua" target="_blank" style="color: var(--primary); font-weight: 600;">contractor.kiev.ua</a> — реальний тактичний магазин з 1000+ товарів. Можете зайти і поспілкуватись з ботом прямо зараз.</p>
+                            </div>
+                            
+                            <div style="position: relative;">
+                                <div style="position: absolute; left: -43px; top: 2px; width: 24px; height: 24px; background: linear-gradient(135deg, #f59e0b, #f97316); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <span style="color: white; font-size: 12px;">⚡</span>
+                                </div>
+                                <h4 style="font-size: 16px; color: var(--text-dark); margin-bottom: 6px;">Сьогодні</h4>
+                                <p style="font-size: 14px; color: var(--text-gray); line-height: 1.6;">Мультитенантна платформа, інтеграція з Horoshop за 10 хвилин, AI-збагачення каталогу, streaming-відповіді, аналітика конверсій. І це тільки початок.</p>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 32px; background: linear-gradient(135deg, var(--primary), var(--secondary)); border-radius: 16px; padding: 24px; color: white;">
+                            <p style="font-size: 15px; line-height: 1.7; margin-bottom: 12px;">💬 <strong>"Я будую продукт, який би хотів мати сам, коли продавав."</strong></p>
+                            <p style="font-size: 13px; opacity: 0.9;">Якщо є питання — пишіть напряму в <a href="https://t.me/AIntento" target="_blank" style="color: #fef3c7; text-decoration: underline;">Telegram</a>. Завжди раді поспілкуватись.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Footer -->
         <footer>
             <div class="container">
@@ -1592,6 +1685,7 @@
                         <a href="#features">Функції</a>
                         <a href="#pricing">Ціни</a>
                         <a href="#partner">Партнерам</a>
+                        <a href="#about">Про нас</a>
                         <a href="https://t.me/AIntento" target="_blank">💬 Підтримка</a>
                     </div>
                 </div>

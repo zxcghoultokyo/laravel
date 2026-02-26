@@ -1110,6 +1110,12 @@ class MeiliProductSearchTool
     {
         $builder = Product::query()->where('in_stock', true);
         
+        // Tenant isolation — critical for multi-tenant
+        $tenantId = $this->getCurrentTenantId();
+        if ($tenantId) {
+            $builder->where('tenant_id', $tenantId);
+        }
+        
         // Text search: extract keywords from query and search by EACH keyword
         if (!empty($query)) {
             // Split query into keywords, filter out small words

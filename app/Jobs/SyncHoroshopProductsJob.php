@@ -207,23 +207,9 @@ class SyncHoroshopProductsJob implements ShouldQueue
                     forceReanalyze: false,
                     tenantId: $this->tenantId
                 )->delay(now()->addMinutes(1))->onQueue('default');
-            }            
-            // 🧠 Trigger AI enrichment for new products (if any were created)
-            $createdCount = $result['created'] ?? 0;
-            if ($createdCount > 0) {
-                Log::info('SyncHoroshopProductsJob: Triggering AI enrichment for new products', [
-                    'tenant_id' => $this->tenantId,
-                    'new_products' => $createdCount,
-                ]);
-                
-                // Dispatch AI enrichment with delay (after Meili reindex)
-                AnalyzeProductsWithAiJob::dispatch(
-                    batchSize: min(50, $createdCount), 
-                    offset: 0, 
-                    forceReanalyze: false,
-                    tenantId: $this->tenantId
-                )->delay(now()->addMinutes(1))->onQueue('default');
             }
+            // NOTE: No separate dispatch for 'new products' — the query above already
+            // covers ALL products without AI index, including newly created ones.
         } catch (\Throwable $e) {
             $syncLog->fail($e->getMessage());
             Log::error('SyncHoroshopProductsJob failed for tenant', [

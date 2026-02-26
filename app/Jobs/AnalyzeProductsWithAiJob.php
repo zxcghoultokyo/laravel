@@ -309,8 +309,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         // Dispatch Meili indexing job
         IndexProductsToMeiliJob::dispatch(
-            chunk: 500,
-            tenantId: $this->tenantId
+            tenantId: $this->tenantId,
+            chunkSize: 500
         );
 
         Log::info('AnalyzeProductsWithAiJob: triggered Meili indexing', [

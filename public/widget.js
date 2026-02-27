@@ -1383,6 +1383,18 @@
                                 }
                             }
                             break;
+
+                        case 'text':
+                            // Complete text response (non-streaming, from intercepted/service queries)
+                            if (loader && loader.parentNode) {
+                                removeLoader(loader);
+                            }
+                            
+                            if (data.text) {
+                                accumulatedText = data.text;
+                                addMessage(messages, data.text, 'assistant', state.sessionId, true, true);
+                            }
+                            break;
                             
                         case 'chunk':
                             // Remove loader on first content chunk

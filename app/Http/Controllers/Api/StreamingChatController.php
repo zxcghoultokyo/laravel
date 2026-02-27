@@ -142,7 +142,7 @@ class StreamingChatController extends Controller
                     $this->sendEvent($type, $data);
                     
                     // Mark that we got a real response (not just status)
-                    if ($type === 'chunk' || $type === 'products') {
+                    if ($type === 'chunk' || $type === 'products' || $type === 'text') {
                         $responseGenerated = true;
                     }
                 }

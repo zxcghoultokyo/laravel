@@ -518,6 +518,26 @@ abstract class BaseAgent
         // This allows "білизна жіноча", "куртка зимова" etc.
         $searchQuery = $message; // Default to full message
         if ($wordCount === 2) {
+            // Don't intercept queries with gender/demographic/season modifiers
+            // GPT has prompt rules to check results and respond honestly
+            // e.g. "жіноча термобілизна" → GPT will search and say "Жіночої немає, є універсальна"
+            $attributeModifiers = [
+                'жіноч', 'чоловіч', 'дитяч', 'підлітков',  // Ukrainian
+                'женск', 'мужск', 'детск', 'подростков',     // Russian
+                'women', 'men', 'kids', 'child',              // English
+                'зимов', 'літн', 'демісезон',                 // Season UA
+                'зимн', 'летн',                               // Season RU
+            ];
+            foreach ($attributeModifiers as $mod) {
+                if (mb_stripos($lower, $mod) !== false) {
+                    Log::info('BaseAgent::handleShortProductQuery - attribute modifier detected, deferring to GPT', [
+                        'message' => $message,
+                        'modifier' => $mod,
+                    ]);
+                    return null; // Let GPT handle attribute-specific queries
+                }
+            }
+
             $categories = [
                 'куртк' => 'куртки',
                 'берц' => 'берці',

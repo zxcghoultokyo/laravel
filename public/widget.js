@@ -1346,9 +1346,11 @@
                 messages.scrollTo({ top: messages.scrollHeight, behavior: 'smooth' });
             }, 100);
             
-            // Build stream URL with tenant_id for proper data isolation
+            // Build stream URL with token for proper tenant auth
             let streamUrl = BASE_URL + '/api/chat/stream?message=' + encodeURIComponent(message) + '&session_id=' + encodeURIComponent(state.sessionId);
-            if (window.aintentoTenantId) {
+            if (token) {
+                streamUrl += '&token=' + encodeURIComponent(token);
+            } else if (window.aintentoTenantId) {
                 streamUrl += '&tenant_id=' + encodeURIComponent(window.aintentoTenantId);
             }
             
@@ -2052,7 +2054,7 @@
                 white-space: nowrap;
                 flex-shrink: 0;
             `;
-            btn.innerHTML = `<span style="font-size: 14px;">${qa.icon}</span><span>${qa.label}</span>`;
+            btn.innerHTML = `<span style="font-size: 14px;">${escapeHtml(qa.icon)}</span><span>${escapeHtml(qa.label)}</span>`;
             
             btn.onmouseenter = () => {
                 btn.style.borderColor = s.primary_color;
@@ -2081,6 +2083,14 @@
         });
         
         // No longer append to messagesContainer - we use the persistent bar
+    }
+
+    /**
+     * Escape HTML special characters to prevent XSS.
+     */
+    function escapeHtml(str) {
+        if (!str && str !== 0) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     /**
@@ -2455,17 +2465,17 @@
                     : 'background: #f3f4f6; color: #374151; border-color: #e5e7eb;';
                 // Store variant data as data attributes
                 return `<button type="button" class="size-btn" 
-                    data-size="${v.size}" 
-                    data-link="${v.link || ''}" 
+                    data-size="${escapeHtml(v.size)}" 
+                    data-link="${escapeHtml(v.link || '')}" 
                     data-id="${v.id}"
-                    data-article="${v.article || ''}"
+                    data-article="${escapeHtml(v.article || '')}"
                     style="padding: 2px 6px; font-size: 10px; border-radius: 4px; border: 1px solid; cursor: pointer; ${activeStyle}"
-                >${v.size}</button>`;
+                >${escapeHtml(v.size)}</button>`;
             }).join('');
             sizeHtml = `<div class="size-variants" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${buttons}</div>`;
         } else if (product.size && product.size !== '-' && product.size !== 'null') {
             // Single size, just show label
-            sizeHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Розмір: </span><span style="font-size: 11px; font-weight: 500;">${product.size}</span></div>`;
+            sizeHtml = `<div style="margin-top: 4px;"><span style="font-size: 10px; color: #6b7280;">Розмір: </span><span style="font-size: 11px; font-weight: 500;">${escapeHtml(product.size)}</span></div>`;
         }
 
         // Store all variants data on the card for switching
@@ -2478,11 +2488,11 @@
             <div style="display: flex; gap: 12px;">
                 ${imgHtml}
                 <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${product.title}</div>
-                    ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${summaryText}</div>` : ''}
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${escapeHtml(product.title)}</div>
+                    ${summaryText ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${escapeHtml(summaryText)}</div>` : ''}
                     ${colorHtml}
                     <div class="size-container">${sizeHtml}</div>
-                    <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px; margin-top: 4px;">${product.price} ₴</div>
+                    <div style="color: ${settings.primary_color}; font-weight: 700; font-size: 16px; margin-top: 4px;">${escapeHtml(product.price)} ₴</div>
                 </div>
             </div>
         `;
@@ -3077,7 +3087,7 @@
         // Hint about adding to cart
         const hint = document.createElement('div');
         hint.style.cssText = 'margin-top: 8px; font-size: 9px; color: #92400e; text-align: center;';
-        hint.innerHTML = `💡 ${crossSell.hint || 'Щоб замовити — додайте товар у кошик на сайті'}`;
+        hint.innerHTML = `💡 ${escapeHtml(crossSell.hint) || 'Щоб замовити — додайте товар у кошик на сайті'}`;
         container.appendChild(hint);
         
         // Dismiss button
@@ -3149,17 +3159,17 @@
             : '';
         
         const summaryHtml = item.summary 
-            ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${item.summary}</div>`
+            ? `<div style="font-size: 11px; color: #6b7280; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${escapeHtml(item.summary)}</div>`
             : '';
         
         // Color display
         const colorHtml = item.color
-            ? `<span style="font-size: 11px; color: #6b7280;">🎨 ${item.color}</span>`
+            ? `<span style="font-size: 11px; color: #6b7280;">🎨 ${escapeHtml(item.color)}</span>`
             : '';
         
         // Size display
         const sizeHtml = item.size
-            ? `<span style="font-size: 11px; color: #6b7280; ${item.color ? 'margin-left: 8px;' : ''}">📐 ${item.size}</span>`
+            ? `<span style="font-size: 11px; color: #6b7280; ${item.color ? 'margin-left: 8px;' : ''}">📐 ${escapeHtml(item.size)}</span>`
             : '';
         
         const metaHtml = (colorHtml || sizeHtml) 
@@ -3170,10 +3180,10 @@
             <div style="display: flex; gap: 12px;">
                 ${imgHtml}
                 <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3;">${item.title}</div>
+                    <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; line-height: 1.3;">${escapeHtml(item.title)}</div>
                     ${summaryHtml}
                     ${metaHtml}
-                    <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${item.price} ₴</div>
+                    <div style="color: ${s.primary_color}; font-weight: 700; font-size: 16px;">${escapeHtml(item.price)} ₴</div>
                 </div>
             </div>
             <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #f3f4f6; font-size: 11px; color: #6b7280; text-align: center;">
@@ -3325,7 +3335,7 @@
                 white-space: nowrap;
                 transition: all 0.2s ease;
                 margin-right: 8px;
-            " data-query="${action.query}">${action.label}</button>
+            " data-query="${escapeHtml(action.query)}">${escapeHtml(action.label)}</button>
         `).join('');
         
         // Prepend greeting actions to the bar

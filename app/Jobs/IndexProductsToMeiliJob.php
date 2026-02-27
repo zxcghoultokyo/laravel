@@ -15,10 +15,24 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 
-class IndexProductsToMeiliJob implements ShouldQueue
+class IndexProductsToMeiliJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    /**
+     * Unique lock to prevent parallel runs for the same tenant.
+     */
+    public function uniqueId(): string
+    {
+        return 'meili-index-' . ($this->tenantId ?? 'all');
+    }
+
+    /**
+     * Seconds the unique lock should be held.
+     */
+    public int $uniqueFor = 600;
 
     /**
      * Backward-compat: старі job-и могли серіалізувати "chunk".

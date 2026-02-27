@@ -148,24 +148,32 @@ abstract class BaseAgent
     {
         $lower = mb_strtolower($serviceCategory);
         
-        // Determine appropriate response based on service type
+        // Load real store data from WidgetSettings
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $settings = Cache::remember('widget_settings_service:' . ($tenantId ?? 'global'), 300, function () use ($tenantId) {
+            if ($tenantId) {
+                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('tenant_id', $tenantId)->first();
+            }
+            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
+        });
+        
+        $tenantInfo = $this->getTenantInfo();
+        $shopName = $tenantInfo['name'];
+        $shopDomain = $tenantInfo['domain'];
+        
+        // Build response from real data based on category
         $response = match(true) {
-            str_contains($lower, 'контакт') => 
-                "Контактну інформацію можна знайти на сторінці сайту. Якщо у Вас є питання — напишіть їх тут, я з радістю допоможу! Або зателефонуйте за номером, вказаним на сайті.",
-            str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => 
-                "Інформація про доставку є на відповідній сторінці сайту. Якщо коротко: ми доставляємо по всій Україні Новою Поштою. Чим можу допомогти з товарами?",
-            str_contains($lower, 'оплат') || str_contains($lower, 'payment') => 
-                "Ми приймаємо оплату: картою онлайн, накладений платіж, безготівковий розрахунок для ФОП/юридичних осіб. Що саме Ви шукаєте?",
-            str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => 
-                "Ми — {$this->getTenantInfo()['name']}. Якщо шукаєте конкретний товар — просто напишіть, і я підберу найкращі варіанти!",
-            str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => 
-                "Гарантія та умови повернення описані на сайті. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?",
-            str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') => 
+            str_contains($lower, 'контакт') => $this->buildContactsResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => $this->buildDeliveryResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'оплат') || str_contains($lower, 'payment') => $this->buildPaymentResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => $this->buildAboutResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => $this->buildReturnsResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') =>
                 "Актуальні акції та знижки відображаються на картках товарів. Що саме Вас цікавить? Можу підібрати товари зі знижкою у потрібній категорії.",
-            str_contains($lower, 'faq') || str_contains($lower, 'питан') => 
+            str_contains($lower, 'faq') || str_contains($lower, 'питан') =>
                 "Задайте своє питання тут — я відповім одразу! Можу допомогти з підбором товару, розмірами, наявністю.",
-            default => 
-                "Це інформаційна сторінка сайту. Якщо шукаєте товари — напишіть що саме, і я підберу найкращі варіанти!",
+            default => $this->buildAboutResponse($settings, $shopName, $shopDomain),
         };
         
         Log::info('BaseAgent: handled service category query', [
@@ -186,6 +194,90 @@ abstract class BaseAgent
                 'service_category' => $serviceCategory,
             ],
         ];
+    }
+
+    /**
+     * Build "About" response from real WidgetSettings data.
+     */
+    private function buildAboutResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
+    {
+        $parts = [];
+        
+        // About text (from Horoshop pages or custom)
+        $about = $settings->faq_about_text ?? $settings->store_about ?? '';
+        if ($about) {
+            $parts[] = $about;
+        }
+        
+        // Add contacts summary
+        $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
+        if ($contacts) {
+            $parts[] = $contacts;
+        } elseif (!empty($settings->store_phone)) {
+            $parts[] = "📞 Телефон: {$settings->store_phone}";
+        }
+        
+        if (!empty($parts)) {
+            return implode("\n\n", $parts) . "\n\nЧим можу допомогти? 😊";
+        }
+        
+        return "Ми — **{$shopName}**. Детальна інформація на сайті {$shopDomain}. Чим можу допомогти?";
+    }
+
+    /**
+     * Build contacts response from real WidgetSettings data.
+     */
+    private function buildContactsResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
+    {
+        $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
+        if ($contacts) {
+            return $contacts . "\n\nЩось ще цікавить? 😊";
+        }
+        
+        if (!empty($settings->store_phone)) {
+            return "📞 Телефон: {$settings->store_phone}\n\nДетальні контакти на сайті {$shopDomain}";
+        }
+        
+        return "Контактну інформацію можна знайти на сайті {$shopDomain}. Якщо є питання — пишіть, допоможу!";
+    }
+
+    /**
+     * Build delivery response from real WidgetSettings data.
+     */
+    private function buildDeliveryResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
+    {
+        $delivery = $settings->faq_payment_delivery_text ?? '';
+        if ($delivery) {
+            return $delivery . "\n\nЧим ще можу допомогти?";
+        }
+        
+        return "Інформація про доставку доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
+    }
+
+    /**
+     * Build payment response from real WidgetSettings data.
+     */
+    private function buildPaymentResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
+    {
+        $payment = $settings->faq_payment_delivery_text ?? '';
+        if ($payment) {
+            return $payment . "\n\nЧим ще можу допомогти?";
+        }
+        
+        return "Інформація про способи оплати доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
+    }
+
+    /**
+     * Build returns/warranty response from real WidgetSettings data.
+     */
+    private function buildReturnsResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
+    {
+        $returns = $settings->faq_returns_text ?? '';
+        if ($returns) {
+            return $returns . "\n\nЧим ще можу допомогти?";
+        }
+        
+        return "Умови гарантії та повернення описані на сайті {$shopDomain}. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?";
     }
 
     // ============================================================

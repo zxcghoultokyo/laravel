@@ -1919,13 +1919,15 @@ PROMPT;
                 }
             }
             if (!$foundInResults) {
-                // Return empty results with message so GPT knows to say "not found"
-                Log::info('Gender attribute not found in results', ['requested' => $requestedGender, 'query' => $query]);
+                // Return products WITH a message so GPT can show them and explain
+                // GPT will add text like "Жіночої немає, є універсальні варіанти:"
+                Log::info('Gender attribute not found in results, returning universal options', ['requested' => $requestedGender, 'query' => $query, 'results_count' => count($results)]);
                 return [
-                    'products' => [], 
-                    'count' => 0, 
+                    'products' => $results, 
+                    'count' => count($results), 
                     'query' => $query,
-                    'message' => "На жаль, '{$requestedGender}' варіанту цього товару немає в асортименті. Є універсальні варіанти - запропонуй їх користувачу."
+                    'gender_not_found' => true,
+                    'message' => "'{$requestedGender}' варіанту немає. Ось універсальні варіанти — покажи їх і поясни що спеціального {$requestedGender} варіанту не знайдено, є лише уніформа/універсальні."
                 ];
             }
         }

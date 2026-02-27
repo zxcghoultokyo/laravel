@@ -3,6 +3,7 @@
 namespace App\Services\Horoshop;
 
 use App\Models\WidgetSettings;
+use App\Services\Tenant\TenantContext;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -21,6 +22,15 @@ class HoroshopDataService
     }
 
     /**
+     * Build tenant-prefixed cache key.
+     */
+    private function cacheKey(string $suffix): string
+    {
+        $tenantId = app(TenantContext::class)->getTenantId() ?? 0;
+        return "horoshop:{$tenantId}:{$suffix}";
+    }
+
+    /**
      * Витягти FAQ/Info pages з Horoshop
      * 
      * @param int $parentId - ID батьківської категорії (0 = root). Для FAQ зазвичай є специфічний ID
@@ -28,7 +38,7 @@ class HoroshopDataService
      */
     public function getFaqPages(int $parentId = 0): array
     {
-        $cacheKey = "horoshop:pages:{$parentId}";
+        $cacheKey = $this->cacheKey("pages:{$parentId}");
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () use ($parentId) {
             try {
@@ -55,7 +65,7 @@ class HoroshopDataService
      */
     public function getDeliveryOptions(): array
     {
-        $cacheKey = 'horoshop:delivery_options';
+        $cacheKey = $this->cacheKey('delivery_options');
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
@@ -79,7 +89,7 @@ class HoroshopDataService
      */
     public function getDeliveryTypes(): array
     {
-        $cacheKey = 'horoshop:delivery_types';
+        $cacheKey = $this->cacheKey('delivery_types');
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
@@ -103,7 +113,7 @@ class HoroshopDataService
      */
     public function getPaymentOptions(): array
     {
-        $cacheKey = 'horoshop:payment_options';
+        $cacheKey = $this->cacheKey('payment_options');
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
@@ -127,7 +137,7 @@ class HoroshopDataService
      */
     public function getPaymentMethods(): array
     {
-        $cacheKey = 'horoshop:payment_methods';
+        $cacheKey = $this->cacheKey('payment_methods');
 
         return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             try {
@@ -149,15 +159,15 @@ class HoroshopDataService
      */
     public function clearCache(): void
     {
-        Cache::forget('horoshop:pages:0');
-        Cache::forget('horoshop:delivery_options');
-        Cache::forget('horoshop:delivery_types');
-        Cache::forget('horoshop:payment_options');
-        Cache::forget('horoshop:payment_methods');
+        Cache::forget($this->cacheKey('pages:0'));
+        Cache::forget($this->cacheKey('delivery_options'));
+        Cache::forget($this->cacheKey('delivery_types'));
+        Cache::forget($this->cacheKey('payment_options'));
+        Cache::forget($this->cacheKey('payment_methods'));
 
         // Також очистити по всіх батьківськимID (якщо їх багато)
         for ($i = 1; $i <= 100; $i++) {
-            Cache::forget("horoshop:pages:{$i}");
+            Cache::forget($this->cacheKey("pages:{$i}"));
         }
 
         Log::info('HoroshopDataService: Cache cleared');
@@ -170,7 +180,10 @@ class HoroshopDataService
      */
     public function getShopDeliverySettings(): array
     {
-        $settings = WidgetSettings::first();
+        $tenantId = app(TenantContext::class)->getTenantId();
+        $settings = $tenantId
+            ? WidgetSettings::where('tenant_id', $tenantId)->first()
+            : WidgetSettings::first();
 
         if (!$settings) {
             return [];

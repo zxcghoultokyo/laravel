@@ -711,10 +711,10 @@ class ChatService
             return 'chat_' . $sessionId;
         }
 
-        // fallback по IP, щоб все одно була якась "сесія"
+        // fallback по IP + random suffix, щоб не було колізій за NAT
         $ip = request()->ip() ?: 'unknown_ip';
 
-        return 'chat_ip_' . $ip;
+        return 'chat_ip_' . $ip . '_' . substr(md5(uniqid((string) mt_rand(), true)), 0, 8);
     }
     
     /**

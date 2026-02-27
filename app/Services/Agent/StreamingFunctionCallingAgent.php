@@ -75,7 +75,6 @@ class StreamingFunctionCallingAgent extends BaseAgent
         
         // Use normalized query for further processing
         $normalizedMessage = $preprocessed['query'];
-        $originalMessage = $message;
         
         if ($normalizedMessage !== $message) {
             Log::info('StreamingAgent: query normalized', [

@@ -2549,9 +2549,13 @@ PROMPT;
     {
         $json = null;
 
-        // Extract JSON from response
-        if (preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
+        // Extract JSON from response (non-greedy to avoid spanning multiple objects)
+        if (preg_match('/\{[\s\S]*?\}/u', $responseText, $matches)) {
             $json = json_decode($matches[0], true);
+            // If non-greedy didn't capture full JSON, try greedy as fallback
+            if ($json === null && preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
+                $json = json_decode($matches[0], true);
+            }
         }
 
         // Build products by article index
@@ -2843,6 +2847,7 @@ PROMPT;
     /**
      * Load conversation history from DB.
      * Appends [Показані товари: ...] marker to assistant messages for context.
+     * Truncates total history to ~8000 chars to prevent context overflow.
      */
     protected function loadConversationHistory(?string $sessionId): array
     {
@@ -2857,7 +2862,7 @@ PROMPT;
                 ->take(20)
                 ->get();
 
-            return $messages->map(function($m) {
+            $history = $messages->map(function($m) {
                 $content = $m->content;
                 
                 // For assistant messages, append shown products marker from meta
@@ -2879,6 +2884,17 @@ PROMPT;
                     'content' => $content,
                 ];
             })->toArray();
+
+            // Truncate history from the oldest end to stay under ~8000 chars
+            $maxChars = 8000;
+            $totalChars = array_sum(array_map(fn($m) => mb_strlen($m['content']), $history));
+
+            while ($totalChars > $maxChars && count($history) > 2) {
+                $removed = array_shift($history);
+                $totalChars -= mb_strlen($removed['content']);
+            }
+
+            return $history;
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to load history', ['error' => $e->getMessage()]);
             return [];
@@ -2898,6 +2914,8 @@ PROMPT;
 
             $messages = ChatMessage::where('chat_session_id', $session->id)
                 ->where('role', 'assistant')
+                ->orderBy('created_at', 'desc')
+                ->take(50)
                 ->get();
 
             $ids = [];

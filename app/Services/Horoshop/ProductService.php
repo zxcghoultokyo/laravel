@@ -27,6 +27,17 @@ class ProductService
     }
 
     /**
+     * Safely truncate a string to max length (prevents SQLSTATE[22001]).
+     */
+    protected function truncateStr(?string $value, int $maxLength = 500): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        return mb_strlen($value) > $maxLength ? mb_substr($value, 0, $maxLength) : $value;
+    }
+
+    /**
      * Синхронізація товарів із Horoshop у локальну БД.
      *
      * @param  int  $limit  Максимальна кількість товарів за один запит
@@ -251,28 +262,31 @@ class ProductService
         $size = $this->extractSizeFromItem($item, $title);
 
         $product->fill([
-            'article' => $article,
-            'parent_article' => $item['parent_article'] ?? null,
-            'title' => $title,
+            'article' => $this->truncateStr($article, 500),
+            'parent_article' => $this->truncateStr($item['parent_article'] ?? null, 500),
+            'title' => $this->truncateStr($title, 500),
             'title_json' => $item['title'] ?? null,
             'price' => $item['price'] ?? 0,
             'price_old' => $item['price_old'] ?? 0,
-            'category_path' => $item['parent']['value'] ?? null,
-            'slug' => $item['slug'] ?? null,
-            'link' => $item['link'] ?? null,
+            'category_path' => $this->truncateStr($item['parent']['value'] ?? null, 500),
+            'slug' => $this->truncateStr($item['slug'] ?? null, 500),
+            'link' => $this->truncateStr($item['link'] ?? null, 1000),
             'images' => $item['images'] ?? [],
             'raw' => $item,
-            'presence' => Arr::get($item, 'presence.value.ua')
-                                   ?? Arr::get($item, 'presence.value.ru')
-                                   ?? null,
+            'presence' => $this->truncateStr(
+                Arr::get($item, 'presence.value.ua')
+                    ?? Arr::get($item, 'presence.value.ru')
+                    ?? null,
+                500
+            ),
             'quantity' => $item['quantity'] ?? 0,
-            'brand' => $brand,
+            'brand' => $this->truncateStr($brand, 500),
             'popularity' => $item['popularity'] ?? 0,
             'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
             'in_stock' => $this->isInStock($item),
-            'color' => $this->extractColorFromItem($item),
-            'size' => $size,
+            'color' => $this->truncateStr($this->extractColorFromItem($item), 500),
+            'size' => $this->truncateStr($size, 500),
         ]);
 
         $product->search_index = $this->buildSearchIndex($item, $product);
@@ -327,28 +341,31 @@ class ProductService
         $size = $this->extractSizeFromItem($item, $title);
 
         $product->fill([
-            'article' => $article,
-            'parent_article' => $item['parent_article'] ?? null,
-            'title' => $title,
+            'article' => $this->truncateStr($article, 500),
+            'parent_article' => $this->truncateStr($item['parent_article'] ?? null, 500),
+            'title' => $this->truncateStr($title, 500),
             'title_json' => $item['title'] ?? null,
             'price' => $item['price'] ?? 0,
             'price_old' => $item['price_old'] ?? 0,
-            'category_path' => $item['parent']['value'] ?? null,
-            'slug' => $item['slug'] ?? null,
-            'link' => $item['link'] ?? null,
+            'category_path' => $this->truncateStr($item['parent']['value'] ?? null, 500),
+            'slug' => $this->truncateStr($item['slug'] ?? null, 500),
+            'link' => $this->truncateStr($item['link'] ?? null, 1000),
             'images' => $item['images'] ?? [],
             'raw' => $item,
-            'presence' => Arr::get($item, 'presence.value.ua')
-                                   ?? Arr::get($item, 'presence.value.ru')
-                                   ?? null,
+            'presence' => $this->truncateStr(
+                Arr::get($item, 'presence.value.ua')
+                    ?? Arr::get($item, 'presence.value.ru')
+                    ?? null,
+                500
+            ),
             'quantity' => $item['quantity'] ?? 0,
-            'brand' => $brand,
+            'brand' => $this->truncateStr($brand, 500),
             'popularity' => $item['popularity'] ?? 0,
             'we_recommended' => (bool) ($item['we_recommended'] ?? false),
             'display_in_showcase' => (bool) ($item['display_in_showcase'] ?? false),
             'in_stock' => $this->isInStock($item),
-            'color' => $this->extractColorFromItem($item),
-            'size' => $size,
+            'color' => $this->truncateStr($this->extractColorFromItem($item), 500),
+            'size' => $this->truncateStr($size, 500),
         ]);
 
         $product->search_index = $this->buildSearchIndex($item, $product);

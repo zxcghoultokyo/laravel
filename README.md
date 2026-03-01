@@ -1,4 +1,4 @@
-## AI‑Powered Tactical Commerce — Backend (Laravel 12)
+## AI‑Powered Commerce — Backend (Laravel 12)
 
 Проєкт: **Multi-tenant SaaS** для e‑commerce з AI‑чатботом, пошуком на Meilisearch та інтеграцією Horoshop. Продакшн-фокус: черги, ідемпотентність, tenant isolation, backward‑compat для job‑ів.
 

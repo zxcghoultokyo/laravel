@@ -245,8 +245,10 @@ class Analytics extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // For checkout_success, prefer orders table count
-                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                // For checkout_success, use ONLY orders table count
+                // chat_events may have checkout_success events that were never confirmed
+                // by Horoshop (browser event ≠ real order)
+                if ($eventType === 'checkout_success') {
                     $count = $checkoutCountFromOrders;
                 } else {
                     $query = DB::table('chat_events')
@@ -283,11 +285,6 @@ class Analytics extends Component
                         $count = $query->count();
                     } else {
                         $count = $query->distinct('session_id')->count('session_id');
-                    }
-                    
-                    // For checkout_success, also check orders table
-                    if ($eventType === 'checkout_success') {
-                        $count = max($count, $checkoutCountFromOrders);
                     }
                 }
             } catch (\Throwable $e) {

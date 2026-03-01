@@ -431,27 +431,19 @@
     <!-- Orders Tab -->
     @if($conversionsActiveTab === 'orders')
         @php
-            $checkoutFunnelCountForStats = collect($funnelData['stages'] ?? [])->firstWhere('stage', 'checkout_success')['count'] ?? 0;
+            $totalRevenue = collect($checkoutOrders)->sum('order_total');
+            $avgOrder = count($checkoutOrders) > 0 ? $totalRevenue / count($checkoutOrders) : 0;
         @endphp
         <div class="grid grid-cols-3 gap-4 mb-6">
             <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg shadow p-4 border border-green-200">
-                <div class="text-3xl font-bold text-green-700">{{ $checkoutFunnelCountForStats }}</div>
-                <div class="text-sm text-green-600">Сесій з замовленнями (воронка)</div>
-                @if($checkoutFunnelCountForStats != count($checkoutOrders))
-                    <div class="text-xs text-gray-400 mt-1">Записів в orders: {{ count($checkoutOrders) }}</div>
-                @endif
+                <div class="text-3xl font-bold text-green-700">{{ count($checkoutOrders) }}</div>
+                <div class="text-sm text-green-600">Замовлень після чату</div>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
-                @php
-                    $totalRevenue = collect($checkoutOrders)->sum('order_total');
-                @endphp
                 <div class="text-3xl font-bold text-blue-600">{{ number_format($totalRevenue, 0, '.', ' ') }} ₴</div>
                 <div class="text-sm text-gray-500">Загальна виручка</div>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
-                @php
-                    $avgOrder = count($checkoutOrders) > 0 ? $totalRevenue / count($checkoutOrders) : 0;
-                @endphp
                 <div class="text-3xl font-bold text-purple-600">{{ number_format($avgOrder, 0, '.', ' ') }} ₴</div>
                 <div class="text-sm text-gray-500">Середній чек</div>
             </div>

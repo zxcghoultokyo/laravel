@@ -38,6 +38,7 @@ class TenantDashboard extends Component
     
     // Conversions tab data
     public int $conversionsDays = 7;
+    public int $funnelDays = 14;
     public string $conversionsActiveTab = 'funnel';
     // REMOVED: $conversionsData - use $funnelData instead (one source of truth)
     public array $cartEvents = [];
@@ -101,12 +102,18 @@ class TenantDashboard extends Component
     public function setConversionsTab(string $tab)
     {
         $this->conversionsActiveTab = $tab;
+        // Reset selected states when switching sub-tabs
+        // so the user sees the list first, not a previously opened detail
+        $this->selectedConversionSession = null;
+        $this->selectedConversionSessionId = null;
+        $this->selectedCheckoutId = null;
+        $this->selectedCheckoutProducts = [];
     }
     
     public function updatedConversionsDays()
     {
-        // Reload funnel with new days filter
-        $this->loadFunnelData();
+        // Reload funnel with conversions filter period
+        $this->loadFunnelData($this->conversionsDays);
         $this->loadConversionsData();
     }
     
@@ -115,7 +122,9 @@ class TenantDashboard extends Component
         $tenant = $this->tenant;
         $startDate = now()->subDays($this->conversionsDays)->startOfDay();
         
-        // Load cart events and orders (funnel is already in $funnelData)
+        // Reload funnel with conversions filter period
+        $this->loadFunnelData($this->conversionsDays);
+        // Load cart events and orders
         $this->loadCartEventsForTenant($startDate);
         $this->loadCheckoutOrdersForTenant($startDate);
     }
@@ -154,12 +163,23 @@ class TenantDashboard extends Component
         $this->cartEvents = $events->map(function ($event) use ($productDataByArticle) {
             $meta = json_decode($event->metadata ?? '{}', true);
             
-            $title = $meta['product_title'] ?? null;
+            $metaTitle = $meta['product_title'] ?? null;
+            
+            // Filter out bogus titles extracted from button text (e.g. "Купити", "Buy", "В кошик")
+            $bogusPatterns = ['купити', 'buy', 'в кошик', 'додати', 'add to cart', 'замовити', 'order'];
+            if ($metaTitle && in_array(mb_strtolower(trim($metaTitle)), $bogusPatterns)) {
+                $metaTitle = null;
+            }
+            
             $url = null;
+            $dbTitle = null;
             if ($event->product_article && isset($productDataByArticle[$event->product_article])) {
-                $title = $title ?: $productDataByArticle[$event->product_article]['title'];
+                $dbTitle = $productDataByArticle[$event->product_article]['title'];
                 $url = $productDataByArticle[$event->product_article]['url'];
             }
+            
+            // Prefer DB title (always accurate) over metadata title (may be button text)
+            $title = $dbTitle ?: $metaTitle;
             
             return [
                 'id' => $event->id,
@@ -631,10 +651,11 @@ class TenantDashboard extends Component
         }
     }
 
-    public function loadFunnelData()
+    public function loadFunnelData(?int $days = null)
     {
         $tenant = $this->tenant;
-        $startDate = now()->subDays($this->conversionsDays)->startOfDay();
+        $this->funnelDays = $days ?? 14;
+        $startDate = now()->subDays($this->funnelDays)->startOfDay();
         $tenantId = $tenant->id;
         
         // Get ALL merchant identifiers for fallback filtering (old records)
@@ -684,8 +705,10 @@ class TenantDashboard extends Component
         
         foreach ($stages as $eventType => $stage) {
             try {
-                // For checkout_success, prefer orders table count (more reliable)
-                if ($eventType === 'checkout_success' && $checkoutCountFromOrders > 0) {
+                // For checkout_success, use ONLY orders table count
+                // chat_events may have checkout_success events that were never confirmed
+                // by Horoshop (browser event ≠ real order)
+                if ($eventType === 'checkout_success') {
                     $count = $checkoutCountFromOrders;
                 } else {
                     $query = DB::table('chat_events')
@@ -721,11 +744,6 @@ class TenantDashboard extends Component
                         $count = $query->count();
                     } else {
                         $count = $query->distinct('session_id')->count('session_id');
-                    }
-                    
-                    // For checkout_success, also check orders if chat_events is 0
-                    if ($eventType === 'checkout_success') {
-                        $count = max($count, $checkoutCountFromOrders);
                     }
                 }
             } catch (\Throwable $e) {
@@ -787,6 +805,11 @@ class TenantDashboard extends Component
         // Load conversions data when switching to conversions tab
         if ($tab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
+        }
+        
+        // Reload funnel with 14 days when going back to overview
+        if ($tab === 'overview' && $this->funnelDays !== 14) {
+            $this->loadFunnelData(14);
         }
     }
     

@@ -716,8 +716,15 @@
             
             // Title from block
             if (!data.title) {
-                const titleEl = productBlock.querySelector('.product-title, .productsSlider-title, h1, h2, h3, a');
-                if (titleEl) data.title = titleEl.textContent.trim();
+                const titleEl = productBlock.querySelector('.product-title, .productsSlider-title, h1, h2, h3, a[href]:not([class*="buy"]):not([class*="cart"]):not([class*="basket"])');
+                if (titleEl) {
+                    const text = titleEl.textContent.trim();
+                    // Filter out button texts that aren't product names
+                    const bogus = ['купити', 'buy', 'в кошик', 'додати', 'add to cart', 'замовити', 'order'];
+                    if (!bogus.includes(text.toLowerCase())) {
+                        data.title = text;
+                    }
+                }
             }
             
             // Price from block
@@ -3749,15 +3756,39 @@
                 return true; // Only blocked if exit_intent itself was already shown (checked above)
             }
             
-            // For other triggers: session limit (1 per session)
-            // But don't count exit_intent towards this limit
-            const nonExitTriggersShown = this.state.sessionTriggersShown.filter(t => t !== 'exit_intent');
-            if (nonExitTriggersShown.length >= 1) {
+            // Define trigger categories — we allow ONE from each category per session
+            // Category A: page-context triggers (compete with each other)
+            const pageContextTriggers = ['time_on_page', 'pdp_no_variant', 'page_scroll'];
+            // Category B: entry/campaign triggers (compete with each other)
+            const entryTriggers = ['utm_campaign', 'returning_visitor'];
+            // Category C: URL-based contextual (independent)
+            const urlTriggers = ['url_pattern'];
+            
+            const getTriggerCategory = (type) => {
+                if (pageContextTriggers.includes(type)) return 'page_context';
+                if (entryTriggers.includes(type)) return 'entry';
+                if (urlTriggers.includes(type)) return 'url';
+                return 'other';
+            };
+            
+            const currentCategory = getTriggerCategory(triggerType);
+            
+            // Check if any trigger from the SAME category was already shown
+            const sameCategoryShown = this.state.sessionTriggersShown.some(
+                shown => shown !== 'exit_intent' && getTriggerCategory(shown) === currentCategory
+            );
+            if (sameCategoryShown) {
                 return false;
             }
             
-            // Cooldown (5 minutes between non-exit triggers)
-            const cooldown = 5 * 60 * 1000;
+            // Hard limit: maximum 2 non-exit triggers per session (across all categories)
+            const nonExitTriggersShown = this.state.sessionTriggersShown.filter(t => t !== 'exit_intent');
+            if (nonExitTriggersShown.length >= 2) {
+                return false;
+            }
+            
+            // Cooldown (3 minutes between non-exit triggers — reduced from 5min)
+            const cooldown = 3 * 60 * 1000;
             if (Date.now() - this.state.lastTriggerTime < cooldown) {
                 return false;
             }
@@ -3782,6 +3813,24 @@
                         return false;
                     }
                     if (conditions.utm_campaign && !this.matchUtmParam(utm.utm_campaign, conditions.utm_campaign)) {
+                        return false;
+                    }
+                    return true;
+                }
+                
+                // For URL pattern rules — check url_contains matches current URL
+                if (triggerType === 'url_pattern') {
+                    const urlContains = rule.conditions.url_contains || [];
+                    const currentUrl = window.location.href.toLowerCase();
+                    const currentPath = window.location.pathname.toLowerCase();
+                    
+                    let urlMatches = false;
+                    const patterns = Array.isArray(urlContains) ? urlContains : [urlContains];
+                    urlMatches = patterns.some(pattern => 
+                        currentUrl.includes(pattern.toLowerCase()) || currentPath.includes(pattern.toLowerCase())
+                    );
+                    
+                    if (!urlMatches) {
                         return false;
                     }
                     return true;
@@ -3829,62 +3878,14 @@
         // Detect current page type
         detectPageType: function() {
             const url = window.location.pathname.toLowerCase();
-            const body = document.body;
             
-            // Check for product page indicators - must have specific product selectors
-            const hasProductSelectors = 
-                document.querySelector('[itemtype*="Product"]') ||
-                document.querySelector('.product-page') ||
-                document.querySelector('.product-detail') ||
-                document.querySelector('[data-product-id]') ||
-                // Horoshop specific
-                document.querySelector('.hs-product-page') ||
-                document.querySelector('.j-product-container') ||
-                document.querySelector('.hs-product-main') ||
-                document.querySelector('.product-main') ||
-                // Product page typically has add-to-cart button
-                document.querySelector('[data-add-to-cart], .add-to-cart, .buy-button, .hs-buy-btn');
-            
-            // Product page URL patterns - Horoshop uses /slug-123 or /category/slug-123
-            const isProductUrl = 
-                url.includes('/product/') ||
-                url.includes('/tovar/') ||
-                url.includes('/p/') ||
-                // Horoshop pattern: /slug-123 or /category/slug-123 where 123 is product ID
-                /\/[a-z0-9-]+-\d+\/?$/i.test(url) ||
-                // Also match /{slug}/{product-name}-{id}
-                /\/[a-z0-9-]+\/[a-z0-9-]+-\d+\/?$/i.test(url);
-            
-            // If we have strong product indicators (selectors), trust them even without perfect URL match
-            if (hasProductSelectors && (isProductUrl || document.querySelector('.hs-product-page, .j-product-container'))) {
-                return 'product';
+            // ===== HOMEPAGE DETECTION (must be first!) =====
+            // Homepage = root path / or with query params
+            if (url === '/' || url === '') {
+                return 'home';
             }
             
-            // Check for category page - multiple products displayed
-            const hasCategorySelectors = 
-                document.querySelector('.category-page') ||
-                document.querySelector('.product-list') ||
-                document.querySelector('.products-grid') ||
-                document.querySelector('.catalog-products') ||
-                document.querySelector('[itemtype*="ItemList"]') ||
-                // Horoshop specific
-                document.querySelector('.hs-catalog') ||
-                document.querySelector('.j-catalog-container') ||
-                // Multiple product cards
-                document.querySelectorAll('.product-card, .product-item, [data-product-id]').length >= 3;
-            
-            const isCategoryUrl =
-                url.includes('/category/') ||
-                url.includes('/catalog/') ||
-                url.includes('/c/') ||
-                // Generic category URL: /category-name/ or /category-name
-                /^\/[a-z0-9-]+\/?$/.test(url);
-            
-            if (hasCategorySelectors || isCategoryUrl) {
-                return 'category';
-            }
-            
-            // Check for cart page
+            // ===== CART / CHECKOUT (check before product/category to avoid false matches) =====
             if (
                 url.includes('/cart') ||
                 url.includes('/basket') ||
@@ -3893,7 +3894,6 @@
                 return 'cart';
             }
             
-            // Check for checkout
             if (
                 url.includes('/checkout') ||
                 url.includes('/order') ||
@@ -3902,9 +3902,93 @@
                 return 'checkout';
             }
             
-            // If we have an h1 with common category keywords, treat as category
+            // ===== SERVICE PAGES (not product/category) =====
+            const servicePages = [
+                '/login', '/register', '/account', '/cabinet', '/profile',
+                '/about', '/contacts', '/kontakty', '/pro-nas',
+                '/privacy', '/terms', '/dostavka', '/oplata', '/delivery', '/payment',
+                '/blog', '/news', '/faq', '/help', '/wishlist', '/compare',
+                '/search', '/sitemap', '/404'
+            ];
+            if (servicePages.some(p => url.startsWith(p))) {
+                return 'other';
+            }
+            
+            // ===== PRODUCT PAGE DETECTION =====
+            // Strong product DOM indicators (specific to a single product page)
+            const hasStrongProductSelectors = 
+                document.querySelector('[itemtype*="Product"]') ||
+                document.querySelector('.product-page') ||
+                document.querySelector('.product-detail') ||
+                // Horoshop specific — these only appear on product detail pages
+                document.querySelector('.hs-product-page') ||
+                document.querySelector('.j-product-container') ||
+                document.querySelector('.hs-product-main') ||
+                document.querySelector('.product-main');
+            
+            // Weak product indicator: add-to-cart exists (could be in mini-cart on any page)
+            const hasAddToCart = document.querySelector(
+                '.product-page [data-add-to-cart], .product-detail .add-to-cart, ' +
+                '.hs-product-page .hs-buy-btn, .j-product-container .buy-button, ' +
+                '.product-main .add-to-cart'
+            );
+            
+            // Product page URL patterns
+            const isProductUrl = 
+                url.includes('/product/') ||
+                url.includes('/tovar/') ||
+                url.includes('/p/') ||
+                // Horoshop: /slug-123/ where 123 is numeric product ID (at least 2 digits)
+                /\/[a-z0-9][a-z0-9-]*-\d{2,}\/?$/i.test(url) ||
+                // /{category}/{product-slug}-{id}/
+                /\/[a-z0-9-]+\/[a-z0-9][a-z0-9-]*-\d{2,}\/?$/i.test(url);
+            
+            // Product = strong selectors, OR (weak selector + product URL)
+            if (hasStrongProductSelectors || (hasAddToCart && isProductUrl)) {
+                return 'product';
+            }
+            
+            // ===== CATEGORY PAGE DETECTION =====
+            // Explicit category DOM selectors
+            const hasExplicitCategorySelectors = 
+                document.querySelector('.category-page') ||
+                document.querySelector('.catalog-products') ||
+                document.querySelector('[itemtype*="ItemList"]') ||
+                // Horoshop specific
+                document.querySelector('.hs-catalog') ||
+                document.querySelector('.j-catalog-container');
+            
+            // Weaker: multiple product cards (could be homepage featured products)
+            const productCardCount = document.querySelectorAll(
+                '.product-card, .product-item, .product-list .item'
+            ).length;
+            const hasMultipleProducts = productCardCount >= 3;
+            
+            // Explicit category URL patterns  
+            const isExplicitCategoryUrl =
+                url.includes('/category/') ||
+                url.includes('/catalog/') ||
+                url.includes('/c/');
+            
+            // Generic single-segment URL like /bronezakhyst/ — could be category
+            // BUT only trust it combined with product grid selectors (not alone!)
+            const isGenericSegmentUrl = /^\/[a-z0-9][a-z0-9-]*\/?$/.test(url);
+            
+            // Category = explicit selectors, OR explicit URL, OR (generic URL + product grid)
+            if (hasExplicitCategorySelectors || isExplicitCategoryUrl) {
+                return 'category';
+            }
+            if (isGenericSegmentUrl && hasMultipleProducts) {
+                return 'category';
+            }
+            // Strong product grid with no product URL match = likely category even with multi-segment URL
+            if (hasMultipleProducts && !isProductUrl && document.querySelector('.product-list, .products-grid')) {
+                return 'category';
+            }
+            
+            // If we have an h1 with common category keywords + products, treat as category
             const h1 = document.querySelector('h1');
-            if (h1) {
+            if (h1 && hasMultipleProducts) {
                 const h1Text = h1.textContent.trim().toLowerCase();
                 const categoryKeywords = ['тактич', 'військов', 'спорядження', 'одяг', 'взуття', 'рюкзак', 
                     'підсумк', 'плитоносц', 'бронежилет', 'шолом', 'камуфляж', 'форма', 'куртк', 
@@ -3957,13 +4041,20 @@
             }
             
             // Try URL path - e.g., /bronezakhyst/1124 -> Бронезахист
-            const pathParts = window.location.pathname.split('/').filter(p => p && !/^\d+$/.test(p));
-            if (pathParts.length > 0) {
-                // Decode and capitalize
-                const lastPart = decodeURIComponent(pathParts[pathParts.length - 1])
-                    .replace(/-/g, ' ')
-                    .replace(/_/g, ' ');
-                return lastPart;
+            // Only use URL fallback on category-like pages, NOT on checkout/cart/account/etc.
+            const currentPageType = this.detectPageType();
+            if (currentPageType === 'category' || currentPageType === 'other') {
+                const pathParts = window.location.pathname.split('/').filter(p => p && !/^\d+$/.test(p));
+                if (pathParts.length > 0) {
+                    // Decode and capitalize
+                    const lastPart = decodeURIComponent(pathParts[pathParts.length - 1])
+                        .replace(/-/g, ' ')
+                        .replace(/_/g, ' ');
+                    // Double-check: don't return known page-type names as categories
+                    if (this.isValidCategory(lastPart)) {
+                        return lastPart;
+                    }
+                }
             }
             
             return null;
@@ -3973,10 +4064,27 @@
         isValidCategory: function(category) {
             if (!category) return false;
             
-            const lower = category.toLowerCase();
+            const lower = category.toLowerCase().trim();
+            
+            // Too short (1-2 chars) = likely fragment, not category
+            if (lower.length < 3) return false;
             
             // Too long = likely store description, not category
             if (category.length > 60) return false;
+            
+            // Exact page-type names - NOT categories
+            const pageTypeNames = [
+                'checkout', 'cart', 'basket', 'order', 'login', 'register',
+                'account', 'cabinet', 'profile', 'search', 'home', 'main',
+                'about', 'contacts', 'contact', '404', 'error',
+                'кошик', 'замовлення', 'оформлення', 'вхід', 'реєстрація',
+                'кабінет', 'профіль', 'пошук', 'головна', 'контакти',
+                'про нас', 'оплата', 'доставка', 'повернення',
+                'korzina', 'oformlenie', 'oplata', 'dostavka'
+            ];
+            if (pageTypeNames.includes(lower)) {
+                return false;
+            }
             
             // Contains marketing phrases - not a category
             const invalidPhrases = [
@@ -3988,7 +4096,13 @@
                 'безкоштовн',
                 'доставк',
                 'знижк',
-                'акці'
+                'акці',
+                'checkout',
+                'success',
+                'thank you',
+                'оформлен',
+                'підтвердж',
+                'payment'
             ];
             if (invalidPhrases.some(phrase => lower.includes(phrase))) {
                 return false;
@@ -4122,19 +4236,36 @@
                 return;
             }
             
+            // Don't show triggers on checkout/cart/home pages - not useful there
+            const currentPage = this.detectPageType();
+            if (currentPage === 'checkout' || currentPage === 'cart' || currentPage === 'home') {
+                log('ProactiveTriggers: Skipping trigger on', currentPage, 'page');
+                return;
+            }
+            
+            // For product-page triggers, require a detectable product name
+            const productTriggerTypes = ['time_on_page', 'pdp_no_variant', 'page_scroll'];
+            if (productTriggerTypes.includes(rule.type) && currentPage === 'product') {
+                const detectedProduct = this.detectCurrentProduct();
+                if (!detectedProduct || !this.isValidProduct(detectedProduct)) {
+                    log('ProactiveTriggers: Skipping product trigger — no valid product detected');
+                    return;
+                }
+            }
+            
             // Set mutex immediately to prevent race conditions
             this.state.showingTrigger = true;
             
-            log('ProactiveTriggers: Showing trigger', rule.id, rule.type);
+            log('ProactiveTriggers: Showing trigger', rule.id, rule.type, 'on', currentPage);
             
             // Collect all available context
             const category = this.detectCurrentCategory();
             const product = this.detectCurrentProduct();
             const price = this.detectProductPrice();
-            const pageType = this.detectPageType();
+            const pageType = currentPage;
             
-            if (category) context.category = category;
-            if (product) context.product = product;
+            if (category && this.isValidCategory(category)) context.category = category;
+            if (product && this.isValidProduct(product)) context.product = product;
             if (price) context.price = price;
             context.pageType = pageType;
             
@@ -4544,6 +4675,42 @@
                 }, 100); // Small delay to filter out false positives
             });
             
+            // Mobile exit intent: detect when user switches tabs or app (visibilitychange)
+            // This is the mobile equivalent of mouse-leaving-viewport
+            document.addEventListener('visibilitychange', () => {
+                if (exitIntentTriggered) return;
+                if (document.hidden) {
+                    // User switched away — this is mobile "exit intent"
+                    const timeOnPage = (Date.now() - this.state.pageStartTime) / 1000;
+                    if (timeOnPage < 15) return; // On mobile, require more time (15s vs 5s)
+                    if (isNavigatingAway) return;
+                    
+                    const rule = this.findMatchingRule('exit_intent');
+                    if (rule && this.canShowTrigger('exit_intent')) {
+                        // Don't show immediately — show when they come BACK
+                        this._pendingMobileExitIntent = rule;
+                        log('ProactiveTriggers: Mobile exit intent pending (tab hidden)');
+                    }
+                } else {
+                    // User came back — if we have a pending trigger, show it
+                    if (this._pendingMobileExitIntent && !exitIntentTriggered) {
+                        const rule = this._pendingMobileExitIntent;
+                        this._pendingMobileExitIntent = null;
+                        
+                        if (this.canShowTrigger('exit_intent')) {
+                            exitIntentTriggered = true;
+                            log('ProactiveTriggers: Mobile exit intent triggered (returned to tab)');
+                            // Small delay to let page render
+                            setTimeout(() => {
+                                this.showTrigger(rule, {
+                                    trigger_reason: 'mobile_tab_return'
+                                });
+                            }, 500);
+                        }
+                    }
+                }
+            });
+            
             // Fast scroll up detection
             let lastScrollY = window.scrollY;
             let lastScrollTime = Date.now();
@@ -4590,19 +4757,27 @@
                 
                 // Product page: use rule's min_seconds and idle_seconds (defaults: 45s, 15s idle)
                 if (pageType === 'product') {
-                    const rule = this.findMatchingRule('time_on_page', { pageType: 'product' });
-                    if (rule) {
-                        const minSeconds = rule.conditions?.min_seconds || 45;
-                        const idleSeconds = rule.conditions?.idle_seconds || 15;
-                        
-                        if (timeOnPage >= minSeconds && idleTime >= idleSeconds) {
-                            if (this.canShowTrigger('time_on_page')) {
-                                log('ProactiveTriggers: Time on product page trigger!', { timeOnPage, idleTime, minSeconds, idleSeconds });
-                                this.showTrigger(rule, {
-                                    trigger_reason: 'time_on_product_page',
-                                    time_on_page: Math.floor(timeOnPage),
-                                    idle_time: Math.floor(idleTime)
-                                });
+                    // Pre-check: only trigger if we can actually detect the product
+                    const detectedProduct = this.detectCurrentProduct();
+                    if (!detectedProduct) {
+                        // Can't detect product on this page — don't trigger
+                        // This prevents firing on pages falsely detected as 'product'
+                    } else {
+                        const rule = this.findMatchingRule('time_on_page', { pageType: 'product' });
+                        if (rule) {
+                            const minSeconds = rule.conditions?.min_seconds || 45;
+                            const idleSeconds = rule.conditions?.idle_seconds || 15;
+                            
+                            if (timeOnPage >= minSeconds && idleTime >= idleSeconds) {
+                                if (this.canShowTrigger('time_on_page')) {
+                                    log('ProactiveTriggers: Time on product page trigger!', { timeOnPage, idleTime, minSeconds, idleSeconds, product: detectedProduct });
+                                    this.showTrigger(rule, {
+                                        trigger_reason: 'time_on_product_page',
+                                        time_on_page: Math.floor(timeOnPage),
+                                        idle_time: Math.floor(idleTime),
+                                        product: detectedProduct
+                                    });
+                                }
                             }
                         }
                     }
@@ -4629,20 +4804,27 @@
                 
                 // PDP no variant: 30 seconds without selection
                 if (pageType === 'product' && timeOnPage >= 30 && !this.state.variantSelected) {
-                    // Expanded variant selectors
-                    const hasVariants = document.querySelector(
-                        '[data-variant], .variant-select, .size-select, .hs-variants, ' +
-                        '.product-variants, [data-size], [data-color], .sizes-list, .colors-list, ' +
-                        'select[name*="size"], select[name*="variant"], .option-selector'
-                    );
-                    if (hasVariants) {
-                        const rule = this.findMatchingRule('pdp_no_variant');
-                        if (rule && this.canShowTrigger('pdp_no_variant')) {
-                            log('ProactiveTriggers: PDP no variant trigger!');
-                            this.showTrigger(rule, {
-                                trigger_reason: 'no_variant_selected',
-                                time_without_selection: Math.floor(timeOnPage)
-                            });
+                    // Must be able to detect the product name
+                    const detectedPdpProduct = this.detectCurrentProduct();
+                    if (detectedPdpProduct) {
+                        // Expanded variant selectors — including Horoshop-specific
+                        const hasVariants = document.querySelector(
+                            '[data-variant], .variant-select, .size-select, .hs-variants, ' +
+                            '.product-variants, [data-size], [data-color], .sizes-list, .colors-list, ' +
+                            'select[name*="size"], select[name*="variant"], .option-selector, ' +
+                            '.j-option-item, .j-options-wrapper, .product-option, .option-value, ' +
+                            '.product-options select, .product-options button'
+                        );
+                        if (hasVariants) {
+                            const rule = this.findMatchingRule('pdp_no_variant');
+                            if (rule && this.canShowTrigger('pdp_no_variant')) {
+                                log('ProactiveTriggers: PDP no variant trigger!', { product: detectedPdpProduct });
+                                this.showTrigger(rule, {
+                                    trigger_reason: 'no_variant_selected',
+                                    time_without_selection: Math.floor(timeOnPage),
+                                    product: detectedPdpProduct
+                                });
+                            }
                         }
                     }
                 }
@@ -4661,13 +4843,33 @@
                 document.addEventListener(event, updateActivity, { passive: true });
             });
             
-            // Track product views in category
+            // Track product views in category — expanded selectors for Horoshop
             document.addEventListener('click', (e) => {
-                const productLink = e.target.closest('a[href*="/product/"], a[href*="/tovar/"], a[href*="/p/"], .product-card, .product-item');
+                // Standard and Horoshop product link patterns
+                const productLink = e.target.closest(
+                    'a[href*="/product/"], a[href*="/tovar/"], a[href*="/p/"], ' +
+                    '.product-card a, .product-item a, .product-card, .product-item, ' +
+                    '.hs-product-card a, .catalog-item a, [data-product-id] a'
+                );
                 if (productLink) {
-                    const productId = productLink.dataset?.productId || productLink.href;
-                    if (!this.state.productsViewed.includes(productId)) {
+                    const href = productLink.href || productLink.closest('a')?.href || '';
+                    const productId = productLink.dataset?.productId || href;
+                    if (productId && !this.state.productsViewed.includes(productId)) {
                         this.state.productsViewed.push(productId);
+                        log('ProactiveTriggers: Product viewed', productId.substring(0, 50));
+                    }
+                }
+                
+                // Also track clicks on any link that looks like a product URL
+                // Horoshop pattern: /slug-123/ where slug has letters and 123 is product ID
+                const anyLink = e.target.closest('a[href]');
+                if (anyLink && anyLink.href) {
+                    const linkPath = new URL(anyLink.href, window.location.origin).pathname;
+                    if (/\/[a-z0-9][a-z0-9-]*-\d{2,}\/?$/i.test(linkPath)) {
+                        if (!this.state.productsViewed.includes(anyLink.href)) {
+                            this.state.productsViewed.push(anyLink.href);
+                            log('ProactiveTriggers: Product viewed (URL pattern)', linkPath);
+                        }
                     }
                 }
             }, { passive: true });
@@ -4677,21 +4879,28 @@
         
         // Variant selection detector
         setupVariantSelectionDetector: function() {
-            // Watch for clicks on variant selectors
+            // Watch for clicks on variant selectors — expanded for Horoshop
             document.addEventListener('click', (e) => {
                 const variantSelector = e.target.closest(
                     '[data-variant], .variant-select, .size-select, .color-select, ' +
-                    '.hs-variants button, .hs-variant-item, [data-size], [data-color]'
+                    '.hs-variants button, .hs-variant-item, [data-size], [data-color], ' +
+                    // Horoshop specific variant/option elements
+                    '.j-option-item, .j-options-wrapper button, .j-options-wrapper label, ' +
+                    '.product-option button, .product-option label, .option-value, ' +
+                    '.sizes-list button, .sizes-list a, .colors-list button, .colors-list a'
                 );
                 if (variantSelector) {
                     this.state.variantSelected = true;
-                    log('ProactiveTriggers: Variant selected');
+                    log('ProactiveTriggers: Variant selected via click');
                 }
             }, { passive: true });
             
-            // Watch for select changes
+            // Watch for select changes — expanded
             document.addEventListener('change', (e) => {
-                if (e.target.matches('select[name*="size"], select[name*="variant"], select[name*="color"]')) {
+                if (e.target.matches(
+                    'select[name*="size"], select[name*="variant"], select[name*="color"], ' +
+                    'select[name*="option"], .product-options select, .j-options-wrapper select'
+                )) {
                     this.state.variantSelected = true;
                     log('ProactiveTriggers: Variant selected via dropdown');
                 }
@@ -4708,7 +4917,7 @@
                 const visitInfo = {
                     timestamp: now,
                     page: window.location.pathname,
-                    category: this.detectCurrentCategory()
+                    category: this.detectCurrentCategorySimple()
                 };
                 
                 // Get previous visits
@@ -4738,19 +4947,34 @@
             }
         },
         
-        // Detect current category from page
-        detectCurrentCategory: function() {
+        // Detect current category from page (simplified version for visit tracking)
+        // Note: main detectCurrentCategory is defined above with full validation
+        // This is a legacy duplicate — delegate to the main one
+        detectCurrentCategorySimple: function() {
             // Try breadcrumbs
             const breadcrumbs = document.querySelectorAll('.breadcrumb a, .breadcrumbs a, [itemtype*="BreadcrumbList"] a');
             if (breadcrumbs.length > 1) {
-                return breadcrumbs[breadcrumbs.length - 1].textContent.trim();
+                const cat = breadcrumbs[breadcrumbs.length - 1].textContent.trim();
+                if (this.isValidCategory(cat)) return cat;
             }
-            // Try h1
-            const h1 = document.querySelector('h1');
-            if (h1) return h1.textContent.trim();
-            // Try URL
-            const pathParts = window.location.pathname.split('/').filter(Boolean);
-            return pathParts[0] || '';
+            // Try h1 on category pages only
+            const pageType = this.detectPageType();
+            if (pageType === 'category') {
+                const h1 = document.querySelector('h1');
+                if (h1) {
+                    const text = h1.textContent.trim();
+                    if (text.length < 50 && this.isValidCategory(text)) return text;
+                }
+            }
+            // Try URL only for category/other pages
+            if (pageType === 'category' || pageType === 'other') {
+                const pathParts = window.location.pathname.split('/').filter(Boolean);
+                if (pathParts.length > 0) {
+                    const lastPart = decodeURIComponent(pathParts[0]).replace(/-/g, ' ').replace(/_/g, ' ');
+                    if (this.isValidCategory(lastPart)) return lastPart;
+                }
+            }
+            return '';
         },
         
         // Check returning visitor trigger
@@ -4829,39 +5053,23 @@
             
             log('ProactiveTriggers: Checking URL pattern triggers', { url, pathname });
             
-            // Find matching URL pattern rule
+            // findMatchingRule now handles url_contains matching internally
             const rule = this.findMatchingRule('url_pattern', { url, pathname });
             if (rule && this.canShowTrigger('url_pattern')) {
-                // Check URL conditions
                 const conditions = rule.conditions || {};
-                const urlContains = conditions.url_contains || [];
+                const delay = (conditions.delay_seconds || 8) * 1000;
+                const minTimeOnPage = (conditions.min_time_on_page || 5) * 1000;
                 
-                // Check if URL matches any pattern
-                let matches = false;
-                if (Array.isArray(urlContains)) {
-                    matches = urlContains.some(pattern => 
-                        url.includes(pattern.toLowerCase()) || pathname.includes(pattern.toLowerCase())
-                    );
-                } else if (typeof urlContains === 'string') {
-                    matches = url.includes(urlContains.toLowerCase()) || pathname.includes(urlContains.toLowerCase());
-                }
-                
-                if (matches) {
-                    // Delay from conditions (default 8 seconds)
-                    const delay = (conditions.delay_seconds || 8) * 1000;
-                    const minTimeOnPage = (conditions.min_time_on_page || 5) * 1000;
-                    
-                    setTimeout(() => {
-                        const timeOnPage = Date.now() - this.state.pageStartTime;
-                        if (timeOnPage >= minTimeOnPage && this.canShowTrigger('url_pattern')) {
-                            log('ProactiveTriggers: URL pattern trigger matched', { url, pattern: urlContains });
-                            this.showTrigger(rule, {
-                                trigger_reason: 'url_pattern_match',
-                                url: url
-                            });
-                        }
-                    }, delay);
-                }
+                setTimeout(() => {
+                    const timeOnPage = Date.now() - this.state.pageStartTime;
+                    if (timeOnPage >= minTimeOnPage && this.canShowTrigger('url_pattern')) {
+                        log('ProactiveTriggers: URL pattern trigger matched', { url, rule_id: rule.id });
+                        this.showTrigger(rule, {
+                            trigger_reason: 'url_pattern_match',
+                            url: url
+                        });
+                    }
+                }, delay);
             }
         },
         
@@ -4912,6 +5120,8 @@
             // Remove any visible trigger popups
             const popup = document.getElementById('aintento-proactive-trigger');
             if (popup) popup.remove();
+            // Release mutex if it was set
+            this.state.showingTrigger = false;
         },
         
         // Notify that chat was closed

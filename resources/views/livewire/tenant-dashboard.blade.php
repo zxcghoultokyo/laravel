@@ -348,6 +348,7 @@
                 <div class="mt-6 pt-6 border-t border-gray-200">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-semibold text-lg">🔄 Воронка конверсії</h3>
+                        <span class="text-xs text-gray-400">за {{ $funnelDays }} {{ $funnelDays == 1 ? 'день' : ($funnelDays < 5 ? 'дні' : 'днів') }}</span>
                         @if(($funnelData['overall_rate'] ?? 0) > 0)
                             <span class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full">
                                 {{ $funnelData['overall_rate'] }}% загальна конверсія

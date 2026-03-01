@@ -62,13 +62,14 @@ class AnalyticsController extends Controller
                     continue;
                 }
                 
-                // Skip checkout events without actual chat conversation
+                // Skip checkout and add_to_cart events without actual chat conversation
                 // These are noise from users who never used the chat
                 $eventType = $event['event_type'] ?? '';
-                if (in_array($eventType, ['checkout_submit', 'checkout_success'])) {
-                    $hadChat = $event['had_chat_conversation'] ?? false;
-                    if (!$hadChat) {
-                        Log::debug('Skipping checkout event without chat conversation', [
+                if (in_array($eventType, ['checkout_submit', 'checkout_success', 'add_to_cart'])) {
+                    $hadChat = !empty($event['had_chat_conversation']);
+                    $fromChat = !empty($event['product_from_chat']);
+                    if (!$hadChat && !$fromChat) {
+                        Log::debug('Skipping event without chat conversation', [
                             'event_type' => $eventType,
                             'session_id' => $event['session_id'] ?? ''
                         ]);
@@ -100,6 +101,37 @@ class AnalyticsController extends Controller
                 // Store product title for display in analytics
                 if (!empty($event['product_title'])) {
                     $metadata['product_title'] = $event['product_title'];
+                }
+                // Store order/checkout fields in metadata for display in dashboard
+                if (!empty($event['order_id'])) {
+                    $metadata['order_id'] = $event['order_id'];
+                }
+                if (!empty($event['order_total'])) {
+                    $metadata['order_total'] = $event['order_total'];
+                }
+                if (!empty($event['items_count'])) {
+                    $metadata['items_count'] = $event['items_count'];
+                }
+                if (!empty($event['order_items_count'])) {
+                    $metadata['order_items_count'] = $event['order_items_count'];
+                }
+                if (!empty($event['has_product_from_chat'])) {
+                    $metadata['has_product_from_chat'] = $event['has_product_from_chat'];
+                }
+                if (!empty($event['customer_name']) || !empty($event['name'])) {
+                    $metadata['customer_name'] = $event['customer_name'] ?? $event['name'];
+                }
+                if (!empty($event['phone'])) {
+                    $metadata['phone'] = $event['phone'];
+                }
+                if (!empty($event['email'])) {
+                    $metadata['email'] = $event['email'];
+                }
+                if (!empty($event['delivery_type'])) {
+                    $metadata['delivery_type'] = $event['delivery_type'];
+                }
+                if (!empty($event['payment_type'])) {
+                    $metadata['payment_type'] = $event['payment_type'];
                 }
                 
                 // Resolve tenant_id from merchant_id (slug) or tenant_id from event
@@ -606,6 +638,16 @@ class AnalyticsController extends Controller
             $sessionId = $event['session_id'] ?? '';
             if (empty($sessionId)) {
                 continue;
+            }
+            
+            // Skip add_to_cart events without actual chat conversation
+            // These are noise from users who never used the chat
+            if ($eventType === 'add_to_cart') {
+                $hadChat = !empty($event['had_chat_conversation']);
+                $fromChat = !empty($event['product_from_chat']);
+                if (!$hadChat && !$fromChat) {
+                    continue;
+                }
             }
             
             // For checkout_success - fetch order details from Horoshop

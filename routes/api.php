@@ -196,6 +196,7 @@ Route::prefix('diagnostic')->group(function () {
     // Command execution & synonyms management
     Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
     Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
+    Route::get('/prompt-presets', [\App\Http\Controllers\Api\DiagnosticController::class, 'promptPresets']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

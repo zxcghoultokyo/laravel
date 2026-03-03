@@ -6539,6 +6539,51 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/prompt-presets
+     * View prompt presets for a tenant
+     */
+    public function promptPresets(Request $request): JsonResponse
+    {
+        if (!$this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id');
+
+        $query = \App\Models\PromptPreset::withoutGlobalScope(\App\Scopes\TenantScope::class);
+
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+
+        $presets = $query->orderBy('priority')->get();
+
+        return response()->json([
+            'count' => $presets->count(),
+            'presets' => $presets->map(fn($p) => [
+                'id' => $p->id,
+                'tenant_id' => $p->tenant_id,
+                'name' => $p->name,
+                'slug' => $p->slug,
+                'is_active' => $p->is_active,
+                'is_default' => $p->is_default,
+                'priority' => $p->priority,
+                'language' => $p->language,
+                'tone' => $p->tone,
+                'campaign' => $p->campaign,
+                'store_type' => $p->store_type,
+                'categories' => $p->categories,
+                'variables' => $p->variables,
+                'system_prompt_length' => mb_strlen($p->system_prompt ?? ''),
+                'system_prompt_preview' => mb_substr($p->system_prompt ?? '', 0, 500),
+                'system_prompt_full' => $p->system_prompt,
+                'created_at' => $p->created_at?->toDateTimeString(),
+                'updated_at' => $p->updated_at?->toDateTimeString(),
+            ]),
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/run-command
      * Run artisan commands safely
      * 

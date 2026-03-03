@@ -42,8 +42,8 @@ Schedule::command('brands:sync --async')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/sync-brands.log'));
 
-// Sync orders from Horoshop (twice daily: morning + evening)
-Schedule::command('orders:sync --days=3 --update-counts')
+// Sync orders from Horoshop for ALL tenants (twice daily: morning + evening)
+Schedule::command('orders:sync --all-tenants --days=3 --update-counts')
     ->twiceDaily(8, 20)
     ->runInBackground()
     ->withoutOverlapping()

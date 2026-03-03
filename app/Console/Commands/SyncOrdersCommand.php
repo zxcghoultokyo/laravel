@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\SyncLog;
+use App\Models\Tenant;
 use App\Services\Horoshop\HoroshopClient;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -25,11 +26,18 @@ class SyncOrdersCommand extends Command
         {--reset : Reset saved position}
         {--update-counts : Update orders_count in products table after sync}
         {--link-chat : Re-link existing orders to chat sessions without API sync}
-        {--stats : Show statistics only}';
+        {--stats : Show statistics only}
+        {--tenant-id= : Sync orders for a specific tenant (uses tenant credentials)}
+        {--all-tenants : Loop over all active tenants with Horoshop credentials}';
 
     protected $description = 'Sync orders from Horoshop API and optionally update product orders_count';
 
     protected const CACHE_KEY = 'sync_orders:offset';
+
+    /**
+     * Current tenant ID being synced (null for legacy single-tenant mode).
+     */
+    protected ?int $currentTenantId = null;
 
     public function handle(HoroshopClient $client): int
     {
@@ -39,6 +47,28 @@ class SyncOrdersCommand extends Command
 
         if ($this->option('link-chat')) {
             return $this->linkExistingOrdersToChat();
+        }
+
+        // Multi-tenant mode: loop over all active tenants
+        if ($this->option('all-tenants')) {
+            return $this->handleAllTenants();
+        }
+
+        // Specific tenant mode: use tenant's Horoshop credentials
+        $tenantId = $this->option('tenant-id');
+        if ($tenantId) {
+            $tenant = Tenant::find((int) $tenantId);
+            if (!$tenant || empty($tenant->platform_credentials)) {
+                $this->error("Tenant #{$tenantId} not found or has no Horoshop credentials.");
+                return self::FAILURE;
+            }
+            $this->currentTenantId = $tenant->id;
+            $creds = $tenant->platform_credentials;
+            $domain = is_array($creds['domain'] ?? null) ? ($creds['domain']['value'] ?? '') : (string) ($creds['domain'] ?? '');
+            $login = is_array($creds['login'] ?? null) ? ($creds['login']['value'] ?? '') : (string) ($creds['login'] ?? '');
+            $password = is_array($creds['password'] ?? null) ? ($creds['password']['value'] ?? '') : (string) ($creds['password'] ?? '');
+            $client = new HoroshopClient($domain, $login, $password);
+            $this->info("[TENANT] Syncing orders for tenant #{$tenant->id} ({$tenant->name})");
         }
 
         $startTime = microtime(true);
@@ -221,6 +251,71 @@ class SyncOrdersCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Sync orders for ALL active tenants with Horoshop credentials.
+     * Similar to how SyncHoroshopProductsJob handles multi-tenant sync.
+     */
+    protected function handleAllTenants(): int
+    {
+        $tenants = Tenant::canUseService()
+            ->where('platform', 'horoshop')
+            ->whereNotNull('platform_credentials')
+            ->get();
+
+        if ($tenants->isEmpty()) {
+            $this->info('[ALL-TENANTS] No active tenants with Horoshop credentials found.');
+            return self::SUCCESS;
+        }
+
+        $this->info("=================================================");
+        $this->info("[ALL-TENANTS] Syncing orders for {$tenants->count()} tenants");
+        $this->info("=================================================");
+
+        $totalSuccess = 0;
+        $totalFailed = 0;
+
+        foreach ($tenants as $tenant) {
+            try {
+                $creds = $tenant->platform_credentials;
+                $domain = is_array($creds['domain'] ?? null) ? ($creds['domain']['value'] ?? '') : (string) ($creds['domain'] ?? '');
+                $login = is_array($creds['login'] ?? null) ? ($creds['login']['value'] ?? '') : (string) ($creds['login'] ?? '');
+                $password = is_array($creds['password'] ?? null) ? ($creds['password']['value'] ?? '') : (string) ($creds['password'] ?? '');
+
+                if (empty($domain) || empty($login)) {
+                    $this->warn("  [SKIP] Tenant #{$tenant->id} ({$tenant->name}): incomplete credentials");
+                    continue;
+                }
+
+                $this->info("  [TENANT #{$tenant->id}] {$tenant->name} ({$domain})...");
+                
+                // Call self with --tenant-id to reuse existing sync logic
+                $exitCode = $this->call('orders:sync', [
+                    '--tenant-id' => $tenant->id,
+                    '--days' => $this->option('days'),
+                    '--update-counts' => $this->option('update-counts'),
+                    '--limit' => $this->option('limit'),
+                    '--timeout' => 300, // 5 min per tenant max
+                ]);
+
+                if ($exitCode === self::SUCCESS) {
+                    $totalSuccess++;
+                } else {
+                    $totalFailed++;
+                }
+            } catch (\Throwable $e) {
+                $totalFailed++;
+                $this->error("  [ERROR] Tenant #{$tenant->id}: {$e->getMessage()}");
+            }
+        }
+
+        $this->newLine();
+        $this->info("=================================================");
+        $this->info("[ALL-TENANTS] Done: {$totalSuccess} success, {$totalFailed} failed");
+        $this->info("=================================================");
+
+        return self::SUCCESS;
+    }
+
     protected function syncOrder(array $raw): Order
     {
         $orderedAt = isset($raw['stat_created']) 
@@ -237,8 +332,14 @@ class SyncOrdersCommand extends Command
         );
 
         $order = Order::updateOrCreate(
-            ['order_id' => $raw['order_id']],
             [
+                'order_id' => $raw['order_id'],
+                // Include tenant_id in unique key to avoid cross-tenant collisions
+                // (different tenants can have same order_id numbers)
+                ...(($this->currentTenantId) ? ['tenant_id' => $this->currentTenantId] : []),
+            ],
+            [
+                'tenant_id'             => $this->currentTenantId,
                 'session_id'            => $chatData['session_id'],
                 'had_chat'              => $chatData['had_chat'],
                 'products_from_chat'    => $chatData['products_from_chat'],
@@ -584,10 +685,17 @@ class SyncOrdersCommand extends Command
         $this->info("\n[UPDATE] Calculating orders_count for products...");
 
         // Count orders per article (only from delivered/delivering orders, excluding gifts)
-        $counts = DB::table('order_items')
+        $countsQuery = DB::table('order_items')
             ->join('orders', 'order_items.order_id', '=', 'orders.id')
             ->whereIn('orders.status_code', [3, 6]) // delivered + delivering
-            ->whereNotIn('order_items.type', ['gift', 'set_item']) // exclude gifts and set items
+            ->whereNotIn('order_items.type', ['gift', 'set_item']); // exclude gifts and set items
+
+        // Filter by tenant if in multi-tenant mode
+        if ($this->currentTenantId) {
+            $countsQuery->where('orders.tenant_id', $this->currentTenantId);
+        }
+
+        $counts = $countsQuery
             ->groupBy('order_items.article')
             ->select('order_items.article', DB::raw('SUM(order_items.quantity) as total_ordered'))
             ->get()
@@ -595,8 +703,12 @@ class SyncOrdersCommand extends Command
 
         $this->info("  Found orders for " . $counts->count() . " unique articles");
 
-        // Reset all to 0 first
-        Product::query()->update(['orders_count' => 0]);
+        // Reset to 0 — only for current tenant if multi-tenant, otherwise all
+        $resetQuery = Product::query();
+        if ($this->currentTenantId) {
+            $resetQuery->where('tenant_id', $this->currentTenantId);
+        }
+        $resetQuery->update(['orders_count' => 0]);
 
         // Update products with counts - separate queries to avoid type mismatch
         $updated = 0;
@@ -606,12 +718,16 @@ class SyncOrdersCommand extends Command
             // Cast article to string for safe comparison
             $articleStr = (string) $article;
             
-            // First try exact article match
-            $affected = Product::where('article', $articleStr)->update(['orders_count' => $count]);
+            // First try exact article match (scoped to tenant if multi-tenant)
+            $query = Product::where('article', $articleStr);
+            if ($this->currentTenantId) $query->where('tenant_id', $this->currentTenantId);
+            $affected = $query->update(['orders_count' => $count]);
             
             // If not found, try parent_article
             if ($affected === 0) {
-                $affected = Product::where('parent_article', $articleStr)->update(['orders_count' => $count]);
+                $query = Product::where('parent_article', $articleStr);
+                if ($this->currentTenantId) $query->where('tenant_id', $this->currentTenantId);
+                $affected = $query->update(['orders_count' => $count]);
             }
             
             if ($affected > 0) {

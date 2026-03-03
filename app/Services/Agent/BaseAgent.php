@@ -2038,6 +2038,8 @@ PROMPT;
                 if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl)\b/i', $size . ' ' . $title)) return false;
                 if ($price > 20000) return false;
                 if (!($p['in_stock'] ?? false)) return false;
+                // Filter out packaging items (bags, wrapping) but keep certificates and gift sets
+                if (preg_match('/\b(пакет|пакунок|обгортк|упаковк|paper\s*bag)\b/iu', $title)) return false;
                 return true;
             };
 
@@ -2074,7 +2076,7 @@ PROMPT;
                 if ($category) {
                     $results = $this->searchTool->search($category, [], $limit * 3);
                     $results = array_filter($results, $filterProduct);
-                    usort($results, fn($a, $b) => (($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10)) <=> (($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10)));
+                    usort($results, fn($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
                     $existingIds = array_column($products, 'id');
                     foreach ($results as $r) {
                         if (!in_array($r['id'], $existingIds)) {
@@ -2083,27 +2085,49 @@ PROMPT;
                         }
                     }
                 } else {
-                    // Get top categories dynamically from tenant's products
-                    $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
-                    
-                    // If no categories found, use generic fallback
-                    if (empty($popularQueries)) {
-                        $popularQueries = ['товар', 'новинка', 'акція'];
-                    }
-                    
+                    // Try we_recommended first — products the store owner marked as recommended
+                    $recQuery = Product::where('in_stock', true)
+                        ->where('we_recommended', true)
+                        ->where('quantity', '>', 0);
+                    if ($tenantId) $recQuery->where('tenant_id', $tenantId);
+                    $recommended = $recQuery->orderByDesc('popularity')->take($limit * 2)->get();
+
                     $existingIds = array_column($products, 'id');
-                    foreach ($popularQueries as $q) {
-                        $results = $this->searchTool->search($q, [], 10);
-                        $results = array_filter($results, $filterProduct);
-                        if (!empty($results)) {
-                            usort($results, fn($a, $b) => abs(($a['price'] ?? 0) - 3000) <=> abs(($b['price'] ?? 0) - 3000));
-                            $best = array_values($results)[0];
-                            if (!in_array($best['id'], $existingIds)) {
-                                $products[] = $best;
-                                $existingIds[] = $best['id'];
-                            }
+                    foreach ($recommended as $p) {
+                        $item = [
+                            'id' => $p->id, 'article' => $p->article, 'title' => $p->title,
+                            'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
+                            'orders_count' => $p->orders_count ?? 0, 'popularity' => $p->popularity ?? 0,
+                        ];
+                        if ($filterProduct($item) && !in_array($p->id, $existingIds)) {
+                            $products[] = $item;
+                            $existingIds[] = $p->id;
                         }
                         if (count($products) >= $limit) break;
+                    }
+
+                    // Still not enough? Use top categories with popularity-based sorting
+                    if (count($products) < $limit) {
+                        $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
+                        
+                        if (empty($popularQueries)) {
+                            $popularQueries = ['товар', 'новинка', 'акція'];
+                        }
+                        
+                        foreach ($popularQueries as $q) {
+                            $results = $this->searchTool->search($q, [], 10);
+                            $results = array_filter($results, $filterProduct);
+                            if (!empty($results)) {
+                                // Sort by popularity score — NOT by price distance to hardcoded value
+                                usort($results, fn($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
+                                $best = array_values($results)[0];
+                                if (!in_array($best['id'], $existingIds)) {
+                                    $products[] = $best;
+                                    $existingIds[] = $best['id'];
+                                }
+                            }
+                            if (count($products) >= $limit) break;
+                        }
                     }
                 }
             }
@@ -2175,6 +2199,22 @@ PROMPT;
             
             return $queries;
         });
+    }
+
+    /**
+     * Calculate a unified popularity score for product ranking.
+     * Uses: orders_count (strongest signal), popularity (Horoshop metric),
+     * we_recommended flag, and price_old (indicates discounted items).
+     */
+    protected function popularityScore(array $product): float
+    {
+        $ordersCount = (int) ($product['orders_count'] ?? 0);
+        $popularity = (int) ($product['popularity'] ?? 0);
+        $weRecommended = !empty($product['we_recommended']);
+        $hasDiscount = !empty($product['price_old']) && ($product['price_old'] > ($product['price'] ?? 0));
+
+        // Weighted score: orders are most valuable, then popularity, then store recommendations
+        return ($ordersCount * 100) + ($popularity * 1) + ($weRecommended ? 500 : 0) + ($hasDiscount ? 50 : 0);
     }
 
     /**
@@ -2968,10 +3008,14 @@ PROMPT;
         if (!$sessionId) return [];
 
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            // Bypass TenantScope — session_id is unique, and tenant context
+            // may not match during cross-tenant lookups or middleware edge cases
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)->first();
             if (!$session) return [];
 
-            $messages = ChatMessage::where('chat_session_id', $session->id)
+            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
                 ->orderBy('created_at', 'asc')
                 ->take(20)
                 ->get();
@@ -3023,10 +3067,12 @@ PROMPT;
         if (!$sessionId) return [];
 
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)->first();
             if (!$session) return [];
 
-            $messages = ChatMessage::where('chat_session_id', $session->id)
+            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('chat_session_id', $session->id)
                 ->where('role', 'assistant')
                 ->orderBy('created_at', 'desc')
                 ->take(50)
@@ -3138,24 +3184,27 @@ PROMPT;
         try {
             $tenantId = $this->searchTool->getCurrentTenantId();
             
-            $session = ChatSession::firstOrCreate(
-                ['session_id' => $sessionId],
-                [
-                    'tenant_id' => $tenantId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]
-            );
+            // Bypass TenantScope to avoid duplicate sessions when tenant context differs
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->firstOrCreate(
+                    ['session_id' => $sessionId],
+                    [
+                        'tenant_id' => $tenantId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
             
             // Update tenant_id if session exists but has null tenant_id
             if ($session->tenant_id === null && $tenantId !== null) {
                 $session->update(['tenant_id' => $tenantId]);
             }
 
-            ChatMessage::create([
+            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $message,
+                'tenant_id' => $tenantId,
             ]);
             
             // Update session: reopen if closed, update last_message_at
@@ -3178,7 +3227,8 @@ PROMPT;
         if (!$sessionId) return;
 
         try {
-            $session = ChatSession::where('session_id', $sessionId)->first();
+            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('session_id', $sessionId)->first();
             if (!$session) return;
 
             // Build content with product markers
@@ -3191,10 +3241,11 @@ PROMPT;
             // Build detailed product info for follow-up questions
             $productDetails = $this->buildProductDetailsForStorage($products);
 
-            ChatMessage::create([
+            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
                 'chat_session_id' => $session->id,
                 'role' => 'assistant',
                 'content' => $content,
+                'tenant_id' => $session->tenant_id,
                 'meta' => [
                     'intent' => $intent,
                     'product_ids' => array_column($products, 'id'),

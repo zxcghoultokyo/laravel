@@ -108,8 +108,8 @@ class ResolveTenantMiddleware
                          ->first();
         }
 
-        // 4. Query parameter - token (alternative)
-        if ($token = $request->query('token')) {
+        // 4. Token parameter - from query string OR POST body (for chat API)
+        if ($token = ($request->query('token') ?? $request->input('token'))) {
             // Try api_token first
             $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('api_token', $token)

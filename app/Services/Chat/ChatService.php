@@ -1016,6 +1016,25 @@ class ChatService
             }
         }
         
+        // Fallback: resolve from POST body token (for chat API)
+        if ($token = request()->input('token')) {
+            $widgetSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('api_token', $token)
+                ->first();
+            
+            if ($widgetSettings && $widgetSettings->tenant_id) {
+                Log::info('ChatService: resolved tenant from body token', ['tenant_id' => $widgetSettings->tenant_id]);
+                return $widgetSettings->tenant_id;
+            }
+            
+            // Fallback: token is tenant slug
+            $tenant = \App\Models\Tenant::where('slug', $token)->first();
+            if ($tenant) {
+                Log::info('ChatService: resolved tenant from body slug', ['slug' => $token, 'tenant_id' => $tenant->id]);
+                return $tenant->id;
+            }
+        }
+        
         // Fallback: request param tenant_id
         if ($requestTenantId = request()->input('tenant_id')) {
             Log::info('ChatService: using request tenant_id', ['tenant_id' => $requestTenantId]);

@@ -1716,12 +1716,21 @@ class DiagnosticController extends Controller
 
         $keepSession = $request->query('keep');
         $dryRun = $request->query('dry_run', '1') !== '0';
+        $tenantId = $request->query('tenant_id');
 
-        $query = \App\Models\ChatSession::where(function($q) {
-            $q->where('session_id', 'like', 'test_%')
-              ->orWhere('session_id', 'like', 'diagnostic_%')
-              ->orWhere('session_id', 'like', 'debug_%');
-        });
+        // Bypass TenantScope for diagnostic cleanup
+        $query = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where(function($q) {
+                $q->where('session_id', 'like', 'test_%')
+                  ->orWhere('session_id', 'like', 'diagnostic_%')
+                  ->orWhere('session_id', 'like', 'debug_%')
+                  ->orWhere('session_id', 'like', 'verify_%')
+                  ->orWhere('session_id', 'like', 'v_%');
+            });
+
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
 
         if ($keepSession) {
             $query->where('session_id', '!=', $keepSession);
@@ -1757,8 +1766,10 @@ class DiagnosticController extends Controller
         }
 
         $ids = $testSessions->pluck('id')->toArray();
-        $deletedMessages = \App\Models\ChatMessage::whereIn('chat_session_id', $ids)->delete();
-        $deletedSessions = \App\Models\ChatSession::whereIn('id', $ids)->delete();
+        $deletedMessages = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->whereIn('chat_session_id', $ids)->delete();
+        $deletedSessions = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->whereIn('id', $ids)->delete();
 
         return response()->json([
             'status' => 'ok',

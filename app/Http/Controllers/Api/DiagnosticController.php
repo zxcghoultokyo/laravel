@@ -1717,19 +1717,34 @@ class DiagnosticController extends Controller
         $keepSession = $request->query('keep');
         $dryRun = $request->query('dry_run', '1') !== '0';
         $tenantId = $request->query('tenant_id');
+        $deleteAll = $request->boolean('all'); // delete ALL sessions for tenant
 
         // Bypass TenantScope for diagnostic cleanup
-        $query = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
-            ->where(function($q) {
+        $query = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class);
+
+        if ($deleteAll && $tenantId) {
+            // Delete ALL sessions for specific tenant
+            $query->where('tenant_id', $tenantId);
+        } else {
+            // Delete only test-prefixed sessions
+            $query->where(function($q) {
                 $q->where('session_id', 'like', 'test_%')
                   ->orWhere('session_id', 'like', 'diagnostic_%')
                   ->orWhere('session_id', 'like', 'debug_%')
                   ->orWhere('session_id', 'like', 'verify_%')
-                  ->orWhere('session_id', 'like', 'v_%');
+                  ->orWhere('session_id', 'like', 'v_%')
+                  ->orWhere('session_id', 'like', 'sse_%')
+                  ->orWhere('session_id', 'like', 'sse\\_multi_%')
+                  ->orWhere('session_id', 'like', 'sse\\_simple_%')
+                  ->orWhere('session_id', 'like', 'sse\\_lang_%')
+                  ->orWhere('session_id', 'like', 'sse\\_sem_%')
+                  ->orWhere('session_id', 'like', 'sse\\_brand_%')
+                  ->orWhere('session_id', 'like', 'sse\\_slang_%');
             });
 
-        if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
         }
 
         if ($keepSession) {

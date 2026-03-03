@@ -51,8 +51,8 @@ class FunctionCallingAgent extends BaseAgent
                 'type' => $preprocessed['response_type'],
             ]);
             
-            // Log assistant response
-            $this->logAssistantMessage($sessionId, $preprocessed['response'], [], $preprocessed['response_type']);
+            // NOTE: ChatService.logAssistantMessage() handles DB logging for POST path
+            // Do NOT call $this->logAssistantMessage() here to avoid duplicates
             
             return [
                 'type' => 'text',
@@ -91,13 +91,7 @@ class FunctionCallingAgent extends BaseAgent
         // These should NOT trigger search, but answer from context
         $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
         if ($followUpResult) {
-            // Log and save to DB
-            $this->logAssistantMessage(
-                $sessionId, 
-                $followUpResult['message'], 
-                $followUpResult['products'], 
-                $followUpResult['meta']['follow_up_type'] ?? 'follow_up'
-            );
+            // NOTE: ChatService.logAssistantMessage() handles DB logging for POST path
             return $followUpResult;
         }
 
@@ -110,13 +104,7 @@ class FunctionCallingAgent extends BaseAgent
                 'source' => $implicitSearchResult['meta']['source'] ?? 'unknown',
             ]);
             
-            // Log and save to DB (IMPORTANT: without this, products won't be in history!)
-            $this->logAssistantMessage(
-                $sessionId, 
-                $implicitSearchResult['message'] ?? 'Ось що я знайшов:', 
-                $implicitSearchResult['products'] ?? [], 
-                $implicitSearchResult['meta']['intent'] ?? 'product_search'
-            );
+            // NOTE: ChatService.logAssistantMessage() handles DB logging for POST path
             
             return $implicitSearchResult;
         }

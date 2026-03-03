@@ -262,6 +262,9 @@ class PromptPresetsManager extends Component
             $this->dispatch('toast', message: 'Пресет створено', type: 'success');
         }
 
+        // Clear preset cache for this tenant
+        app(\App\Services\Ai\PromptPresetService::class)->clearCache();
+
         $this->showModal = false;
         $this->resetForm();
     }
@@ -276,6 +279,7 @@ class PromptPresetsManager extends Component
         }
 
         $preset->delete();
+        app(\App\Services\Ai\PromptPresetService::class)->clearCache();
         $this->dispatch('toast', message: 'Пресет видалено', type: 'success');
     }
 
@@ -289,6 +293,7 @@ class PromptPresetsManager extends Component
         $newPreset->is_default = false;
         $newPreset->save();
 
+        app(\App\Services\Ai\PromptPresetService::class)->clearCache();
         $this->dispatch('toast', message: 'Пресет скопійовано', type: 'success');
     }
 
@@ -297,6 +302,7 @@ class PromptPresetsManager extends Component
         $preset = PromptPreset::findOrFail($id);
         $preset->update(['is_active' => !$preset->is_active]);
         
+        app(\App\Services\Ai\PromptPresetService::class)->clearCache();
         $status = $preset->is_active ? 'активовано' : 'деактивовано';
         $this->dispatch('toast', message: "Пресет {$status}", type: 'success');
     }

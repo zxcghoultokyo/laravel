@@ -6558,8 +6558,36 @@ class DiagnosticController extends Controller
 
         $presets = $query->orderBy('priority')->get();
 
+        // Test layered resolution if tenant_id provided
+        $layerTest = null;
+        if ($tenantId) {
+            $service = app(\App\Services\Ai\PromptPresetService::class);
+            $testContext = ['tenant_id' => (int) $tenantId, 'language' => 'uk'];
+            $layers = $service->findLayersForContext($testContext);
+            
+            // Also test with a furniture category
+            $testContextFurniture = array_merge($testContext, ['category' => 'МЕБЛІ ТА ОРГАНІЗАЦІЯ']);
+            $layersFurniture = $service->findLayersForContext($testContextFurniture);
+            
+            $layerTest = [
+                'general_query' => [
+                    'context' => $testContext,
+                    'base' => $layers['base'] ? $layers['base']['name'] : null,
+                    'overlays' => array_map(fn($o) => "{$o['name']} (p{$o['priority']})", $layers['overlays']),
+                    'merged_prompt_length' => mb_strlen($service->getSystemPromptForContext($testContext) ?? ''),
+                ],
+                'furniture_query' => [
+                    'context' => $testContextFurniture,
+                    'base' => $layersFurniture['base'] ? $layersFurniture['base']['name'] : null,
+                    'overlays' => array_map(fn($o) => "{$o['name']} (p{$o['priority']})", $layersFurniture['overlays']),
+                    'merged_prompt_length' => mb_strlen($service->getSystemPromptForContext($testContextFurniture) ?? ''),
+                ],
+            ];
+        }
+
         return response()->json([
             'count' => $presets->count(),
+            'layer_test' => $layerTest,
             'presets' => $presets->map(fn($p) => [
                 'id' => $p->id,
                 'tenant_id' => $p->tenant_id,

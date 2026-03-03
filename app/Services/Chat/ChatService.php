@@ -730,6 +730,12 @@ class ChatService
     {
         $context = [];
         
+        // CRITICAL: tenant_id for multi-tenant preset isolation
+        $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
+        if ($tenantId) {
+            $context['tenant_id'] = $tenantId;
+        }
+        
         // Detect language from message
         $context['language'] = $this->detectLanguage($message);
         

@@ -53,10 +53,12 @@ class PromptPreset extends Model
             }
         });
 
-        // Only one default preset allowed
+        // Only one default preset allowed PER TENANT
         static::saving(function ($preset) {
-            if ($preset->is_default) {
-                static::where('id', '!=', $preset->id ?? 0)
+            if ($preset->is_default && $preset->tenant_id) {
+                static::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                    ->where('id', '!=', $preset->id ?? 0)
+                    ->where('tenant_id', $preset->tenant_id)
                     ->where('is_default', true)
                     ->update(['is_default' => false]);
             }

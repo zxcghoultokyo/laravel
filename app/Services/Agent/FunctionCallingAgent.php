@@ -175,6 +175,21 @@ class FunctionCallingAgent extends BaseAgent
             }
         }
 
+        // Fallback: GPT may have mentioned products by article in plain text
+        // (e.g. follow-up "а фігурки планет?" → "Монтессорі-набір (арт. 107)...")
+        $extracted = $this->extractProductsFromTextResponse($text, $this->tenantId);
+        if ($extracted && ! empty($extracted['products'])) {
+            return [
+                'message' => $text,
+                'products' => $extracted['products'],
+                'messages' => array_filter([
+                    ['type' => 'text', 'content' => $text],
+                    ['type' => 'products', 'products' => $extracted['products']],
+                ]),
+                'meta' => ['intent' => 'product_search', 'agent' => 'function_calling', 'source' => 'text_article_extract'],
+            ];
+        }
+
         return [
             'message' => $text,
             'products' => [],

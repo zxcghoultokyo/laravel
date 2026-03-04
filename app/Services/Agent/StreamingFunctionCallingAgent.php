@@ -477,11 +477,30 @@ CONTEXT;
                 $responseProducts = $structured['products'];
                 $responseIntent = 'product_search';
             } else {
-                // Stream as plain text
-                $textChunks = mb_str_split($responseText, 3);
-                foreach ($textChunks as $chunk) {
-                    yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
-                    usleep(10000);
+                // Check if GPT text mentions products by article (follow-up from history)
+                $extracted = $this->extractProductsFromTextResponse($responseText, $this->tenantId);
+                if ($extracted && ! empty($extracted['products'])) {
+                    // Stream text first, then product cards
+                    $textChunks = mb_str_split($responseText, 3);
+                    foreach ($textChunks as $chunk) {
+                        yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                        usleep(10000);
+                    }
+
+                    yield ['type' => 'products', 'data' => [
+                        'products' => $extracted['products'],
+                        'count' => count($extracted['products']),
+                    ]];
+
+                    $responseProducts = $extracted['products'];
+                    $responseIntent = 'product_search';
+                } else {
+                    // Stream as plain text
+                    $textChunks = mb_str_split($responseText, 3);
+                    foreach ($textChunks as $chunk) {
+                        yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                        usleep(10000);
+                    }
                 }
             }
         }

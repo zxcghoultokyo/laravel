@@ -3098,6 +3098,54 @@ PROMPT;
     }
 
     /**
+     * Extract product cards from a plain-text GPT response that mentions articles.
+     *
+     * When GPT knows a product from conversation history it may respond with text
+     * like 'Монтессорі-набір "Планети" (арт. 107) ...' instead of calling search_products.
+     * This method finds those article references and returns real product cards.
+     *
+     * @return array{products: array, text: string}|null Null if no articles found
+     */
+    protected function extractProductsFromTextResponse(string $text, ?int $tenantId = null): ?array
+    {
+        // Match article patterns: "арт. 107", "(арт. abc-123)", "артикул: XYZ"
+        if (! preg_match_all('/(?:арт(?:икул)?\.?\s*)([a-zA-Z0-9_\-]+)/ui', $text, $matches)) {
+            return null;
+        }
+
+        $articles = array_unique($matches[1]);
+        if (empty($articles)) {
+            return null;
+        }
+
+        // Look up products by article in DB
+        $query = Product::query()->whereIn('article', $articles)->where('in_stock', true);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        $products = $query->get();
+
+        if ($products->isEmpty()) {
+            return null;
+        }
+
+        // Build product cards using ProductDetailsTool
+        $detailsTool = app(\App\Services\Agent\Tools\ProductDetailsTool::class);
+        $cards = $detailsTool->getCards($products->pluck('id')->all(), 5, $tenantId);
+
+        if (empty($cards)) {
+            return null;
+        }
+
+        Log::info('BaseAgent: extracted products from plain text response', [
+            'articles' => $articles,
+            'found_count' => count($cards),
+        ]);
+
+        return ['products' => $cards, 'text' => $text];
+    }
+
+    /**
      * Detect if the current message is a fresh/new query (not a follow-up).
      * A fresh query should NOT use previous context.
      */

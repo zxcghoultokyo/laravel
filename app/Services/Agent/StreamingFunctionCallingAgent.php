@@ -478,7 +478,7 @@ CONTEXT;
                 $responseIntent = 'product_search';
             } else {
                 // Check if GPT text mentions products by article (follow-up from history)
-                $extracted = $this->extractProductsFromTextResponse($responseText, $this->tenantId);
+                $extracted = $this->extractProductsFromTextResponse($responseText, $this->searchTool->getCurrentTenantId());
                 if ($extracted && ! empty($extracted['products'])) {
                     // Stream text first, then product cards
                     $textChunks = mb_str_split($responseText, 3);

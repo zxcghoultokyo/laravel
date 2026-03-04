@@ -7276,4 +7276,75 @@ class DiagnosticController extends Controller
         }
         flush();
     }
+
+    /**
+     * Call arbitrary Horoshop API function for a tenant (read-only diagnostics).
+     * Example: /api/diagnostic/horoshop-api-call?key=...&tenant_id=20&function=productSet/export
+     */
+    public function horoshopApiCall(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = (int) $request->query('tenant_id', 2);
+        $function = $request->query('function', 'productSet/export');
+
+        // Only allow safe read-only functions
+        $allowedFunctions = [
+            'productSet/export',
+            'catalog/export',
+            'pages/export',
+        ];
+
+        if (! in_array($function, $allowedFunctions, true)) {
+            return response()->json(['error' => 'Function not allowed. Allowed: '.implode(', ', $allowedFunctions)], 400);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (! $tenant) {
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+
+        if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
+            return response()->json(['error' => 'Tenant has no Horoshop credentials'], 400);
+        }
+
+        try {
+            $credentials = $tenant->platform_credentials;
+            $domain = is_array($credentials['domain'] ?? null) ? ($credentials['domain']['value'] ?? '') : (string) ($credentials['domain'] ?? '');
+            $login = is_array($credentials['login'] ?? null) ? ($credentials['login']['value'] ?? '') : (string) ($credentials['login'] ?? '');
+            $password = is_array($credentials['password'] ?? null) ? ($credentials['password']['value'] ?? '') : (string) ($credentials['password'] ?? '');
+
+            $client = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
+
+            // Build payload from query params (except reserved ones)
+            $reserved = ['key', 'tenant_id', 'function'];
+            $payload = [];
+            foreach ($request->query() as $k => $v) {
+                if (! in_array($k, $reserved, true)) {
+                    // Try to decode JSON values
+                    $decoded = json_decode($v, true);
+                    $payload[$k] = $decoded !== null ? $decoded : $v;
+                }
+            }
+
+            $response = $client->request($function, $payload);
+
+            return response()->json([
+                'tenant_id' => $tenantId,
+                'function' => $function,
+                'payload' => $payload,
+                'response_keys' => array_keys($response),
+                'response_count' => is_array($response) ? count($response) : null,
+                'response' => $response,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'tenant_id' => $tenantId,
+                'function' => $function,
+            ], 500);
+        }
+    }
 }

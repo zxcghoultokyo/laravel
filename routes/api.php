@@ -125,6 +125,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/generate-synonyms/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'generateSynonyms']);
     Route::get('/categories-by-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoriesByTenant']);
     Route::get('/horoshop-stock-count', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopStockCount']);
+    Route::get('/horoshop-api-call', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopApiCall']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);
     Route::get('/chat-history/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatHistory']);
     Route::post('/sync-faq', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncFaq']);

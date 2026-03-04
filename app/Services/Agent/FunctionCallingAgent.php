@@ -12,14 +12,14 @@ use Illuminate\Support\Facades\Log;
 /**
  * Non-streaming GPT Agent with Function Calling.
  * Uses BaseAgent for shared logic.
- * 
+ *
  * Instead of 2000 lines of hardcoded rules, we let GPT decide what to do.
  * GPT has access to tools and calls them as needed.
  */
 class FunctionCallingAgent extends BaseAgent
 {
     protected QueryPreprocessorService $queryPreprocessor;
-    
+
     public function __construct(
         MeiliProductSearchTool $searchTool,
         ProductDetailsTool $detailsTool,
@@ -44,16 +44,16 @@ class FunctionCallingAgent extends BaseAgent
 
         // PRE-PROCESS: Normalize slang, brands, detect FAQ/greetings
         $preprocessed = $this->queryPreprocessor->preprocess($message);
-        
+
         if ($preprocessed['intercepted']) {
             Log::info('FunctionCallingAgent: query intercepted by preprocessor', [
                 'message' => $message,
                 'type' => $preprocessed['response_type'],
             ]);
-            
+
             // NOTE: ChatService.logAssistantMessage() handles DB logging for POST path
             // Do NOT call $this->logAssistantMessage() here to avoid duplicates
-            
+
             return [
                 'type' => 'text',
                 'message' => $preprocessed['response'],
@@ -64,10 +64,10 @@ class FunctionCallingAgent extends BaseAgent
                 ],
             ];
         }
-        
+
         // Use normalized query for further processing
         $normalizedMessage = $preprocessed['query'];
-        
+
         if ($normalizedMessage !== $message) {
             Log::info('FunctionCallingAgent: query normalized', [
                 'original' => $message,
@@ -80,7 +80,7 @@ class FunctionCallingAgent extends BaseAgent
         // CRITICAL: Load shown product IDs FIRST - needed for all handlers
         // This must happen before handleImplicitQuery and handleFollowUpQuestion
         $this->shownProductIds = $this->extractShownProductIds($sessionId);
-        
+
         Log::info('FunctionCallingAgent: loaded shown product IDs', [
             'session_id' => $sessionId,
             'shown_ids_count' => count($this->shownProductIds),
@@ -103,9 +103,9 @@ class FunctionCallingAgent extends BaseAgent
                 'products_count' => count($implicitSearchResult['products'] ?? []),
                 'source' => $implicitSearchResult['meta']['source'] ?? 'unknown',
             ]);
-            
+
             // NOTE: ChatService.logAssistantMessage() handles DB logging for POST path
-            
+
             return $implicitSearchResult;
         }
 
@@ -115,7 +115,7 @@ class FunctionCallingAgent extends BaseAgent
         // Call GPT with tools
         $response = $this->callGptWithTools($messages);
 
-        if (!$response) {
+        if (! $response) {
             return $this->fallbackResponse($normalizedMessage);
         }
 
@@ -128,6 +128,7 @@ class FunctionCallingAgent extends BaseAgent
 
         // Direct text response (small talk, FAQ, follow-up questions)
         $text = $response['choices'][0]['message']['content'] ?? '';
+        $text = $this->stripUrlsFromText($text);
 
         // Check if GPT returned JSON (sometimes it does for follow-ups with products from history)
         if (preg_match('/^\s*\{/u', $text)) {
@@ -136,7 +137,7 @@ class FunctionCallingAgent extends BaseAgent
                 // Use parseStructuredResponse to find real products in DB by article
                 $structured = $this->parseStructuredResponse($text, []);
 
-                if (!empty($structured['products'])) {
+                if (! empty($structured['products'])) {
                     Log::info('FunctionCallingAgent: found products in JSON response without tool_calls', [
                         'product_count' => count($structured['products']),
                         'articles' => array_column($structured['products'], 'article'),
@@ -144,7 +145,7 @@ class FunctionCallingAgent extends BaseAgent
 
                     $introText = $structured['intro'] ?? '';
                     $outroText = $structured['outro'] ?? '';
-                    $fullText = trim($introText . "\n\n" . $outroText);
+                    $fullText = trim($introText."\n\n".$outroText);
 
                     return [
                         'message' => $fullText,
@@ -161,10 +162,10 @@ class FunctionCallingAgent extends BaseAgent
                 // No products found - extract text only
                 if (isset($json['intro'])) {
                     $text = $json['intro'];
-                    if (!empty($json['products'])) {
+                    if (! empty($json['products'])) {
                         foreach ($json['products'] as $p) {
-                            if (!empty($p['comment'])) {
-                                $text .= "\n• " . $p['comment'];
+                            if (! empty($p['comment'])) {
+                                $text .= "\n• ".$p['comment'];
                             }
                         }
                     }
@@ -189,20 +190,20 @@ class FunctionCallingAgent extends BaseAgent
     {
         // Set current message for modular prompt building
         $this->currentMessage = $message;
-        
+
         // Add conversation history if available
         $history = $context['history'] ?? [];
         $sessionId = $context['session_id'] ?? null;
-        
+
         // Set context for modular prompts
-        $this->currentContext['has_history'] = !empty($history);
+        $this->currentContext['has_history'] = ! empty($history);
 
         // Detect trigger query (from proactive triggers)
         $isTriggerQuery = $this->detectTriggerQuery($message);
         if ($isTriggerQuery) {
             $this->currentContext['is_trigger'] = true;
         }
-        
+
         $systemPrompt = $this->getSystemPrompt();
 
         $messages = [
@@ -219,7 +220,7 @@ class FunctionCallingAgent extends BaseAgent
         // Check if this is a fresh/new query (not a follow-up)
         $isFreshQuery = $this->isFreshQuery($message, $history);
         $conversationContext = $isFreshQuery ? '' : $this->extractConversationContext($history);
-        
+
         // Load detailed product info for follow-up questions
         $productDetails = $isFreshQuery ? '' : $this->loadRecentProductDetails($sessionId);
 
@@ -228,16 +229,16 @@ class FunctionCallingAgent extends BaseAgent
             'history_count' => count($history),
             'is_trigger' => $isTriggerQuery,
             'is_fresh_query' => $isFreshQuery,
-            'has_product_details' => !empty($productDetails),
+            'has_product_details' => ! empty($productDetails),
         ]);
 
         if ($conversationContext || $productDetails) {
             $contextContent = "=== КОНТЕКСТ ПОПЕРЕДНЬОЇ РОЗМОВИ ===\n";
-            
+
             if ($conversationContext) {
                 $contextContent .= "{$conversationContext}\n\n";
             }
-            
+
             if ($productDetails) {
                 $contextContent .= "=== ДЕТАЛЬНА ІНФОРМАЦІЯ ПРО ПОКАЗАНІ ТОВАРИ ===\n";
                 $contextContent .= "Використовуй ці дані для відповідей на питання про характеристики, розміри, опис товарів:\n\n";
@@ -245,8 +246,8 @@ class FunctionCallingAgent extends BaseAgent
                 $contextContent .= "ВАЖЛИВО: Якщо користувач питає про розміри, характеристики, опис — ВІДПОВІДАЙ на основі цих даних!\n";
                 $contextContent .= "НЕ кажи \"не знаю\" або \"немає інформації\" якщо дані є вище!\n\n";
             }
-            
-            $contextContent .= <<<CONTEXT
+
+            $contextContent .= <<<'CONTEXT'
 ПРАВИЛА ВИКОРИСТАННЯ КОНТЕКСТУ:
 1. НЕ питай "що ви шукаєте" якщо в контексті вже є категорія товару!
 2. Якщо користувач уточнює (розмір, колір, бренд) — КОМБІНУЙ з попереднім контекстом!
@@ -272,7 +273,7 @@ class FunctionCallingAgent extends BaseAgent
 Якщо раніше обговорювали куртки — шукай КУРТКИ!
 НЕ шукай випадкові товари! Дивись на [Показані товари: ...] в історії!
 CONTEXT;
-            
+
             $messages[] = [
                 'role' => 'system',
                 'content' => $contextContent,
@@ -288,7 +289,7 @@ CONTEXT;
         $isFollowUp = $this->detectFollowUpQuery($lowerMessage, $history);
 
         // If follow-up, add context hint for GPT
-        if ($isFollowUp && !empty($history)) {
+        if ($isFollowUp && ! empty($history)) {
             $lastAssistant = null;
             foreach (array_reverse($history) as $msg) {
                 if ($msg['role'] === 'assistant' && str_contains($msg['content'], '[Показані товари:')) {
@@ -316,14 +317,14 @@ CONTEXT;
     {
         $shopPhone = $this->getShopPhone();
 
-        return "🚨 УВАГА: Це ТРИГЕРНИЙ ЗАПИТ! Клієнт прийшов з підказки на сайті, він вже зацікавлений!\n" .
-            "ТВОЯ ЗАДАЧА — ЗАКРИТИ ПРОДАЖ:\n" .
-            "1. Знайди товар через search_products\n" .
-            "2. Дай КОРОТКУ але ВПЕВНЕНУ відповідь (1-2 речення про особливості товару)\n" .
-            "3. Закінчи КОНКРЕТНИМ CTA залежно від товару:\n" .
-            "   - Одяг/взуття → 'Який розмір вам потрібен? Підкажіть зріст/вагу'\n" .
-            "   - Аксесуари/рюкзаки/шоломи → 'Оформлюємо? Або є питання по характеристиках?'\n" .
-            "   - Якщо мало в наявності → 'Залишилось X шт. Резервуємо?'\n" .
+        return "🚨 УВАГА: Це ТРИГЕРНИЙ ЗАПИТ! Клієнт прийшов з підказки на сайті, він вже зацікавлений!\n".
+            "ТВОЯ ЗАДАЧА — ЗАКРИТИ ПРОДАЖ:\n".
+            "1. Знайди товар через search_products\n".
+            "2. Дай КОРОТКУ але ВПЕВНЕНУ відповідь (1-2 речення про особливості товару)\n".
+            "3. Закінчи КОНКРЕТНИМ CTA залежно від товару:\n".
+            "   - Одяг/взуття → 'Який розмір вам потрібен? Підкажіть зріст/вагу'\n".
+            "   - Аксесуари/рюкзаки/шоломи → 'Оформлюємо? Або є питання по характеристиках?'\n".
+            "   - Якщо мало в наявності → 'Залишилось X шт. Резервуємо?'\n".
             "НЕ питай 'що саме потрібно?' — ДІЙ ВПЕВНЕНО!";
     }
 
@@ -373,11 +374,12 @@ CONTEXT;
     {
         if (empty($this->apiKey)) {
             Log::warning('FunctionCallingAgent: no API key');
+
             return null;
         }
 
         $maxRetries = 3; // Increased from 2 for better rate limit handling
-        
+
         try {
             Log::info('FunctionCallingAgent: calling OpenAI', [
                 'model' => $this->model,
@@ -388,7 +390,7 @@ CONTEXT;
             $response = Http::withToken($this->apiKey)
                 ->timeout(45) // Increased from 30 to 45 seconds
                 ->connectTimeout(10) // Add connect timeout
-                ->post($this->baseUrl . '/chat/completions', [
+                ->post($this->baseUrl.'/chat/completions', [
                     'model' => $this->model,
                     'messages' => $messages,
                     'tools' => $this->getTools(),
@@ -406,7 +408,7 @@ CONTEXT;
 
             if (isset($data['error'])) {
                 Log::error('FunctionCallingAgent: OpenAI error', ['error' => $data['error']]);
-                
+
                 // Retry on rate limit or server errors with exponential backoff
                 if ($retryCount < $maxRetries && $this->isRetryableError($data['error'])) {
                     // Exponential backoff: 1s, 2s, 4s
@@ -417,26 +419,29 @@ CONTEXT;
                         'error_type' => $data['error']['type'] ?? 'unknown',
                     ]);
                     usleep($delay);
+
                     return $this->callGptWithTools($messages, $retryCount + 1);
                 }
-                
+
                 return null;
             }
 
             return $data;
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             Log::error('FunctionCallingAgent: Connection timeout', ['error' => $e->getMessage()]);
-            
+
             // Retry on connection timeouts
             if ($retryCount < $maxRetries) {
                 Log::info('FunctionCallingAgent: retrying after timeout', ['retry' => $retryCount + 1]);
                 usleep(500000 * ($retryCount + 1)); // 0.5s, 1s delay
+
                 return $this->callGptWithTools($messages, $retryCount + 1);
             }
-            
+
             return null;
         } catch (\Throwable $e) {
             Log::error('FunctionCallingAgent: API error', ['error' => $e->getMessage()]);
+
             return null;
         }
     }
@@ -449,7 +454,7 @@ CONTEXT;
         $retryableCodes = ['rate_limit_exceeded', 'server_error', 'timeout', 'overloaded'];
         $errorType = $error['type'] ?? '';
         $errorCode = $error['code'] ?? '';
-        
+
         return in_array($errorType, $retryableCodes) || in_array($errorCode, $retryableCodes);
     }
 
@@ -460,21 +465,21 @@ CONTEXT;
     {
         $products = [];
         $toolResults = [];
-        
+
         // Track if search_products found anything - to prevent irrelevant fallback
         $searchFoundProducts = false;
         $searchWasCalled = false;
         $searchQuery = null;  // Track what GPT actually searched for (debug)
 
         $isTriggerQuery = $this->detectTriggerQuery($originalMessage);
-        
+
         // Extract last category from conversation context for follow-up queries
         $lastCategory = $this->extractLastCategoryFromMessages($messages);
 
         foreach ($toolCalls as $toolCall) {
             $functionName = $toolCall['function']['name'];
             $args = json_decode($toolCall['function']['arguments'], true) ?? [];
-            
+
             // CRITICAL: Inject category context for follow-up queries like "дешевше", "ще", "аналоги"
             if ($functionName === 'search_products' && $lastCategory) {
                 $args = $this->injectCategoryContext($args, $originalMessage, $lastCategory);
@@ -487,13 +492,13 @@ CONTEXT;
             ]);
 
             $result = $this->executeTool($functionName, $args);
-            
+
             // Track search results and the actual query used
             if ($functionName === 'search_products') {
                 $searchWasCalled = true;
-                $searchFoundProducts = !empty($result['products']);
+                $searchFoundProducts = ! empty($result['products']);
                 $searchQuery = $args['query'] ?? null;
-                
+
                 // Log important debug info about search
                 Log::info('FunctionCallingAgent: search_products result', [
                     'query_from_gpt' => $searchQuery,
@@ -505,18 +510,18 @@ CONTEXT;
             // Filter out already shown products ONLY when explicitly requested (for "покажи ще" type requests)
             // Regular searches should show all matching products, even if shown before
             $excludeShown = $args['exclude_shown'] ?? false;
-            if (in_array($functionName, ['search_products', 'get_popular_products']) 
-                && !empty($result['products']) 
-                && !empty($this->shownProductIds)
+            if (in_array($functionName, ['search_products', 'get_popular_products'])
+                && ! empty($result['products'])
+                && ! empty($this->shownProductIds)
                 && $excludeShown) {
                 $beforeCount = count($result['products']);
                 $result['products'] = array_filter(
                     $result['products'],
-                    fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds)
+                    fn ($p) => ! in_array((int) ($p['id'] ?? 0), $this->shownProductIds)
                 );
                 $result['products'] = array_values($result['products']);
                 $result['count'] = count($result['products']);
-                
+
                 Log::info('FunctionCallingAgent: filtered shown products (exclude_shown=true)', [
                     'tool' => $functionName,
                     'before' => $beforeCount,
@@ -527,13 +532,13 @@ CONTEXT;
             // Collect products from search tools
             // BUT: If search_products was called and found nothing, do NOT use get_popular_products as fallback
             // This prevents showing термобілизна when user asked for "набір для чищення зброї"
-            if ($functionName === 'search_products' && !empty($result['products'])) {
+            if ($functionName === 'search_products' && ! empty($result['products'])) {
                 $products = array_merge($products, $result['products']);
-            } elseif ($functionName === 'get_popular_products' && !empty($result['products'])) {
+            } elseif ($functionName === 'get_popular_products' && ! empty($result['products'])) {
                 // Only use popular products if:
                 // 1. search_products was NOT called (user asked for "популярне", "топ")
                 // 2. OR search_products DID find products (user asked "покажи ще популярних підсумків")
-                if (!$searchWasCalled || $searchFoundProducts) {
+                if (! $searchWasCalled || $searchFoundProducts) {
                     $products = array_merge($products, $result['products']);
                 } else {
                     Log::warning('FunctionCallingAgent: BLOCKED get_popular_products fallback - search found nothing, not showing random products', [
@@ -546,14 +551,14 @@ CONTEXT;
                     $result['reason'] = 'Search found no results, not showing random fallback products';
                 }
             }
-            if ($functionName === 'get_product_details' && !empty($result['product'])) {
+            if ($functionName === 'get_product_details' && ! empty($result['product'])) {
                 $products[] = $result['product'];
             }
 
             $toolResults[] = [
                 'tool_call_id' => $toolCall['id'],
                 'role' => 'tool',
-                'content' => json_encode($result, JSON_UNESCAPED_UNICODE),
+                'content' => json_encode($this->stripLinksForGpt($result), JSON_UNESCAPED_UNICODE),
             ];
         }
 
@@ -571,7 +576,7 @@ CONTEXT;
 
         // Get final response from GPT
         $finalResponse = $this->callGptWithTools($messages);
-        
+
         // Handle GPT failure - return products with basic intro
         if ($finalResponse === null) {
             Log::warning('GPT final response failed, returning products with basic intro', [
@@ -579,6 +584,7 @@ CONTEXT;
             ]);
             $products = $this->dedupeProducts($products);
             $intro = $this->personalizeIntro('', $originalMessage, $products);
+
             return [
                 'message' => $intro ?: 'Ось результати пошуку:',
                 'products' => array_slice($products, 0, 5),
@@ -586,14 +592,17 @@ CONTEXT;
                 'meta' => [
                     'intent' => 'product_search',
                     'agent' => 'function_calling',
-                    'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
+                    'tools_called' => array_map(fn ($tc) => $tc['function']['name'], $toolCalls),
                     'products_found' => count($products),
                     'gpt_final_failed' => true,
                 ],
             ];
         }
-        
+
         $responseText = $finalResponse['choices'][0]['message']['content'] ?? '';
+
+        // Safety net: strip any URLs/markdown links that GPT generated despite prompt prohibition
+        $responseText = $this->stripUrlsFromText($responseText);
 
         // Dedupe products
         $products = $this->dedupeProducts($products);
@@ -603,9 +612,9 @@ CONTEXT;
 
         // Generate outro for trigger queries if needed (pass GPT response to avoid duplication)
         $outro = $structuredResponse['outro'] ?? null;
-        if ($isTriggerQuery && !empty($products) && empty($outro)) {
+        if ($isTriggerQuery && ! empty($products) && empty($outro)) {
             $outro = $this->generateTriggerOutro($products, $responseText, $originalMessage);
-            if (!empty($structuredResponse['messages'])) {
+            if (! empty($structuredResponse['messages'])) {
                 $structuredResponse['messages'][] = ['type' => 'text', 'content' => $outro];
             }
         }
@@ -620,7 +629,7 @@ CONTEXT;
         // because search might return irrelevant products that GPT correctly identified as wrong
         $finalProducts = $structuredResponse['products'] ?? array_slice($products, 0, 5);
         $finalMessages = $structuredResponse['messages'] ?? [];
-        
+
         if ($this->textIndicatesNoResults($intro)) {
             Log::warning('FunctionCallingAgent: GPT text indicates no results found, clearing products', [
                 'intro' => mb_substr($intro, 0, 100),
@@ -630,7 +639,7 @@ CONTEXT;
             ]);
             $finalProducts = [];
             // Remove product messages, keep only text
-            $finalMessages = array_filter($finalMessages, fn($m) => ($m['type'] ?? '') !== 'product');
+            $finalMessages = array_filter($finalMessages, fn ($m) => ($m['type'] ?? '') !== 'product');
         }
 
         return [
@@ -640,7 +649,7 @@ CONTEXT;
             'meta' => [
                 'intent' => count($finalProducts) > 0 ? 'product_search' : 'text',
                 'agent' => 'function_calling',
-                'tools_called' => array_map(fn($tc) => $tc['function']['name'], $toolCalls),
+                'tools_called' => array_map(fn ($tc) => $tc['function']['name'], $toolCalls),
                 'products_found' => count($finalProducts),
                 'outro' => $outro,
                 'is_trigger' => $isTriggerQuery,
@@ -690,9 +699,9 @@ CONTEXT;
             '/^here\'?s what i found/ui',
             '/^ось кілька варіантів/ui',
         ];
-        
+
         $isGeneric = empty(trim($intro));
-        if (!$isGeneric) {
+        if (! $isGeneric) {
             foreach ($genericPatterns as $pattern) {
                 if (preg_match($pattern, trim($intro))) {
                     $isGeneric = true;
@@ -700,15 +709,15 @@ CONTEXT;
                 }
             }
         }
-        
+
         // If not generic, keep original
-        if (!$isGeneric) {
+        if (! $isGeneric) {
             return $intro;
         }
-        
+
         // Try to extract category from user message
         $lowerMsg = mb_strtolower(trim($userMessage));
-        
+
         // Check for follow-up patterns
         if (preg_match('/^(а є |є )?дешевш/ui', $lowerMsg)) {
             return 'Ось дешевші варіанти:';
@@ -722,7 +731,7 @@ CONTEXT;
         if (preg_match('/новинк|нов[іе] надходження|що нового/ui', $lowerMsg)) {
             return 'Ось новинки:';
         }
-        
+
         // IMPORTANT: Check category FIRST before colors!
         // "термобілизна" contains "біл" which would match color "білий" incorrectly
         $categoryPatterns = [
@@ -741,24 +750,25 @@ CONTEXT;
             'бронежилет' => 'бронежилети',
             'тактич' => 'тактичне спорядження',
         ];
-        
+
         foreach ($categoryPatterns as $pattern => $category) {
             if (mb_stripos($lowerMsg, $pattern) !== false) {
                 return "Ось {$category}:";
             }
         }
-        
+
         // Extract color (AFTER category check to avoid false positives like "термобілизна" -> "білий")
         $colors = ['олив', 'чорн', 'біл', 'мультикам', 'піксель', 'коричнев', 'coyote', 'койот', 'ranger green'];
         foreach ($colors as $color) {
             if (mb_stripos($lowerMsg, $color) !== false) {
                 $colorName = mb_ucfirst($color);
+
                 return "Ось варіанти в кольорі {$colorName}:";
             }
         }
-        
+
         // Try to get category from first product
-        if (!empty($products[0]['category_path'])) {
+        if (! empty($products[0]['category_path'])) {
             $categoryPath = $products[0]['category_path'];
             $parts = explode(' > ', $categoryPath);
             $lastCategory = end($parts);
@@ -766,11 +776,11 @@ CONTEXT;
                 return "Ось {$lastCategory}:";
             }
         }
-        
+
         // Default fallback - still better than generic
         return 'Ось товари:';
     }
-    
+
     /**
      * Extract last product category from conversation messages.
      * Used to maintain context for follow-up queries like "дешевше", "ще".
@@ -778,25 +788,25 @@ CONTEXT;
     private function extractLastCategoryFromMessages(array $messages): ?string
     {
         $foundCategory = null;
-        
+
         // Scan messages in reverse to find last mentioned category
         foreach (array_reverse($messages) as $msg) {
             $content = $msg['content'] ?? '';
             $role = $msg['role'] ?? '';
-            
+
             // Skip system messages and current user message (last in array)
             if ($role === 'system') {
                 continue;
             }
-            
+
             // Look for [Показані товари: ...] marker in assistant messages
             if ($role === 'assistant' && preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
                 $productText = $matches[1];
-                
+
                 // Extract category keywords from product text
                 $categoryKeywords = [
                     'peltor|пелтор' => 'навушники Peltor',
-                    'earmor' => 'навушники Earmor', 
+                    'earmor' => 'навушники Earmor',
                     'навушник|headset|comtac' => 'навушники',
                     'куртк|jacket' => 'куртки',
                     'берц|boots' => 'берці',
@@ -809,18 +819,19 @@ CONTEXT;
                     'термо' => 'термобілизна',
                     'бронежилет|armor' => 'бронежилети',
                 ];
-                
+
                 foreach ($categoryKeywords as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $productText)) {
                         Log::info('FunctionCallingAgent: extracted category from [Показані товари]', [
                             'category' => $category,
                             'from' => mb_substr($productText, 0, 100),
                         ]);
+
                         return $category;
                     }
                 }
             }
-            
+
             // Check user messages for explicit product mentions (but not current message)
             // We check ALL user messages and take the most recent category found
             if ($role === 'user' && $foundCategory === null) {
@@ -838,7 +849,7 @@ CONTEXT;
                     'рюкзак' => 'рюкзаки',
                     'підсум' => 'підсумки',
                 ];
-                
+
                 foreach ($userCategoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $lowerContent)) {
                         $foundCategory = $category;
@@ -852,10 +863,10 @@ CONTEXT;
                 }
             }
         }
-        
+
         return $foundCategory;
     }
-    
+
     /**
      * Inject category context into search args for follow-up queries.
      * Prevents "дешевше" from returning random products instead of same category.
@@ -863,18 +874,18 @@ CONTEXT;
     private function injectCategoryContext(array $args, string $userMessage, string $lastCategory): array
     {
         $lowerMsg = mb_strtolower($userMessage);
-        
+
         // Patterns that indicate follow-up without explicit category
         $followUpPatterns = [
             'дешевше', 'дешевший', 'дорожче', 'дорожчий',
             'ще ', 'інші', 'інш', 'аналог', 'подібн', 'такий же', 'такі ж',
             'більше варіант', 'ще варіант',
         ];
-        
+
         $isFollowUp = false;
         $isCheaper = false;
         $isMoreExpensive = false;
-        
+
         foreach ($followUpPatterns as $pattern) {
             if (mb_stripos($lowerMsg, $pattern) !== false) {
                 $isFollowUp = true;
@@ -887,22 +898,22 @@ CONTEXT;
                 break;
             }
         }
-        
+
         // If not follow-up or query already has specific category, don't modify
-        if (!$isFollowUp) {
+        if (! $isFollowUp) {
             return $args;
         }
-        
+
         $currentQuery = $args['query'] ?? '';
-        
+
         // Check if query already contains category keywords
         $hasCategory = preg_match('/(навушник|куртк|берц|штан|шолом|рюкзак|плитонос)/ui', $currentQuery);
-        
-        if (!$hasCategory) {
+
+        if (! $hasCategory) {
             // Inject category into query
-            $newQuery = trim($lastCategory . ' ' . $currentQuery);
+            $newQuery = trim($lastCategory.' '.$currentQuery);
             $args['query'] = $newQuery;
-            
+
             Log::info('FunctionCallingAgent: injected category context', [
                 'original_query' => $currentQuery,
                 'new_query' => $newQuery,
@@ -910,7 +921,7 @@ CONTEXT;
                 'user_message' => $userMessage,
             ]);
         }
-        
+
         // Add price sorting for "дешевше" / "дорожче" queries
         if ($isCheaper) {
             $args['sort_by'] = 'price_asc';
@@ -919,7 +930,7 @@ CONTEXT;
             $args['sort_by'] = 'price_desc';
             Log::info('FunctionCallingAgent: added price_desc sorting for expensive request');
         }
-        
+
         return $args;
     }
 }

@@ -2834,6 +2834,68 @@ PROMPT;
     }
 
     /**
+     * Strip URL/link fields from tool result before sending to GPT.
+     * GPT must NOT see product URLs — otherwise it generates [Детальніше](url) links.
+     * The link is preserved in $products array for the front-end.
+     */
+    protected function stripLinksForGpt(array $result): array
+    {
+        // Strip link from products array
+        if (! empty($result['products'])) {
+            $result['products'] = array_map(function ($p) {
+                unset($p['link'], $p['slug']);
+                // Also strip links from size_variants/color_variants
+                if (! empty($p['size_variants'])) {
+                    $p['size_variants'] = array_map(function ($v) {
+                        unset($v['link']);
+
+                        return $v;
+                    }, $p['size_variants']);
+                }
+
+                return $p;
+            }, $result['products']);
+        }
+
+        // Strip link from single product (get_product_details)
+        if (! empty($result['product'])) {
+            unset($result['product']['link'], $result['product']['slug']);
+            if (! empty($result['product']['size_variants'])) {
+                $result['product']['size_variants'] = array_map(function ($v) {
+                    unset($v['link']);
+
+                    return $v;
+                }, $result['product']['size_variants']);
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Strip markdown URLs from GPT text response (safety net).
+     * Converts [Детальніше](https://...) → removes entirely,
+     * and strips bare https:// URLs.
+     */
+    protected function stripUrlsFromText(string $text): string
+    {
+        // Remove markdown links like [Детальніше](https://bavkatoys.com/...)
+        // Replace with just the link text if it's useful, or remove entirely for "Детальніше" type
+        $text = preg_replace('/\[(?:Детальніше|Переглянути|Дивитися|Подробиці|View|Details|More)\]\(https?:\/\/[^\)]+\)/ui', '', $text);
+
+        // Remove other markdown links with URLs — keep the anchor text
+        $text = preg_replace('/\[([^\]]+)\]\(https?:\/\/[^\)]+\)/u', '$1', $text);
+
+        // Remove bare URLs
+        $text = preg_replace('/https?:\/\/\S+/u', '', $text);
+
+        // Clean up leftover whitespace
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
+
+        return trim($text);
+    }
+
+    /**
      * Deduplicate products by ID.
      */
     protected function dedupeProducts(array $products): array

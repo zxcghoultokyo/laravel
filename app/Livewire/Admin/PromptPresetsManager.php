@@ -56,12 +56,24 @@ class PromptPresetsManager extends Component
     ];
 
     public bool $embedded = false;
+    
+    // Track tenant to reset page on tenant switch
+    private ?int $lastTenantId = null;
 
     public function render()
     {
         $presets = PromptPreset::orderByDesc('priority')
             ->orderByDesc('is_default')
             ->paginate(10);
+
+        // Safeguard: if paginator has items but current page is empty, reset to page 1
+        // This happens when admin switches tenants or when presets are deleted
+        if ($presets->total() > 0 && $presets->isEmpty()) {
+            $this->resetPage();
+            $presets = PromptPreset::orderByDesc('priority')
+                ->orderByDesc('is_default')
+                ->paginate(10);
+        }
 
         // Load available categories from products
         $availableCategories = \App\Models\Product::where('in_stock', true)

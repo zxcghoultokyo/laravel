@@ -897,10 +897,6 @@
                     font-size: 16px !important; /* Prevents zoom on iOS */
                 }
             }
-                    right: 20px !important;
-                    z-index: 10000 !important;
-                }
-            }
         `;
         document.head.appendChild(style);
     }
@@ -920,6 +916,10 @@
         };
         const iconBorderRadius = iconShapes[s.icon_style] || iconShapes.circle;
         
+        // Bottom offset - larger icons need more space to avoid overlapping site buttons
+        const iconBottomOffsets = { small: 20, medium: 24, large: 32 };
+        const iconBottom = iconBottomOffsets[s.icon_size] || iconBottomOffsets.medium;
+        
         // Entrance animation: start hidden, animation class adds later
         const hasEntrance = s.icon_entrance_animation && s.icon_entrance_animation !== 'none';
         const entranceOpacity = hasEntrance ? 'opacity: 0;' : '';
@@ -935,7 +935,7 @@
             
             <div class="aintento-widget" style="
                 position: fixed;
-                bottom: 20px;
+                bottom: ${iconBottom}px;
                 ${(s.position || '').includes('right') ? 'right: 20px;' : 'left: 20px;'}
                 z-index: 9999;
                 font-family: ${s.font_family || "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"};
@@ -1117,8 +1117,13 @@
                             padding-right: 16px;
                         "></div>
                         ${s.consent_notice ? `
-                        <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px; line-height: 1.4;">
-                            ${s.consent_notice}
+                        <div id="aintento-consent" style="font-size: 11px; color: #6b7280; margin-bottom: 10px; line-height: 1.4; background: #f9fafb; border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb;">
+                            <div style="margin-bottom: 6px;">${s.consent_notice}</div>
+                            <button id="aintento-consent-accept" style="
+                                background: ${s.primary_color}; color: white; border: none; 
+                                padding: 4px 14px; border-radius: 12px; font-size: 11px; 
+                                cursor: pointer; font-weight: 500; transition: opacity 0.2s;
+                            " onmouseenter="this.style.opacity='0.85'" onmouseleave="this.style.opacity='1'">Погоджуюсь</button>
                         </div>` : ''}
                         <div style="display: flex; gap: 8px;">
                             <input 
@@ -1237,6 +1242,32 @@
                     localStorage.setItem('aintento_bubble_dismissed', 'true');
                 } catch (e) {}
             }
+        }
+        
+        // === CONSENT NOTICE DISMISS ===
+        const consentEl = document.getElementById('aintento-consent');
+        const consentBtn = document.getElementById('aintento-consent-accept');
+        if (consentEl && consentBtn) {
+            // Hide if already accepted
+            try {
+                if (localStorage.getItem('aintento_consent_accepted') === 'true') {
+                    consentEl.style.display = 'none';
+                }
+            } catch (e) {}
+            
+            consentBtn.addEventListener('click', function() {
+                consentEl.style.transition = 'opacity 0.3s ease, max-height 0.3s ease';
+                consentEl.style.opacity = '0';
+                consentEl.style.maxHeight = '0';
+                consentEl.style.overflow = 'hidden';
+                consentEl.style.marginBottom = '0';
+                consentEl.style.padding = '0';
+                consentEl.style.border = 'none';
+                setTimeout(function() { consentEl.style.display = 'none'; }, 300);
+                try {
+                    localStorage.setItem('aintento_consent_accepted', 'true');
+                } catch (e) {}
+            });
         }
         
         // Check if bubble was already dismissed

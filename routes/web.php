@@ -16,6 +16,11 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Changelog
+Route::get('/changelog', function () {
+    return view('changelog');
+})->name('changelog');
+
 // Legal pages
 Route::get('/privacy', function () {
     return view('legal.privacy');

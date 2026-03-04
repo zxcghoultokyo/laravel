@@ -1686,6 +1686,7 @@
                         <a href="#pricing">Ціни</a>
                         <a href="#partner">Партнерам</a>
                         <a href="#about">Про нас</a>
+                        <a href="/changelog">Changelog</a>
                         <a href="https://t.me/AIntento" target="_blank">💬 Підтримка</a>
                     </div>
                 </div>

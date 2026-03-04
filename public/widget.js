@@ -1095,7 +1095,7 @@
                         overflow-y: auto;
                         padding: 16px;
                         background: #f9fafb;
-                        min-height: 300px;
+                        min-height: 0;
                     "></div>
 
                     <div class="aintento-input-container" style="
@@ -1117,12 +1117,12 @@
                             padding-right: 16px;
                         "></div>
                         ${s.consent_notice ? `
-                        <div id="aintento-consent" style="font-size: 11px; color: #6b7280; margin-bottom: 10px; line-height: 1.4; background: #f9fafb; border-radius: 10px; padding: 10px 12px; border: 1px solid #e5e7eb;">
-                            <div style="margin-bottom: 6px;">${s.consent_notice}</div>
+                        <div id="aintento-consent" style="font-size: 10px; color: #6b7280; margin-bottom: 8px; line-height: 1.3; background: #f9fafb; border-radius: 8px; padding: 8px 10px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 8px;">
+                            <div style="flex: 1; min-width: 0;">${s.consent_notice}</div>
                             <button id="aintento-consent-accept" style="
                                 background: ${s.primary_color}; color: white; border: none; 
-                                padding: 4px 14px; border-radius: 12px; font-size: 11px; 
-                                cursor: pointer; font-weight: 500; transition: opacity 0.2s;
+                                padding: 4px 12px; border-radius: 12px; font-size: 10px; 
+                                cursor: pointer; font-weight: 500; transition: opacity 0.2s; white-space: nowrap; flex-shrink: 0;
                             " onmouseenter="this.style.opacity='0.85'" onmouseleave="this.style.opacity='1'">Погоджуюсь</button>
                         </div>` : ''}
                         <div style="display: flex; gap: 8px;">

@@ -2251,19 +2251,23 @@ PROMPT;
 
     /**
      * Tool: Get order status.
+     * Resolves tenant-specific Horoshop credentials when available.
      */
     protected function toolGetOrderStatus(array $args): array
     {
         $orderId = $args['order_id'] ?? null;
         $phone = $args['phone'] ?? null;
 
+        // Resolve the correct OrderSearchService for the current tenant
+        $orderService = $this->resolveOrderSearchService();
+
         // Check if order search is available
-        if (!$this->orderSearchService->isAvailable()) {
-            return ['error' => 'Пошук замовлень тимчасово недоступний.'];
+        if (!$orderService->isAvailable()) {
+            return ['error' => 'Пошук замовлень тимчасово недоступний. Зверніться до менеджера магазину.'];
         }
 
         try {
-            $result = $this->orderSearchService->search([
+            $result = $orderService->search([
                 'order_id' => $orderId,
                 'phone' => $phone,
                 'limit' => 5,
@@ -2279,6 +2283,92 @@ PROMPT;
         } catch (\Exception $e) {
             Log::error('toolGetOrderStatus error', ['error' => $e->getMessage()]);
             return ['error' => 'Не вдалося перевірити замовлення. Спробуйте пізніше.'];
+        }
+    }
+
+    /**
+     * Resolve OrderSearchService for the current tenant.
+     * Creates a tenant-specific service with proper Horoshop credentials
+     * instead of using the global singleton (which may point to wrong shop).
+     */
+    protected function resolveOrderSearchService(): OrderSearchService
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        
+        if (!$tenantId) {
+            return $this->orderSearchService;
+        }
+
+        // Cache per tenant to avoid re-creating on every call
+        static $tenantServices = [];
+        if (isset($tenantServices[$tenantId])) {
+            return $tenantServices[$tenantId];
+        }
+
+        try {
+            $tenant = \App\Models\Tenant::find($tenantId);
+            if (!$tenant || $tenant->platform !== \App\Models\Tenant::PLATFORM_HOROSHOP) {
+                Log::info('resolveOrderSearchService: tenant has no Horoshop platform', [
+                    'tenant_id' => $tenantId,
+                    'platform' => $tenant?->platform,
+                ]);
+                return $this->orderSearchService;
+            }
+
+            $credentials = $tenant->platform_credentials;
+            if (empty($credentials) || empty($credentials['domain'])) {
+                Log::warning('resolveOrderSearchService: tenant has no Horoshop credentials', [
+                    'tenant_id' => $tenantId,
+                ]);
+                return $this->orderSearchService;
+            }
+
+            // Extract credentials (handle both plain and nested formats)
+            $domain = is_array($credentials['domain']) 
+                ? ($credentials['domain']['value'] ?? '') 
+                : (string) $credentials['domain'];
+            $login = is_array($credentials['login'] ?? null) 
+                ? ($credentials['login']['value'] ?? '') 
+                : (string) ($credentials['login'] ?? '');
+            $password = is_array($credentials['password'] ?? null) 
+                ? ($credentials['password']['value'] ?? '') 
+                : (string) ($credentials['password'] ?? '');
+
+            if (empty($domain) || empty($login) || empty($password)) {
+                Log::warning('resolveOrderSearchService: incomplete credentials', [
+                    'tenant_id' => $tenantId,
+                    'has_domain' => !empty($domain),
+                    'has_login' => !empty($login),
+                    'has_password' => !empty($password),
+                ]);
+                return $this->orderSearchService;
+            }
+
+            // Create tenant-specific Horoshop client and services
+            $tenantClient = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
+            $tenantOrderService = new \App\Services\Horoshop\OrderService($tenantClient);
+            $deliveryTrackingService = app(\App\Services\Horoshop\DeliveryTrackingService::class);
+            
+            $tenantSearchService = new OrderSearchService(
+                $tenantClient,
+                $tenantOrderService,
+                $deliveryTrackingService
+            );
+
+            Log::info('resolveOrderSearchService: created tenant-specific service', [
+                'tenant_id' => $tenantId,
+                'domain' => $domain,
+            ]);
+
+            $tenantServices[$tenantId] = $tenantSearchService;
+            return $tenantSearchService;
+
+        } catch (\Throwable $e) {
+            Log::error('resolveOrderSearchService: failed to create tenant service', [
+                'tenant_id' => $tenantId,
+                'error' => $e->getMessage(),
+            ]);
+            return $this->orderSearchService;
         }
     }
 

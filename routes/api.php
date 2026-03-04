@@ -1,14 +1,14 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\OrderStatusController;
-use App\Http\Controllers\Api\OrderSearchController;
-use App\Http\Controllers\Api\DebugProductsController;
 use App\Http\Controllers\Api\AdminJobsController;
+use App\Http\Controllers\Api\BillingWebhookController;
+use App\Http\Controllers\Api\DebugProductsController;
+use App\Http\Controllers\Api\OrderSearchController;
+use App\Http\Controllers\Api\OrderStatusController;
 use App\Http\Controllers\Api\ProductSearchController;
 use App\Http\Controllers\Api\WidgetController;
-use App\Http\Controllers\Api\BillingWebhookController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
@@ -165,10 +165,10 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/test-color-picker', [\App\Http\Controllers\Api\DiagnosticController::class, 'testColorPicker']);
     Route::get('/color-palette', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorPalette']);
     Route::post('/auto-detect-colors', [\App\Http\Controllers\Api\DiagnosticController::class, 'autoDetectColors']);
-    
+
     // Model benchmark
     Route::get('/benchmark-models', [\App\Http\Controllers\Api\DiagnosticController::class, 'benchmarkModels']);
-    
+
     // Tenant management
     Route::get('/tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenants']);
     Route::get('/tenant/{id}', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantDetails']);
@@ -177,29 +177,38 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/trigger-stats/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'triggerStats']);
     Route::post('/seed-test-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTestData']);
     Route::post('/fix-messages-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixMessagesTenant']);
-    
+
     // Order investigation
     Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);
     Route::post('/fix-order-chat/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixOrderChat']);
     Route::post('/unlink-order-session/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'unlinkOrderSession']);
     Route::post('/cleanup-false-chat-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupFalseChatEvents']);
     Route::delete('/cleanup-test-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTestSessions']);
-    
+
     // Chat session management
     Route::get('/session-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'sessionStats']);
     Route::post('/close-inactive-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'closeInactiveSessions']);
-    
+
     // Synonyms & Aliases
     Route::get('/color-synonyms', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorSynonyms']);
     Route::get('/category-aliases', [\App\Http\Controllers\Api\DiagnosticController::class, 'categoryAliases']);
-    
+
     // Command execution & synonyms management
     Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
     Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
     Route::get('/prompt-presets', [\App\Http\Controllers\Api\DiagnosticController::class, 'promptPresets']);
-    
+
     // OpenAI health check
     Route::get('/openai-check', [\App\Http\Controllers\Api\DiagnosticController::class, 'openaiCheck']);
+
+    // SSE streaming test
+    Route::get('/test-sse', [\App\Http\Controllers\Api\DiagnosticController::class, 'testSse']);
+
+    // Full SSE chat test (streams real agent response)
+    Route::get('/test-chat-sse', [\App\Http\Controllers\Api\DiagnosticController::class, 'testChatSse']);
+
+    // Health check: all services
+    Route::get('/health', [\App\Http\Controllers\Api\DiagnosticController::class, 'healthCheck']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)
@@ -253,22 +262,22 @@ Route::prefix('admin')->middleware('admin.token')->group(function () {
     // Circuit breaker management
     Route::get('/circuit-breaker', [\App\Http\Controllers\Api\Admin\CircuitBreakerController::class, 'index']);
     Route::post('/circuit-breaker/{service}/reset', [\App\Http\Controllers\Api\Admin\CircuitBreakerController::class, 'reset']);
-    
+
     // Metrics
     Route::get('/metrics', [\App\Http\Controllers\Api\Admin\MetricsController::class, 'index']);
-    
+
     // Live chat sessions
     Route::get('/chats/active', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'active']);
     Route::post('/chats/{sessionId}/takeover', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'takeover']);
     Route::post('/chats/{sessionId}/release', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'release']);
     Route::post('/chats/{sessionId}/message', [\App\Http\Controllers\Api\Admin\LiveChatController::class, 'sendMessage']);
-    
+
     // Store Context - auto-generate prompts
     Route::post('/store-context/analyze', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'analyze']);
     Route::get('/store-context', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'show']);
     Route::post('/store-context/generate-prompt', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'generatePrompt']);
     Route::post('/store-context/create-preset', [\App\Http\Controllers\Api\Admin\StoreContextController::class, 'createPreset']);
-    
+
     // Tenant Management (SaaS)
     Route::get('/tenants', [\App\Http\Controllers\Api\Admin\TenantController::class, 'index']);
     Route::post('/tenants', [\App\Http\Controllers\Api\Admin\TenantController::class, 'store']);

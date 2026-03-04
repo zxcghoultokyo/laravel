@@ -8,6 +8,7 @@ use App\Services\Search\MeiliClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Diagnostic API for debugging production issues
@@ -7002,5 +7003,277 @@ class DiagnosticController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * GET /api/diagnostic/test-sse?key=...
+     * Basic SSE connectivity test — sends 5 numbered events then done.
+     * Use this to verify SSE works through the infrastructure (proxy, CDN, etc).
+     *
+     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-sse?key=diagnostic_secret_key_2025"
+     */
+    public function testSse(Request $request): StreamedResponse|JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        return new StreamedResponse(function () {
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
+
+            $this->sseEvent('status', ['text' => 'SSE connection established']);
+
+            for ($i = 1; $i <= 5; $i++) {
+                $this->sseEvent('chunk', [
+                    'text' => "Test message {$i}/5",
+                    'index' => $i,
+                    'timestamp' => now()->toIso8601String(),
+                ]);
+                usleep(300_000); // 300ms between events
+            }
+
+            $this->sseEvent('done', [
+                'text' => 'SSE test completed successfully',
+                'total_events' => 5,
+                'server' => gethostname(),
+                'php_version' => PHP_VERSION,
+            ]);
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/test-chat-sse?key=...&message=шоломи&token=...&tenant_id=2
+     * Full SSE chat test — runs the real StreamingFunctionCallingAgent.
+     *
+     * Required: key + (token OR tenant_id)
+     * Optional: message (default: "шоломи"), session_id (auto-generated if omitted)
+     *
+     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-chat-sse?key=diagnostic_secret_key_2025&token=zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj&message=покажи+берці"
+     */
+    public function testChatSse(Request $request): StreamedResponse|JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $message = trim($request->input('message', 'шоломи'));
+        $sessionId = $request->input('session_id', 'diag_'.time().'_'.substr(md5(uniqid()), 0, 8));
+        $token = $request->input('token');
+        $tenantId = $request->input('tenant_id');
+
+        // Resolve tenant
+        $tenant = null;
+        if ($token) {
+            $ws = \App\Models\WidgetSettings::where('api_token', $token)->first();
+            if ($ws) {
+                $tenant = \App\Models\Tenant::find($ws->tenant_id);
+            }
+        } elseif ($tenantId) {
+            $tenant = \App\Models\Tenant::find($tenantId);
+        }
+
+        if (! $tenant) {
+            return response()->json([
+                'error' => 'Tenant not found. Provide valid token= or tenant_id= parameter.',
+            ], 400);
+        }
+
+        // Set tenant context
+        $tenantContext = app(\App\Services\Tenant\TenantContext::class);
+        $tenantContext->set($tenant);
+
+        return new StreamedResponse(function () use ($message, $sessionId, $tenant) {
+            while (ob_get_level() > 0) {
+                ob_end_flush();
+            }
+
+            $startTime = microtime(true);
+
+            $this->sseEvent('status', [
+                'text' => 'Starting chat test...',
+                'tenant' => $tenant->name ?? $tenant->slug,
+                'tenant_id' => $tenant->id,
+                'message' => $message,
+                'session_id' => $sessionId,
+            ]);
+
+            try {
+                $agent = app(\App\Services\Agent\StreamingFunctionCallingAgent::class);
+
+                $eventCount = 0;
+                $productCount = 0;
+                $textChunks = 0;
+
+                foreach ($agent->stream($message, $sessionId) as $event) {
+                    $type = $event['type'] ?? 'chunk';
+                    $data = $event['data'] ?? [];
+                    $data['session_id'] = $sessionId;
+                    $data['_event_index'] = ++$eventCount;
+                    $data['_elapsed_ms'] = round((microtime(true) - $startTime) * 1000);
+
+                    if ($type === 'products') {
+                        $productCount += count($data['products'] ?? []);
+                    }
+                    if ($type === 'chunk' || $type === 'text') {
+                        $textChunks++;
+                    }
+
+                    $this->sseEvent($type, $data);
+                }
+
+                $elapsed = round((microtime(true) - $startTime) * 1000);
+
+                $this->sseEvent('done', [
+                    'session_id' => $sessionId,
+                    'elapsed_ms' => $elapsed,
+                    'total_events' => $eventCount,
+                    'text_chunks' => $textChunks,
+                    'products_found' => $productCount,
+                    'tenant' => $tenant->name ?? $tenant->slug,
+                ]);
+
+            } catch (\Throwable $e) {
+                \Log::error('DiagnosticController::testChatSse error', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+
+                $elapsed = round((microtime(true) - $startTime) * 1000);
+
+                $this->sseEvent('error', [
+                    'text' => 'Error: '.$e->getMessage(),
+                    'error_class' => get_class($e),
+                    'elapsed_ms' => $elapsed,
+                    'session_id' => $sessionId,
+                ]);
+                $this->sseEvent('done', ['session_id' => $sessionId, 'error' => true]);
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    /**
+     * GET /api/diagnostic/health?key=...
+     * Quick health check of all services: DB, Redis/Cache, OpenAI, Meilisearch, Queue.
+     *
+     * curl "https://aintento-dev.laravel.cloud/api/diagnostic/health?key=diagnostic_secret_key_2025"
+     */
+    public function healthCheck(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $checks = [];
+
+        // 1. Database
+        try {
+            $start = microtime(true);
+            \DB::select('SELECT 1');
+            $checks['database'] = [
+                'status' => 'ok',
+                'latency_ms' => round((microtime(true) - $start) * 1000, 1),
+                'driver' => config('database.default'),
+            ];
+        } catch (\Throwable $e) {
+            $checks['database'] = ['status' => 'error', 'error' => $e->getMessage()];
+        }
+
+        // 2. Cache (Redis)
+        try {
+            $start = microtime(true);
+            $testKey = 'diagnostic_health_'.time();
+            \Cache::put($testKey, 'ok', 10);
+            $val = \Cache::get($testKey);
+            \Cache::forget($testKey);
+            $checks['cache'] = [
+                'status' => $val === 'ok' ? 'ok' : 'error',
+                'latency_ms' => round((microtime(true) - $start) * 1000, 1),
+                'driver' => config('cache.default'),
+            ];
+        } catch (\Throwable $e) {
+            $checks['cache'] = ['status' => 'error', 'error' => $e->getMessage()];
+        }
+
+        // 3. Meilisearch
+        try {
+            if (config('meilisearch.enabled', false)) {
+                $start = microtime(true);
+                $client = app(\Meilisearch\Client::class);
+                $stats = $client->stats();
+                $checks['meilisearch'] = [
+                    'status' => 'ok',
+                    'latency_ms' => round((microtime(true) - $start) * 1000, 1),
+                    'indexes' => count($stats['indexes'] ?? []),
+                ];
+            } else {
+                $checks['meilisearch'] = ['status' => 'disabled'];
+            }
+        } catch (\Throwable $e) {
+            $checks['meilisearch'] = ['status' => 'error', 'error' => $e->getMessage()];
+        }
+
+        // 4. OpenAI (lightweight — just check key presence)
+        $apiKey = config('services.openai.key', '');
+        $checks['openai'] = [
+            'status' => ! empty($apiKey) ? 'configured' : 'missing_key',
+            'model' => config('services.openai.model', 'unknown'),
+        ];
+
+        // 5. Tenants & Products summary
+        try {
+            $checks['data'] = [
+                'tenants' => \App\Models\Tenant::count(),
+                'products' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->count(),
+                'products_in_stock' => Product::withoutGlobalScope(\App\Scopes\TenantScope::class)->where('in_stock', true)->count(),
+                'chat_sessions' => \App\Models\ChatSession::count(),
+            ];
+        } catch (\Throwable $e) {
+            $checks['data'] = ['status' => 'error', 'error' => $e->getMessage()];
+        }
+
+        // 6. Queue
+        try {
+            $checks['queue'] = [
+                'driver' => config('queue.default'),
+                'connection' => config('queue.connections.'.config('queue.default').'.driver', 'unknown'),
+            ];
+        } catch (\Throwable $e) {
+            $checks['queue'] = ['status' => 'error', 'error' => $e->getMessage()];
+        }
+
+        $allOk = collect($checks)->every(fn ($c) => ($c['status'] ?? 'ok') !== 'error');
+
+        return response()->json([
+            'status' => $allOk ? 'healthy' : 'degraded',
+            'environment' => app()->environment(),
+            'timestamp' => now()->toIso8601String(),
+            'checks' => $checks,
+        ]);
+    }
+
+    /**
+     * Helper: send an SSE event to the output stream.
+     */
+    private function sseEvent(string $type, array $data): void
+    {
+        $data['type'] = $type;
+        echo 'data: '.json_encode($data, JSON_UNESCAPED_UNICODE)."\n\n";
+
+        if (ob_get_level() > 0) {
+            ob_flush();
+        }
+        flush();
     }
 }

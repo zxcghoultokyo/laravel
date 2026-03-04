@@ -723,24 +723,52 @@
                     @php
                         $iconSizeMap = ['small' => '48px', 'medium' => '56px', 'large' => '64px'];
                         $iconSizePx = $iconSizeMap[$icon_size ?? 'medium'] ?? '56px';
-                        $iconInner = match($icon_size ?? 'medium') { 'small' => '20px', 'large' => '28px', default => '24px' };
-                        $iconRadius = match($icon_style ?? 'circle') { 'rounded-square' => '12px', 'squircle' => '28%', default => '50%' };
-                        $animClass = match($icon_entrance_animation ?? 'none') { 'bounce' => 'animate-bounce', 'scale' => 'animate-pulse', default => '' };
+                        $iconRadius = match($icon_style ?? 'circle') { 'rounded-square' => '16px', 'squircle' => '28%', default => '50%' };
                     @endphp
-                    <div class="relative inline-flex items-center justify-center shadow-lg cursor-pointer transition-transform hover:scale-110 {{ $animClass }}"
-                         style="width: {{ $iconSizePx }}; height: {{ $iconSizePx }}; border-radius: {{ $iconRadius }}; background-color: {{ $primary_color }};
-                         @if(($icon_attention_effect ?? 'none') === 'glow') box-shadow: 0 0 15px {{ $glow_color ?: $primary_color }}, 0 0 30px {{ $glow_color ?: $primary_color }}40;
-                         @elseif(($icon_attention_effect ?? 'none') === 'pulse-ring') box-shadow: 0 0 0 4px {{ $primary_color }}40;
-                         @endif">
+                    <style>
+                        @keyframes admin-wiggle {
+                            0%, 100% { transform: rotate(0deg); }
+                            15% { transform: rotate(-8deg); }
+                            30% { transform: rotate(8deg); }
+                            45% { transform: rotate(-5deg); }
+                            60% { transform: rotate(5deg); }
+                            75% { transform: rotate(-2deg); }
+                            90% { transform: rotate(2deg); }
+                        }
+                        @keyframes admin-pulse-ring {
+                            0% { box-shadow: 0 0 0 0 {{ $glow_color ?: $primary_color }}99, 0 4px 12px rgba(0,0,0,0.15); }
+                            70% { box-shadow: 0 0 0 14px {{ $glow_color ?: $primary_color }}00, 0 4px 12px rgba(0,0,0,0.15); }
+                            100% { box-shadow: 0 0 0 0 {{ $glow_color ?: $primary_color }}00, 0 4px 12px rgba(0,0,0,0.15); }
+                        }
+                        @keyframes admin-glow {
+                            0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                            50% { box-shadow: 0 0 20px {{ $glow_color ?: $primary_color }}B3, 0 0 40px {{ $glow_color ?: $primary_color }}59, 0 4px 12px rgba(0,0,0,0.15); }
+                        }
+                        @keyframes admin-bounce {
+                            0% { opacity: 0; transform: scale(0) translateY(40px); }
+                            50% { opacity: 1; transform: scale(1.15) translateY(-5px); }
+                            70% { transform: scale(0.95) translateY(2px); }
+                            100% { opacity: 1; transform: scale(1) translateY(0); }
+                        }
+                    </style>
+                    <div class="relative inline-flex items-center justify-center cursor-pointer"
+                         style="width: {{ $iconSizePx }}; height: {{ $iconSizePx }}; border-radius: {{ $iconRadius }}; background-color: {{ $primary_color }}; overflow: hidden; aspect-ratio: 1;
+                         @if(($icon_attention_effect ?? 'none') === 'glow') animation: admin-glow 2s ease-in-out infinite;
+                         @elseif(($icon_attention_effect ?? 'none') === 'pulse-ring') animation: admin-pulse-ring 2s ease-out infinite;
+                         @elseif(($icon_attention_effect ?? 'none') === 'wiggle') animation: admin-wiggle 1s ease-in-out infinite;
+                         @endif
+                         @if(($icon_entrance_animation ?? 'none') === 'bounce') animation: admin-bounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+                         @endif
+                         box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
                         @if($bot_avatar_base64 || $bot_avatar_url)
-                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" style="width: {{ $iconInner }}; height: {{ $iconInner }}; border-radius: 50%; object-fit: cover;">
+                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" style="width: 100%; height: 100%; border-radius: {{ $iconRadius }}; object-fit: cover; display: block;">
                         @else
-                            <svg style="width: {{ $iconInner }}; height: {{ $iconInner }};" fill="{{ $text_color }}" viewBox="0 0 24 24">
+                            <svg style="width: 60%; height: 60%;" fill="{{ $text_color }}" viewBox="0 0 24 24">
                                 <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
                             </svg>
                         @endif
                         @if(($icon_attention_effect ?? 'none') === 'pulse-ring')
-                        <span class="absolute inset-0 rounded-full animate-ping opacity-30" style="border: 2px solid {{ $primary_color }};"></span>
+                        <span class="absolute inset-0 animate-ping opacity-30" style="border-radius: {{ $iconRadius }}; border: 2px solid {{ $primary_color }};"></span>
                         @endif
                     </div>
                 </div>

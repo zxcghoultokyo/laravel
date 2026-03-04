@@ -63,6 +63,59 @@ class ProductRawExtractor
      * Витягнути характеристики у вигляді ["Матеріал" => "Cordura", ...]
      * і повернути асоціативний масив.
      */
+    /**
+     * Horoshop transliterated characteristic keys → proper Ukrainian names.
+     */
+    private const HOROSHOP_KEY_MAP = [
+        'rozmr' => 'Розмір',
+        'rozmir' => 'Розмір',
+        'dljadtok' => 'Для дітей',
+        'dljadtej' => 'Для дітей',
+        'pokrittja' => 'Покриття',
+        'materalvigotovlennja' => 'Матеріал виготовлення',
+        'material' => 'Матеріал',
+        'koplektacja' => 'Комплектація',
+        'komplektacija' => 'Комплектація',
+        'vaga' => 'Вага',
+        'kolr' => 'Колір',
+        'kolir' => 'Колір',
+        'color' => 'Колір',
+        'strana' => 'Країна',
+        'brend' => 'Бренд',
+        'brand' => 'Бренд',
+        'opisanie' => 'Опис',
+        'vik' => 'Вік',
+        'virobnik' => 'Виробник',
+        'stil' => 'Стиль',
+        'sezon' => 'Сезон',
+        'size' => 'Розмір',
+        'weight' => 'Вага',
+        'country' => 'Країна',
+        'manufacturer' => 'Виробник',
+        'width' => 'Ширина',
+        'height' => 'Висота',
+        'length' => 'Довжина',
+        'dlina' => 'Довжина',
+        'shirina' => 'Ширина',
+        'visota' => 'Висота',
+        'artikul' => 'Артикул',
+    ];
+
+    /**
+     * Translate a Horoshop characteristic key to a human-readable Ukrainian name.
+     */
+    private static function translateKey(string $key): string
+    {
+        $lower = mb_strtolower(trim($key));
+
+        if (isset(self::HOROSHOP_KEY_MAP[$lower])) {
+            return self::HOROSHOP_KEY_MAP[$lower];
+        }
+
+        // Fallback: ucfirst + replace underscores
+        return ucfirst(str_replace('_', ' ', $key));
+    }
+
     public static function attributes(array $raw, string $lang = 'ua', array $parentRaw = []): array
     {
         // Horoshop формат: characteristics як об'єкт {"material": {...}, "weight": {...}}
@@ -72,11 +125,11 @@ class ProductRawExtractor
         $chars = Arr::get($raw, 'characteristics');
         if (is_array($chars)) {
             foreach ($chars as $key => $charData) {
-                if ($key === 'opisanie') {
+                if (mb_strtolower((string) $key) === 'opisanie') {
                     // опис обробляємо окремо
                     continue;
                 }
-                $name = ucfirst(str_replace('_', ' ', (string) $key));
+                $name = self::translateKey((string) $key);
 
                 if (is_array($charData)) {
                     $value = self::pickLang($charData['value'] ?? null, $lang)
@@ -96,7 +149,7 @@ class ProductRawExtractor
         $select = Arr::get($raw, 'select');
         if (is_array($select)) {
             foreach ($select as $key => $val) {
-                $name = ucfirst(str_replace('_', ' ', (string) $key));
+                $name = self::translateKey((string) $key);
                 $v = self::pickLang($val, $lang) ?: self::asText($val);
                 if (is_string($v) && trim($v) !== '') {
                     $out[trim($name)] = trim($v);
@@ -150,6 +203,7 @@ class ProductRawExtractor
             $k2 = mb_strtolower(trim($k));
             if (mb_strlen($k2) < 2) {
                 unset($out[$k]);
+
                 continue;
             }
             if (mb_strlen($v) > 300) {
@@ -179,6 +233,7 @@ class ProductRawExtractor
     {
         if (is_array($val)) {
             $x = $val[$lang] ?? $val['ua'] ?? $val['ru'] ?? null;
+
             return is_string($x) ? trim($x) : null;
         }
 
@@ -229,7 +284,7 @@ class ProductRawExtractor
         // Уніфікуємо пробіли та переносимо за роздільниками
         $text = preg_replace('/[\t\r]+/u', ' ', $text) ?? $text;
         $text = preg_replace('/\s*;\s*/u', ";\n", $text) ?? $text;
-        $text = preg_replace('/\s*\|\s*/u', " | ", $text) ?? $text;
+        $text = preg_replace('/\s*\|\s*/u', ' | ', $text) ?? $text;
         $text = preg_replace('/\s*\n\s*/u', "\n", $text) ?? $text;
 
         $lines = array_filter(array_map('trim', explode("\n", $text)));

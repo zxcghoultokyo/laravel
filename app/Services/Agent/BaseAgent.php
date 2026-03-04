@@ -2880,14 +2880,20 @@ PROMPT;
     protected function stripUrlsFromText(string $text): string
     {
         // Remove markdown links like [Детальніше](https://bavkatoys.com/...)
-        // Replace with just the link text if it's useful, or remove entirely for "Детальніше" type
         $text = preg_replace('/\[(?:Детальніше|Переглянути|Дивитися|Подробиці|View|Details|More)\]\(https?:\/\/[^\)]+\)/ui', '', $text);
+
+        // Remove [Детальніше] WITHOUT URL (GPT sometimes generates just the bracket text)
+        $text = preg_replace('/\[(?:Детальніше|Переглянути|Дивитися|Подробиці|View|Details|More)\]/ui', '', $text);
 
         // Remove other markdown links with URLs — keep the anchor text
         $text = preg_replace('/\[([^\]]+)\]\(https?:\/\/[^\)]+\)/u', '$1', $text);
 
         // Remove bare URLs
         $text = preg_replace('/https?:\/\/\S+/u', '', $text);
+
+        // Remove "Ось що я знайшов" / "Here's what I found" patterns
+        $text = preg_replace('/Ось що я знайшов[:\.]?/ui', '', $text);
+        $text = preg_replace('/Here\'?s what I found[:\.]?/ui', '', $text);
 
         // Clean up leftover whitespace
         $text = preg_replace('/\n{3,}/', "\n\n", $text);

@@ -187,7 +187,7 @@ class FunctionCallingAgent extends BaseAgent
 
         // Fallback: GPT may have mentioned products by article in plain text
         // (e.g. follow-up "а фігурки планет?" → "Монтессорі-набір (арт. 107)...")
-        $extracted = $this->extractProductsFromTextResponse($text, $this->tenantId);
+        $extracted = $this->extractProductsFromTextResponse($text, $this->searchTool->getCurrentTenantId());
         if ($extracted && ! empty($extracted['products'])) {
             return [
                 'message' => $text,
@@ -426,7 +426,7 @@ CONTEXT;
             Log::info('FunctionCallingAgent: sending to OpenAI', [
                 'url' => $this->baseUrl.'/chat/completions',
                 'model' => $this->model,
-                'api_key_prefix' => substr($this->apiKey, 0, 12) . '...',
+                'api_key_prefix' => substr($this->apiKey, 0, 12).'...',
                 'messages_count' => count($messages),
                 'tools_count' => count($requestPayload['tools']),
             ]);

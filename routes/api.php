@@ -197,6 +197,9 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
     Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
     Route::get('/prompt-presets', [\App\Http\Controllers\Api\DiagnosticController::class, 'promptPresets']);
+    
+    // OpenAI health check
+    Route::get('/openai-check', [\App\Http\Controllers\Api\DiagnosticController::class, 'openaiCheck']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

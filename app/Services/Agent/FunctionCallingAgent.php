@@ -116,6 +116,16 @@ class FunctionCallingAgent extends BaseAgent
         $response = $this->callGptWithTools($messages);
 
         if (! $response) {
+            Log::error('FunctionCallingAgent: callGptWithTools returned null, falling back', [
+                'message' => $normalizedMessage,
+                'session_id' => $sessionId,
+                'tenant_id' => $tenantId,
+                'api_key_set' => ! empty($this->apiKey),
+                'model' => $this->model,
+                'base_url' => $this->baseUrl,
+                'messages_count' => count($messages),
+            ]);
+
             return $this->fallbackResponse($normalizedMessage);
         }
 
@@ -388,7 +398,10 @@ CONTEXT;
     private function callGptWithTools(array $messages, int $retryCount = 0): ?array
     {
         if (empty($this->apiKey)) {
-            Log::warning('FunctionCallingAgent: no API key');
+            Log::error('FunctionCallingAgent: no API key configured', [
+                'config_key' => config('services.openai.key') ? 'SET' : 'EMPTY',
+                'env_key' => env('OPENAI_API_KEY') ? 'SET' : 'EMPTY',
+            ]);
 
             return null;
         }
@@ -402,23 +415,36 @@ CONTEXT;
                 'retry' => $retryCount,
             ]);
 
+            $requestPayload = [
+                'model' => $this->model,
+                'messages' => $messages,
+                'tools' => $this->getTools(),
+                'tool_choice' => 'auto',
+                'temperature' => 0.3,
+            ];
+
+            Log::info('FunctionCallingAgent: sending to OpenAI', [
+                'url' => $this->baseUrl.'/chat/completions',
+                'model' => $this->model,
+                'api_key_prefix' => substr($this->apiKey, 0, 12) . '...',
+                'messages_count' => count($messages),
+                'tools_count' => count($requestPayload['tools']),
+            ]);
+
             $response = Http::withToken($this->apiKey)
-                ->timeout(45) // Increased from 30 to 45 seconds
-                ->connectTimeout(10) // Add connect timeout
-                ->post($this->baseUrl.'/chat/completions', [
-                    'model' => $this->model,
-                    'messages' => $messages,
-                    'tools' => $this->getTools(),
-                    'tool_choice' => 'auto',
-                    'temperature' => 0.3,
-                ]);
+                ->timeout(45)
+                ->connectTimeout(10)
+                ->post($this->baseUrl.'/chat/completions', $requestPayload);
 
             $data = $response->json();
 
             Log::info('FunctionCallingAgent: GPT response', [
                 'status' => $response->status(),
+                'has_choices' => isset($data['choices']),
                 'has_tool_calls' => isset($data['choices'][0]['message']['tool_calls']),
                 'finish_reason' => $data['choices'][0]['finish_reason'] ?? null,
+                'error' => $data['error'] ?? null,
+                'response_keys' => array_keys($data ?? []),
             ]);
 
             if (isset($data['error'])) {
@@ -443,19 +469,28 @@ CONTEXT;
 
             return $data;
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            Log::error('FunctionCallingAgent: Connection timeout', ['error' => $e->getMessage()]);
+            Log::error('FunctionCallingAgent: Connection timeout', [
+                'error' => $e->getMessage(),
+                'retry' => $retryCount,
+                'url' => $this->baseUrl,
+            ]);
 
             // Retry on connection timeouts
             if ($retryCount < $maxRetries) {
                 Log::info('FunctionCallingAgent: retrying after timeout', ['retry' => $retryCount + 1]);
-                usleep(500000 * ($retryCount + 1)); // 0.5s, 1s delay
+                usleep(500000 * ($retryCount + 1));
 
                 return $this->callGptWithTools($messages, $retryCount + 1);
             }
 
             return null;
         } catch (\Throwable $e) {
-            Log::error('FunctionCallingAgent: API error', ['error' => $e->getMessage()]);
+            Log::error('FunctionCallingAgent: API error (Throwable)', [
+                'error' => $e->getMessage(),
+                'class' => get_class($e),
+                'file' => $e->getFile().':'.$e->getLine(),
+                'trace' => array_slice(explode("\n", $e->getTraceAsString()), 0, 5),
+            ]);
 
             return null;
         }

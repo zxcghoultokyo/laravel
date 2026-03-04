@@ -15,17 +15,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // First, drop the old unique constraint on article alone
-        Schema::table('products', function (Blueprint $table) {
-            // Drop existing unique index on article
-            // The index name might be 'products_article_unique' based on convention
-            $table->dropUnique(['article']);
-        });
+        // Drop the old unique constraint on article alone (if it exists)
+        if (Schema::hasIndex('products', 'products_article_unique')) {
+            Schema::table('products', function (Blueprint $table) {
+                $table->dropUnique('products_article_unique');
+            });
+        }
 
-        // Add composite unique index for tenant_id + article
-        Schema::table('products', function (Blueprint $table) {
-            $table->unique(['tenant_id', 'article'], 'products_tenant_article_unique');
-        });
+        // Add composite unique index for tenant_id + article (if not already present)
+        if (! Schema::hasIndex('products', 'products_tenant_article_unique')) {
+            Schema::table('products', function (Blueprint $table) {
+                $table->unique(['tenant_id', 'article'], 'products_tenant_article_unique');
+            });
+        }
     }
 
     /**

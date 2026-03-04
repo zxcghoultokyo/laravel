@@ -43,6 +43,16 @@ return new class extends Migration
                 $table->index('tenant_id');
             });
         }
+
+        // Ensure composite unique on widget_settings (domain + tenant_id)
+        // This may have been skipped by the earlier migration if tenant_id didn't exist yet
+        if (Schema::hasTable('widget_settings')
+            && Schema::hasColumn('widget_settings', 'tenant_id')
+            && ! Schema::hasIndex('widget_settings', 'widget_settings_domain_tenant_unique')) {
+            Schema::table('widget_settings', function (Blueprint $table) {
+                $table->unique(['domain', 'tenant_id'], 'widget_settings_domain_tenant_unique');
+            });
+        }
         
         // Create store_contexts table if it doesn't exist (with tenant support)
         if (!Schema::hasTable('store_contexts')) {
@@ -91,9 +101,20 @@ return new class extends Migration
                 continue;
             }
 
-            Schema::table($tableName, function (Blueprint $table) {
-                $table->dropForeign(['tenant_id']);
-                $table->dropIndex(['tenant_id']);
+            Schema::table($tableName, function (Blueprint $table) use ($tableName) {
+                // Only drop foreign key if it exists (was never created with FK)
+                try {
+                    $table->dropForeign(['tenant_id']);
+                } catch (\Throwable $e) {
+                    // FK doesn't exist, ignore
+                }
+
+                if (Schema::hasIndex($tableName, $tableName . '_tenant_id_index')) {
+                    $table->dropIndex([$tableName . '_tenant_id_index']);
+                } elseif (Schema::hasIndex($tableName, 'tenant_id')) {
+                    $table->dropIndex(['tenant_id']);
+                }
+
                 $table->dropColumn('tenant_id');
             });
         }

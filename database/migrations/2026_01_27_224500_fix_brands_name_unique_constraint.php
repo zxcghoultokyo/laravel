@@ -32,9 +32,12 @@ return new class extends Migration
         }
 
         // Add new composite unique constraint (tenant_id, name)
-        Schema::table('brands', function (Blueprint $table) {
-            $table->unique(['tenant_id', 'name'], 'brands_tenant_name_unique');
-        });
+        if (Schema::hasColumn('brands', 'tenant_id')
+            && ! Schema::hasIndex('brands', 'brands_tenant_name_unique')) {
+            Schema::table('brands', function (Blueprint $table) {
+                $table->unique(['tenant_id', 'name'], 'brands_tenant_name_unique');
+            });
+        }
     }
 
     public function down(): void

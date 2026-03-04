@@ -15,6 +15,15 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Ensure tenant_id column exists (on fresh DB it may not,
+        // because add_tenant_id_to_existing_tables runs before products table is created)
+        if (! Schema::hasColumn('products', 'tenant_id')) {
+            Schema::table('products', function (Blueprint $table) {
+                $table->unsignedBigInteger('tenant_id')->nullable()->after('id');
+                $table->index('tenant_id');
+            });
+        }
+
         // Drop the old unique constraint on article alone (if it exists)
         if (Schema::hasIndex('products', 'products_article_unique')) {
             Schema::table('products', function (Blueprint $table) {

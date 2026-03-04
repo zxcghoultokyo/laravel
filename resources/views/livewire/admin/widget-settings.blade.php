@@ -715,6 +715,41 @@
                 </div>
             </div>
             @endif
+
+            <!-- Icon trigger preview -->
+            <div class="mt-4 p-3 bg-white rounded-lg shadow-sm">
+                <h4 class="text-sm font-medium text-gray-700 mb-3">💬 Кнопка чату (як бачить відвідувач)</h4>
+                <div class="flex items-center justify-{{ $position === 'left' ? 'start' : 'end' }}">
+                    @php
+                        $iconSizeMap = ['small' => '48px', 'medium' => '56px', 'large' => '64px'];
+                        $iconSizePx = $iconSizeMap[$icon_size ?? 'medium'] ?? '56px';
+                        $iconInner = match($icon_size ?? 'medium') { 'small' => '20px', 'large' => '28px', default => '24px' };
+                        $iconRadius = match($icon_style ?? 'circle') { 'rounded-square' => '12px', 'squircle' => '28%', default => '50%' };
+                        $animClass = match($icon_entrance_animation ?? 'none') { 'bounce' => 'animate-bounce', 'scale' => 'animate-pulse', default => '' };
+                    @endphp
+                    <div class="relative inline-flex items-center justify-center shadow-lg cursor-pointer transition-transform hover:scale-110 {{ $animClass }}"
+                         style="width: {{ $iconSizePx }}; height: {{ $iconSizePx }}; border-radius: {{ $iconRadius }}; background-color: {{ $primary_color }};
+                         @if(($icon_attention_effect ?? 'none') === 'glow') box-shadow: 0 0 15px {{ $glow_color ?: $primary_color }}, 0 0 30px {{ $glow_color ?: $primary_color }}40;
+                         @elseif(($icon_attention_effect ?? 'none') === 'pulse-ring') box-shadow: 0 0 0 4px {{ $primary_color }}40;
+                         @endif">
+                        @if($bot_avatar_base64 || $bot_avatar_url)
+                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" style="width: {{ $iconInner }}; height: {{ $iconInner }}; border-radius: 50%; object-fit: cover;">
+                        @else
+                            <svg style="width: {{ $iconInner }}; height: {{ $iconInner }};" fill="{{ $text_color }}" viewBox="0 0 24 24">
+                                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                            </svg>
+                        @endif
+                        @if(($icon_attention_effect ?? 'none') === 'pulse-ring')
+                        <span class="absolute inset-0 rounded-full animate-ping opacity-30" style="border: 2px solid {{ $primary_color }};"></span>
+                        @endif
+                    </div>
+                </div>
+                <div class="mt-2 text-xs text-gray-500">
+                    Розмір: {{ $icon_size ?? 'medium' }} · 
+                    Форма: {{ match($icon_style ?? 'circle') { 'rounded-square' => 'скруглений квадрат', 'squircle' => 'сквіркл', default => 'коло' } }} · 
+                    Ефект: {{ match($icon_attention_effect ?? 'none') { 'glow' => 'свічення', 'pulse-ring' => 'пульс', 'wiggle' => 'покачування', default => 'немає' } }}
+                </div>
+            </div>
         </div>
     </div>
 </div>

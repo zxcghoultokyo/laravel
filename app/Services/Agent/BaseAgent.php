@@ -2,24 +2,23 @@
 
 namespace App\Services\Agent;
 
-use App\Services\Agent\Tools\MeiliProductSearchTool;
-use App\Services\Agent\Tools\ProductDetailsTool;
-use App\Services\Horoshop\OrderSearchService;
-use App\Services\Ai\ToneService;
-use App\Services\Ai\PromptPresetService;
-use App\Services\Ai\PromptModulesService;
-use App\Services\Catalog\PriceStatsService;
-use App\Services\Catalog\CategoryPatternService;
-use App\Models\Product;
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\WidgetSettings;
-use App\Models\ProductSynonym;
-use App\Models\ChatSession;
 use App\Models\ChatMessage;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\Models\ChatSession;
+use App\Models\Product;
+use App\Models\ProductSynonym;
+use App\Models\WidgetSettings;
+use App\Services\Agent\Tools\MeiliProductSearchTool;
+use App\Services\Agent\Tools\ProductDetailsTool;
+use App\Services\Ai\PromptModulesService;
+use App\Services\Ai\PromptPresetService;
+use App\Services\Ai\ToneService;
+use App\Services\Catalog\CategoryPatternService;
+use App\Services\Catalog\PriceStatsService;
+use App\Services\Horoshop\OrderSearchService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Base Agent with shared functionality for both streaming and non-streaming agents.
@@ -28,16 +27,25 @@ use Illuminate\Support\Facades\Cache;
 abstract class BaseAgent
 {
     protected string $apiKey;
+
     protected string $model;
+
     protected string $baseUrl;
+
     protected MeiliProductSearchTool $searchTool;
+
     protected ProductDetailsTool $detailsTool;
+
     protected OrderSearchService $orderSearchService;
+
     protected ToneService $toneService;
+
     protected PromptPresetService $promptPresetService;
+
     protected PromptModulesService $promptModulesService;
+
     protected CategoryPatternService $categoryPatternService;
-    
+
     /**
      * Service/info pages that are NOT product categories.
      * Users sometimes navigate to these and trigger auto-message.
@@ -69,7 +77,7 @@ abstract class BaseAgent
         'часті питання',
         'відгуки',
         'акції',
-        'розпродаж', 
+        'розпродаж',
         'знижки',
         'головна',
         'home',
@@ -81,13 +89,13 @@ abstract class BaseAgent
         'terms',
         'privacy',
     ];
-    
+
     // Context for prompt preset matching
     protected array $currentContext = [];
-    
+
     // Track shown product IDs to exclude from subsequent searches
     protected array $shownProductIds = [];
-    
+
     // Current user message (for modular prompt building)
     protected string $currentMessage = '';
 
@@ -115,6 +123,7 @@ abstract class BaseAgent
     public function setContext(array $context): self
     {
         $this->currentContext = $context;
+
         return $this;
     }
 
@@ -129,14 +138,14 @@ abstract class BaseAgent
     protected function detectServiceCategory(string $message): ?string
     {
         $lower = mb_strtolower(trim($message));
-        
+
         // Check for exact match or "категорії X" pattern
         foreach (self::SERVICE_CATEGORIES as $serviceCategory) {
             if (mb_stripos($lower, $serviceCategory) !== false) {
                 return $serviceCategory;
             }
         }
-        
+
         return null;
     }
 
@@ -147,40 +156,39 @@ abstract class BaseAgent
     protected function handleServiceCategoryQuery(string $message, string $serviceCategory): array
     {
         $lower = mb_strtolower($serviceCategory);
-        
+
         // Load real store data from WidgetSettings
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $settings = Cache::remember('widget_settings_service:' . ($tenantId ?? 'global'), 300, function () use ($tenantId) {
+        $settings = Cache::remember('widget_settings_service:'.($tenantId ?? 'global'), 300, function () use ($tenantId) {
             if ($tenantId) {
                 return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                     ->where('tenant_id', $tenantId)->first();
             }
+
             return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
-        
+
         $tenantInfo = $this->getTenantInfo();
         $shopName = $tenantInfo['name'];
         $shopDomain = $tenantInfo['domain'];
-        
+
         // Build response from real data based on category
-        $response = match(true) {
+        $response = match (true) {
             str_contains($lower, 'контакт') => $this->buildContactsResponse($settings, $shopName, $shopDomain),
             str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => $this->buildDeliveryResponse($settings, $shopName, $shopDomain),
             str_contains($lower, 'оплат') || str_contains($lower, 'payment') => $this->buildPaymentResponse($settings, $shopName, $shopDomain),
             str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => $this->buildAboutResponse($settings, $shopName, $shopDomain),
             str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => $this->buildReturnsResponse($settings, $shopName, $shopDomain),
-            str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') =>
-                "Актуальні акції та знижки відображаються на картках товарів. Що саме Вас цікавить? Можу підібрати товари зі знижкою у потрібній категорії.",
-            str_contains($lower, 'faq') || str_contains($lower, 'питан') =>
-                "Задайте своє питання тут — я відповім одразу! Можу допомогти з підбором товару, розмірами, наявністю.",
+            str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') => 'Актуальні акції та знижки відображаються на картках товарів. Що саме Вас цікавить? Можу підібрати товари зі знижкою у потрібній категорії.',
+            str_contains($lower, 'faq') || str_contains($lower, 'питан') => 'Задайте своє питання тут — я відповім одразу! Можу допомогти з підбором товару, розмірами, наявністю.',
             default => $this->buildAboutResponse($settings, $shopName, $shopDomain),
         };
-        
+
         Log::info('BaseAgent: handled service category query', [
             'message' => $message,
             'service_category' => $serviceCategory,
         ]);
-        
+
         return [
             'message' => $response,
             'products' => [],
@@ -202,25 +210,25 @@ abstract class BaseAgent
     private function buildAboutResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
     {
         $parts = [];
-        
+
         // About text (from Horoshop pages or custom)
         $about = $settings->faq_about_text ?? $settings->store_about ?? '';
         if ($about) {
             $parts[] = $about;
         }
-        
+
         // Add contacts summary
         $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
         if ($contacts) {
             $parts[] = $contacts;
-        } elseif (!empty($settings->store_phone)) {
+        } elseif (! empty($settings->store_phone)) {
             $parts[] = "📞 Телефон: {$settings->store_phone}";
         }
-        
-        if (!empty($parts)) {
-            return implode("\n\n", $parts) . "\n\nЧим можу допомогти? 😊";
+
+        if (! empty($parts)) {
+            return implode("\n\n", $parts)."\n\nЧим можу допомогти? 😊";
         }
-        
+
         return "Ми — **{$shopName}**. Детальна інформація на сайті {$shopDomain}. Чим можу допомогти?";
     }
 
@@ -231,13 +239,13 @@ abstract class BaseAgent
     {
         $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
         if ($contacts) {
-            return $contacts . "\n\nЩось ще цікавить? 😊";
+            return $contacts."\n\nЩось ще цікавить? 😊";
         }
-        
-        if (!empty($settings->store_phone)) {
+
+        if (! empty($settings->store_phone)) {
             return "📞 Телефон: {$settings->store_phone}\n\nДетальні контакти на сайті {$shopDomain}";
         }
-        
+
         return "Контактну інформацію можна знайти на сайті {$shopDomain}. Якщо є питання — пишіть, допоможу!";
     }
 
@@ -248,9 +256,9 @@ abstract class BaseAgent
     {
         $delivery = $settings->faq_payment_delivery_text ?? '';
         if ($delivery) {
-            return $delivery . "\n\nЧим ще можу допомогти?";
+            return $delivery."\n\nЧим ще можу допомогти?";
         }
-        
+
         return "Інформація про доставку доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
     }
 
@@ -261,9 +269,9 @@ abstract class BaseAgent
     {
         $payment = $settings->faq_payment_delivery_text ?? '';
         if ($payment) {
-            return $payment . "\n\nЧим ще можу допомогти?";
+            return $payment."\n\nЧим ще можу допомогти?";
         }
-        
+
         return "Інформація про способи оплати доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
     }
 
@@ -274,9 +282,9 @@ abstract class BaseAgent
     {
         $returns = $settings->faq_returns_text ?? '';
         if ($returns) {
-            return $returns . "\n\nЧим ще можу допомогти?";
+            return $returns."\n\nЧим ще можу допомогти?";
         }
-        
+
         return "Умови гарантії та повернення описані на сайті {$shopDomain}. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?";
     }
 
@@ -296,7 +304,7 @@ abstract class BaseAgent
             return $this->handleServiceCategoryQuery($message, $serviceCategory);
         }
         $lower = mb_strtolower(trim($message));
-        
+
         // Patterns that imply product need without naming the product
         $implicitPatterns = [
             // Calling/communication → smartphone
@@ -304,41 +312,41 @@ abstract class BaseAgent
             '/\b(make|робити)\s+(calls?|дзвінки)\b/ui' => 'smartphone OR телефон OR phone',
             '/\bneed\s+to\s+call\b/ui' => 'smartphone OR телефон OR phone',
             '/\bsomething\s+to\s+call\b/ui' => 'smartphone OR телефон OR phone',
-            
+
             // Writing → pen
             '/\bsomething\s+to\s+write\b/ui' => 'pen OR ручка OR marker',
             '/\bписати\s+чимось\b/ui' => 'ручка OR pen',
-            
+
             // Cutting → knife
             '/\bsomething\s+to\s+cut\b/ui' => 'knife OR ніж OR multitool',
             '/\bрізати\s+чимось\b/ui' => 'ніж OR knife OR мультитул',
-            
-            // Head protection → helmet  
+
+            // Head protection → helmet
             '/\bhead\s+protection\b/ui' => 'шолом OR helmet OR каска',
             '/\bзахист\s+голови\b/ui' => 'шолом OR helmet OR каска',
             '/\bprotect\s+(my\s+)?head\b/ui' => 'шолом OR helmet OR каска',
-            
+
             // Stay warm → jacket
             '/\bstay\s+warm\b/ui' => 'куртка OR jacket OR термобілизна',
             '/\bзігрітися\b/ui' => 'куртка OR jacket',
             '/\bcold\s+weather\b/ui' => 'термобілизна OR куртка OR Level 7',
-            
+
             // Carry stuff → backpack/bag
             '/\bcarry\s+(stuff|things|gear)\b/ui' => 'рюкзак OR backpack OR сумка',
             '/\bneed\s+(a\s+)?bag\b/ui' => 'сумка OR рюкзак OR підсумок',
             '/\bнести\s+речі\b/ui' => 'рюкзак OR сумка',
-            
+
             // Stop bleeding → tourniquet/medical
             '/\bstop\s+(the\s+)?bleeding\b/ui' => 'турнікет OR tourniquet OR бандаж',
             '/\bзупинити\s+кров\b/ui' => 'турнікет OR джгут OR бандаж',
             '/\bfirst\s+aid\b/ui' => 'аптечка OR турнікет OR медицина',
-            
+
             // Body armor → plate carrier
             '/\bbody\s+(armor|armour|protection)\b/ui' => 'бронежилет OR plate carrier OR плитоноска',
             '/\bзахист\s+тіла\b/ui' => 'бронежилет OR плитоноска',
             '/\bbullet\s*proof\b/ui' => 'бронежилет OR плитоноска OR броня',
         ];
-        
+
         foreach ($implicitPatterns as $pattern => $searchQuery) {
             if (preg_match($pattern, $lower)) {
                 Log::info('BaseAgent: detected implicit query', [
@@ -346,17 +354,17 @@ abstract class BaseAgent
                     'pattern' => $pattern,
                     'search_query' => $searchQuery,
                 ]);
-                
+
                 // Execute search directly
                 $products = $this->searchTool->search($searchQuery, [], 3);
-                
-                if (!empty($products)) {
+
+                if (! empty($products)) {
                     // Determine language for response
                     $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
-                    $intro = $isEnglish 
+                    $intro = $isEnglish
                         ? "Here's what I found for you:"
-                        : "Ось що я знайшов для вас:";
-                    
+                        : 'Ось що я знайшов для вас:';
+
                     return [
                         'message' => $intro,
                         'products' => $products,
@@ -372,19 +380,19 @@ abstract class BaseAgent
                         ],
                     ];
                 }
-                
+
                 // No products found - let GPT handle
                 break;
             }
         }
-        
+
         // CONFIRMATION WORDS HANDLER
         // If user says "дозволяю", "давай", "хочу", "можна" - extract category from history and search
         $confirmationWords = ['дозволяю', 'давай', 'хочу', 'можна', 'показуй', 'покажи', 'будь ласка', 'авжеж', 'гаразд', 'згода'];
         if (in_array($lower, $confirmationWords) || preg_match('/^(дозволяю|давай|хочу|показуй|покажи)$/ui', $lower)) {
             // Extract category from LAST user message that was a product query
             $history = $this->loadConversationHistory($sessionId);
-            
+
             // Find the LAST user message that looks like a product query (skip confirmations)
             $lastProductQuery = null;
             foreach (array_reverse($history) as $msg) {
@@ -409,13 +417,13 @@ abstract class BaseAgent
                     }
                 }
             }
-            
+
             if ($lastProductQuery) {
                 Log::info('BaseAgent: confirmation word detected, using last product query', [
                     'message' => $message,
                     'last_product_query' => $lastProductQuery,
                 ]);
-                
+
                 // Map to canonical search term (same as handleShortProductQuery)
                 $searchQuery = $lastProductQuery;
                 $categoryMap = [
@@ -443,7 +451,7 @@ abstract class BaseAgent
                     'кепк' => 'кепки',
                     'фліс' => 'фліс',
                 ];
-                
+
                 $lowerQuery = mb_strtolower($lastProductQuery);
                 foreach ($categoryMap as $cat => $canonical) {
                     if (mb_stripos($lowerQuery, $cat) !== false) {
@@ -451,19 +459,19 @@ abstract class BaseAgent
                         break;
                     }
                 }
-                
+
                 // Search for the canonical category
                 $products = $this->searchTool->search($searchQuery, [], 3);
-                
-                if (!empty($products)) {
+
+                if (! empty($products)) {
                     // Get full product cards
                     $ids = array_column($products, 'id');
                     $tenantId = $this->searchTool->getCurrentTenantId();
                     $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
-                    if (!empty($cards)) {
+                    if (! empty($cards)) {
                         $products = $cards;
                     }
-                    
+
                     return [
                         'message' => "Ось {$searchQuery}:",
                         'products' => $products,
@@ -480,7 +488,7 @@ abstract class BaseAgent
                 }
             }
         }
-        
+
         // UNIVERSAL SHORT QUERY HANDLER
         // If message is 1-3 words and looks like a product type/category, search directly.
         // This prevents GPT from asking "уточніть запит" for valid product queries like "підсумки".
@@ -488,7 +496,7 @@ abstract class BaseAgent
         if ($shortQueryResult) {
             return $shortQueryResult;
         }
-        
+
         return null;
     }
 
@@ -502,18 +510,18 @@ abstract class BaseAgent
         $lower = mb_strtolower(trim($message));
         $words = preg_split('/\s+/u', $lower);
         $wordCount = count($words);
-        
+
         // Handle 1-2 word queries that contain category keywords
         // This is universal for any language without needing patterns
         if ($wordCount > 2) {
             return null;
         }
-        
+
         // Skip very short words (likely typos or particles)
         if (mb_strlen($lower) < 3) {
             return null;
         }
-        
+
         // For 2-word queries, check if it contains a known category
         // This allows "білизна жіноча", "куртка зимова" etc.
         $searchQuery = $message; // Default to full message
@@ -534,6 +542,7 @@ abstract class BaseAgent
                         'message' => $message,
                         'modifier' => $mod,
                     ]);
+
                     return null; // Let GPT handle attribute-specific queries
                 }
             }
@@ -562,7 +571,7 @@ abstract class BaseAgent
                 'шапк' => 'шапки',
                 'кепк' => 'кепки',
             ];
-            
+
             $foundCategory = null;
             foreach ($categories as $cat => $canonical) {
                 if (mb_stripos($lower, $cat) !== false) {
@@ -570,17 +579,17 @@ abstract class BaseAgent
                     break;
                 }
             }
-            
+
             // If no category found in 2-word query, let GPT handle it
-            if (!$foundCategory) {
+            if (! $foundCategory) {
                 return null;
             }
-            
+
             // Use canonical category for search instead of full query
             // This ensures "білизна жіноча" searches for "термобілизна"
             $searchQuery = $foundCategory;
         }
-        
+
         // If it's a single noun-like query, try searching directly
         // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
         Log::info('BaseAgent::handleShortProductQuery attempting search', [
@@ -588,53 +597,53 @@ abstract class BaseAgent
             'search_query' => $searchQuery,
             'shown_ids_count' => count($this->shownProductIds),
         ]);
-        
+
         // Request more products to allow excluding shown ones
         $requestLimit = 3 + count($this->shownProductIds);
         $products = $this->searchTool->search($searchQuery, [], $requestLimit);
-        
+
         Log::info('BaseAgent::handleShortProductQuery raw search results', [
             'message' => $message,
             'raw_count' => count($products),
             'raw_ids' => array_column(array_slice($products, 0, 10), 'id'),
         ]);
-        
+
         // Exclude already shown products for variety
-        if (!empty($this->shownProductIds) && !empty($products)) {
+        if (! empty($this->shownProductIds) && ! empty($products)) {
             $beforeCount = count($products);
-            $products = array_filter($products, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
+            $products = array_filter($products, fn ($p) => ! in_array((int) ($p['id'] ?? 0), $this->shownProductIds));
             $products = array_values($products);
-            
+
             Log::info('BaseAgent::handleShortProductQuery excluded shown', [
                 'before' => $beforeCount,
                 'after' => count($products),
                 'shown_ids' => array_slice($this->shownProductIds, 0, 5),
             ]);
         }
-        
+
         // Limit to 3
         $products = array_slice($products, 0, 3);
-        
-        if (!empty($products)) {
+
+        if (! empty($products)) {
             // Get full product cards with images (same as toolSearchProducts)
             $ids = array_column($products, 'id');
             $tenantId = $this->searchTool->getCurrentTenantId();
             $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
-            if (!empty($cards)) {
+            if (! empty($cards)) {
                 $products = $cards;
             }
-            
+
             // Determine language for response
             $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
-            $intro = $isEnglish 
+            $intro = $isEnglish
                 ? "Here's what I found:"
-                : "Ось що я знайшов:";
-            
+                : 'Ось що я знайшов:';
+
             Log::info('BaseAgent: short query direct search succeeded', [
                 'message' => $message,
                 'products_found' => count($products),
             ]);
-            
+
             return [
                 'message' => $intro,
                 'products' => $products,
@@ -649,7 +658,7 @@ abstract class BaseAgent
                 ],
             ];
         }
-        
+
         return null;
     }
 
@@ -660,13 +669,13 @@ abstract class BaseAgent
     /**
      * Handle follow-up questions about previously shown products.
      * These questions should NOT trigger search, but answer from context.
-     * 
+     *
      * Examples: "це оригінал?", "а знижки є?", "які розміри?"
      */
     protected function handleFollowUpQuestion(string $message, ?string $sessionId): ?array
     {
         $lower = mb_strtolower(trim($message));
-        
+
         // Follow-up patterns that should NOT trigger search
         $followUpPatterns = [
             'original' => '/^(це|а це|воно?|він|вона)?\s*(оригінал|оригінальн|не підробка|справжн)/ui',
@@ -677,7 +686,7 @@ abstract class BaseAgent
             'warranty' => '/^(гарант|warranty)/ui',
             'delivery' => '/^(доставк|delivery|як\s+отримати)/ui',
         ];
-        
+
         $matchedType = null;
         foreach ($followUpPatterns as $type => $pattern) {
             if (preg_match($pattern, $lower)) {
@@ -685,32 +694,33 @@ abstract class BaseAgent
                 break;
             }
         }
-        
-        if (!$matchedType) {
+
+        if (! $matchedType) {
             return null;
         }
-        
+
         Log::info('BaseAgent: detected follow-up question', [
             'message' => $message,
             'type' => $matchedType,
             'session_id' => $sessionId,
         ]);
-        
+
         // Load last shown product from session
         $lastProduct = $this->loadLastShownProduct($sessionId);
-        
-        if (!$lastProduct) {
+
+        if (! $lastProduct) {
             Log::info('BaseAgent: no product context for follow-up', ['session_id' => $sessionId]);
+
             return null; // Let GPT handle - maybe it has context
         }
-        
+
         // Generate response based on question type
         $response = $this->generateFollowUpResponse($matchedType, $lastProduct);
-        
-        if (!$response) {
+
+        if (! $response) {
             return null;
         }
-        
+
         return [
             'message' => $response,
             'products' => [],
@@ -730,19 +740,19 @@ abstract class BaseAgent
      */
     protected function loadLastShownProduct(?string $sessionId): ?array
     {
-        if (!$sessionId) {
+        if (! $sessionId) {
             return null;
         }
-        
+
         try {
             $session = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)
                 ->first();
-                
-            if (!$session) {
+
+            if (! $session) {
                 return null;
             }
-            
+
             // Get last assistant message with non-empty products array
             // Note: whereNotNull doesn't work for empty arrays, so we filter in PHP
             $lastMessage = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
@@ -753,36 +763,37 @@ abstract class BaseAgent
                 ->get()
                 ->first(function ($msg) {
                     $products = $msg->meta['products'] ?? [];
-                    return !empty($products);
+
+                    return ! empty($products);
                 });
-                
-            if (!$lastMessage) {
+
+            if (! $lastMessage) {
                 return null;
             }
-            
+
             $meta = $lastMessage->meta ?? [];
             $products = $meta['products'] ?? [];
-            
+
             if (empty($products)) {
                 return null;
             }
-            
+
             // Get the first product shown
             $productInfo = $products[0];
             $productId = $productInfo['id'] ?? null;
-            
-            if (!$productId) {
+
+            if (! $productId) {
                 return $productInfo; // Return basic info if no ID
             }
-            
+
             // Load full product from DB for details
             $product = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->find($productId);
-                
-            if (!$product) {
+
+            if (! $product) {
                 return $productInfo;
             }
-            
+
             // Combine API info with DB details
             return [
                 'id' => $product->id,
@@ -798,52 +809,55 @@ abstract class BaseAgent
             ];
         } catch (\Throwable $e) {
             Log::error('BaseAgent: failed to load last product', ['error' => $e->getMessage()]);
+
             return null;
         }
     }
-    
+
     /**
      * Extract product description from raw field.
      */
     protected function extractDescription(\App\Models\Product $product): string
     {
         $raw = $product->raw ?? [];
+
         return $raw['description'] ?? $raw['full_description'] ?? '';
     }
-    
+
     /**
      * Extract product attributes/characteristics from raw field.
      */
     protected function extractAttributes(\App\Models\Product $product): array
     {
         $raw = $product->raw ?? [];
+
         return $raw['characteristics'] ?? $raw['attributes'] ?? [];
     }
-    
+
     /**
      * Extract available sizes from product.
      */
     protected function extractSizes(\App\Models\Product $product): array
     {
         $raw = $product->raw ?? [];
-        
+
         // Try different possible formats
-        if (!empty($raw['variants'])) {
+        if (! empty($raw['variants'])) {
             return array_unique(array_filter(array_column($raw['variants'], 'size')));
         }
-        
-        if (!empty($raw['sizes'])) {
+
+        if (! empty($raw['sizes'])) {
             return $raw['sizes'];
         }
-        
+
         // Check if product itself has size
-        if (!empty($product->size) && $product->size !== '-') {
+        if (! empty($product->size) && $product->size !== '-') {
             return [$product->size];
         }
-        
+
         return [];
     }
-    
+
     /**
      * Generate response for follow-up question based on product data.
      */
@@ -856,7 +870,7 @@ abstract class BaseAgent
         $sizes = $product['sizes'] ?? [];
         $description = $product['description'] ?? '';
         $attributes = $product['attributes'] ?? [];
-        
+
         switch ($type) {
             case 'original':
                 if ($brand) {
@@ -869,28 +883,34 @@ abstract class BaseAgent
                             break;
                         }
                     }
-                    
+
                     if ($isLikelyOriginal) {
                         return "Так, {$title} є оригінальним продуктом бренду {$brand}.";
                     }
+
                     return "Це товар бренду {$brand}. Якщо потрібно уточнити оригінальність — зателефонуйте: {$this->getShopPhone()}";
                 }
+
                 return "Щодо оригінальності товару — зверніться до менеджера: {$this->getShopPhone()}";
-                
+
             case 'discount':
                 if ($priceOld && floatval($priceOld) > floatval($price)) {
                     $discount = round((floatval($priceOld) - floatval($price)) / floatval($priceOld) * 100);
+
                     return "Так, на цей товар діє знижка {$discount}%! Стара ціна: {$priceOld} грн, нова: {$price} грн.";
                 }
+
                 return "На даний момент знижок на цей товар немає. Ціна: {$price} грн.";
-                
+
             case 'sizes':
-                if (!empty($sizes)) {
+                if (! empty($sizes)) {
                     $sizeList = implode(', ', $sizes);
+
                     return "Є такі розміри: {$sizeList}. Який вам потрібен?";
                 }
+
                 return "Щодо наявних розмірів — уточніть у менеджера: {$this->getShopPhone()}";
-                
+
             case 'material':
                 // Try to find material in description or attributes
                 foreach ($attributes as $key => $value) {
@@ -903,8 +923,9 @@ abstract class BaseAgent
                 if (preg_match('/матеріал[:\s]+([^.]+)/ui', $description, $m)) {
                     return "Матеріал: {$m[1]}";
                 }
+
                 return "Детальну інформацію про матеріал можна уточнити на сайті або зателефонувати: {$this->getShopPhone()}";
-                
+
             case 'included':
                 if (preg_match('/комплект[:\s]+([^.]+)/ui', $description, $m)) {
                     return "В комплект входить: {$m[1]}";
@@ -912,14 +933,15 @@ abstract class BaseAgent
                 if (preg_match('/включа[єе][:\s]+([^.]+)/ui', $description, $m)) {
                     return "В комплект входить: {$m[1]}";
                 }
+
                 return "Детальну інформацію про комплектацію дивіться на сайті або зверніться до менеджера: {$this->getShopPhone()}";
-                
+
             case 'warranty':
                 return "Інформацію про гарантію уточнюйте у менеджера: {$this->getShopPhone()}";
-                
+
             case 'delivery':
                 return "Доставка здійснюється Новою Поштою. Для уточнення деталей зверніться: {$this->getShopPhone()}";
-                
+
             default:
                 return null;
         }
@@ -931,7 +953,7 @@ abstract class BaseAgent
 
     /**
      * Get system prompt - uses modular approach for optimized token usage.
-     * 
+     *
      * Strategy:
      * 1. Check for custom PromptPreset (manual override)
      * 2. Use modular prompt builder (context-aware, ~3K tokens)
@@ -944,20 +966,21 @@ abstract class BaseAgent
             $this->currentContext,
             $this->getDefaultVariables()
         );
-        
+
         if ($customPrompt) {
             Log::debug('BaseAgent: using custom prompt preset', [
                 'context' => $this->currentContext,
             ]);
+
             // Add minimal core rules to custom prompt
-            return $customPrompt . "\n\n" . $this->getMinimalCoreRules();
+            return $customPrompt."\n\n".$this->getMinimalCoreRules();
         }
-        
+
         // Use modular prompt if enabled (default: true)
         if (config('services.openai.modular_prompt', true)) {
             return $this->getModularSystemPrompt();
         }
-        
+
         // Legacy fallback - full prompt (~14K tokens)
         return $this->getDefaultSystemPrompt();
     }
@@ -972,7 +995,7 @@ abstract class BaseAgent
         if ($tenantId) {
             $this->toneService->setTenantId($tenantId);
         }
-        
+
         $tenantInfo = $this->getTenantInfo();
         $storeInfo = [
             'name' => $tenantInfo['name'],
@@ -980,24 +1003,24 @@ abstract class BaseAgent
             'faq' => $this->loadFaqInfo(),
             'tone_section' => $this->toneService->getFullPromptSection(),
         ];
-        
+
         $context = [
-            'has_history' => !empty($this->shownProductIds) || !empty($this->currentContext['has_history']),
+            'has_history' => ! empty($this->shownProductIds) || ! empty($this->currentContext['has_history']),
             'is_trigger' => $this->currentContext['is_trigger'] ?? false,
         ];
-        
+
         $prompt = $this->promptModulesService->buildPrompt(
             $this->currentMessage,
             $context,
             $storeInfo
         );
-        
+
         // Add price context
         $priceContext = $this->loadPriceContext();
         if ($priceContext) {
-            $prompt .= "\n\n" . $priceContext;
+            $prompt .= "\n\n".$priceContext;
         }
-        
+
         return $prompt;
     }
 
@@ -1007,7 +1030,7 @@ abstract class BaseAgent
     protected function getMinimalCoreRules(): string
     {
         $shopPhone = $this->getShopPhone();
-        
+
         return <<<RULES
 🎯 CORE RULES:
 - ЗАВЖДИ search_products() перед відповіддю на запит про товари
@@ -1015,18 +1038,20 @@ abstract class BaseAgent
 - intro = контекст ("Ось куртки:"), НЕ "Ось що я знайшов"
 - Замовлення: "Натисніть картку → сайт → кошик. Тел: {$shopPhone}"
 - Мова = мова запиту
+- ⛔ НЕ ПИШИ URL/посилання в тексті! Картки з посиланнями додаються автоматично
 RULES;
     }
 
     /**
      * Get core rules that ALWAYS apply regardless of custom preset.
+     *
      * @deprecated Use getMinimalCoreRules() or modular prompts instead
      */
     protected function getCoreRules(): string
     {
         $priceContext = $this->loadPriceContext();
         $shopPhone = $this->getShopPhone();
-        
+
         return <<<RULES
 === ОБОВ'ЯЗКОВІ ПРАВИЛА (ЗАВЖДИ ЗАСТОСОВУЮТЬСЯ) ===
 
@@ -1165,10 +1190,20 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
 Не кажи "цього немає" поки не перевіриш пошуком.
 
+🔄 ЯКЩО ПОШУК НЕ ДАВ РЕЗУЛЬТАТІВ:
+- Спробуй синоніми: "фігурки планет" → search_products("планети OR сонячна система OR космос")
+- Розбий запит інакше: "дерев'яна кухня" → search_products("кухня дерев'яна OR іграшкова кухня")
+- НЕ КАЖИ "такого немає" після ОДНОГО пошуку! Зроби 2-3 варіанти!
+
 ЗАБОРОНА ГАЛЮЦИНАЦІЙ — КРИТИЧНО!
 - НЕ ВИГАДУЙ факти! Відповідай ТІЛЬКИ на основі результатів search_products!
 - Якщо питають про характеристики яких немає в каталозі — кажи "уточніть у менеджера"
 - Ти НЕ ЕКСПЕРТ — ти ПРОДАВЕЦЬ який знає ТІЛЬКИ свій каталог!
+
+⛔ ПОСИЛАННЯ — ЗАБОРОНЕНО!
+- НЕ пиши URL/посилання в тексті! НЕ пиши "Детальніше: https://..."
+- Посилання на товари додаються АВТОМАТИЧНО через картки
+- Якщо клієнт хоче подробиці — кажи "Натисніть на картку товару"
 
 📝 ПЕРСОНАЛІЗАЦІЯ ВІДПОВІДЕЙ — КРИТИЧНО!
 НЕ пиши generic "Ось що я знайшов" — ЗАВЖДИ вказуй КОНТЕКСТ запиту!
@@ -1404,22 +1439,22 @@ RULES;
     protected function getDefaultSystemPrompt(): string
     {
         $faqInfo = $this->loadFaqInfo();
-        
+
         // Set tenant for ToneService to load correct brand rules
         $tenantId = $this->searchTool->getCurrentTenantId();
         if ($tenantId) {
             $this->toneService->setTenantId($tenantId);
         }
-        
+
         $toneSection = $this->toneService->getFullPromptSection();
         $priceContext = $this->loadPriceContext();
-        
+
         // Get dynamic store info
         $tenantInfo = $this->getTenantInfo();
         $storeName = $tenantInfo['name'];
         $shopPhone = $this->getShopPhone();
         $callbackFormUrl = $this->getCallbackFormUrl();
-        $phoneNote = !empty($shopPhone) ? "рекомендую уточнити у менеджера: {$shopPhone}" : "рекомендую уточнити у менеджера на сайті";
+        $phoneNote = ! empty($shopPhone) ? "рекомендую уточнити у менеджера: {$shopPhone}" : 'рекомендую уточнити у менеджера на сайті';
 
         return <<<PROMPT
 Ти — AIntento, AI-консультант магазину "{$storeName}".
@@ -1444,8 +1479,7 @@ RULES;
 
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
 Не кажи "цього немає" поки не перевіриш пошуком.
-
-⛔ ЗАБОРОНА ПИСАТИ ІМЕНА ФУНКЦІЙ ТЕКСТОМ!
+Якщо перший пошук не дав результатів — спробуй синоніми через OR!
 НІКОЛИ не пиши "search_products(...)" або "recommend_size(...)" як ТЕКСТ!
 Якщо хочеш шукати товари — ВИКЛИЧ функцію через tool_calls, НЕ пиши її назву!
 ❌ ПОГАНО: "Ось кілька варіантів: search_products("куртка")"
@@ -1535,6 +1569,7 @@ PROMPT;
     protected function getDefaultVariables(): array
     {
         $tenantInfo = $this->getTenantInfo();
+
         return [
             'shop_name' => $tenantInfo['name'],
             'shop_domain' => $tenantInfo['domain'],
@@ -1551,8 +1586,8 @@ PROMPT;
     protected function getTenantInfo(): array
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'tenant_info:' . ($tenantId ?? 'global');
-        
+        $cacheKey = 'tenant_info:'.($tenantId ?? 'global');
+
         return Cache::remember($cacheKey, 300, function () use ($tenantId) {
             if ($tenantId) {
                 $tenant = \App\Models\Tenant::find($tenantId);
@@ -1561,13 +1596,14 @@ PROMPT;
                     $domain = $tenant->domain ?? '';
                     $domain = preg_replace('#^https?://#', '', $domain);
                     $domain = rtrim($domain, '/');
-                    
+
                     return [
                         'name' => $tenant->name ?? 'Магазин',
                         'domain' => $domain ?: 'сайт магазину',
                     ];
                 }
             }
+
             return [
                 'name' => 'Магазин',
                 'domain' => 'сайт магазину',
@@ -1581,14 +1617,16 @@ PROMPT;
     protected function getShopPhone(): string
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $cacheKey = 'widget_settings_faq:'.($tenantId ?? 'global');
         $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
             if ($tenantId) {
                 return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                     ->where('tenant_id', $tenantId)->first();
             }
+
             return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
+
         return $settings?->shop_phone ?? ''; // Empty if not configured
     }
 
@@ -1598,14 +1636,16 @@ PROMPT;
     protected function getCallbackFormUrl(): string
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $cacheKey = 'widget_settings_faq:'.($tenantId ?? 'global');
         $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
             if ($tenantId) {
                 return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                     ->where('tenant_id', $tenantId)->first();
             }
+
             return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
+
         return $settings?->callback_form_url ?? '';
     }
 
@@ -1615,33 +1655,48 @@ PROMPT;
     protected function loadFaqInfo(): string
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'widget_settings_faq:' . ($tenantId ?? 'global');
+        $cacheKey = 'widget_settings_faq:'.($tenantId ?? 'global');
         $settings = Cache::remember($cacheKey, 300, function () use ($tenantId) {
             if ($tenantId) {
                 return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
                     ->where('tenant_id', $tenantId)->first();
             }
+
             return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
         });
 
-        if (!$settings) {
+        if (! $settings) {
             $tenantInfo = $this->getTenantInfo();
+
             return "Актуальну інформацію дивіться на сайті {$tenantInfo['domain']}";
         }
 
         $info = [];
-        if (!empty($settings->shop_phone)) $info[] = "ТЕЛЕФОН МАГАЗИНУ: {$settings->shop_phone}";
-        if (!empty($settings->callback_form_url)) $info[] = "ФОРМА ЗВОРОТНОГО ЗВ'ЯЗКУ: {$settings->callback_form_url}";
-        if (!empty($settings->faq_contacts_text)) $info[] = "КОНТАКТИ:\n{$settings->faq_contacts_text}";
-        if (!empty($settings->faq_payment_delivery_text)) $info[] = "ОПЛАТА ТА ДОСТАВКА:\n{$settings->faq_payment_delivery_text}";
-        if (!empty($settings->faq_returns_text)) $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";
-        if (!empty($settings->faq_about_text)) $info[] = "ПРО МАГАЗИН:\n{$settings->faq_about_text}";
+        if (! empty($settings->shop_phone)) {
+            $info[] = "ТЕЛЕФОН МАГАЗИНУ: {$settings->shop_phone}";
+        }
+        if (! empty($settings->callback_form_url)) {
+            $info[] = "ФОРМА ЗВОРОТНОГО ЗВ'ЯЗКУ: {$settings->callback_form_url}";
+        }
+        if (! empty($settings->faq_contacts_text)) {
+            $info[] = "КОНТАКТИ:\n{$settings->faq_contacts_text}";
+        }
+        if (! empty($settings->faq_payment_delivery_text)) {
+            $info[] = "ОПЛАТА ТА ДОСТАВКА:\n{$settings->faq_payment_delivery_text}";
+        }
+        if (! empty($settings->faq_returns_text)) {
+            $info[] = "ПОВЕРНЕННЯ ТА ОБМІН:\n{$settings->faq_returns_text}";
+        }
+        if (! empty($settings->faq_about_text)) {
+            $info[] = "ПРО МАГАЗИН:\n{$settings->faq_about_text}";
+        }
 
         if (empty($info)) {
             $tenantInfo = $this->getTenantInfo();
+
             return "Актуальну інформацію дивіться на сайті {$tenantInfo['domain']}";
         }
-        
+
         return implode("\n\n", $info);
     }
 
@@ -1652,10 +1707,12 @@ PROMPT;
     {
         try {
             $priceService = app(PriceStatsService::class);
+
             return $priceService->getPromptContext();
         } catch (\Throwable $e) {
             Log::warning('Failed to load price context', ['error' => $e->getMessage()]);
-            return "ЦІНОВІ ПОРОГИ: бюджетний до 1500 грн, середній 1500-5000 грн, преміум від 5000 грн";
+
+            return 'ЦІНОВІ ПОРОГИ: бюджетний до 1500 грн, середній 1500-5000 грн, преміум від 5000 грн';
         }
     }
 
@@ -1743,7 +1800,7 @@ PROMPT;
                 'function' => [
                     'name' => 'get_categories',
                     'description' => 'Список категорій товарів.',
-                    'parameters' => ['type' => 'object', 'properties' => (object)[]],
+                    'parameters' => ['type' => 'object', 'properties' => (object) []],
                 ],
             ],
             [
@@ -1807,7 +1864,7 @@ PROMPT;
             'tool' => $name,
             'args' => $args,
         ]);
-        
+
         return match ($name) {
             'search_products' => $this->toolSearchProducts($args),
             'get_popular_products' => $this->toolGetPopularProducts($args),
@@ -1833,19 +1890,27 @@ PROMPT;
         Log::info('BaseAgent::toolSearchProducts', ['args' => $args, 'sort_by' => $sortBy]);
 
         $filters = [];
-        if (!empty($args['price_min'])) $filters['price_min'] = (float)$args['price_min'];
-        if (!empty($args['price_max'])) $filters['price_max'] = (float)$args['price_max'];
-        if (!empty($args['brand'])) $filters['brand'] = $args['brand'];
-        if ($sortBy !== 'relevance') $filters['sort_by'] = $sortBy;
+        if (! empty($args['price_min'])) {
+            $filters['price_min'] = (float) $args['price_min'];
+        }
+        if (! empty($args['price_max'])) {
+            $filters['price_max'] = (float) $args['price_max'];
+        }
+        if (! empty($args['brand'])) {
+            $filters['brand'] = $args['brand'];
+        }
+        if ($sortBy !== 'relevance') {
+            $filters['sort_by'] = $sortBy;
+        }
 
         // Request more to have room after filtering and deduplication
         $requestLimit = $limit * 5 + count($this->shownProductIds);
         $results = $this->searchTool->search($query, $filters, $requestLimit);
 
         // Filter by exclude text
-        if (!empty($args['exclude']) && !empty($results)) {
+        if (! empty($args['exclude']) && ! empty($results)) {
             $exclude = mb_strtolower($args['exclude']);
-            $results = array_filter($results, fn($p) => !str_contains(mb_strtolower($p['title'] ?? ''), $exclude));
+            $results = array_filter($results, fn ($p) => ! str_contains(mb_strtolower($p['title'] ?? ''), $exclude));
             $results = array_values($results);
         }
 
@@ -1854,9 +1919,9 @@ PROMPT;
         // MinimalAgent doesn't have this filter and works better.
 
         // Filter by color
-        if (!empty($args['color']) && !empty($results)) {
+        if (! empty($args['color']) && ! empty($results)) {
             $color = mb_strtolower($args['color']);
-            $results = array_filter($results, fn($p) => str_contains(mb_strtolower(($p['title'] ?? '') . ' ' . ($p['color'] ?? '')), $color));
+            $results = array_filter($results, fn ($p) => str_contains(mb_strtolower(($p['title'] ?? '').' '.($p['color'] ?? '')), $color));
             $results = array_values($results);
         }
 
@@ -1864,10 +1929,10 @@ PROMPT;
         // By default, allow showing same products again (for repeated queries)
         $excludeShown = $args['exclude_shown'] ?? false;
         $beforeExcludeCount = count($results);
-        if ($excludeShown && !empty($this->shownProductIds) && !empty($results)) {
-            $results = array_filter($results, fn($p) => !in_array((int)($p['id'] ?? 0), $this->shownProductIds));
+        if ($excludeShown && ! empty($this->shownProductIds) && ! empty($results)) {
+            $results = array_filter($results, fn ($p) => ! in_array((int) ($p['id'] ?? 0), $this->shownProductIds));
             $results = array_values($results);
-            
+
             Log::info('BaseAgent::toolSearchProducts exclude_shown filter', [
                 'exclude_shown' => $excludeShown,
                 'shown_ids_count' => count($this->shownProductIds),
@@ -1890,11 +1955,13 @@ PROMPT;
         $results = array_slice($results, 0, $limit);
 
         // Get full product cards with images
-        if (!empty($results)) {
+        if (! empty($results)) {
             $ids = array_column($results, 'id');
             $tenantId = $this->searchTool->getCurrentTenantId();
             $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
-            if (!empty($cards)) $results = $cards;
+            if (! empty($cards)) {
+                $results = $cards;
+            }
         }
 
         // Check if gender attribute was requested but not found in results
@@ -1907,8 +1974,8 @@ PROMPT;
                 break;
             }
         }
-        
-        if ($requestedGender && !empty($results)) {
+
+        if ($requestedGender && ! empty($results)) {
             $foundInResults = false;
             foreach ($results as $p) {
                 $titleLower = mb_strtolower($p['title'] ?? '');
@@ -1918,16 +1985,17 @@ PROMPT;
                     break;
                 }
             }
-            if (!$foundInResults) {
+            if (! $foundInResults) {
                 // Return products WITH a message so GPT can show them and explain
                 // GPT will add text like "Жіночої немає, є універсальні варіанти:"
                 Log::info('Gender attribute not found in results, returning universal options', ['requested' => $requestedGender, 'query' => $query, 'results_count' => count($results)]);
+
                 return [
-                    'products' => $results, 
-                    'count' => count($results), 
+                    'products' => $results,
+                    'count' => count($results),
                     'query' => $query,
                     'gender_not_found' => true,
-                    'message' => "'{$requestedGender}' варіанту немає. Ось універсальні варіанти — покажи їх і поясни що спеціального {$requestedGender} варіанту не знайдено, є лише уніформа/універсальні."
+                    'message' => "'{$requestedGender}' варіанту немає. Ось універсальні варіанти — покажи їх і поясни що спеціального {$requestedGender} варіанту не знайдено, є лише уніформа/універсальні.",
                 ];
             }
         }
@@ -1938,7 +2006,7 @@ PROMPT;
             'exclude_shown' => $excludeShown,
             'results_count' => count($results),
             'result_ids' => array_column(array_slice($results, 0, 5), 'id'),
-            'result_titles' => array_map(fn($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
+            'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
         ]);
 
         return ['products' => $results, 'count' => count($results), 'query' => $query];
@@ -1955,10 +2023,10 @@ PROMPT;
         }
 
         $queryLower = mb_strtolower($query);
-        
+
         // Only filter for main product queries
         // Note: \b word boundaries don't work with Cyrillic, so we use simple contains
-        if (!preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)/ui', $queryLower)) {
+        if (! preg_match('/(шолом|каска|helmet|плитоноск|plate\s*carrier|бронежилет)/ui', $queryLower)) {
             return $results;
         }
 
@@ -1977,20 +2045,20 @@ PROMPT;
         // Filter products
         $mainProducts = [];
         $accessories = [];
-        
+
         foreach ($results as $product) {
             $title = mb_strtolower($product['title'] ?? '');
             $category = mb_strtolower($product['category_path'] ?? '');
-            
+
             $isAccessory = false;
-            
+
             // Check category first
             if (str_contains($category, 'аксесуар') || str_contains($category, 'комплектуюч')) {
                 $isAccessory = true;
             }
-            
+
             // Check title patterns
-            if (!$isAccessory) {
+            if (! $isAccessory) {
                 foreach ($accessoryPatterns as $pattern) {
                     if (str_contains($title, $pattern)) {
                         $isAccessory = true;
@@ -1998,7 +2066,7 @@ PROMPT;
                     }
                 }
             }
-            
+
             if ($isAccessory) {
                 $accessories[] = $product;
             } else {
@@ -2011,11 +2079,11 @@ PROMPT;
             'total' => count($results),
             'main' => count($mainProducts),
             'accessories' => count($accessories),
-            'main_titles' => array_map(fn($p) => $p['title'] ?? '', array_slice($mainProducts, 0, 5)),
+            'main_titles' => array_map(fn ($p) => $p['title'] ?? '', array_slice($mainProducts, 0, 5)),
         ]);
 
         // Return main products if we have any, otherwise return all
-        return !empty($mainProducts) ? $mainProducts : $results;
+        return ! empty($mainProducts) ? $mainProducts : $results;
     }
 
     /**
@@ -2026,7 +2094,7 @@ PROMPT;
         $category = $args['category'] ?? null;
         $limit = min($args['limit'] ?? 3, 3);
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'popular_products_v7:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all') . ':' . $limit;
+        $cacheKey = 'popular_products_v7:'.($tenantId ?? 'all').':'.($category ?? 'all').':'.$limit;
 
         return Cache::remember($cacheKey, 300, function () use ($category, $limit, $tenantId) {
             $products = [];
@@ -2034,23 +2102,36 @@ PROMPT;
             $filterProduct = function ($p) {
                 $size = strtolower($p['size'] ?? '');
                 $title = strtolower($p['title'] ?? '');
-                $price = (float)($p['price'] ?? 0);
-                if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl)\b/i', $size . ' ' . $title)) return false;
-                if ($price > 20000) return false;
-                if (!($p['in_stock'] ?? false)) return false;
+                $price = (float) ($p['price'] ?? 0);
+                if (preg_match('/\b(50|51|52|53|54|55|xxxl|xxxxl)\b/i', $size.' '.$title)) {
+                    return false;
+                }
+                if ($price > 20000) {
+                    return false;
+                }
+                if (! ($p['in_stock'] ?? false)) {
+                    return false;
+                }
                 // Filter out packaging items (bags, wrapping) but keep certificates and gift sets
-                if (preg_match('/\b(пакет|пакунок|обгортк|упаковк|paper\s*bag)\b/iu', $title)) return false;
+                if (preg_match('/\b(пакет|пакунок|обгортк|упаковк|paper\s*bag)\b/iu', $title)) {
+                    return false;
+                }
+
                 return true;
             };
 
             // Check for real sales data
             $salesQuery = Product::where('orders_count', '>', 0);
-            if ($tenantId) $salesQuery->where('tenant_id', $tenantId);
+            if ($tenantId) {
+                $salesQuery->where('tenant_id', $tenantId);
+            }
             $hasOrdersData = $salesQuery->exists();
 
             if ($hasOrdersData) {
                 $query = Product::where('in_stock', true)->where('orders_count', '>', 0)->where('quantity', '>', 0);
-                if ($tenantId) $query->where('tenant_id', $tenantId);
+                if ($tenantId) {
+                    $query->where('tenant_id', $tenantId);
+                }
                 if ($category) {
                     $query->where(function ($q) use ($category) {
                         $q->where('category_path', 'like', "%{$category}%")
@@ -2066,8 +2147,12 @@ PROMPT;
                         'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
                         'orders_count' => $p->orders_count, 'popularity' => $p->popularity,
                     ];
-                    if ($filterProduct($item)) $products[] = $item;
-                    if (count($products) >= $limit) break;
+                    if ($filterProduct($item)) {
+                        $products[] = $item;
+                    }
+                    if (count($products) >= $limit) {
+                        break;
+                    }
                 }
             }
 
@@ -2076,12 +2161,14 @@ PROMPT;
                 if ($category) {
                     $results = $this->searchTool->search($category, [], $limit * 3);
                     $results = array_filter($results, $filterProduct);
-                    usort($results, fn($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
+                    usort($results, fn ($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
                     $existingIds = array_column($products, 'id');
                     foreach ($results as $r) {
-                        if (!in_array($r['id'], $existingIds)) {
+                        if (! in_array($r['id'], $existingIds)) {
                             $products[] = $r;
-                            if (count($products) >= $limit) break;
+                            if (count($products) >= $limit) {
+                                break;
+                            }
                         }
                     }
                 } else {
@@ -2089,7 +2176,9 @@ PROMPT;
                     $recQuery = Product::where('in_stock', true)
                         ->where('we_recommended', true)
                         ->where('quantity', '>', 0);
-                    if ($tenantId) $recQuery->where('tenant_id', $tenantId);
+                    if ($tenantId) {
+                        $recQuery->where('tenant_id', $tenantId);
+                    }
                     $recommended = $recQuery->orderByDesc('popularity')->take($limit * 2)->get();
 
                     $existingIds = array_column($products, 'id');
@@ -2099,45 +2188,51 @@ PROMPT;
                             'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
                             'orders_count' => $p->orders_count ?? 0, 'popularity' => $p->popularity ?? 0,
                         ];
-                        if ($filterProduct($item) && !in_array($p->id, $existingIds)) {
+                        if ($filterProduct($item) && ! in_array($p->id, $existingIds)) {
                             $products[] = $item;
                             $existingIds[] = $p->id;
                         }
-                        if (count($products) >= $limit) break;
+                        if (count($products) >= $limit) {
+                            break;
+                        }
                     }
 
                     // Still not enough? Use top categories with popularity-based sorting
                     if (count($products) < $limit) {
                         $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
-                        
+
                         if (empty($popularQueries)) {
                             $popularQueries = ['товар', 'новинка', 'акція'];
                         }
-                        
+
                         foreach ($popularQueries as $q) {
                             $results = $this->searchTool->search($q, [], 10);
                             $results = array_filter($results, $filterProduct);
-                            if (!empty($results)) {
+                            if (! empty($results)) {
                                 // Sort by popularity score — NOT by price distance to hardcoded value
-                                usort($results, fn($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
+                                usort($results, fn ($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
                                 $best = array_values($results)[0];
-                                if (!in_array($best['id'], $existingIds)) {
+                                if (! in_array($best['id'], $existingIds)) {
                                     $products[] = $best;
                                     $existingIds[] = $best['id'];
                                 }
                             }
-                            if (count($products) >= $limit) break;
+                            if (count($products) >= $limit) {
+                                break;
+                            }
                         }
                     }
                 }
             }
-            
+
             // Last resort: just get any in-stock products from tenant
             if (count($products) < $limit) {
                 $query = Product::where('in_stock', true)->where('quantity', '>', 0);
-                if ($tenantId) $query->where('tenant_id', $tenantId);
+                if ($tenantId) {
+                    $query->where('tenant_id', $tenantId);
+                }
                 $anyProducts = $query->orderByDesc('updated_at')->take(($limit - count($products)) * 2)->get();
-                
+
                 $existingIds = array_column($products, 'id');
                 foreach ($anyProducts as $p) {
                     $item = [
@@ -2145,20 +2240,24 @@ PROMPT;
                         'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
                         'orders_count' => $p->orders_count ?? 0, 'popularity' => $p->popularity ?? 0,
                     ];
-                    if ($filterProduct($item) && !in_array($p->id, $existingIds)) {
+                    if ($filterProduct($item) && ! in_array($p->id, $existingIds)) {
                         $products[] = $item;
                         $existingIds[] = $p->id;
                     }
-                    if (count($products) >= $limit) break;
+                    if (count($products) >= $limit) {
+                        break;
+                    }
                 }
             }
 
             // Get full cards with images
-            if (!empty($products)) {
+            if (! empty($products)) {
                 $ids = array_column($products, 'id');
                 $tenantId = $this->searchTool->getCurrentTenantId();
                 $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
-                if (!empty($cards)) $products = $cards;
+                if (! empty($cards)) {
+                    $products = $cards;
+                }
             }
 
             return ['products' => array_slice($products, 0, $limit), 'count' => count($products)];
@@ -2170,12 +2269,14 @@ PROMPT;
      */
     protected function getTopCategoriesForTenant(?int $tenantId, int $limit = 5): array
     {
-        $cacheKey = 'tenant_top_categories:' . ($tenantId ?? 'all') . ':' . $limit;
-        
+        $cacheKey = 'tenant_top_categories:'.($tenantId ?? 'all').':'.$limit;
+
         return Cache::remember($cacheKey, 600, function () use ($tenantId, $limit) {
             $query = Product::where('in_stock', true);
-            if ($tenantId) $query->where('tenant_id', $tenantId);
-            
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
+
             $categories = $query
                 ->selectRaw('category_path, count(*) as cnt')
                 ->whereNotNull('category_path')
@@ -2185,18 +2286,20 @@ PROMPT;
                 ->limit($limit * 2)
                 ->pluck('category_path')
                 ->toArray();
-            
+
             // Extract last segment of category path as search query
             $queries = [];
             foreach ($categories as $cat) {
                 $parts = explode('/', $cat);
                 $lastPart = trim(end($parts));
-                if (!empty($lastPart) && mb_strlen($lastPart) > 2 && !in_array($lastPart, $queries)) {
+                if (! empty($lastPart) && mb_strlen($lastPart) > 2 && ! in_array($lastPart, $queries)) {
                     $queries[] = $lastPart;
                 }
-                if (count($queries) >= $limit) break;
+                if (count($queries) >= $limit) {
+                    break;
+                }
             }
-            
+
             return $queries;
         });
     }
@@ -2210,8 +2313,8 @@ PROMPT;
     {
         $ordersCount = (int) ($product['orders_count'] ?? 0);
         $popularity = (int) ($product['popularity'] ?? 0);
-        $weRecommended = !empty($product['we_recommended']);
-        $hasDiscount = !empty($product['price_old']) && ($product['price_old'] > ($product['price'] ?? 0));
+        $weRecommended = ! empty($product['we_recommended']);
+        $hasDiscount = ! empty($product['price_old']) && ($product['price_old'] > ($product['price'] ?? 0));
 
         // Weighted score: orders are most valuable, then popularity, then store recommendations
         return ($ordersCount * 100) + ($popularity * 1) + ($weRecommended ? 500 : 0) + ($hasDiscount ? 50 : 0);
@@ -2223,13 +2326,19 @@ PROMPT;
     protected function toolGetProductDetails(array $args): array
     {
         $article = $args['article'] ?? '';
-        if (empty($article)) return ['error' => 'Article required'];
+        if (empty($article)) {
+            return ['error' => 'Article required'];
+        }
 
         $tenantId = $this->searchTool->getCurrentTenantId();
         $query = Product::where('article', $article);
-        if ($tenantId) $query->where('tenant_id', $tenantId);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
         $product = $query->first();
-        if (!$product) return ['error' => 'Product not found'];
+        if (! $product) {
+            return ['error' => 'Product not found'];
+        }
 
         $images = $this->extractProductImages($product);
 
@@ -2262,7 +2371,7 @@ PROMPT;
         $orderService = $this->resolveOrderSearchService();
 
         // Check if order search is available
-        if (!$orderService->isAvailable()) {
+        if (! $orderService->isAvailable()) {
             return ['error' => 'Пошук замовлень тимчасово недоступний. Зверніться до менеджера магазину.'];
         }
 
@@ -2273,8 +2382,8 @@ PROMPT;
                 'limit' => 5,
             ]);
 
-            if (!empty($result['orders'])) {
-                return $result['total'] === 1 
+            if (! empty($result['orders'])) {
+                return $result['total'] === 1
                     ? ['order' => $result['orders'][0]]
                     : ['orders' => $result['orders'], 'count' => $result['total']];
             }
@@ -2282,6 +2391,7 @@ PROMPT;
             return ['error' => 'Замовлення не знайдено. Перевірте номер або телефон.'];
         } catch (\Exception $e) {
             Log::error('toolGetOrderStatus error', ['error' => $e->getMessage()]);
+
             return ['error' => 'Не вдалося перевірити замовлення. Спробуйте пізніше.'];
         }
     }
@@ -2294,8 +2404,8 @@ PROMPT;
     protected function resolveOrderSearchService(): OrderSearchService
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        
-        if (!$tenantId) {
+
+        if (! $tenantId) {
             return $this->orderSearchService;
         }
 
@@ -2307,11 +2417,12 @@ PROMPT;
 
         try {
             $tenant = \App\Models\Tenant::find($tenantId);
-            if (!$tenant || $tenant->platform !== \App\Models\Tenant::PLATFORM_HOROSHOP) {
+            if (! $tenant || $tenant->platform !== \App\Models\Tenant::PLATFORM_HOROSHOP) {
                 Log::info('resolveOrderSearchService: tenant has no Horoshop platform', [
                     'tenant_id' => $tenantId,
                     'platform' => $tenant?->platform,
                 ]);
+
                 return $this->orderSearchService;
             }
 
@@ -2320,27 +2431,29 @@ PROMPT;
                 Log::warning('resolveOrderSearchService: tenant has no Horoshop credentials', [
                     'tenant_id' => $tenantId,
                 ]);
+
                 return $this->orderSearchService;
             }
 
             // Extract credentials (handle both plain and nested formats)
-            $domain = is_array($credentials['domain']) 
-                ? ($credentials['domain']['value'] ?? '') 
+            $domain = is_array($credentials['domain'])
+                ? ($credentials['domain']['value'] ?? '')
                 : (string) $credentials['domain'];
-            $login = is_array($credentials['login'] ?? null) 
-                ? ($credentials['login']['value'] ?? '') 
+            $login = is_array($credentials['login'] ?? null)
+                ? ($credentials['login']['value'] ?? '')
                 : (string) ($credentials['login'] ?? '');
-            $password = is_array($credentials['password'] ?? null) 
-                ? ($credentials['password']['value'] ?? '') 
+            $password = is_array($credentials['password'] ?? null)
+                ? ($credentials['password']['value'] ?? '')
                 : (string) ($credentials['password'] ?? '');
 
             if (empty($domain) || empty($login) || empty($password)) {
                 Log::warning('resolveOrderSearchService: incomplete credentials', [
                     'tenant_id' => $tenantId,
-                    'has_domain' => !empty($domain),
-                    'has_login' => !empty($login),
-                    'has_password' => !empty($password),
+                    'has_domain' => ! empty($domain),
+                    'has_login' => ! empty($login),
+                    'has_password' => ! empty($password),
                 ]);
+
                 return $this->orderSearchService;
             }
 
@@ -2348,7 +2461,7 @@ PROMPT;
             $tenantClient = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
             $tenantOrderService = new \App\Services\Horoshop\OrderService($tenantClient);
             $deliveryTrackingService = app(\App\Services\Horoshop\DeliveryTrackingService::class);
-            
+
             $tenantSearchService = new OrderSearchService(
                 $tenantClient,
                 $tenantOrderService,
@@ -2361,6 +2474,7 @@ PROMPT;
             ]);
 
             $tenantServices[$tenantId] = $tenantSearchService;
+
             return $tenantSearchService;
 
         } catch (\Throwable $e) {
@@ -2368,6 +2482,7 @@ PROMPT;
                 'tenant_id' => $tenantId,
                 'error' => $e->getMessage(),
             ]);
+
             return $this->orderSearchService;
         }
     }
@@ -2378,12 +2493,15 @@ PROMPT;
     protected function toolGetCategories(): array
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'categories_list:' . ($tenantId ?? 'all');
+        $cacheKey = 'categories_list:'.($tenantId ?? 'all');
 
         return Cache::remember($cacheKey, 3600, function () use ($tenantId) {
             $query = Category::whereNotNull('path');
-            if ($tenantId) $query->where('tenant_id', $tenantId);
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
             $categories = $query->orderBy('path')->pluck('path')->unique()->values()->toArray();
+
             return ['categories' => $categories, 'count' => count($categories)];
         });
     }
@@ -2395,13 +2513,18 @@ PROMPT;
     {
         $category = $args['category'] ?? null;
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'brands_list:' . ($tenantId ?? 'all') . ':' . ($category ?? 'all');
+        $cacheKey = 'brands_list:'.($tenantId ?? 'all').':'.($category ?? 'all');
 
         return Cache::remember($cacheKey, 3600, function () use ($category, $tenantId) {
             $query = Brand::query();
-            if ($tenantId) $query->where('tenant_id', $tenantId);
-            if ($category) $query->where('categories', 'like', "%{$category}%");
+            if ($tenantId) {
+                $query->where('tenant_id', $tenantId);
+            }
+            if ($category) {
+                $query->where('categories', 'like', "%{$category}%");
+            }
             $brands = $query->orderBy('name')->pluck('name')->toArray();
+
             return ['brands' => $brands, 'count' => count($brands)];
         });
     }
@@ -2412,16 +2535,24 @@ PROMPT;
     protected function toolGetAvailableSizes(array $args): array
     {
         $article = $args['article'] ?? '';
-        if (empty($article)) return ['error' => 'Article required'];
+        if (empty($article)) {
+            return ['error' => 'Article required'];
+        }
 
         $tenantId = $this->searchTool->getCurrentTenantId();
         $query = Product::query();
-        if ($tenantId) $query->where('tenant_id', $tenantId);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
 
         // Find main product
         $product = (clone $query)->where('article', $article)->first();
-        if (!$product) $product = (clone $query)->where('id', $article)->first();
-        if (!$product) return ['error' => 'Product not found'];
+        if (! $product) {
+            $product = (clone $query)->where('id', $article)->first();
+        }
+        if (! $product) {
+            return ['error' => 'Product not found'];
+        }
 
         // Find all size variants
         $parentArticle = $product->parent_article ?? $product->article;
@@ -2436,7 +2567,7 @@ PROMPT;
             ->orderBy('size')
             ->get();
 
-        $sizes = $variants->map(fn($v) => [
+        $sizes = $variants->map(fn ($v) => [
             'size' => $v->size,
             'article' => $v->article,
             'quantity' => $v->quantity,
@@ -2464,8 +2595,8 @@ PROMPT;
         // If article provided, get available sizes first
         $availableSizes = [];
         $productTitle = 'ECWCS одяг';
-        
-        if (!empty($article)) {
+
+        if (! empty($article)) {
             $sizesResult = $this->toolGetAvailableSizes(['article' => $article]);
             if (isset($sizesResult['error'])) {
                 // Article not found, continue without it - just recommend ECWCS size
@@ -2478,7 +2609,7 @@ PROMPT;
 
         // Estimate chest from weight if not provided (rough formula for tactical gear)
         // Average male: weight/height ratio affects chest size
-        if (!$chest && $weight && $height) {
+        if (! $chest && $weight && $height) {
             // BMI-based chest estimation for men
             $bmi = $weight / (($height / 100) ** 2);
             // Rough estimation: BMI 18-22 = ~90-95cm, 22-26 = ~100-105cm, 26-30 = ~110-115cm, 30+ = ~120+cm
@@ -2491,14 +2622,14 @@ PROMPT;
             } else {
                 $chest = 122 + ($bmi - 30) * 2;
             }
-            $chest = (int)round($chest);
+            $chest = (int) round($chest);
         }
-        
+
         // If only weight provided, estimate chest directly
-        if (!$chest && $weight) {
+        if (! $chest && $weight) {
             // Simple formula: chest ≈ weight * 1.05 + 10 (rough average for men)
             // 70kg → ~84cm, 85kg → ~99cm, 100kg → ~115cm, 115kg → ~131cm
-            $chest = (int)round($weight * 1.05 + 10);
+            $chest = (int) round($weight * 1.05 + 10);
         }
 
         // ECWCS size chart (US Army standard)
@@ -2527,7 +2658,7 @@ PROMPT;
         $warnings = [];
 
         // If we have specific available sizes, filter by them. Otherwise check all ECWCS sizes.
-        $hasAvailableSizes = !empty($availableSizes);
+        $hasAvailableSizes = ! empty($availableSizes);
 
         foreach ($ecwcsSizes as $size => $ranges) {
             $score = 0;
@@ -2535,12 +2666,15 @@ PROMPT;
             // Check if this size is available (only filter if we have specific sizes)
             if ($hasAvailableSizes) {
                 $sizePrefix = explode('/', $size)[0]; // Get XS, S, M, L, XL, XXL part
-                $availableSize = collect($availableSizes)->first(function($s) use ($sizePrefix, $size) {
+                $availableSize = collect($availableSizes)->first(function ($s) use ($sizePrefix, $size) {
                     $sizeStr = $s['size'] ?? '';
+
                     // Match exact size or prefix match
                     return stripos($sizeStr, $size) !== false || stripos($sizeStr, $sizePrefix) !== false;
                 });
-                if (!$availableSize) continue;
+                if (! $availableSize) {
+                    continue;
+                }
             }
 
             // Calculate score - lower is better
@@ -2554,13 +2688,13 @@ PROMPT;
                     $score += abs($chest - $chestMid) * 4;
                 }
             }
-            
+
             // Height is secondary (weight = 2)
             if ($height) {
                 $heightMid = ($ranges['height'][0] + $ranges['height'][1]) / 2;
                 $score += abs($height - $heightMid) * 2;
             }
-            
+
             // Waist if provided (weight = 3)
             if ($waist) {
                 $waistMid = ($ranges['waist'][0] + $ranges['waist'][1]) / 2;
@@ -2584,22 +2718,22 @@ PROMPT;
         if ($weight && $weight > 110) {
             $warnings[] = 'При вазі 110+ кг можливо знадобиться XXL — зверніть увагу на таблицю розмірів';
         }
-        
+
         // Calculate estimated chest for response
         $estimatedChest = $chest;
-        
+
         // Default to XL/L for heavy people without better match
-        if (!$recommendation && $weight && $weight >= 100) {
+        if (! $recommendation && $weight && $weight >= 100) {
             $recommendation = 'XL/L';
-        } elseif (!$recommendation && $weight && $weight >= 85) {
+        } elseif (! $recommendation && $weight && $weight >= 85) {
             $recommendation = 'L/L';
         }
 
         // Extract base size (XS, S, M, L, XL, XXL) from ECWCS notation (XL/L -> XL)
         $baseSize = $recommendation ? explode('/', $recommendation)[0] : 'L';
-        
+
         // Build user-friendly size explanation
-        $sizeExplanation = match($baseSize) {
+        $sizeExplanation = match ($baseSize) {
             'XS' => 'XS (або XS-Short, XS-Regular)',
             'S' => 'S (або S-Short, S-Regular, S-Long)',
             'M' => 'M (або M-Short, M-Regular, M-Long)',
@@ -2621,7 +2755,7 @@ PROMPT;
             'estimated_chest' => $estimatedChest ? "~{$estimatedChest} см (оцінка за вагою)" : null,
             'note' => "Якщо товар має просту розмітку (S, M, L, XL) — обирайте {$baseSize}. Якщо є позначення росту (Short/Regular/Long або S/R/L) — обирайте {$recommendation}.",
         ];
-        
+
         return $result;
     }
 
@@ -2637,18 +2771,18 @@ PROMPT;
         $images = [];
 
         // 1. Try raw['pictures'] (Horoshop format)
-        if ($product->raw && is_array($product->raw) && !empty($product->raw['pictures'])) {
+        if ($product->raw && is_array($product->raw) && ! empty($product->raw['pictures'])) {
             $images = collect($product->raw['pictures'])
-                ->map(fn($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
+                ->map(fn ($pic) => is_array($pic) ? ($pic['url'] ?? null) : $pic)
                 ->filter()->values()->toArray();
         }
 
         // 2. Try raw['images']
-        if (empty($images) && $product->raw && is_array($product->raw) && !empty($product->raw['images'])) {
+        if (empty($images) && $product->raw && is_array($product->raw) && ! empty($product->raw['images'])) {
             $imgs = $product->raw['images'];
             if (is_array($imgs)) {
                 $images = collect($imgs)
-                    ->map(fn($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
+                    ->map(fn ($img) => is_array($img) ? ($img['url'] ?? $img['src'] ?? null) : $img)
                     ->filter()->values()->toArray();
             }
         }
@@ -2656,14 +2790,21 @@ PROMPT;
         // 3. Fallback to images field
         if (empty($images) && $product->images) {
             $imgs = $product->images;
-            if (is_string($imgs)) $imgs = json_decode($imgs, true) ?: [$imgs];
-            if (is_array($imgs)) $images = array_values(array_filter($imgs));
+            if (is_string($imgs)) {
+                $imgs = json_decode($imgs, true) ?: [$imgs];
+            }
+            if (is_array($imgs)) {
+                $images = array_values(array_filter($imgs));
+            }
         }
 
         // 4. Single image fallbacks
         if (empty($images) && $product->raw && is_array($product->raw)) {
-            if (!empty($product->raw['image'])) $images = [$product->raw['image']];
-            elseif (!empty($product->raw['main_image'])) $images = [$product->raw['main_image']];
+            if (! empty($product->raw['image'])) {
+                $images = [$product->raw['image']];
+            } elseif (! empty($product->raw['main_image'])) {
+                $images = [$product->raw['main_image']];
+            }
         }
 
         return $images;
@@ -2676,14 +2817,14 @@ PROMPT;
     protected function getProductTypeSynonyms(string $productType): array
     {
         $tenantId = $this->searchTool->getCurrentTenantId();
-        $cacheKey = 'product_type_synonyms:' . ($tenantId ?? 'global') . ':' . md5($productType);
+        $cacheKey = 'product_type_synonyms:'.($tenantId ?? 'global').':'.md5($productType);
 
         return Cache::remember($cacheKey, 3600, function () use ($productType, $tenantId) {
             // Use forTenant() which returns tenant-specific + global (NULL) synonyms
             $synonyms = ProductSynonym::forTenant($tenantId)
                 ->where(function ($q) use ($productType) {
                     $q->where('product_type', $productType)
-                      ->orWhere('synonym', $productType);
+                        ->orWhere('synonym', $productType);
                 })
                 ->pluck('synonym')
                 ->toArray();
@@ -2702,7 +2843,7 @@ PROMPT;
 
         foreach ($products as $product) {
             $id = $product['id'] ?? null;
-            if ($id && !isset($seen[$id])) {
+            if ($id && ! isset($seen[$id])) {
                 $seen[$id] = true;
                 $result[] = $product;
             }
@@ -2728,6 +2869,7 @@ PROMPT;
         foreach ($triggerPhrases as $phrase) {
             if (str_starts_with($lowerMessage, $phrase)) {
                 Log::info('BaseAgent: detected trigger query', ['message' => $message]);
+
                 return true;
             }
         }
@@ -2742,11 +2884,13 @@ PROMPT;
      */
     protected function generateTriggerOutro(array $products, string $gptResponse = '', string $originalQuery = ''): string
     {
-        if (empty($products)) return 'Є питання? Допоможу з вибором!';
+        if (empty($products)) {
+            return 'Є питання? Допоможу з вибором!';
+        }
 
         // For "top products in category" queries, don't ask about size/color - products are diverse!
         $lowerQuery = mb_strtolower($originalQuery);
-        $isTopProductsQuery = str_contains($lowerQuery, 'топ товари') 
+        $isTopProductsQuery = str_contains($lowerQuery, 'топ товари')
             || str_contains($lowerQuery, 'популярні товари')
             || str_contains($lowerQuery, 'top products');
 
@@ -2769,14 +2913,18 @@ PROMPT;
         $hasMultipleColors = false;
 
         foreach ($products as $p) {
-            if (!empty($p['size_variants']) && count($p['size_variants']) > 1) $hasMultipleSizes = true;
-            if (!empty($p['color_variants']) && count($p['color_variants']) > 1) $hasMultipleColors = true;
+            if (! empty($p['size_variants']) && count($p['size_variants']) > 1) {
+                $hasMultipleSizes = true;
+            }
+            if (! empty($p['color_variants']) && count($p['color_variants']) > 1) {
+                $hasMultipleColors = true;
+            }
         }
 
-        if ($hasMultipleSizes && !$alreadyAskedSize) {
+        if ($hasMultipleSizes && ! $alreadyAskedSize) {
             return 'Який розмір/варіант вам потрібен? Допоможу підібрати!';
         }
-        if ($hasMultipleColors && !$alreadyAskedColor) {
+        if ($hasMultipleColors && ! $alreadyAskedColor) {
             return 'Який колір вам більше підходить?';
         }
         if ($quantity > 0 && $quantity <= 3) {
@@ -2812,7 +2960,7 @@ PROMPT;
         if ($json && isset($json['products']) && is_array($json['products'])) {
             $messages = [];
 
-            if (!empty($json['intro'])) {
+            if (! empty($json['intro'])) {
                 $messages[] = ['type' => 'text', 'content' => $json['intro']];
             }
 
@@ -2822,7 +2970,7 @@ PROMPT;
                 $comment = $item['comment'] ?? '';
 
                 $product = $productsByArticle[$article] ?? null;
-                if (!$product) {
+                if (! $product) {
                     foreach ($productsByArticle as $a => $p) {
                         if (str_contains($a, $article) || str_contains($article, $a)) {
                             $product = $p;
@@ -2837,14 +2985,14 @@ PROMPT;
                 }
             }
 
-            if (!empty($json['outro'])) {
+            if (! empty($json['outro'])) {
                 $messages[] = ['type' => 'text', 'content' => $json['outro']];
             }
 
             return [
                 'intro' => $json['intro'] ?? 'Ось що я знайшов:',
                 'outro' => $json['outro'] ?? null,
-                'products' => !empty($orderedProducts) ? $orderedProducts : array_slice($allProducts, 0, 5),
+                'products' => ! empty($orderedProducts) ? $orderedProducts : array_slice($allProducts, 0, 5),
                 'messages' => $messages,
             ];
         }
@@ -2855,6 +3003,7 @@ PROMPT;
             foreach (array_slice($allProducts, 0, 5) as $product) {
                 $messages[] = ['type' => 'product', 'product' => $product, 'comment' => ''];
             }
+
             return [
                 'intro' => $json['text'],
                 'outro' => null,
@@ -2865,7 +3014,9 @@ PROMPT;
 
         // Fallback: plain text response
         $messages = [];
-        if ($responseText) $messages[] = ['type' => 'text', 'content' => $responseText];
+        if ($responseText) {
+            $messages[] = ['type' => 'text', 'content' => $responseText];
+        }
         foreach (array_slice($allProducts, 0, 5) as $product) {
             $messages[] = ['type' => 'product', 'product' => $product, 'comment' => ''];
         }
@@ -2886,7 +3037,7 @@ PROMPT;
     {
         $msg = mb_strtolower(trim($message));
         $wordCount = count(preg_split('/\s+/u', $msg));
-        
+
         // Short confirmations are NOT fresh queries - they're follow-ups
         $confirmations = [
             'так', 'ні', 'добре', 'ок', 'окей', 'зрозумів', 'дякую', 'ще', 'інші', 'більше', 'показуй',
@@ -2895,36 +3046,36 @@ PROMPT;
         if (in_array($msg, $confirmations) || $wordCount <= 2 && preg_match('/^(ще|інші|більше|показуй|дозволяю|хочу|давай)/u', $msg)) {
             return false;
         }
-        
+
         // If message contains clear category/brand without modifiers - it's a fresh query
         // Brands that indicate a fresh brand-specific search
-        $brands = ['defcon', 'm-tac', 'mtac', 'helikon', 'pentagon', 'velmet', '5.11', 'uf pro', 'condor', 
-                   'direct action', 'crye', 'ops-core', 'emerson', 'wartech', 'архангел', 'p1g', 'a-tac', 'hrt',
-                   'mechanix', 'oakley', 'salomon', 'lowa', 'meindl', 'haix'];
-        
+        $brands = ['defcon', 'm-tac', 'mtac', 'helikon', 'pentagon', 'velmet', '5.11', 'uf pro', 'condor',
+            'direct action', 'crye', 'ops-core', 'emerson', 'wartech', 'архангел', 'p1g', 'a-tac', 'hrt',
+            'mechanix', 'oakley', 'salomon', 'lowa', 'meindl', 'haix'];
+
         foreach ($brands as $brand) {
             // If message is ONLY the brand name (with maybe small variations)
-            if (preg_match('/^' . preg_quote($brand, '/') . '\s*\d*$/ui', $msg)) {
+            if (preg_match('/^'.preg_quote($brand, '/').'\s*\d*$/ui', $msg)) {
                 return true;
             }
         }
-        
+
         // Clear new category queries (single category word without modifiers from context)
-        $categories = ['плитоноски', 'шоломи', 'берці', 'рюкзаки', 'куртки', 'штани', 'футболки', 
-                       'підсумки', 'рукавиці', 'окуляри', 'ремені', 'бронеплати', 'жилети',
-                       'термобілизна', 'фліс', 'софтшел', 'шапки', 'балаклави', 'носки'];
-        
+        $categories = ['плитоноски', 'шоломи', 'берці', 'рюкзаки', 'куртки', 'штани', 'футболки',
+            'підсумки', 'рукавиці', 'окуляри', 'ремені', 'бронеплати', 'жилети',
+            'термобілизна', 'фліс', 'софтшел', 'шапки', 'балаклави', 'носки'];
+
         foreach ($categories as $cat) {
-            if (preg_match('/^' . preg_quote($cat, '/') . '$/ui', $msg)) {
+            if (preg_match('/^'.preg_quote($cat, '/').'$/ui', $msg)) {
                 return true;
             }
         }
-        
+
         // If there's NO history, it's always fresh
         if (empty($history)) {
             return true;
         }
-        
+
         // If user explicitly starts a new topic with "покажи", "знайди", "шукаю" + different category
         // This is a heuristic - if the new query has a clear product type and it's different from context
         $lastUserMsg = '';
@@ -2934,14 +3085,14 @@ PROMPT;
                 break;
             }
         }
-        
+
         // Check if current message has a clear search intent with new category
         if (preg_match('/^(покажи|знайди|шукаю|є|маєте)\s+/ui', $msg)) {
             // Extract what they're searching for now vs before
             // If it's clearly different - fresh query
             return true;
         }
-        
+
         return false;
     }
 
@@ -2950,7 +3101,9 @@ PROMPT;
      */
     protected function extractConversationContext(array $history): string
     {
-        if (empty($history)) return '';
+        if (empty($history)) {
+            return '';
+        }
 
         $contextParts = [];
         $productCategories = [];
@@ -2964,7 +3117,7 @@ PROMPT;
         // Get category patterns from DB (with fallback to hardcoded)
         $tenantId = $this->currentContext['tenant_id'] ?? null;
         $categoryPatterns = $this->categoryPatternService->getPatterns($tenantId);
-        
+
         // If DB patterns are empty, use fallback
         if (empty($categoryPatterns)) {
             $categoryPatterns = $this->categoryPatternService->getFallbackPatterns();
@@ -2977,7 +3130,7 @@ PROMPT;
             // Collect last 3 user questions for context
             if ($role === 'user' && mb_strlen($content) > 3) {
                 $userQuestions[] = mb_substr($content, 0, 100);
-                
+
                 // Extract categories from user queries
                 foreach ($categoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $content)) {
@@ -2985,7 +3138,7 @@ PROMPT;
                     }
                 }
             }
-            
+
             // Also extract categories from assistant messages (when bot mentions products)
             // This catches cases like "є варіанти термобілизни" where user then says "дозволяю"
             if ($role === 'assistant' && mb_strlen($content) > 10) {
@@ -3000,7 +3153,7 @@ PROMPT;
             if (preg_match('/\[Показані товари: (.+?)\]/u', $content, $matches)) {
                 $products = $matches[1];
                 $shownProducts[] = $products;
-                
+
                 // Extract categories from product names using same patterns
                 foreach ($categoryPatterns as $pattern => $category) {
                     if (preg_match("/($pattern)/ui", $products)) {
@@ -3039,7 +3192,7 @@ PROMPT;
             }
 
             // Extract brands
-            $brandPatterns = ['M-TAC', 'Helikon', 'Pentagon', 'Velmet', '5.11', 'UF PRO', 'Condor', 'Direct Action', 
+            $brandPatterns = ['M-TAC', 'Helikon', 'Pentagon', 'Velmet', '5.11', 'UF PRO', 'Condor', 'Direct Action',
                 'Crye', 'Ops-Core', 'Emerson', 'Wartech', 'Архангел', 'P1G', 'A-TAC', 'HRT'];
             foreach ($brandPatterns as $brand) {
                 if (stripos($content, $brand) !== false) {
@@ -3055,34 +3208,34 @@ PROMPT;
                 $priceRange[] = 'преміум';
             }
             if (preg_match('/до\s*(\d+)\s*(грн|₴)/ui', $content, $priceMatch)) {
-                $priceRange[] = 'до ' . $priceMatch[1] . ' грн';
+                $priceRange[] = 'до '.$priceMatch[1].' грн';
             }
         }
 
         // Build rich context
-        if (!empty($productCategories)) {
-            $contextParts[] = 'Шукає: ' . implode(', ', array_unique($productCategories));
+        if (! empty($productCategories)) {
+            $contextParts[] = 'Шукає: '.implode(', ', array_unique($productCategories));
         }
-        if (!empty($shownProducts)) {
+        if (! empty($shownProducts)) {
             // Only last 2 shown product sets
             $recentShown = array_slice(array_unique($shownProducts), -2);
-            $contextParts[] = 'Вже показано: ' . implode(' | ', $recentShown);
+            $contextParts[] = 'Вже показано: '.implode(' | ', $recentShown);
         }
-        if (!empty($brands)) {
-            $contextParts[] = 'Бренди: ' . implode(', ', array_unique($brands));
+        if (! empty($brands)) {
+            $contextParts[] = 'Бренди: '.implode(', ', array_unique($brands));
         }
-        if (!empty($sizes)) {
-            $contextParts[] = 'Розміри: ' . implode(', ', array_unique($sizes));
+        if (! empty($sizes)) {
+            $contextParts[] = 'Розміри: '.implode(', ', array_unique($sizes));
         }
-        if (!empty($colors)) {
-            $contextParts[] = 'Кольори: ' . implode(', ', array_unique($colors));
+        if (! empty($colors)) {
+            $contextParts[] = 'Кольори: '.implode(', ', array_unique($colors));
         }
-        if (!empty($priceRange)) {
-            $contextParts[] = 'Ціна: ' . implode(', ', array_unique($priceRange));
+        if (! empty($priceRange)) {
+            $contextParts[] = 'Ціна: '.implode(', ', array_unique($priceRange));
         }
-        if (!empty($userQuestions)) {
+        if (! empty($userQuestions)) {
             $recentQuestions = array_slice($userQuestions, -3);
-            $contextParts[] = 'Останні питання: ' . implode(' → ', $recentQuestions);
+            $contextParts[] = 'Останні питання: '.implode(' → ', $recentQuestions);
         }
 
         return implode('; ', $contextParts);
@@ -3095,14 +3248,18 @@ PROMPT;
      */
     protected function loadConversationHistory(?string $sessionId): array
     {
-        if (!$sessionId) return [];
+        if (! $sessionId) {
+            return [];
+        }
 
         try {
             // Bypass TenantScope — session_id is unique, and tenant context
             // may not match during cross-tenant lookups or middleware edge cases
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)->first();
-            if (!$session) return [];
+            if (! $session) {
+                return [];
+            }
 
             $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('chat_session_id', $session->id)
@@ -3110,23 +3267,23 @@ PROMPT;
                 ->take(20)
                 ->get();
 
-            $history = $messages->map(function($m) {
+            $history = $messages->map(function ($m) {
                 $content = $m->content;
-                
+
                 // For assistant messages, append shown products marker from meta
-                if ($m->role === 'assistant' && !empty($m->meta['products'])) {
+                if ($m->role === 'assistant' && ! empty($m->meta['products'])) {
                     $productTitles = array_map(
-                        fn($p) => $p['title'] ?? 'Товар',
+                        fn ($p) => $p['title'] ?? 'Товар',
                         array_slice($m->meta['products'], 0, 5) // Limit to 5 titles
                     );
                     $productList = implode(', ', $productTitles);
-                    
+
                     // Only add marker if not already present
                     if (strpos($content, '[Показані товари:') === false) {
                         $content .= "\n[Показані товари: {$productList}]";
                     }
                 }
-                
+
                 return [
                     'role' => $m->role,
                     'content' => $content,
@@ -3135,7 +3292,7 @@ PROMPT;
 
             // Truncate history from the oldest end to stay under ~8000 chars
             $maxChars = 8000;
-            $totalChars = array_sum(array_map(fn($m) => mb_strlen($m['content']), $history));
+            $totalChars = array_sum(array_map(fn ($m) => mb_strlen($m['content']), $history));
 
             while ($totalChars > $maxChars && count($history) > 2) {
                 $removed = array_shift($history);
@@ -3145,6 +3302,7 @@ PROMPT;
             return $history;
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to load history', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -3154,12 +3312,16 @@ PROMPT;
      */
     protected function extractShownProductIds(?string $sessionId): array
     {
-        if (!$sessionId) return [];
+        if (! $sessionId) {
+            return [];
+        }
 
         try {
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)->first();
-            if (!$session) return [];
+            if (! $session) {
+                return [];
+            }
 
             $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('chat_session_id', $session->id)
@@ -3171,7 +3333,7 @@ PROMPT;
             $ids = [];
             foreach ($messages as $msg) {
                 $meta = $msg->meta ?? [];
-                if (!empty($meta['product_ids'])) {
+                if (! empty($meta['product_ids'])) {
                     $ids = array_merge($ids, $meta['product_ids']);
                 }
             }
@@ -3179,6 +3341,7 @@ PROMPT;
             return array_unique(array_map('intval', $ids));
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to extract shown product IDs', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -3189,13 +3352,17 @@ PROMPT;
      */
     protected function loadRecentProductDetails(?string $sessionId): string
     {
-        if (!$sessionId) return '';
+        if (! $sessionId) {
+            return '';
+        }
 
         try {
             // Bypass TenantScope - sessions are identified by session_id
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)->first();
-            if (!$session) return '';
+            if (! $session) {
+                return '';
+            }
 
             // Get last 3 assistant messages with product details
             // Also bypass TenantScope for ChatMessage query
@@ -3209,7 +3376,7 @@ PROMPT;
             $allDetails = [];
             foreach ($messages as $msg) {
                 $meta = $msg->meta ?? [];
-                if (!empty($meta['product_details'])) {
+                if (! empty($meta['product_details'])) {
                     $allDetails = array_merge($allDetails, $meta['product_details']);
                 }
             }
@@ -3222,37 +3389,39 @@ PROMPT;
             $formatted = [];
             $count = 0;
             foreach ($allDetails as $id => $detail) {
-                if ($count >= 3) break;
-                
+                if ($count >= 3) {
+                    break;
+                }
+
                 $lines = [];
                 $lines[] = "- **{$detail['title']}** (арт. {$detail['article']})";
-                
-                if (!empty($detail['price'])) {
+
+                if (! empty($detail['price'])) {
                     $lines[] = "  Ціна: {$detail['price']} грн";
                 }
-                
-                if (!empty($detail['brand'])) {
+
+                if (! empty($detail['brand'])) {
                     $lines[] = "  Бренд: {$detail['brand']}";
                 }
-                
-                if (!empty($detail['sizes'])) {
-                    $lines[] = "  Доступні розміри: " . implode(', ', array_slice($detail['sizes'], 0, 5));
+
+                if (! empty($detail['sizes'])) {
+                    $lines[] = '  Доступні розміри: '.implode(', ', array_slice($detail['sizes'], 0, 5));
                 }
-                
-                if (!empty($detail['attributes'])) {
+
+                if (! empty($detail['attributes'])) {
                     $attrStr = [];
                     foreach ($detail['attributes'] as $name => $value) {
                         $attrStr[] = "{$name}: {$value}";
                     }
                     if ($attrStr) {
-                        $lines[] = "  Характеристики: " . implode('; ', array_slice($attrStr, 0, 5));
+                        $lines[] = '  Характеристики: '.implode('; ', array_slice($attrStr, 0, 5));
                     }
                 }
-                
-                if (!empty($detail['description'])) {
-                    $lines[] = "  Опис: " . mb_substr($detail['description'], 0, 100) . '...';
+
+                if (! empty($detail['description'])) {
+                    $lines[] = '  Опис: '.mb_substr($detail['description'], 0, 100).'...';
                 }
-                
+
                 $formatted[] = implode("\n", $lines);
                 $count++;
             }
@@ -3260,6 +3429,7 @@ PROMPT;
             return implode("\n\n", $formatted);
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to load product details', ['error' => $e->getMessage()]);
+
             return '';
         }
     }
@@ -3269,11 +3439,13 @@ PROMPT;
      */
     protected function logUserMessage(?string $sessionId, string $message): void
     {
-        if (!$sessionId) return;
+        if (! $sessionId) {
+            return;
+        }
 
         try {
             $tenantId = $this->searchTool->getCurrentTenantId();
-            
+
             // Bypass TenantScope to avoid duplicate sessions when tenant context differs
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->firstOrCreate(
@@ -3284,7 +3456,7 @@ PROMPT;
                         'updated_at' => now(),
                     ]
                 );
-            
+
             // Update tenant_id if session exists but has null tenant_id
             if ($session->tenant_id === null && $tenantId !== null) {
                 $session->update(['tenant_id' => $tenantId]);
@@ -3296,7 +3468,7 @@ PROMPT;
                 'content' => $message,
                 'tenant_id' => $tenantId,
             ]);
-            
+
             // Update session: reopen if closed, update last_message_at
             // Sessions may be auto-closed after 24h inactivity, reopen on new message
             $session->update([
@@ -3314,18 +3486,22 @@ PROMPT;
      */
     protected function logAssistantMessage(?string $sessionId, string $text, array $products, string $intent): void
     {
-        if (!$sessionId) return;
+        if (! $sessionId) {
+            return;
+        }
 
         try {
             $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->where('session_id', $sessionId)->first();
-            if (!$session) return;
+            if (! $session) {
+                return;
+            }
 
             // Build content with product markers
             $content = $text;
-            if (!empty($products)) {
-                $productMarkers = array_map(fn($p) => ($p['title'] ?? '') . ' (арт. ' . ($p['article'] ?? '') . ')', array_slice($products, 0, 3));
-                $content .= "\n[Показані товари: " . implode(', ', $productMarkers) . "]";
+            if (! empty($products)) {
+                $productMarkers = array_map(fn ($p) => ($p['title'] ?? '').' (арт. '.($p['article'] ?? '').')', array_slice($products, 0, 3));
+                $content .= "\n[Показані товари: ".implode(', ', $productMarkers).']';
             }
 
             // Build detailed product info for follow-up questions
@@ -3343,7 +3519,7 @@ PROMPT;
                     'product_details' => $productDetails, // Full details for follow-up questions
                 ],
             ]);
-            
+
             // Update last_message_at for proper sorting in dashboard
             $session->update([
                 'last_message_at' => now(),
@@ -3365,35 +3541,39 @@ PROMPT;
         }
 
         $productIds = array_column($products, 'id');
-        
+
         try {
             // Load full product data from DB
             $dbProducts = Product::whereIn('id', $productIds)->get()->keyBy('id');
-            
+
             $details = [];
             foreach ($products as $p) {
                 $id = $p['id'] ?? null;
-                if (!$id) continue;
-                
+                if (! $id) {
+                    continue;
+                }
+
                 $dbProduct = $dbProducts->get($id);
-                if (!$dbProduct) continue;
-                
+                if (! $dbProduct) {
+                    continue;
+                }
+
                 // Extract description and attributes from raw
                 $raw = $dbProduct->raw ?? [];
                 $parentRaw = [];
-                
+
                 // Try to get parent raw if this is a variant
                 if ($dbProduct->parent_article) {
                     $parent = Product::where('article', $dbProduct->parent_article)->first();
                     $parentRaw = $parent?->raw ?? [];
                 }
-                
+
                 $description = \App\Support\ProductRawExtractor::description($raw, 'ua', $parentRaw);
                 $attributes = \App\Support\ProductRawExtractor::attributes($raw, 'ua', $parentRaw);
-                
+
                 // Extract available sizes/variants - also get current product size from DB
                 $sizes = $this->extractSizesFromProduct($dbProduct);
-                
+
                 $details[$id] = [
                     'title' => $p['title'] ?? $dbProduct->title,
                     'article' => $p['article'] ?? $dbProduct->article,
@@ -3405,10 +3585,11 @@ PROMPT;
                     'category' => $dbProduct->category_path,
                 ];
             }
-            
+
             return $details;
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to build product details', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -3420,14 +3601,14 @@ PROMPT;
     {
         $sizes = [];
         $raw = $product->raw ?? [];
-        
+
         // 1. First check the product's own size column
-        if (!empty($product->size)) {
+        if (! empty($product->size)) {
             $sizes[] = $product->size;
         }
-        
+
         // 2. Check variants array in raw
-        if (!empty($raw['variants']) && is_array($raw['variants'])) {
+        if (! empty($raw['variants']) && is_array($raw['variants'])) {
             foreach ($raw['variants'] as $variant) {
                 $size = $variant['size'] ?? ($variant['select']['size'] ?? null);
                 if ($size && is_string($size)) {
@@ -3435,9 +3616,9 @@ PROMPT;
                 }
             }
         }
-        
+
         // 3. Check select.size in raw
-        if (!empty($raw['select']['size'])) {
+        if (! empty($raw['select']['size'])) {
             $sizeData = $raw['select']['size'];
             if (is_string($sizeData)) {
                 $sizes[] = $sizeData;
@@ -3451,9 +3632,9 @@ PROMPT;
                 }
             }
         }
-        
+
         // 4. Check characteristics.size in raw
-        if (!empty($raw['characteristics']['size'])) {
+        if (! empty($raw['characteristics']['size'])) {
             $sizeChar = $raw['characteristics']['size'];
             if (is_string($sizeChar)) {
                 $sizes[] = $sizeChar;
@@ -3466,9 +3647,9 @@ PROMPT;
                 }
             }
         }
-        
+
         // 5. Look for sibling products with same parent_article
-        if (!empty($product->parent_article)) {
+        if (! empty($product->parent_article)) {
             $siblingsSizes = Product::where('parent_article', $product->parent_article)
                 ->whereNotNull('size')
                 ->where('size', '!=', '')
@@ -3478,7 +3659,7 @@ PROMPT;
                 ->toArray();
             $sizes = array_merge($sizes, $siblingsSizes);
         }
-        
+
         // 6. If no parent_article, look for products with SAME title (size variants often have identical titles)
         if (empty($product->parent_article) && count(array_unique($sizes)) <= 1) {
             $titleSiblings = Product::where('title', $product->title)
@@ -3492,7 +3673,7 @@ PROMPT;
                 ->toArray();
             $sizes = array_merge($sizes, $titleSiblings);
         }
-        
+
         return array_values(array_unique(array_filter($sizes)));
     }
 
@@ -3506,11 +3687,13 @@ PROMPT;
         // Try simple keyword search
         $results = $this->searchTool->search($message, [], 3);
 
-        if (!empty($results)) {
+        if (! empty($results)) {
             $ids = array_column($results, 'id');
             $tenantId = $this->searchTool->getCurrentTenantId();
             $cards = $this->detailsTool->getCards($ids, 10, $tenantId);
-            if (!empty($cards)) $results = $cards;
+            if (! empty($cards)) {
+                $results = $cards;
+            }
 
             return [
                 'message' => 'Ось що я знайшов за вашим запитом:',

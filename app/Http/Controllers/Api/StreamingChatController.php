@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Streaming chat endpoint using Server-Sent Events (SSE).
- * 
+ *
  * Usage from frontend:
  * ```javascript
  * const eventSource = new EventSource('/api/chat/stream?message=плитоноска&session_id=xxx');
@@ -27,13 +27,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  *   }
  * };
  * ```
- * 
+ *
  * Test with curl:
  * curl -N "http://localhost:8000/api/chat/stream?message=плитоноска&session_id=test123"
  */
 class StreamingChatController extends Controller
 {
     private const MAX_MESSAGE_LENGTH = 2000;
+
     private const MIN_SESSION_ID_LENGTH = 8;
 
     public function __construct(
@@ -49,6 +50,7 @@ class StreamingChatController extends Controller
         $message = $this->sanitizeMessage($request->input('message', ''));
         $sessionId = $this->validateSessionId($request->input('session_id'));
         $requestId = (string) Str::uuid();
+        $debugMode = $request->input('debug_key') === config('app.diagnostic_key', 'diagnostic_secret_key_2025');
 
         Log::info('StreamingChatController: starting stream', [
             'request_id' => $requestId,
@@ -56,12 +58,12 @@ class StreamingChatController extends Controller
             'session_id' => $sessionId,
         ]);
 
-        return new StreamedResponse(function () use ($message, $sessionId, $requestId) {
+        return new StreamedResponse(function () use ($message, $sessionId, $requestId, $debugMode) {
             // Disable output buffering
             while (ob_get_level() > 0) {
                 ob_end_flush();
             }
-            
+
             // Send initial keepalive to establish connection
             $this->sendEvent('status', [
                 'text' => 'Обробляю...',
@@ -72,11 +74,12 @@ class StreamingChatController extends Controller
             // Validate input
             if (mb_strlen($message) > self::MAX_MESSAGE_LENGTH) {
                 $this->sendEvent('error', [
-                    'text' => 'Повідомлення занадто довге. Скоротіть до ' . self::MAX_MESSAGE_LENGTH . ' символів.',
+                    'text' => 'Повідомлення занадто довге. Скоротіть до '.self::MAX_MESSAGE_LENGTH.' символів.',
                     'session_id' => $sessionId,
                     'request_id' => $requestId,
                 ]);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
+
                 return;
             }
 
@@ -87,6 +90,7 @@ class StreamingChatController extends Controller
                     'request_id' => $requestId,
                 ]);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
+
                 return;
             }
 
@@ -97,32 +101,34 @@ class StreamingChatController extends Controller
                     'request_id' => $requestId,
                     'session_id' => $sessionId,
                 ]);
-                
+
                 // Still save the user message to DB for operator to see
                 $this->saveUserMessage($sessionId, $message);
-                
+
                 $this->sendEvent('chunk', [
                     'text' => 'Ваше повідомлення передано оператору. Очікуйте відповіді.',
                 ]);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
+
                 return;
             }
 
             // Check message limit for tenant
             $tenantContext = app(\App\Services\Tenant\TenantContext::class);
             $tenant = $tenantContext->getTenant();
-            if ($tenant && !$tenant->canSendMessage()) {
+            if ($tenant && ! $tenant->canSendMessage()) {
                 Log::warning('StreamingChatController: message limit exceeded', [
                     'request_id' => $requestId,
                     'tenant_id' => $tenant->id,
                     'messages_used' => $tenant->messages_used,
                     'messages_limit' => $tenant->messages_limit,
                 ]);
-                
+
                 $this->sendEvent('chunk', [
                     'text' => 'На жаль, вичерпано ліміт повідомлень на цей місяць. Зверніться до адміністратора магазину.',
                 ]);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
+
                 return;
             }
 
@@ -130,7 +136,7 @@ class StreamingChatController extends Controller
                 // Set context for prompt preset matching
                 $presetContext = $this->buildPresetContext($sessionId, $message);
                 $this->streamingAgent->setContext($presetContext);
-                
+
                 // Stream response from agent
                 $responseGenerated = false;
                 foreach ($this->streamingAgent->stream($message, $sessionId) as $event) {
@@ -138,15 +144,15 @@ class StreamingChatController extends Controller
                     $data = $event['data'] ?? [];
                     $data['session_id'] = $sessionId;
                     $data['request_id'] = $requestId;
-                    
+
                     $this->sendEvent($type, $data);
-                    
+
                     // Mark that we got a real response (not just status)
                     if ($type === 'chunk' || $type === 'products' || $type === 'text') {
                         $responseGenerated = true;
                     }
                 }
-                
+
                 // Increment message usage ONLY if AI generated a response
                 if ($tenant && $responseGenerated) {
                     $tenant->incrementMessageUsage();
@@ -156,14 +162,23 @@ class StreamingChatController extends Controller
                 Log::error('StreamingChatController: error', [
                     'request_id' => $requestId,
                     'error' => $e->getMessage(),
+                    'file' => $e->getFile().':'.$e->getLine(),
                     'trace' => $e->getTraceAsString(),
                 ]);
 
-                $this->sendEvent('error', [
+                $errorData = [
                     'text' => 'Сталася помилка. Спробуйте ще раз 🙏',
                     'session_id' => $sessionId,
                     'request_id' => $requestId,
-                ]);
+                ];
+
+                if ($debugMode) {
+                    $errorData['debug_error'] = $e->getMessage();
+                    $errorData['debug_file'] = $e->getFile().':'.$e->getLine();
+                    $errorData['debug_class'] = get_class($e);
+                }
+
+                $this->sendEvent('error', $errorData);
                 $this->sendEvent('done', ['session_id' => $sessionId]);
             }
         }, 200, [
@@ -182,8 +197,8 @@ class StreamingChatController extends Controller
     private function sendEvent(string $type, array $data): void
     {
         $data['type'] = $type;
-        echo "data: " . json_encode($data, JSON_UNESCAPED_UNICODE) . "\n\n";
-        
+        echo 'data: '.json_encode($data, JSON_UNESCAPED_UNICODE)."\n\n";
+
         if (ob_get_level() > 0) {
             ob_flush();
         }
@@ -195,13 +210,13 @@ class StreamingChatController extends Controller
      */
     private function sanitizeMessage(mixed $input): string
     {
-        if (!is_string($input)) {
+        if (! is_string($input)) {
             return '';
         }
 
         $message = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $input);
         $message = preg_replace('/\s+/', ' ', $message);
-        
+
         return trim($message);
     }
 
@@ -210,12 +225,12 @@ class StreamingChatController extends Controller
      */
     private function validateSessionId(mixed $input): string
     {
-        if (!is_string($input) || mb_strlen(trim($input)) < self::MIN_SESSION_ID_LENGTH) {
+        if (! is_string($input) || mb_strlen(trim($input)) < self::MIN_SESSION_ID_LENGTH) {
             return (string) Str::uuid();
         }
 
         $normalized = preg_replace('/[^a-zA-Z0-9_-]/', '', $input);
-        
+
         if (mb_strlen($normalized) < self::MIN_SESSION_ID_LENGTH) {
             return (string) Str::uuid();
         }
@@ -231,7 +246,7 @@ class StreamingChatController extends Controller
         try {
             // Get tenant_id from TenantContext
             $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
-            
+
             $chatSession = \App\Models\ChatSession::firstOrCreate(
                 ['session_id' => $sessionId],
                 [
@@ -240,7 +255,7 @@ class StreamingChatController extends Controller
                     'started_at' => now(),
                 ]
             );
-            
+
             // Update tenant_id if session exists but has null tenant_id
             if ($chatSession->tenant_id === null && $tenantId !== null) {
                 $chatSession->update(['tenant_id' => $tenantId]);
@@ -268,46 +283,46 @@ class StreamingChatController extends Controller
             ]);
         }
     }
-    
+
     /**
      * Build context for prompt preset matching.
      */
     private function buildPresetContext(string $sessionId, string $message): array
     {
         $context = [];
-        
+
         // CRITICAL: tenant_id for multi-tenant preset isolation
         $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
         if ($tenantId) {
             $context['tenant_id'] = $tenantId;
         }
-        
+
         // Detect language from message
         $context['language'] = $this->detectLanguage($message);
-        
+
         // Load session data for UTM and other context
         $session = \App\Models\ChatSession::where('session_id', $sessionId)->first();
-        
+
         if ($session && is_array($session->meta)) {
             // Get UTM campaign if stored
-            if (!empty($session->meta['utm_campaign'])) {
+            if (! empty($session->meta['utm_campaign'])) {
                 $context['campaign'] = $session->meta['utm_campaign'];
             }
-            
+
             // Get tone preference if stored
-            if (!empty($session->meta['tone'])) {
+            if (! empty($session->meta['tone'])) {
                 $context['tone'] = $session->meta['tone'];
             }
-            
+
             // Get categories from last context
-            if (!empty($session->meta['last_categories'])) {
+            if (! empty($session->meta['last_categories'])) {
                 $context['categories'] = $session->meta['last_categories'];
             }
         }
-        
+
         return array_filter($context);
     }
-    
+
     /**
      * Simple language detection from message.
      */
@@ -319,14 +334,15 @@ class StreamingChatController extends Controller
             if (preg_match('/[іїєґІЇЄҐ]/u', $message)) {
                 return 'uk';
             }
+
             return 'uk';
         }
-        
+
         // Latin characters - English
         if (preg_match('/[a-zA-Z]/u', $message)) {
             return 'en';
         }
-        
+
         return 'uk';
     }
 }

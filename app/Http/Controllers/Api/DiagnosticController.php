@@ -15,7 +15,12 @@ use Illuminate\Support\Facades\DB;
  */
 class DiagnosticController extends Controller
 {
-    private string $secretKey = 'diagnostic_secret_key_2025';
+    private string $secretKey;
+
+    public function __construct()
+    {
+        $this->secretKey = config('services.diagnostic.secret_key', 'diagnostic_secret_key_2025');
+    }
 
     /**
      * Middleware to check access key
@@ -31,7 +36,7 @@ class DiagnosticController extends Controller
      */
     public function dbStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -41,16 +46,16 @@ class DiagnosticController extends Controller
                 ->where('in_stock', true)
                 ->where('price', '>', 0)
                 ->pluck('price')
-                ->map(fn($p) => (float) $p)
+                ->map(fn ($p) => (float) $p)
                 ->sort()
                 ->values();
-            
+
             $count = $prices->count();
             if ($count > 0) {
                 $p25 = $prices->get((int) ($count * 0.25)) ?? $prices->first();
                 $p50 = $prices->get((int) ($count * 0.50)) ?? $prices->avg();
                 $p75 = $prices->get((int) ($count * 0.75)) ?? $prices->last();
-                
+
                 $priceStats = [
                     'min' => (int) $prices->min(),
                     'max' => (int) $prices->max(),
@@ -81,8 +86,8 @@ class DiagnosticController extends Controller
             ->select('tenant_id', DB::raw('COUNT(*) as count'))
             ->groupBy('tenant_id')
             ->get()
-            ->mapWithKeys(fn($row) => [
-                $row->tenant_id ?? 'NULL' => $row->count
+            ->mapWithKeys(fn ($row) => [
+                $row->tenant_id ?? 'NULL' => $row->count,
             ]);
 
         // AI Enrichment statistics (may not exist in all environments)
@@ -95,7 +100,7 @@ class DiagnosticController extends Controller
                 ->select('products.tenant_id', DB::raw('COUNT(*) as count'))
                 ->groupBy('products.tenant_id')
                 ->get()
-                ->mapWithKeys(fn($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
+                ->mapWithKeys(fn ($row) => [$row->tenant_id ?? 'NULL' => $row->count]);
         } catch (\Exception $e) {
             // Table may not exist
             $totalAiIndex = 0;
@@ -112,11 +117,11 @@ class DiagnosticController extends Controller
             ->select('presence', DB::raw('COUNT(*) as count'), DB::raw('SUM(CASE WHEN in_stock = 1 THEN 1 ELSE 0 END) as in_stock_count'))
             ->groupBy('presence')
             ->get()
-            ->mapWithKeys(fn($row) => [
+            ->mapWithKeys(fn ($row) => [
                 $row->presence ?? 'NULL' => [
                     'total' => $row->count,
                     'in_stock' => $row->in_stock_count,
-                ]
+                ],
             ]);
 
         $stats = [
@@ -133,8 +138,8 @@ class DiagnosticController extends Controller
                 'with_ai_type' => $withAiType,
                 'with_ai_category' => $withAiCategory,
                 'by_tenant' => $aiIndexByTenant,
-                'coverage_percent' => $totalProducts > 0 
-                    ? round(($totalAiIndex / $totalProducts) * 100, 1) 
+                'coverage_percent' => $totalProducts > 0
+                    ? round(($totalAiIndex / $totalProducts) * 100, 1)
                     : 0,
             ],
             'price_stats' => [
@@ -159,7 +164,7 @@ class DiagnosticController extends Controller
      */
     public function cartEvents(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -168,16 +173,17 @@ class DiagnosticController extends Controller
 
         $events = DB::table('chat_events')
             ->where('event_type', 'add_to_cart')
-            ->where(function($q) use ($merchantId) {
+            ->where(function ($q) use ($merchantId) {
                 $q->where('merchant_id', $merchantId)
-                  ->orWhere('merchant_id', 'like', '%' . $merchantId . '%');
+                    ->orWhere('merchant_id', 'like', '%'.$merchantId.'%');
             })
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get();
 
-        $parsed = $events->map(function($e) {
+        $parsed = $events->map(function ($e) {
             $meta = json_decode($e->metadata ?? '{}', true);
+
             return [
                 'id' => $e->id,
                 'merchant_id' => $e->merchant_id,
@@ -195,11 +201,11 @@ class DiagnosticController extends Controller
 
         // Summary stats
         $total = $parsed->count();
-        $withHadChat = $parsed->filter(fn($e) => $e['had_chat'])->count();
-        $withFromChat = $parsed->filter(fn($e) => $e['from_chat'])->count();
-        $chatAttributed = $parsed->filter(fn($e) => $e['had_chat'] || $e['from_chat'])->count();
+        $withHadChat = $parsed->filter(fn ($e) => $e['had_chat'])->count();
+        $withFromChat = $parsed->filter(fn ($e) => $e['from_chat'])->count();
+        $chatAttributed = $parsed->filter(fn ($e) => $e['had_chat'] || $e['from_chat'])->count();
         $uniqueSessions = $parsed->pluck('session_id')->unique()->count();
-        $chatAttributedSessions = $parsed->filter(fn($e) => $e['had_chat'] || $e['from_chat'])->pluck('session_id')->unique()->count();
+        $chatAttributedSessions = $parsed->filter(fn ($e) => $e['had_chat'] || $e['from_chat'])->pluck('session_id')->unique()->count();
 
         return response()->json([
             'summary' => [
@@ -221,7 +227,7 @@ class DiagnosticController extends Controller
      */
     public function categories(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -232,7 +238,7 @@ class DiagnosticController extends Controller
             ->groupBy('category_path')
             ->orderByDesc('count')
             ->get()
-            ->map(fn($c) => [
+            ->map(fn ($c) => [
                 'path' => $c->category_path,
                 'name' => collect(explode(' > ', $c->category_path))->last(),
                 'count' => $c->count,
@@ -250,7 +256,7 @@ class DiagnosticController extends Controller
      */
     public function searchDb(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -258,25 +264,25 @@ class DiagnosticController extends Controller
         $limit = min((int) $request->query('limit', 20), 100);
         $tenantId = $request->query('tenant_id');
 
-        if (!$query) {
+        if (! $query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
         // Use withoutGlobalScope to see all products including those with NULL tenant_id
         $productsQuery = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('in_stock', true);
-        
+
         // Filter by tenant_id if provided
         if ($tenantId !== null) {
             $productsQuery->where('tenant_id', (int) $tenantId);
         }
-        
+
         $products = $productsQuery
             ->where(function ($q) use ($query) {
                 if ($query !== '*') {
                     $q->where('title', 'like', "%{$query}%")
-                      ->orWhere('search_index', 'like', "%{$query}%")
-                      ->orWhere('category_path', 'like', "%{$query}%");
+                        ->orWhere('search_index', 'like', "%{$query}%")
+                        ->orWhere('category_path', 'like', "%{$query}%");
                 }
             })
             ->limit($limit)
@@ -312,18 +318,18 @@ class DiagnosticController extends Controller
      */
     public function productByArticle(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $article = $request->query('article', '');
-        if (!$article) {
+        if (! $article) {
             return response()->json(['error' => 'Missing article parameter'], 400);
         }
 
         $product = Product::where('article', $article)->first();
-        
-        if (!$product) {
+
+        if (! $product) {
             return response()->json([
                 'found' => false,
                 'article' => $article,
@@ -341,7 +347,7 @@ class DiagnosticController extends Controller
             'characteristics_rozmir' => $product->raw['characteristics']['rozmir'] ?? null,
             'params_size' => $product->raw['params']['size'] ?? null,
         ];
-        
+
         return response()->json([
             'found' => true,
             'article' => $article,
@@ -378,7 +384,7 @@ class DiagnosticController extends Controller
      */
     public function searchMeili(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -387,7 +393,7 @@ class DiagnosticController extends Controller
         $filter = $request->query('filter', '');
         $tenantId = $request->query('tenant_id');
 
-        if (!$query) {
+        if (! $query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
@@ -402,15 +408,15 @@ class DiagnosticController extends Controller
 
             // Build filter
             $filterParts = ['in_stock = true'];
-            
+
             if ($tenantId) {
                 $filterParts[] = "tenant_id = {$tenantId}";
             }
-            
+
             if ($filter) {
                 $filterParts[] = $filter;
             }
-            
+
             $searchParams['filter'] = implode(' AND ', $filterParts);
 
             $result = $index->search($query, $searchParams);
@@ -438,14 +444,14 @@ class DiagnosticController extends Controller
      */
     public function meiliStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $meiliEnabled = config('meilisearch.enabled', false);
         $meiliHost = config('meilisearch.host', 'not set');
-        
-        if (!$meiliEnabled) {
+
+        if (! $meiliEnabled) {
             return response()->json([
                 'status' => 'disabled',
                 'meili_enabled' => false,
@@ -453,10 +459,10 @@ class DiagnosticController extends Controller
                 'message' => 'Meilisearch is disabled in config (MEILI_ENABLED=false)',
             ]);
         }
-        
+
         if (empty($meiliHost)) {
             return response()->json([
-                'status' => 'not_configured', 
+                'status' => 'not_configured',
                 'meili_enabled' => true,
                 'meili_host' => $meiliHost,
                 'message' => 'Meilisearch host is not configured (MEILI_HOST is empty)',
@@ -466,10 +472,10 @@ class DiagnosticController extends Controller
         try {
             $meili = app(MeiliClient::class);
             $client = $meili->client();
-            
+
             // First check if client can connect
             $health = $client->health();
-            
+
             $index = $client->index('products');
             $stats = $index->stats(); // v1.x uses stats() not getStats()
             $settings = $index->getSettings();
@@ -502,13 +508,13 @@ class DiagnosticController extends Controller
      */
     public function product(Request $request, int $id): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $product = Product::with('aiIndex')->find($id);
 
-        if (!$product) {
+        if (! $product) {
             return response()->json(['error' => 'Product not found'], 404);
         }
 
@@ -534,7 +540,7 @@ class DiagnosticController extends Controller
      */
     public function variants(Request $request, string $parentArticle): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -547,7 +553,7 @@ class DiagnosticController extends Controller
                 'color' => $color ?: '(no color)',
                 'count' => $items->count(),
                 'sizes' => $items->pluck('size')->filter()->unique()->values()->toArray(),
-                'items' => $items->map(fn($p) => [
+                'items' => $items->map(fn ($p) => [
                     'id' => $p->id,
                     'size' => $p->size,
                     'price' => $p->price,
@@ -572,14 +578,14 @@ class DiagnosticController extends Controller
      */
     public function categoryProducts(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $path = $request->query('path', '');
         $limit = min((int) $request->query('limit', 50), 200);
 
-        if (!$path) {
+        if (! $path) {
             return response()->json(['error' => 'Missing path parameter'], 400);
         }
 
@@ -602,14 +608,14 @@ class DiagnosticController extends Controller
      */
     public function testChat(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $query = $request->query('q', '');
         $tenantId = $request->query('tenant_id', 2); // Default to tenant 2 for debugging
 
-        if (!$query) {
+        if (! $query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
@@ -617,63 +623,63 @@ class DiagnosticController extends Controller
             // STEP 1: Direct Meili search with same filter as MeiliProductSearchTool
             $meili = app(\App\Services\Search\MeiliClient::class);
             $index = $meili->client()->index('products');
-            
+
             // Build the same filter that MeiliProductSearchTool would build
             $queryLower = mb_strtolower($query);
             $accessoryFilter = null;
             if (preg_match('/(шолом|каска|helmet)/ui', $queryLower)) {
                 $accessoryFilter = "ai_product_type IN ['helmet', 'ballistic_helmet', 'tactical_helmet']";
             }
-            
+
             $meiliFilter = "tenant_id = {$tenantId} AND in_stock = true";
             if ($accessoryFilter) {
-                $meiliFilter .= " AND " . $accessoryFilter;
+                $meiliFilter .= ' AND '.$accessoryFilter;
             }
-            
+
             $rawMeiliWithFilter = $index->search($query, [
                 'limit' => 10,
                 'filter' => $meiliFilter,
                 'attributesToRetrieve' => ['id', 'title', 'ai_product_type', 'category_path'],
             ])->getHits();
-            
+
             // STEP 2: Direct Meili without ai_product_type filter for comparison
             $rawMeiliNoFilter = $index->search($query, [
                 'limit' => 5,
                 'filter' => "tenant_id = {$tenantId} AND in_stock = true",
                 'attributesToRetrieve' => ['id', 'title', 'ai_product_type'],
             ])->getHits();
-            
+
             // STEP 3: Run MeiliProductSearchTool.search()
             $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
             $currentTenantId = $searchTool->getCurrentTenantId();
-            $filters = ['tenant_id' => (int)$tenantId];
+            $filters = ['tenant_id' => (int) $tenantId];
             $results = $searchTool->search($query, $filters, 20);
 
             return response()->json([
                 'query' => $query,
-                'tenant_id_requested' => (int)$tenantId,
+                'tenant_id_requested' => (int) $tenantId,
                 'tenant_id_from_context' => $currentTenantId,
                 'meili_filter_used' => $meiliFilter,
                 'accessory_filter' => $accessoryFilter,
-                
+
                 // Raw Meili WITH ai_product_type filter
                 'raw_meili_with_filter_count' => count($rawMeiliWithFilter),
-                'raw_meili_with_filter' => array_map(fn($h) => [
+                'raw_meili_with_filter' => array_map(fn ($h) => [
                     'id' => $h['id'] ?? null,
                     'title' => mb_substr($h['title'] ?? '', 0, 50),
                     'ai_product_type' => $h['ai_product_type'] ?? '__missing__',
                 ], array_slice($rawMeiliWithFilter, 0, 5)),
-                
+
                 // Raw Meili WITHOUT ai_product_type filter
                 'raw_meili_no_filter_count' => count($rawMeiliNoFilter),
-                'raw_meili_no_filter' => array_map(fn($h) => [
+                'raw_meili_no_filter' => array_map(fn ($h) => [
                     'id' => $h['id'] ?? null,
                     'ai_product_type' => $h['ai_product_type'] ?? '__missing__',
                 ], array_slice($rawMeiliNoFilter, 0, 5)),
-                
+
                 // MeiliProductSearchTool results
                 'meili_tool_count' => count($results),
-                'meili_tool_results' => array_map(fn($p) => [
+                'meili_tool_results' => array_map(fn ($p) => [
                     'id' => $p['id'] ?? null,
                     'title' => mb_substr($p['title'] ?? '', 0, 50),
                     'ai_product_type' => $p['ai_product_type'] ?? '__missing__',
@@ -688,42 +694,42 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/trace-meili?q=...&tenant_id=2
      * Step-by-step trace of MeiliProductSearchTool to find where ai_product_type is lost
      */
     public function traceMeili(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $query = $request->query('q', '');
-        $tenantId = (int)$request->query('tenant_id', 2);
+        $tenantId = (int) $request->query('tenant_id', 2);
 
-        if (!$query) {
+        if (! $query) {
             return response()->json(['error' => 'Missing q parameter'], 400);
         }
 
         $trace = [];
-        
+
         try {
             $meili = app(\App\Services\Search\MeiliClient::class);
             $index = $meili->client()->index('products');
-            
+
             // Build filter
-            $filterParts = ["tenant_id = {$tenantId}", "in_stock = true"];
+            $filterParts = ["tenant_id = {$tenantId}", 'in_stock = true'];
             $queryLower = mb_strtolower($query);
-            
+
             // Add helmet filter if query matches
             if (preg_match('/(шолом|каска|helmet)/ui', $queryLower)) {
                 $filterParts[] = "ai_product_type IN ['helmet', 'ballistic_helmet', 'tactical_helmet']";
             }
-            
+
             $filterString = implode(' AND ', $filterParts);
             $trace['filter'] = $filterString;
-            
+
             // Search
             $searchParams = [
                 'limit' => 20,
@@ -734,17 +740,17 @@ class DiagnosticController extends Controller
                     'ai_product_type', 'ai_keywords', 'display_in_showcase', 'brand',
                 ],
             ];
-            
+
             $result = $index->search($query, $searchParams);
             $hits = $result->getHits();
-            
-            $trace['step1_raw_hits'] = array_map(fn($h) => [
+
+            $trace['step1_raw_hits'] = array_map(fn ($h) => [
                 'id' => $h['id'] ?? null,
                 'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
                 'title' => mb_substr($h['title'] ?? '', 0, 40),
             ], array_slice($hits, 0, 5));
             $trace['step1_count'] = count($hits);
-            
+
             // Apply __unknown__ for empty ai_product_type (like MeiliProductSearchTool does)
             foreach ($hits as &$hit) {
                 if (empty($hit['ai_product_type'])) {
@@ -752,12 +758,12 @@ class DiagnosticController extends Controller
                 }
             }
             unset($hit); // Important: unset reference!
-            
-            $trace['step2_after_unknown_default'] = array_map(fn($h) => [
+
+            $trace['step2_after_unknown_default'] = array_map(fn ($h) => [
                 'id' => $h['id'] ?? null,
                 'ai_product_type' => $h['ai_product_type'] ?? '__MISSING__',
             ], array_slice($hits, 0, 5));
-            
+
             // STEP 3: Simulate filterAccessories logic
             $accessoryTitlePatterns = [
                 'кріплення', 'адаптер', 'планка', 'подушк', 'противаг',
@@ -767,15 +773,15 @@ class DiagnosticController extends Controller
                 'захист обличчя', 'захист нижньої', 'набір', 'комплект монтаж',
                 'система захист', 'липучк', 'нейлонов', 'платформ',
             ];
-            
+
             $mainProducts = [];
             $filteredOut = [];
-            
+
             foreach ($hits as $hit) {
                 $titleLower = mb_strtolower($hit['title'] ?? '');
                 $isAccessory = false;
                 $matchedPattern = null;
-                
+
                 foreach ($accessoryTitlePatterns as $pattern) {
                     if (str_contains($titleLower, $pattern)) {
                         $isAccessory = true;
@@ -783,7 +789,7 @@ class DiagnosticController extends Controller
                         break;
                     }
                 }
-                
+
                 if ($isAccessory) {
                     $filteredOut[] = [
                         'id' => $hit['id'],
@@ -798,39 +804,39 @@ class DiagnosticController extends Controller
                     ];
                 }
             }
-            
+
             $trace['step3_main_products_count'] = count($mainProducts);
             $trace['step3_main_products'] = array_slice($mainProducts, 0, 10);
             $trace['step3_filtered_out_count'] = count($filteredOut);
             $trace['step3_filtered_out_sample'] = array_slice($filteredOut, 0, 5);
-            
+
             // Step 4: Check if shouldFilter would be true
             $isMainProductQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate.?carrier|бронежилет|жилет)/ui', $queryLower);
             $shouldFilter = (count($mainProducts) >= 1 && $isMainProductQuery) || (count($mainProducts) >= 2);
             $trace['step4_shouldFilter'] = $shouldFilter;
-            $trace['step4_isMainProductQuery'] = (bool)$isMainProductQuery;
+            $trace['step4_isMainProductQuery'] = (bool) $isMainProductQuery;
             $trace['step4_mainCount'] = count($mainProducts);
-            
+
             // Step 5: What would MeiliProductSearchTool.search() actually return?
             $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
             $toolFilters = ['tenant_id' => $tenantId];
             $toolResults = $searchTool->search($query, $toolFilters, 20);
             $searchMeta = $searchTool->getSearchMeta();
-            
+
             $trace['step5_meili_tool_results_count'] = count($toolResults);
             $trace['step5_meili_tool_search_meta'] = $searchMeta;
-            $trace['step5_meili_tool_results'] = array_map(fn($p) => [
+            $trace['step5_meili_tool_results'] = array_map(fn ($p) => [
                 'id' => $p['id'] ?? null,
                 'ai_product_type' => $p['ai_product_type'] ?? '__missing__',
                 'title' => mb_substr($p['title'] ?? '', 0, 40),
             ], array_slice($toolResults, 0, 5));
-            
+
             return response()->json([
                 'query' => $query,
                 'tenant_id' => $tenantId,
                 'trace' => $trace,
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'error' => $e->getMessage(),
@@ -845,20 +851,20 @@ class DiagnosticController extends Controller
      */
     public function syncSample(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $article = $request->query('article', '');
 
-        if (!$article) {
+        if (! $article) {
             // Return random product with raw data
             $product = Product::whereNotNull('raw')->where('in_stock', true)->inRandomOrder()->first();
         } else {
             $product = Product::where('article', $article)->first();
         }
 
-        if (!$product) {
+        if (! $product) {
             return response()->json(['error' => 'Product not found'], 404);
         }
 
@@ -873,7 +879,7 @@ class DiagnosticController extends Controller
             'raw_Kolir' => $raw['Kolir'] ?? null,
             'raw_Rozmir' => $raw['Rozmir'] ?? null,
             'raw_mod_title' => $raw['mod_title'] ?? null,
-            'has_raw' => !empty($raw),
+            'has_raw' => ! empty($raw),
             'raw_keys' => is_array($raw) ? array_keys($raw) : [],
         ]);
     }
@@ -886,14 +892,14 @@ class DiagnosticController extends Controller
      */
     public function reindexMeili(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $chunk = min((int) $request->query('chunk', 200), 500);
         $sync = $request->query('sync', false);
         $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
-        
+
         // Count products
         $query = Product::withoutGlobalScope(\App\Scopes\TenantScope::class);
         if ($tenantId !== null) {
@@ -914,7 +920,7 @@ class DiagnosticController extends Controller
             // Constructor: __construct(?int $tenantId = null, int $chunkSize = 500)
             $job = new \App\Jobs\IndexProductsToMeiliJob($tenantId, $chunk);
             $job->handle(app(\App\Services\Search\MeiliClient::class));
-            
+
             return response()->json([
                 'status' => 'completed',
                 'total_products' => $total,
@@ -941,7 +947,7 @@ class DiagnosticController extends Controller
     /**
      * POST /api/diagnostic/ai-enrich
      * Run AI enrichment for products without AI index
-     * 
+     *
      * Query params:
      *   - tenant_id: optional, specific tenant (default: all tenants)
      *   - sync: run synchronously (default: queue)
@@ -950,7 +956,7 @@ class DiagnosticController extends Controller
      */
     public function aiEnrich(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -962,24 +968,24 @@ class DiagnosticController extends Controller
         // Count products needing enrichment
         $query = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('in_stock', true);
-        
+
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
-        
-        if (!$force) {
+
+        if (! $force) {
             $query->whereNotIn('id', function ($q) {
                 $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
             });
         }
-        
+
         $productsToEnrich = $query->count();
-        
+
         // Get stats per tenant
         $statsByTenant = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('in_stock', true)
-            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
-            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+            ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->when(! $force, fn ($q) => $q->whereNotIn('id', function ($sq) {
                 $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
             }))
             ->selectRaw('tenant_id, COUNT(*) as count')
@@ -999,41 +1005,45 @@ class DiagnosticController extends Controller
             // Run synchronously for all tenants - process ALL batches in a loop
             set_time_limit(3600); // 1 hour for large datasets
             $results = [];
-            
-            $tenants = $tenantId 
+
+            $tenants = $tenantId
                 ? [\App\Models\Tenant::find($tenantId)]
                 : \App\Models\Tenant::where('status', 'active')->get();
-            
+
             foreach ($tenants as $tenant) {
-                if (!$tenant) continue;
-                
+                if (! $tenant) {
+                    continue;
+                }
+
                 $tenantCount = $statsByTenant[$tenant->id] ?? 0;
-                if ($tenantCount === 0) continue;
-                
+                if ($tenantCount === 0) {
+                    continue;
+                }
+
                 try {
                     $processed = 0;
                     $batchNum = 0;
-                    
+
                     // Process all batches in a loop (not via dispatch)
                     while ($processed < $tenantCount) {
                         $batchNum++;
-                        
+
                         // Get products for this batch directly (not via job)
                         $products = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                             ->where('tenant_id', $tenant->id)
                             ->where('in_stock', true)
                             ->whereNotNull('title')
-                            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+                            ->when(! $force, fn ($q) => $q->whereNotIn('id', function ($sq) {
                                 $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
                             }))
                             ->orderBy('id')
                             ->take($batchSize)
                             ->get();
-                        
+
                         if ($products->isEmpty()) {
                             break;
                         }
-                        
+
                         // Process products using ProductIndexBuilder directly
                         $builder = app(\App\Services\Ai\ProductIndexBuilder::class);
                         foreach ($products as $product) {
@@ -1047,20 +1057,20 @@ class DiagnosticController extends Controller
                                 ]);
                                 // Continue with next product even on error
                             }
-                            
+
                             // Rate limiting: 300ms between API calls
                             usleep(300000);
                         }
-                        
+
                         // Update tenantCount for accurate tracking
                         $tenantCount = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                             ->where('tenant_id', $tenant->id)
                             ->where('in_stock', true)
-                            ->when(!$force, fn($q) => $q->whereNotIn('id', function ($sq) {
+                            ->when(! $force, fn ($q) => $q->whereNotIn('id', function ($sq) {
                                 $sq->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
                             }))
                             ->count();
-                        
+
                         \Illuminate\Support\Facades\Log::info('AI enrichment batch complete', [
                             'tenant_id' => $tenant->id,
                             'batch' => $batchNum,
@@ -1069,7 +1079,7 @@ class DiagnosticController extends Controller
                             'remaining' => $tenantCount,
                         ]);
                     }
-                    
+
                     $results[$tenant->id] = [
                         'status' => 'completed',
                         'products_processed' => $processed,
@@ -1081,7 +1091,7 @@ class DiagnosticController extends Controller
                     ];
                 }
             }
-            
+
             return response()->json([
                 'status' => 'completed',
                 'mode' => 'sync',
@@ -1092,24 +1102,28 @@ class DiagnosticController extends Controller
         }
 
         // Dispatch jobs per tenant
-        $tenants = $tenantId 
+        $tenants = $tenantId
             ? [\App\Models\Tenant::find($tenantId)]
             : \App\Models\Tenant::where('status', 'active')->get();
-        
+
         $dispatched = [];
         foreach ($tenants as $tenant) {
-            if (!$tenant) continue;
-            
+            if (! $tenant) {
+                continue;
+            }
+
             $tenantCount = $statsByTenant[$tenant->id] ?? 0;
-            if ($tenantCount === 0) continue;
-            
+            if ($tenantCount === 0) {
+                continue;
+            }
+
             \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
                 batchSize: min($batchSize, $tenantCount),
                 offset: 0,
                 forceReanalyze: $force,
                 tenantId: $tenant->id
             )->onQueue('default');
-            
+
             $dispatched[$tenant->id] = $tenantCount;
         }
 
@@ -1129,27 +1143,27 @@ class DiagnosticController extends Controller
      */
     public function aiTestOne(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $productId = $request->input('product_id');
-        
+
         // Get one product to test
         $product = Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('in_stock', true)
             ->whereNotNull('title')
-            ->when($productId, fn($q) => $q->where('id', $productId))
+            ->when($productId, fn ($q) => $q->where('id', $productId))
             ->first();
-        
-        if (!$product) {
+
+        if (! $product) {
             return response()->json(['error' => 'No product found'], 404);
         }
 
         $config = config('services.openai', []);
         $apiKey = $config['key'] ?? null;
-        
-        if (!$apiKey) {
+
+        if (! $apiKey) {
             return response()->json([
                 'error' => 'OpenAI API key not configured',
                 'config_keys' => array_keys($config),
@@ -1157,7 +1171,7 @@ class DiagnosticController extends Controller
         }
 
         $raw = is_array($product->raw) ? $product->raw : json_decode($product->raw ?? '{}', true);
-        
+
         $title = $product->title ?? '';
         $description = $this->extractDescriptionForTest($raw);
         $category = $product->category_path ?? '';
@@ -1168,7 +1182,7 @@ class DiagnosticController extends Controller
         // Hardcode gpt-4o-mini for testing - gpt-5-nano has too many restrictions
         $model = 'gpt-4o-mini';
         $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
-        
+
         // Build request body for gpt-4o-mini
         $requestBody = [
             'model' => $model,
@@ -1179,15 +1193,15 @@ class DiagnosticController extends Controller
             'temperature' => 0.3,
             'max_tokens' => 800,
         ];
-        
+
         try {
             $response = \Illuminate\Support\Facades\Http::timeout(30)
                 ->withToken($apiKey)
-                ->post($baseUrl . '/chat/completions', $requestBody);
+                ->post($baseUrl.'/chat/completions', $requestBody);
 
             $data = $response->json();
             $content = $data['choices'][0]['message']['content'] ?? null;
-            
+
             // Try to parse JSON
             $json = null;
             if ($content) {
@@ -1196,7 +1210,7 @@ class DiagnosticController extends Controller
                 $cleanContent = trim($cleanContent);
                 $json = json_decode($cleanContent, true);
             }
-            
+
             // Save if requested and JSON parsed successfully
             $saved = false;
             if ($request->boolean('save') && $json !== null) {
@@ -1215,7 +1229,7 @@ class DiagnosticController extends Controller
                 );
                 $saved = true;
             }
-            
+
             return response()->json([
                 'product' => [
                     'id' => $product->id,
@@ -1227,7 +1241,7 @@ class DiagnosticController extends Controller
                 'api_config' => [
                     'model' => $model,
                     'base_url' => $baseUrl,
-                    'has_key' => !empty($apiKey),
+                    'has_key' => ! empty($apiKey),
                 ],
                 'prompt_length' => mb_strlen($prompt),
                 'response_status' => $response->status(),
@@ -1257,13 +1271,14 @@ class DiagnosticController extends Controller
         if (is_array($desc)) {
             $desc = $desc['uk'] ?? $desc['ua'] ?? reset($desc) ?: '';
         }
-        return mb_substr(strip_tags((string)$desc), 0, 1000);
+
+        return mb_substr(strip_tags((string) $desc), 0, 1000);
     }
 
     private function extractCharacteristicsForTest(array $raw): string
     {
         $chars = $raw['characteristics'] ?? $raw['attrs'] ?? [];
-        if (!is_array($chars)) {
+        if (! is_array($chars)) {
             return '';
         }
         $lines = [];
@@ -1271,7 +1286,7 @@ class DiagnosticController extends Controller
             if (is_array($value)) {
                 // Handle nested structures like {"id": 1, "value": {"ua": "Text"}}
                 if (isset($value['value'])) {
-                    $value = is_array($value['value']) 
+                    $value = is_array($value['value'])
                         ? ($value['value']['ua'] ?? $value['value']['uk'] ?? reset($value['value']) ?: '')
                         : $value['value'];
                 } else {
@@ -1283,6 +1298,7 @@ class DiagnosticController extends Controller
                 $lines[] = "{$key}: {$value}";
             }
         }
+
         return implode('; ', array_slice($lines, 0, 20));
     }
 
@@ -1293,7 +1309,7 @@ class DiagnosticController extends Controller
 ТОВАР:
 Назва: {$title}
 Категорія: {$category}
-Опис: " . mb_substr($description, 0, 500) . "
+Опис: ".mb_substr($description, 0, 500)."
 Характеристики: {$characteristics}
 
 Згенеруй JSON з полями:
@@ -1311,7 +1327,7 @@ class DiagnosticController extends Controller
     /**
      * POST /api/diagnostic/ai-enrich-batch-sync
      * Synchronously process a batch of products without AI index
-     * 
+     *
      * Query params:
      * - tenant_id: required - process only this tenant's products
      * - batch_size: 1-20, default 5 - how many products to process
@@ -1319,12 +1335,12 @@ class DiagnosticController extends Controller
      */
     public function aiEnrichBatchSync(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = $request->input('tenant_id');
-        if (!$tenantId) {
+        if (! $tenantId) {
             return response()->json(['error' => 'tenant_id is required'], 400);
         }
 
@@ -1334,7 +1350,7 @@ class DiagnosticController extends Controller
         // Get products without AI index for this tenant
         $products = \App\Models\Product::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereNotIn('id', function($query) {
+            ->whereNotIn('id', function ($query) {
                 $query->select('product_id')->from('product_ai_index');
             })
             ->orderBy('id')
@@ -1346,7 +1362,7 @@ class DiagnosticController extends Controller
             // Check if there are any products left
             $remainingCount = \App\Models\Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
-                ->whereNotIn('id', function($query) {
+                ->whereNotIn('id', function ($query) {
                     $query->select('product_id')->from('product_ai_index');
                 })
                 ->count();
@@ -1396,16 +1412,17 @@ class DiagnosticController extends Controller
             try {
                 $response = \Illuminate\Support\Facades\Http::timeout(45)
                     ->withToken($apiKey)
-                    ->post($baseUrl . '/chat/completions', $requestBody);
+                    ->post($baseUrl.'/chat/completions', $requestBody);
 
-                if (!$response->successful()) {
+                if (! $response->successful()) {
                     $results[] = [
                         'product_id' => $product->id,
                         'title' => $title,
                         'status' => 'error',
-                        'error' => 'API error: ' . $response->status(),
+                        'error' => 'API error: '.$response->status(),
                     ];
                     $errorCount++;
+
                     continue;
                 }
 
@@ -1426,10 +1443,11 @@ class DiagnosticController extends Controller
                         'product_id' => $product->id,
                         'title' => $title,
                         'status' => 'error',
-                        'error' => 'Failed to parse JSON: ' . json_last_error_msg(),
+                        'error' => 'Failed to parse JSON: '.json_last_error_msg(),
                         'raw_content' => mb_substr($content ?? '', 0, 200),
                     ];
                     $errorCount++;
+
                     continue;
                 }
 
@@ -1474,7 +1492,7 @@ class DiagnosticController extends Controller
         // Get remaining count
         $remainingCount = \App\Models\Product::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereNotIn('id', function($query) {
+            ->whereNotIn('id', function ($query) {
                 $query->select('product_id')->from('product_ai_index');
             })
             ->count();
@@ -1498,7 +1516,7 @@ class DiagnosticController extends Controller
      */
     public function syncLogs(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -1507,7 +1525,7 @@ class DiagnosticController extends Controller
 
         $query = DB::table('sync_logs')
             ->orderBy('created_at', 'desc');
-        
+
         if ($type) {
             $query->where('type', $type);
         }
@@ -1526,7 +1544,7 @@ class DiagnosticController extends Controller
      */
     public function aiEnrichStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -1564,8 +1582,8 @@ class DiagnosticController extends Controller
                 'with_keywords' => $ai->with_keywords ?? 0,
                 'with_slang' => $ai->with_slang ?? 0,
                 'with_type' => $ai->with_type ?? 0,
-                'coverage_percent' => $data->total > 0 
-                    ? round((($ai->indexed ?? 0) / $data->total) * 100, 1) 
+                'coverage_percent' => $data->total > 0
+                    ? round((($ai->indexed ?? 0) / $data->total) * 100, 1)
                     : 0,
             ];
         }
@@ -1584,13 +1602,13 @@ class DiagnosticController extends Controller
                 'product_ai_index.slang',
                 'product_ai_index.created_at'
             );
-        
+
         if ($tenantIdFilter) {
             $samplesQuery->where('products.tenant_id', (int) $tenantIdFilter);
         }
-        
+
         $samples = $samplesQuery->limit(10)->get();
-        
+
         // Count products without AI index per tenant
         $missingAiByTenant = DB::table('products')
             ->leftJoin('product_ai_index', 'products.id', '=', 'product_ai_index.product_id')
@@ -1617,40 +1635,40 @@ class DiagnosticController extends Controller
      */
     public function cleanupMeili(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         set_time_limit(120);
-        
+
         try {
             $meili = app(\App\Services\Search\MeiliClient::class);
             $index = $meili->productsIndex();
-            
+
             // Get all IDs from Meilisearch
             $meiliIds = [];
             $limit = 1000;
             $offset = 0;
-            
+
             do {
-                $query = (new \Meilisearch\Contracts\DocumentsQuery())
+                $query = (new \Meilisearch\Contracts\DocumentsQuery)
                     ->setLimit($limit)
                     ->setOffset($offset)
                     ->setFields(['id']);
                 $result = $index->getDocuments($query);
                 $docs = $result->getResults();
-                
+
                 if (empty($docs)) {
                     break;
                 }
-                
+
                 foreach ($docs as $doc) {
                     $meiliIds[] = (int) $doc['id'];
                 }
-                
+
                 $offset += $limit;
             } while (count($docs) === $limit);
-            
+
             if (empty($meiliIds)) {
                 return response()->json([
                     'status' => 'ok',
@@ -1659,17 +1677,17 @@ class DiagnosticController extends Controller
                     'message' => 'Meili index is empty',
                 ]);
             }
-            
+
             // Get valid IDs from DB (only in_stock=true)
             $validIds = Product::where('in_stock', true)
                 ->whereIn('id', $meiliIds)
                 ->pluck('id')
-                ->map(fn($id) => (int) $id)
+                ->map(fn ($id) => (int) $id)
                 ->toArray();
-            
+
             // Find IDs to delete
             $idsToDelete = array_diff($meiliIds, $validIds);
-            
+
             if (empty($idsToDelete)) {
                 return response()->json([
                     'status' => 'ok',
@@ -1679,14 +1697,14 @@ class DiagnosticController extends Controller
                     'message' => 'No stale documents found',
                 ]);
             }
-            
+
             // Delete in chunks
             $deletedCount = 0;
             foreach (array_chunk($idsToDelete, 500) as $chunk) {
                 $index->deleteDocuments($chunk);
                 $deletedCount += count($chunk);
             }
-            
+
             return response()->json([
                 'status' => 'ok',
                 'meili_count' => count($meiliIds),
@@ -1695,7 +1713,7 @@ class DiagnosticController extends Controller
                 'sample_deleted_ids' => array_slice($idsToDelete, 0, 10),
                 'message' => "Deleted {$deletedCount} stale documents",
             ]);
-            
+
         } catch (\Throwable $e) {
             return response()->json([
                 'status' => 'error',
@@ -1710,7 +1728,7 @@ class DiagnosticController extends Controller
      */
     public function cleanupTestSessions(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -1727,19 +1745,19 @@ class DiagnosticController extends Controller
             $query->where('tenant_id', $tenantId);
         } else {
             // Delete only test-prefixed sessions
-            $query->where(function($q) {
+            $query->where(function ($q) {
                 $q->where('session_id', 'like', 'test_%')
-                  ->orWhere('session_id', 'like', 'diagnostic_%')
-                  ->orWhere('session_id', 'like', 'debug_%')
-                  ->orWhere('session_id', 'like', 'verify_%')
-                  ->orWhere('session_id', 'like', 'v_%')
-                  ->orWhere('session_id', 'like', 'sse_%')
-                  ->orWhere('session_id', 'like', 'sse\\_multi_%')
-                  ->orWhere('session_id', 'like', 'sse\\_simple_%')
-                  ->orWhere('session_id', 'like', 'sse\\_lang_%')
-                  ->orWhere('session_id', 'like', 'sse\\_sem_%')
-                  ->orWhere('session_id', 'like', 'sse\\_brand_%')
-                  ->orWhere('session_id', 'like', 'sse\\_slang_%');
+                    ->orWhere('session_id', 'like', 'diagnostic_%')
+                    ->orWhere('session_id', 'like', 'debug_%')
+                    ->orWhere('session_id', 'like', 'verify_%')
+                    ->orWhere('session_id', 'like', 'v_%')
+                    ->orWhere('session_id', 'like', 'sse_%')
+                    ->orWhere('session_id', 'like', 'sse\\_multi_%')
+                    ->orWhere('session_id', 'like', 'sse\\_simple_%')
+                    ->orWhere('session_id', 'like', 'sse\\_lang_%')
+                    ->orWhere('session_id', 'like', 'sse\\_sem_%')
+                    ->orWhere('session_id', 'like', 'sse\\_brand_%')
+                    ->orWhere('session_id', 'like', 'sse\\_slang_%');
             });
 
             if ($tenantId) {
@@ -1763,7 +1781,7 @@ class DiagnosticController extends Controller
             ]);
         }
 
-        $sessionsData = $testSessions->map(fn($s) => [
+        $sessionsData = $testSessions->map(fn ($s) => [
             'id' => $s->id,
             'session_id' => $s->session_id,
             'tenant_id' => $s->tenant_id,
@@ -1804,22 +1822,22 @@ class DiagnosticController extends Controller
      */
     public function cleanupStaleProducts(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
-        if (!$tenantId) {
+        if (! $tenantId) {
             return response()->json(['error' => 'tenant_id is required'], 400);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
         $dryRun = $request->query('dry_run', '1') !== '0';
-        
+
         // Allow absolute cutoff time or relative minutes
         $cutoffTimeParam = $request->query('cutoff_time');
         if ($cutoffTimeParam) {
@@ -1834,15 +1852,15 @@ class DiagnosticController extends Controller
             $staleQuery = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->where('updated_at', '<', $cutoffTime);
-            
+
             $staleCount = $staleQuery->count();
             $sampleArticles = (clone $staleQuery)->limit(10)->pluck('article')->toArray();
-            
+
             // Current products count
             $currentCount = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->count();
-            
+
             // Recent products count
             $recentCount = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
@@ -1891,17 +1909,17 @@ class DiagnosticController extends Controller
      */
     public function cleanupByApi(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
-        if (!$tenantId) {
+        if (! $tenantId) {
             return response()->json(['error' => 'tenant_id is required'], 400);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -1917,14 +1935,14 @@ class DiagnosticController extends Controller
             $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
             $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
             $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
-            
+
             $client = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
-            
+
             // Fetch all articles from API
             $apiArticles = [];
             $offset = 0;
             $limit = 200;
-            
+
             do {
                 $response = $client->request('catalog/export', [
                     'expr' => ['display_in_showcase' => 1],
@@ -1932,30 +1950,30 @@ class DiagnosticController extends Controller
                     'offset' => $offset,
                     'includedParams' => ['article'],
                 ]);
-                
+
                 $products = $response['products'] ?? [];
                 if (empty($products)) {
                     break;
                 }
-                
+
                 foreach ($products as $product) {
-                    if (!empty($product['article'])) {
+                    if (! empty($product['article'])) {
                         $apiArticles[] = $product['article'];
                     }
                 }
-                
+
                 $offset += $limit;
             } while (count($products) === $limit);
-            
+
             // Get DB articles for tenant
             $dbArticles = Product::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
                 ->pluck('article')
                 ->toArray();
-            
+
             // Find articles to delete (in DB but not in API)
             $articlesToDelete = array_diff($dbArticles, $apiArticles);
-            
+
             if (empty($articlesToDelete)) {
                 return response()->json([
                     'status' => 'ok',
@@ -1976,7 +1994,7 @@ class DiagnosticController extends Controller
                     'to_delete' => count($articlesToDelete),
                     'would_remain' => count($apiArticles),
                     'sample_stale_articles' => array_slice($articlesToDelete, 0, 20),
-                    'message' => "Would delete " . count($articlesToDelete) . " stale products. Add &dry_run=0 to execute.",
+                    'message' => 'Would delete '.count($articlesToDelete).' stale products. Add &dry_run=0 to execute.',
                 ]);
             }
 
@@ -2010,39 +2028,40 @@ class DiagnosticController extends Controller
      */
     public function syncHoroshop(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $useQueue = $request->query('queue', '1') !== '0';
         $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
-        
+
         // For tenant-specific sync, use SyncHoroshopProductsJob
         if ($tenantId) {
             $tenant = \App\Models\Tenant::find($tenantId);
-            if (!$tenant) {
+            if (! $tenant) {
                 return response()->json(['error' => 'Tenant not found'], 404);
             }
-            
+
             if ($tenant->platform !== 'horoshop' || empty($tenant->platform_credentials)) {
                 return response()->json(['error' => 'Tenant has no Horoshop credentials'], 400);
             }
-            
+
             if ($useQueue) {
                 \App\Jobs\SyncHoroshopProductsJob::dispatch($tenantId)->onQueue('default');
+
                 return response()->json([
                     'status' => 'dispatched',
                     'message' => "SyncHoroshopProductsJob dispatched for tenant {$tenantId}",
                     'tenant_id' => $tenantId,
                 ]);
             }
-            
+
             // Sync synchronously
             try {
                 $productService = app(\App\Services\Horoshop\ProductService::class);
                 $result = $productService->syncFromHoroshopForTenant($tenant, 200);
                 $tenant->update(['last_sync_at' => now()]);
-                
+
                 return response()->json([
                     'status' => 'completed',
                     'tenant_id' => $tenantId,
@@ -2058,30 +2077,30 @@ class DiagnosticController extends Controller
                 ], 500);
             }
         }
-        
+
         // Legacy global sync (for backwards compatibility)
         if ($useQueue) {
             // Dispatch to queue
             \App\Jobs\IncrementalProductSyncJob::dispatch()
                 ->onQueue('default');
-            
+
             return response()->json([
                 'status' => 'dispatched',
                 'message' => 'IncrementalProductSyncJob dispatched to queue. Will mark deleted products as out of stock.',
             ]);
         }
-        
+
         // Run synchronously (for debugging)
         set_time_limit(600); // 10 minutes
-        
+
         try {
-            $job = new \App\Jobs\IncrementalProductSyncJob();
+            $job = new \App\Jobs\IncrementalProductSyncJob;
             $job->handle(
                 app(\App\Services\Horoshop\ProductService::class)
             );
-            
+
             $stats = \Illuminate\Support\Facades\Cache::get('incremental_sync_stats', []);
-            
+
             return response()->json([
                 'status' => 'completed',
                 'stats' => $stats,
@@ -2100,22 +2119,22 @@ class DiagnosticController extends Controller
      */
     public function deleteTenantProducts(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
         $dryRun = $request->boolean('dry_run', true);
-        
+
         // Count products including soft-deleted (using DB::table to bypass SoftDeletes)
         $productCount = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->count();
-        
+
         if ($dryRun) {
             return response()->json([
                 'dry_run' => true,
@@ -2125,7 +2144,7 @@ class DiagnosticController extends Controller
                 'note' => 'Set dry_run=false to actually delete products',
             ]);
         }
-        
+
         // Delete AI index first (foreign key)
         // Note: Use products table directly to include soft-deleted products
         $aiDeleted = DB::table('product_ai_index')
@@ -2133,16 +2152,16 @@ class DiagnosticController extends Controller
                 $q->select('id')->from('products')->where('tenant_id', $tenantId);
             })
             ->delete();
-        
+
         // Force delete products (bypassing soft delete)
         // DB::table() doesn't respect SoftDeletes, so it will delete all including soft-deleted
         $deleted = DB::table('products')
             ->where('tenant_id', $tenantId)
             ->delete();
-        
+
         // Reset last_sync_at
         $tenant->update(['last_sync_at' => null]);
-        
+
         return response()->json([
             'dry_run' => false,
             'tenant_id' => $tenantId,
@@ -2159,12 +2178,12 @@ class DiagnosticController extends Controller
      */
     public function deleteTenant(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -2271,12 +2290,12 @@ class DiagnosticController extends Controller
      */
     public function resetTenant(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -2369,7 +2388,7 @@ class DiagnosticController extends Controller
             $index = $client->index(config('meilisearch.index', 'products'));
             // Delete all docs for this tenant
             $index->deleteDocuments(['filter' => "tenant_id = {$tenantId}"]);
-            $deleted['meilisearch'] = 'Deleted docs with tenant_id=' . $tenantId;
+            $deleted['meilisearch'] = 'Deleted docs with tenant_id='.$tenantId;
         } catch (\Throwable $e) {
             $deleted['meilisearch_error'] = $e->getMessage();
         }
@@ -2390,12 +2409,12 @@ class DiagnosticController extends Controller
      */
     public function dispatchOnboard(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -2426,27 +2445,27 @@ class DiagnosticController extends Controller
      */
     public function chatSessions(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $limit = min((int) $request->query('limit', 20), 100);
         $tenantId = $request->query('tenant_id');
         $showNullTenant = $request->boolean('null_tenant');
-        
+
         // Build query without TenantScope to see all sessions for diagnostics
         $query = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->orderByDesc('updated_at');
-        
+
         if ($showNullTenant) {
             $query->whereNull('tenant_id');
         } elseif ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
-        
+
         $sessions = $query->take($limit)
             ->get()
-            ->map(fn($s) => [
+            ->map(fn ($s) => [
                 'session_id' => $s->session_id,
                 'tenant_id' => $s->tenant_id,
                 'messages_count' => $s->messages_count,
@@ -2455,14 +2474,14 @@ class DiagnosticController extends Controller
                 'last_message_at' => $s->last_message_at?->format('Y-m-d H:i:s'),
                 'updated_at' => $s->updated_at?->format('Y-m-d H:i:s'),
             ]);
-        
+
         // Count sessions by tenant_id for diagnostics
         $tenantStats = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->selectRaw('tenant_id, COUNT(*) as count')
             ->groupBy('tenant_id')
             ->get()
-            ->mapWithKeys(fn($row) => [
-                $row->tenant_id ?? 'NULL' => $row->count
+            ->mapWithKeys(fn ($row) => [
+                $row->tenant_id ?? 'NULL' => $row->count,
             ]);
 
         return response()->json([
@@ -2478,15 +2497,15 @@ class DiagnosticController extends Controller
      */
     public function chatHistory(Request $request, string $sessionId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         // Bypass TenantScope to allow diagnostic access to all sessions
         $session = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('session_id', $sessionId)->first();
-        
-        if (!$session) {
+
+        if (! $session) {
             return response()->json([
                 'error' => 'Session not found',
                 'session_id' => $sessionId,
@@ -2502,12 +2521,12 @@ class DiagnosticController extends Controller
             ->get()
             ->map(function ($msg) use ($fullContent) {
                 $content = $msg->content;
-                if (!$fullContent) {
-                    $content = mb_substr($content, 0, 500) . (mb_strlen($content) > 500 ? '...' : '');
+                if (! $fullContent) {
+                    $content = mb_substr($content, 0, 500).(mb_strlen($content) > 500 ? '...' : '');
                 }
-                
+
                 $meta = $msg->meta ?? [];
-                
+
                 return [
                     'id' => $msg->id,
                     'role' => $msg->role,
@@ -2517,7 +2536,7 @@ class DiagnosticController extends Controller
                     'products_shown' => $meta['products_shown'] ?? null,
                     'product_ids' => $meta['product_ids'] ?? null,
                     'product_articles' => $meta['product_articles'] ?? null,
-                    'has_product_details' => !empty($meta['product_details']),
+                    'has_product_details' => ! empty($meta['product_details']),
                     'product_details_count' => count($meta['product_details'] ?? []),
                     'created_at' => $msg->created_at->format('Y-m-d H:i:s'),
                 ];
@@ -2549,12 +2568,12 @@ class DiagnosticController extends Controller
      */
     public function syncFaq(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $settings = \App\Models\WidgetSettings::first();
-        if (!$settings) {
+        if (! $settings) {
             return response()->json(['error' => 'No WidgetSettings found'], 404);
         }
 
@@ -2609,30 +2628,30 @@ class DiagnosticController extends Controller
      */
     public function widgetSettings(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         // Get all widget settings for all tenants
         $allSettings = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->get();
-        
+
         if ($allSettings->isEmpty()) {
             return response()->json(['error' => 'No WidgetSettings found'], 404);
         }
 
         $settingsList = $allSettings->map(function ($settings) {
-            $tenant = $settings->tenant_id 
-                ? \App\Models\Tenant::find($settings->tenant_id) 
+            $tenant = $settings->tenant_id
+                ? \App\Models\Tenant::find($settings->tenant_id)
                 : null;
-            
+
             return [
                 'id' => $settings->id,
                 'tenant_id' => $settings->tenant_id,
                 'tenant_name' => $tenant?->name,
                 'tenant_slug' => $tenant?->slug,
                 'api_token' => $settings->api_token,
-                'api_token_preview' => $settings->api_token 
-                    ? substr($settings->api_token, 0, 8) . '...' . substr($settings->api_token, -8) 
+                'api_token_preview' => $settings->api_token
+                    ? substr($settings->api_token, 0, 8).'...'.substr($settings->api_token, -8)
                     : null,
                 'store_name' => $settings->store_name,
                 'domain' => $settings->domain,
@@ -2675,7 +2694,7 @@ class DiagnosticController extends Controller
      */
     public function clearToneCache(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -2684,7 +2703,7 @@ class DiagnosticController extends Controller
 
         // Clear specific tenant cache
         if ($tenantId) {
-            $key = 'widget_settings_tone:' . $tenantId;
+            $key = 'widget_settings_tone:'.$tenantId;
             \Illuminate\Support\Facades\Cache::forget($key);
             $cleared[] = $key;
         }
@@ -2705,7 +2724,7 @@ class DiagnosticController extends Controller
         // Test ToneService output
         $toneService = app(\App\Services\Ai\ToneService::class);
         if ($tenantId) {
-            $toneService->setTenantId((int)$tenantId);
+            $toneService->setTenantId((int) $tenantId);
         }
         $fullPromptSection = $toneService->getFullPromptSection();
         $brandRulesPrompt = $toneService->getBrandRulesPrompt();
@@ -2732,13 +2751,13 @@ class DiagnosticController extends Controller
      */
     public function tenantContext(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $context = app(\App\Services\Tenant\TenantContext::class);
         $searchTool = app(\App\Services\Agent\Tools\MeiliProductSearchTool::class);
-        
+
         return response()->json([
             'request' => [
                 'has_tenant_id' => $request->has('tenant_id'),
@@ -2761,19 +2780,19 @@ class DiagnosticController extends Controller
             ],
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/sync-orders
      * Sync orders from Horoshop and update orders_count
      */
     public function syncOrders(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $days = (int) $request->input('days', 90);
-        
+
         try {
             // Run the sync command
             \Illuminate\Support\Facades\Artisan::call('orders:sync', [
@@ -2781,9 +2800,9 @@ class DiagnosticController extends Controller
                 '--update-counts' => true,
                 '--timeout' => 300,
             ]);
-            
+
             $output = \Illuminate\Support\Facades\Artisan::output();
-            
+
             // Get stats after sync
             $ordersCount = \App\Models\Order::count();
             $itemsCount = \App\Models\OrderItem::count();
@@ -2792,7 +2811,7 @@ class DiagnosticController extends Controller
                 ->orderBy('orders_count', 'desc')
                 ->take(10)
                 ->get(['article', 'title', 'orders_count']);
-            
+
             return response()->json([
                 'success' => true,
                 'days_synced' => $days,
@@ -2816,7 +2835,7 @@ class DiagnosticController extends Controller
      */
     public function backfillCheckoutEvents(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -2843,6 +2862,7 @@ class DiagnosticController extends Controller
                 $rawData = is_array($order->raw) ? $order->raw : (is_string($order->raw) ? json_decode($order->raw, true) : []);
                 if (($rawData['stat_status'] ?? $order->status_code) == 5) {
                     $stats['skipped_cancelled']++;
+
                     continue;
                 }
 
@@ -2850,11 +2870,12 @@ class DiagnosticController extends Controller
                 $existingEvent = DB::table('chat_events')
                     ->where('event_type', 'checkout_success')
                     ->where('session_id', $order->session_id)
-                    ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+                    ->where('metadata', 'like', '%"order_id":'.$order->order_id.'%')
                     ->exists();
 
                 if ($existingEvent) {
                     $stats['already_has_event']++;
+
                     continue;
                 }
 
@@ -2863,13 +2884,13 @@ class DiagnosticController extends Controller
                 $chatSession = DB::table('chat_sessions')
                     ->where('session_id', $order->session_id)
                     ->first();
-                
+
                 if ($chatSession) {
                     $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
                     $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
                 }
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     DB::table('chat_events')->insert([
                         'session_id' => $order->session_id,
                         'merchant_id' => $merchantId,
@@ -2895,7 +2916,7 @@ class DiagnosticController extends Controller
                 'success' => true,
                 'dry_run' => $dryRun,
                 'stats' => $stats,
-                'message' => $dryRun 
+                'message' => $dryRun
                     ? "Dry run complete. Would create {$stats['events_created']} events."
                     : "Backfill complete. Created {$stats['events_created']} checkout_success events.",
             ]);
@@ -2908,27 +2929,27 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/orders-stats
      * Get orders statistics
      */
     public function ordersStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $ordersCount = \App\Models\Order::count();
         $itemsCount = \App\Models\OrderItem::count();
         $productsWithOrders = \App\Models\Product::where('orders_count', '>', 0)->count();
-        
+
         $topProducts = \App\Models\Product::where('orders_count', '>', 0)
             ->where('in_stock', true)
             ->orderBy('orders_count', 'desc')
             ->take(20)
             ->get(['article', 'title', 'orders_count', 'price', 'category_path']);
-        
+
         return response()->json([
             'orders_count' => $ordersCount,
             'items_count' => $itemsCount,
@@ -2936,14 +2957,14 @@ class DiagnosticController extends Controller
             'top_20_products' => $topProducts,
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/ai-index-stats
      * Get AI enrichment statistics and quality score
      */
     public function aiIndexStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -2954,12 +2975,12 @@ class DiagnosticController extends Controller
         $totalProducts = \App\Models\Product::count();
         $inStockProducts = \App\Models\Product::where('in_stock', true)->count();
         $showcaseProducts = \App\Models\Product::where('display_in_showcase', true)->count();
-        
+
         // Products without AI index
         $withoutAiIndex = \App\Models\Product::where('display_in_showcase', true)
             ->whereDoesntHave('aiIndex')
             ->count();
-        
+
         // Top product types
         $topProductTypes = \App\Models\ProductAiIndex::selectRaw('product_type, COUNT(*) as cnt')
             ->whereNotNull('product_type')
@@ -2968,19 +2989,19 @@ class DiagnosticController extends Controller
             ->orderByDesc('cnt')
             ->take(15)
             ->get();
-        
+
         // Products needing slang enrichment
         $missingSlangCount = \App\Models\Product::where('display_in_showcase', true)
             ->whereHas('aiIndex', function ($ai) {
                 $ai->where(function ($q) {
                     $q->whereNull('slang')
-                      ->orWhere('slang', '[]')
-                      ->orWhere('slang', 'null')
-                      ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                        ->orWhere('slang', '[]')
+                        ->orWhere('slang', 'null')
+                        ->orWhereRaw('JSON_LENGTH(slang) = 0');
                 });
             })
             ->count();
-        
+
         return response()->json([
             'quality_score' => $quality['score'],
             'quality_grade' => $quality['grade'],
@@ -2994,44 +3015,44 @@ class DiagnosticController extends Controller
             'recommendations' => $recommendations,
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/ai-index-problems
      * Get detailed problems with AI index quality
      */
     public function aiIndexProblems(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $limit = (int) $request->input('limit', 50);
-        
+
         $qualityService = app(\App\Services\Ai\EnrichmentQualityService::class);
         $problems = $qualityService->findProblems($limit);
         $recommendations = $qualityService->getRecommendations();
-        
+
         return response()->json([
             'problems' => $problems,
             'total_issues' => array_sum(array_column($problems, 'count')),
             'recommendations' => $recommendations,
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/run-enrichment
      * Run AI enrichment for products
-     * 
+     *
      * Modes:
      * - missing: products without AI index (default)
      * - incomplete: products with empty product_type
      * - missing_slang: products with empty slang
-     * 
+     *
      * Set async=1 to dispatch as queue job (recommended for large batches)
      */
     public function runEnrichment(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -3040,14 +3061,14 @@ class DiagnosticController extends Controller
         $noAi = (bool) $request->input('no_ai', false);
         $async = (bool) $request->input('async', false);
         $mode = $request->input('mode', 'missing'); // missing, incomplete, missing_slang
-        
+
         // Build options based on mode
         $options = [
             '--limit' => $limit,
             '--timeout' => $timeout,
             '--batch' => 10,
         ];
-        
+
         switch ($mode) {
             case 'missing_slang':
                 $options['--missing-slang'] = true;
@@ -3060,18 +3081,18 @@ class DiagnosticController extends Controller
                 $options['--only-missing'] = true;
                 break;
         }
-        
+
         if ($noAi) {
             $options['--no-ai'] = true;
         }
-        
+
         try {
             if ($async) {
                 // Dispatch as queue job to avoid HTTP timeout
                 dispatch(function () use ($options) {
                     \Illuminate\Support\Facades\Artisan::call('products:build-ai-index', $options);
                 })->onQueue('default');
-                
+
                 return response()->json([
                     'success' => true,
                     'async' => true,
@@ -3081,21 +3102,21 @@ class DiagnosticController extends Controller
                     'timeout' => $timeout,
                 ]);
             }
-            
+
             // Sync execution (will timeout on large batches)
             \Illuminate\Support\Facades\Artisan::call('products:build-ai-index', $options);
-            
+
             $output = \Illuminate\Support\Facades\Artisan::output();
-            
+
             // Get updated stats
             $totalAiIndex = \App\Models\ProductAiIndex::count();
             $withProductType = \App\Models\ProductAiIndex::whereNotNull('product_type')
                 ->where('product_type', '!=', '')
                 ->count();
             $withSlang = \App\Models\ProductAiIndex::whereNotNull('slang')
-                ->whereRaw("JSON_LENGTH(slang) > 0")
+                ->whereRaw('JSON_LENGTH(slang) > 0')
                 ->count();
-            
+
             return response()->json([
                 'success' => true,
                 'mode' => $mode,
@@ -3114,31 +3135,31 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/slang-stats?type=plate_carrier
      * Get slang statistics by product type
      */
     public function slangStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $productType = $request->query('type');
-        
+
         $query = \App\Models\ProductAiIndex::query();
-        
+
         if ($productType) {
             $query->where('product_type', $productType);
         }
-        
+
         $records = $query->whereNotNull('slang')
-            ->whereRaw("JSON_LENGTH(slang) > 0")
+            ->whereRaw('JSON_LENGTH(slang) > 0')
             ->with('product:id,title,category_path')
             ->take(20)
             ->get(['id', 'product_id', 'product_type', 'slang', 'keywords']);
-        
+
         // Aggregate all slang terms
         $allSlang = [];
         foreach ($records as $r) {
@@ -3151,102 +3172,102 @@ class DiagnosticController extends Controller
             }
         }
         arsort($allSlang);
-        
+
         // Products without slang for this type
         $withoutSlang = \App\Models\ProductAiIndex::query()
-            ->when($productType, fn($q) => $q->where('product_type', $productType))
-            ->where(function($q) {
+            ->when($productType, fn ($q) => $q->where('product_type', $productType))
+            ->where(function ($q) {
                 $q->whereNull('slang')
-                  ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                    ->orWhereRaw('JSON_LENGTH(slang) = 0');
             })
             ->with('product:id,title')
             ->take(10)
             ->get(['id', 'product_id', 'product_type']);
-        
+
         return response()->json([
             'product_type' => $productType ?? 'all',
             'with_slang_count' => $records->count(),
             'slang_terms' => array_slice($allSlang, 0, 30, true),
-            'examples' => $records->take(5)->map(fn($r) => [
+            'examples' => $records->take(5)->map(fn ($r) => [
                 'title' => $r->product->title ?? 'N/A',
                 'slang' => $r->slang,
             ]),
-            'without_slang' => $withoutSlang->map(fn($r) => [
+            'without_slang' => $withoutSlang->map(fn ($r) => [
                 'title' => $r->product->title ?? 'N/A',
                 'product_type' => $r->product_type,
             ]),
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/enrich-one
      * Enrich a single product with AI (fast, avoids timeout)
-     * 
+     *
      * Pass product_id=123 to enrich specific product
      * Or mode=missing_slang to enrich next product without slang
      */
     public function enrichOne(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $productId = $request->input('product_id');
         $mode = $request->input('mode', 'missing_slang');
-        
+
         // Find product to enrich
         $product = null;
-        
+
         if ($productId) {
             $product = \App\Models\Product::find($productId);
         } else {
             // Find next product based on mode
             $query = \App\Models\Product::where('display_in_showcase', true);
-            
+
             if ($mode === 'missing_slang') {
                 $query->whereHas('aiIndex', function ($ai) {
                     $ai->where(function ($q) {
                         $q->whereNull('slang')
-                          ->orWhere('slang', '[]')
-                          ->orWhere('slang', 'null')
-                          ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                            ->orWhere('slang', '[]')
+                            ->orWhere('slang', 'null')
+                            ->orWhereRaw('JSON_LENGTH(slang) = 0');
                     });
                 });
             } elseif ($mode === 'missing') {
                 $query->whereDoesntHave('aiIndex');
             }
-            
+
             $product = $query->orderBy('id')->first();
         }
-        
-        if (!$product) {
+
+        if (! $product) {
             return response()->json([
                 'success' => true,
                 'message' => 'No products to enrich',
                 'remaining' => 0,
             ]);
         }
-        
+
         try {
             /** @var \App\Services\Ai\ProductIndexBuilder $builder */
             $builder = app(\App\Services\Ai\ProductIndexBuilder::class);
             $result = $builder->buildForProduct($product);
-            
+
             // Count remaining
             $remaining = \App\Models\Product::where('display_in_showcase', true)
                 ->whereHas('aiIndex', function ($ai) {
                     $ai->where(function ($q) {
                         $q->whereNull('slang')
-                          ->orWhere('slang', '[]')
-                          ->orWhere('slang', 'null')
-                          ->orWhereRaw("JSON_LENGTH(slang) = 0");
+                            ->orWhere('slang', '[]')
+                            ->orWhere('slang', 'null')
+                            ->orWhereRaw('JSON_LENGTH(slang) = 0');
                     });
                 })
                 ->count();
-            
+
             // Get model being used
             $analyzeModel = config('services.openai.model_analyze') ?: config('services.openai.model');
-            
+
             return response()->json([
                 'success' => true,
                 'product_id' => $product->id,
@@ -3266,104 +3287,105 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/embedding-stats
      * Get statistics about embeddings
      */
     public function embeddingStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $totalAiIndex = \App\Models\ProductAiIndex::count();
-        
+
         // Count embeddings - embedding field is JSON array
         $withEmbedding = \App\Models\ProductAiIndex::whereNotNull('embedding')
             ->where('embedding', '!=', '[]')
             ->where('embedding', '!=', 'null')
             ->count();
-        
+
         $withoutEmbedding = $totalAiIndex - $withEmbedding;
-        
+
         // Sample of products with embeddings
         $samplesWithEmbedding = \App\Models\ProductAiIndex::whereNotNull('embedding')
             ->where('embedding', '!=', '[]')
             ->with('product:id,title,article')
             ->take(5)
             ->get()
-            ->map(fn($ai) => [
+            ->map(fn ($ai) => [
                 'product_id' => $ai->product_id,
                 'title' => $ai->product->title ?? 'Unknown',
                 'embedding_length' => is_array($ai->embedding) ? count($ai->embedding) : 0,
             ]);
-        
+
         // Check embedding service availability
         $embeddingService = app(\App\Services\Ai\EmbeddingService::class);
         $serviceAvailable = $embeddingService->isAvailable();
-        
+
         return response()->json([
             'total_ai_index' => $totalAiIndex,
             'with_embedding' => $withEmbedding,
             'without_embedding' => $withoutEmbedding,
-            'coverage_percent' => $totalAiIndex > 0 
-                ? round(($withEmbedding / $totalAiIndex) * 100, 1) 
+            'coverage_percent' => $totalAiIndex > 0
+                ? round(($withEmbedding / $totalAiIndex) * 100, 1)
                 : 0,
             'service_available' => $serviceAvailable,
             'samples_with_embedding' => $samplesWithEmbedding,
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/generate-embeddings
      * Generate embeddings for products (sync, limited batch for HTTP timeout)
      */
     public function generateEmbeddings(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $limit = min((int) $request->input('limit', 50), 100); // Max 100 per request
         $batchSize = min((int) $request->input('batch', 20), 50);
-        
+
         $embeddingService = app(\App\Services\Ai\EmbeddingService::class);
-        
-        if (!$embeddingService->isAvailable()) {
+
+        if (! $embeddingService->isAvailable()) {
             return response()->json([
                 'success' => false,
                 'error' => 'Embedding service not available (check OPENAI_API_KEY)',
             ], 500);
         }
-        
+
         $startTime = microtime(true);
         $processed = 0;
         $success = 0;
         $failed = 0;
-        
+
         // Get products without embeddings
         $aiIndexes = \App\Models\ProductAiIndex::whereNull('embedding')
             ->orWhere('embedding', '[]')
             ->with('product')
             ->limit($limit)
             ->get();
-        
+
         $totalNeeding = \App\Models\ProductAiIndex::whereNull('embedding')
             ->orWhere('embedding', '[]')
             ->count();
-        
+
         foreach ($aiIndexes->chunk($batchSize) as $chunk) {
             $texts = [];
             $indexMap = [];
-            
+
             foreach ($chunk as $aiIndex) {
                 $product = $aiIndex->product;
-                if (!$product) {
+                if (! $product) {
                     $failed++;
+
                     continue;
                 }
-                
+
                 $text = $embeddingService->buildProductText([
                     'title' => $product->title,
                     'category_path' => $product->category_path,
@@ -3371,27 +3393,29 @@ class DiagnosticController extends Controller
                     'keywords' => $aiIndex->keywords ?? [],
                     'slang' => $aiIndex->slang ?? [],
                 ]);
-                
-                if (!empty($text)) {
+
+                if (! empty($text)) {
                     $texts[] = $text;
                     $indexMap[count($texts) - 1] = $aiIndex;
                 }
             }
-            
+
             if (empty($texts)) {
                 continue;
             }
-            
+
             // Batch embed
             $embeddings = $embeddingService->embedBatch($texts);
-            
+
             // Save embeddings
             foreach ($embeddings as $i => $embedding) {
                 $aiIndex = $indexMap[$i] ?? null;
-                if (!$aiIndex) continue;
-                
+                if (! $aiIndex) {
+                    continue;
+                }
+
                 $processed++;
-                
+
                 if ($embedding && is_array($embedding)) {
                     $aiIndex->embedding = $embedding;
                     $aiIndex->save();
@@ -3401,10 +3425,10 @@ class DiagnosticController extends Controller
                 }
             }
         }
-        
+
         $elapsed = round(microtime(true) - $startTime, 2);
         $remaining = $totalNeeding - $success;
-        
+
         return response()->json([
             'success' => true,
             'processed' => $processed,
@@ -3412,72 +3436,72 @@ class DiagnosticController extends Controller
             'failed_count' => $failed,
             'elapsed_seconds' => $elapsed,
             'remaining' => $remaining,
-            'message' => $remaining > 0 
+            'message' => $remaining > 0
                 ? "Generated {$success} embeddings. {$remaining} remaining. Run again to continue."
-                : "All embeddings generated!",
+                : 'All embeddings generated!',
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/ab-test-stats
      * Get A/B testing statistics
      */
     public function abTestStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $experiment = $request->input('experiment', 'search_ai_features');
-        
+
         $abService = app(\App\Services\Analytics\ABTestingService::class);
         $stats = $abService->getStats($experiment);
-        
+
         return response()->json($stats);
     }
-    
+
     /**
      * POST /api/diagnostic/ab-test-reset
      * Reset A/B test data (for testing)
      */
     public function abTestReset(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $experiment = $request->input('experiment', 'search_ai_features');
-        
+
         $abService = app(\App\Services\Analytics\ABTestingService::class);
         $abService->resetExperiment($experiment);
-        
+
         return response()->json([
             'success' => true,
             'message' => "Experiment '{$experiment}' data reset",
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/ab-test-variant
      * Get variant for a specific session
      */
     public function abTestVariant(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $sessionId = $request->input('session_id');
-        if (!$sessionId) {
+        if (! $sessionId) {
             return response()->json(['error' => 'session_id required'], 400);
         }
-        
+
         $experiment = $request->input('experiment', 'search_ai_features');
-        
+
         $abService = app(\App\Services\Analytics\ABTestingService::class);
         $variant = $abService->getVariant($sessionId, $experiment);
         $features = $abService->getFeatures($sessionId, $experiment);
-        
+
         return response()->json([
             'session_id' => $sessionId,
             'experiment' => $experiment,
@@ -3485,29 +3509,29 @@ class DiagnosticController extends Controller
             'features' => $features,
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/ab-test-force
      * Force a specific variant for a session (for testing)
      */
     public function abTestForce(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $sessionId = $request->input('session_id');
         $variant = $request->input('variant');
-        
-        if (!$sessionId || !$variant) {
+
+        if (! $sessionId || ! $variant) {
             return response()->json(['error' => 'session_id and variant required'], 400);
         }
-        
+
         $experiment = $request->input('experiment', 'search_ai_features');
-        
+
         $abService = app(\App\Services\Analytics\ABTestingService::class);
         $abService->forceVariant($sessionId, $variant, $experiment);
-        
+
         return response()->json([
             'success' => true,
             'session_id' => $sessionId,
@@ -3515,28 +3539,28 @@ class DiagnosticController extends Controller
             'experiment' => $experiment,
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/clear-product-shown
      * Clear all product_shown events (to fix inflated stats from bug)
      */
     public function clearProductShown(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         // Get counts before deletion
         $totalEvents = DB::table('chat_events')->count();
         $productShownCount = DB::table('chat_events')
             ->where('event_type', 'product_shown')
             ->count();
-        
+
         // Delete all product_shown events
         $deleted = DB::table('chat_events')
             ->where('event_type', 'product_shown')
             ->delete();
-        
+
         return response()->json([
             'success' => true,
             'total_events_before' => $totalEvents,
@@ -3545,29 +3569,29 @@ class DiagnosticController extends Controller
             'message' => "Deleted {$deleted} product_shown events",
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/reset-views-count
      * Reset views_count for all products (to recalculate from clean events)
      */
     public function resetViewsCount(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         // Count products with views > 0 before reset
         $productsWithViews = DB::table('products')
             ->where('views_count', '>', 0)
             ->count();
-        
+
         $totalViews = DB::table('products')
             ->sum('views_count');
-        
+
         // Reset all views_count to 0
         $affected = DB::table('products')
             ->update(['views_count' => 0]);
-        
+
         return response()->json([
             'success' => true,
             'products_with_views_before' => $productsWithViews,
@@ -3576,40 +3600,40 @@ class DiagnosticController extends Controller
             'message' => "Reset views_count to 0 for {$affected} products",
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/chat-events-stats
      * Get statistics about chat_events table
      */
     public function chatEventsStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $stats = DB::table('chat_events')
             ->selectRaw('event_type, COUNT(*) as count')
             ->groupBy('event_type')
             ->orderByDesc('count')
             ->get();
-        
+
         $total = DB::table('chat_events')->count();
         $uniqueSessions = DB::table('chat_events')->distinct('session_id')->count('session_id');
-        
+
         return response()->json([
             'total_events' => $total,
             'unique_sessions' => $uniqueSessions,
             'by_event_type' => $stats,
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/clear-all-analytics
      * Nuclear option: clear ALL analytics data and start fresh
      */
     public function clearAllAnalytics(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -3627,19 +3651,20 @@ class DiagnosticController extends Controller
             'ab_test_events' => 'A/B test events',
             'proactive_trigger_events' => 'Proactive trigger events',
         ];
-        
+
         $stats = [];
         $totalDeleted = 0;
 
         foreach ($tables as $table => $description) {
             // Check if table exists
-            if (!DB::getSchemaBuilder()->hasTable($table)) {
+            if (! DB::getSchemaBuilder()->hasTable($table)) {
                 $stats[$table] = ['exists' => false, 'description' => $description, 'count' => 0];
+
                 continue;
             }
 
             $query = DB::table($table);
-            
+
             // Filter by tenant if specified
             if ($tenantId) {
                 $columns = DB::getSchemaBuilder()->getColumnListing($table);
@@ -3651,7 +3676,7 @@ class DiagnosticController extends Controller
             }
 
             $count = $query->count();
-            
+
             if ($dryRun) {
                 $stats[$table] = [
                     'exists' => true,
@@ -3682,7 +3707,7 @@ class DiagnosticController extends Controller
         }
 
         // Reset counters in proactive_trigger_rules
-        if (!$dryRun && DB::getSchemaBuilder()->hasTable('proactive_trigger_rules')) {
+        if (! $dryRun && DB::getSchemaBuilder()->hasTable('proactive_trigger_rules')) {
             $rulesQuery = DB::table('proactive_trigger_rules');
             if ($tenantId) {
                 $rulesQuery->where('tenant_id', $tenantId);
@@ -3706,7 +3731,7 @@ class DiagnosticController extends Controller
         }
 
         // Clear cache
-        if (!$dryRun) {
+        if (! $dryRun) {
             try {
                 \Illuminate\Support\Facades\Cache::flush();
                 $stats['cache'] = ['cleared' => true];
@@ -3734,33 +3759,33 @@ class DiagnosticController extends Controller
             'message' => '🔥 All statistics cleared! Dashboard will show 0 until new data is collected.',
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/set-super-admin
      * Set user as super admin by email
      */
     public function setSuperAdmin(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $email = $request->input('email', 'stovburtm@gmail.com');
-        
+
         $user = \App\Models\User::where('email', $email)->first();
-        
-        if (!$user) {
+
+        if (! $user) {
             return response()->json([
                 'success' => false,
                 'error' => 'User not found',
                 'email' => $email,
             ], 404);
         }
-        
+
         $oldRole = $user->role;
         $user->role = \App\Models\User::ROLE_SUPER_ADMIN;
         $user->save();
-        
+
         return response()->json([
             'success' => true,
             'email' => $email,
@@ -3769,21 +3794,21 @@ class DiagnosticController extends Controller
             'message' => "User {$email} is now super_admin",
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/users
      * List all users with roles
      */
     public function listUsers(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $users = \App\Models\User::select(['id', 'name', 'email', 'role', 'tenant_id', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->get();
-        
+
         return response()->json([
             'count' => $users->count(),
             'users' => $users,
@@ -3796,7 +3821,7 @@ class DiagnosticController extends Controller
      */
     public function funnelDebug(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -3809,7 +3834,7 @@ class DiagnosticController extends Controller
         $tenant = null;
         $slug = null;
         $apiToken = null;
-        
+
         if ($tenantId) {
             $tenant = \App\Models\Tenant::find($tenantId);
             if ($tenant) {
@@ -3845,14 +3870,14 @@ class DiagnosticController extends Controller
                 $query = DB::table('chat_events')
                     ->where('event_type', $type)
                     ->whereBetween('created_at', [$startDate, $endDate]);
-                
-                $query->where(function($q) use ($slug, $apiToken) {
+
+                $query->where(function ($q) use ($slug, $apiToken) {
                     $q->where('merchant_id', $slug);
                     if ($apiToken) {
                         $q->orWhere('merchant_id', $apiToken);
                     }
                 });
-                
+
                 $funnelFiltered[$type] = $query->distinct('session_id')->count('session_id');
             }
         }
@@ -3866,8 +3891,8 @@ class DiagnosticController extends Controller
                     ->where('tenant_id', $tenantId)
                     ->pluck('session_id')
                     ->toArray();
-                
-                if (!empty($tenantSessionIds)) {
+
+                if (! empty($tenantSessionIds)) {
                     $ordersCount = DB::table('orders')
                         ->whereIn('session_id', $tenantSessionIds)
                         ->where('created_at', '>=', $startDate)
@@ -3892,7 +3917,7 @@ class DiagnosticController extends Controller
         // Chat sessions count
         $chatSessionsCount = DB::table('chat_sessions')
             ->where('created_at', '>=', $startDate)
-            ->when($tenantId, fn($q) => $q->where('tenant_id', $tenantId))
+            ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
             ->count();
 
         // Proactive trigger events
@@ -3914,7 +3939,7 @@ class DiagnosticController extends Controller
                 'id' => $tenantId,
                 'name' => $tenant?->name,
                 'slug' => $slug,
-                'api_token' => $apiToken ? substr($apiToken, 0, 10) . '...' : null,
+                'api_token' => $apiToken ? substr($apiToken, 0, 10).'...' : null,
             ],
             'period' => [
                 'days' => $days,
@@ -3944,20 +3969,20 @@ class DiagnosticController extends Controller
      */
     public function triggerEvents(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $sessionId = $request->query('session_id');
         $limit = min((int) $request->query('limit', 50), 200);
-        
+
         $query = \App\Models\ProactiveTriggerEvent::with('rule:id,name,trigger_type')
             ->orderByDesc('created_at');
-        
+
         if ($sessionId) {
             $query->where('session_id', $sessionId);
         }
-        
+
         $events = $query->take($limit)->get()->map(function ($event) {
             return [
                 'id' => $event->id,
@@ -3970,7 +3995,7 @@ class DiagnosticController extends Controller
                 'created_at' => $event->created_at->format('Y-m-d H:i:s'),
             ];
         });
-        
+
         // Summary stats
         $stats = [
             'total_events' => \App\Models\ProactiveTriggerEvent::count(),
@@ -3978,7 +4003,7 @@ class DiagnosticController extends Controller
             'today_clicked' => \App\Models\ProactiveTriggerEvent::today()->where('event_type', 'clicked')->count(),
             'today_dismissed' => \App\Models\ProactiveTriggerEvent::today()->where('event_type', 'dismissed')->count(),
         ];
-        
+
         return response()->json([
             'stats' => $stats,
             'events' => $events,
@@ -3991,14 +4016,14 @@ class DiagnosticController extends Controller
      */
     public function schedulerStatus(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         // Get scheduled tasks
         $schedule = app(\Illuminate\Console\Scheduling\Schedule::class);
         $events = $schedule->events();
-        
+
         $tasks = collect($events)->map(function ($event) {
             return [
                 'command' => $event->command ?? $event->description ?? get_class($event),
@@ -4011,14 +4036,14 @@ class DiagnosticController extends Controller
                     ->format('Y-m-d H:i:s'),
             ];
         });
-        
+
         // Check last sync logs
         $lastSyncs = [];
         if (\Schema::hasTable('sync_logs')) {
             $lastSyncs = \App\Models\SyncLog::orderByDesc('started_at')
                 ->take(10)
                 ->get()
-                ->map(fn($log) => [
+                ->map(fn ($log) => [
                     'type' => $log->sync_type,
                     'status' => $log->status,
                     'started_at' => $log->started_at?->format('Y-m-d H:i:s'),
@@ -4026,10 +4051,10 @@ class DiagnosticController extends Controller
                     'error' => $log->error_message,
                 ]);
         }
-        
+
         // Check queue status
         $queueInfo = $this->getQueueStatus();
-        
+
         return response()->json([
             'timezone' => config('app.timezone'),
             'server_time' => now()->format('Y-m-d H:i:s'),
@@ -4040,7 +4065,7 @@ class DiagnosticController extends Controller
             'note' => 'On Laravel Cloud, scheduler requires a Scheduler Worker in Dashboard > Workers',
         ]);
     }
-    
+
     /**
      * Get queue status (pending jobs, failed jobs)
      */
@@ -4052,12 +4077,12 @@ class DiagnosticController extends Controller
             'failed_jobs' => 0,
             'recent_failed' => [],
         ];
-        
+
         try {
             // Check jobs table if using database driver
             if (config('queue.default') === 'database' && \Schema::hasTable('jobs')) {
                 $result['pending_jobs'] = DB::table('jobs')->count();
-                
+
                 // Get pending jobs breakdown
                 $pendingByQueue = DB::table('jobs')
                     ->select('queue', DB::raw('count(*) as count'))
@@ -4067,19 +4092,20 @@ class DiagnosticController extends Controller
                     ->toArray();
                 $result['pending_by_queue'] = $pendingByQueue;
             }
-            
+
             // Check failed_jobs table
             if (\Schema::hasTable('failed_jobs')) {
                 $result['failed_jobs'] = DB::table('failed_jobs')->count();
-                
+
                 // Get recent failed jobs
                 $recentFailed = DB::table('failed_jobs')
                     ->orderByDesc('failed_at')
                     ->take(5)
                     ->get(['uuid', 'queue', 'payload', 'exception', 'failed_at']);
-                
+
                 $result['recent_failed'] = $recentFailed->map(function ($job) {
                     $payload = json_decode($job->payload, true);
+
                     return [
                         'uuid' => $job->uuid,
                         'queue' => $job->queue,
@@ -4092,7 +4118,7 @@ class DiagnosticController extends Controller
         } catch (\Exception $e) {
             $result['error'] = $e->getMessage();
         }
-        
+
         return $result;
     }
 
@@ -4102,51 +4128,51 @@ class DiagnosticController extends Controller
      */
     public function runSyncJob(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $job = $request->input('job', 'horoshop');
         $sync = $request->input('sync', false); // Run synchronously instead of queue
-        
+
         $jobMap = [
             'horoshop' => \App\Jobs\SyncHoroshopProductsJob::class,
             'brands' => \App\Jobs\SyncBrandsJob::class,
             'meili' => \App\Jobs\IndexProductsToMeiliJob::class,
             'ai' => \App\Jobs\AnalyzeProductsWithAiJob::class,
         ];
-        
-        if (!isset($jobMap[$job])) {
+
+        if (! isset($jobMap[$job])) {
             return response()->json([
                 'error' => "Unknown job: {$job}",
                 'available' => array_keys($jobMap),
             ], 400);
         }
-        
+
         try {
             $jobClass = $jobMap[$job];
-            
+
             if ($sync) {
                 // Run synchronously (will block the request)
-                $jobInstance = new $jobClass();
+                $jobInstance = new $jobClass;
                 $jobInstance->handle();
-                
+
                 return response()->json([
                     'success' => true,
                     'job' => $job,
                     'mode' => 'sync',
-                    'message' => "Job executed synchronously.",
+                    'message' => 'Job executed synchronously.',
                 ]);
             }
-            
-            dispatch(new $jobClass());
-            
+
+            dispatch(new $jobClass);
+
             return response()->json([
                 'success' => true,
                 'job' => $job,
                 'mode' => 'queue',
                 'dispatched' => $jobClass,
-                'message' => "Job dispatched to queue. Check queue worker logs.",
+                'message' => 'Job dispatched to queue. Check queue worker logs.',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -4155,25 +4181,25 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/tenant/{id}
      * Get tenant info with widget status check
      */
     public function tenantInfo(Request $request, int $id): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $tenant = \App\Models\Tenant::find($id);
-        
-        if (!$tenant) {
+
+        if (! $tenant) {
             return response()->json(['error' => "Tenant #{$id} not found"], 404);
         }
-        
+
         $widgetAccess = $tenant->canUseWidget();
-        
+
         return response()->json([
             'id' => $tenant->id,
             'name' => $tenant->name,
@@ -4197,29 +4223,29 @@ class DiagnosticController extends Controller
             'products_count' => $tenant->products()->count(),
         ]);
     }
-    
+
     /**
      * POST /api/diagnostic/clear-queue
      * Clear all pending jobs from queue (use when queue is backed up)
      */
     public function clearQueue(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $deleted = 0;
         $failed = 0;
-        
+
         try {
             if (\Schema::hasTable('jobs')) {
                 $deleted = DB::table('jobs')->delete();
             }
-            
+
             if ($request->input('include_failed', false) && \Schema::hasTable('failed_jobs')) {
                 $failed = DB::table('failed_jobs')->delete();
             }
-            
+
             return response()->json([
                 'success' => true,
                 'deleted_pending' => $deleted,
@@ -4233,28 +4259,28 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * GET /api/diagnostic/test-queue
      * Test if queue worker is processing jobs
      */
     public function testQueue(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         // Create a simple test job that just writes to cache
         $testId = uniqid('queue_test_');
-        
+
         // Write "pending" to cache
         \Cache::put("queue_test_{$testId}", 'pending', 300);
-        
+
         // Dispatch a simple closure job
         dispatch(function () use ($testId) {
-            \Cache::put("queue_test_{$testId}", 'completed_at_' . now()->toIso8601String(), 300);
+            \Cache::put("queue_test_{$testId}", 'completed_at_'.now()->toIso8601String(), 300);
         })->onQueue('default');
-        
+
         return response()->json([
             'test_id' => $testId,
             'status' => 'dispatched',
@@ -4262,26 +4288,26 @@ class DiagnosticController extends Controller
             'message' => 'Job dispatched. Check result in 10-30 seconds.',
         ]);
     }
-    
+
     /**
      * GET /api/diagnostic/test-queue-result
      * Check result of queue test
      */
     public function testQueueResult(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        
+
         $testId = $request->query('test_id');
-        if (!$testId) {
+        if (! $testId) {
             return response()->json(['error' => 'Missing test_id'], 400);
         }
-        
+
         $result = \Cache::get("queue_test_{$testId}", 'not_found');
-        
+
         $queueWorkerActive = str_starts_with($result, 'completed_at_');
-        
+
         return response()->json([
             'test_id' => $testId,
             'result' => $result,
@@ -4296,22 +4322,22 @@ class DiagnosticController extends Controller
      */
     public function fixNullTenants(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $defaultTenantId = $request->input('tenant_id', 2); // Default to Contractor (id=2)
-        
+
         // Fix sessions with NULL tenant_id
         $sessionsFixed = \App\Models\ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->whereNull('tenant_id')
             ->update(['tenant_id' => $defaultTenantId]);
-        
+
         // Fix messages with NULL tenant_id
         $messagesFixed = \App\Models\ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->whereNull('tenant_id')
             ->update(['tenant_id' => $defaultTenantId]);
-        
+
         return response()->json([
             'success' => true,
             'sessions_fixed' => $sessionsFixed,
@@ -4326,7 +4352,7 @@ class DiagnosticController extends Controller
      */
     public function tenants(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4334,7 +4360,7 @@ class DiagnosticController extends Controller
             // Extract horoshop domain from credentials (without exposing login/password)
             $credentials = $tenant->platform_credentials ?? [];
             $horoshopDomain = $credentials['domain'] ?? null;
-            
+
             return [
                 'id' => $tenant->id,
                 'name' => $tenant->name,
@@ -4344,7 +4370,7 @@ class DiagnosticController extends Controller
                 'status' => $tenant->status,
                 'platform' => $tenant->platform,
                 'horoshop_domain' => $horoshopDomain,
-                'has_credentials' => !empty($credentials),
+                'has_credentials' => ! empty($credentials),
                 'trial_ends_at' => $tenant->trial_ends_at?->toDateTimeString(),
                 'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
                 'messages_used' => $tenant->messages_used,
@@ -4377,12 +4403,12 @@ class DiagnosticController extends Controller
      */
     public function tenantDetails(Request $request, int $id): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($id);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -4405,7 +4431,7 @@ class DiagnosticController extends Controller
             ->orderByDesc('count')
             ->limit(20)
             ->get();
-        
+
         // Get sample products (first 5)
         $sampleProducts = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('tenant_id', $tenant->id)
@@ -4426,18 +4452,18 @@ class DiagnosticController extends Controller
                 'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
                 'messages_used' => $tenant->messages_used,
                 'messages_limit' => $tenant->messages_limit,
-                'has_credentials' => !empty($tenant->platform_credentials),
+                'has_credentials' => ! empty($tenant->platform_credentials),
             ],
             'widget_settings' => $widgetSettings ? [
                 'id' => $widgetSettings->id,
-                'api_token' => $widgetSettings->api_token ? substr($widgetSettings->api_token, 0, 8) . '...' : null,
+                'api_token' => $widgetSettings->api_token ? substr($widgetSettings->api_token, 0, 8).'...' : null,
                 'domain' => $widgetSettings->domain,
                 'bot_name' => $widgetSettings->bot_name,
                 'store_name' => $widgetSettings->store_name,
                 'enabled' => $widgetSettings->enabled,
                 'horoshop_domain' => $widgetSettings->horoshop_domain,
                 'primary_color' => $widgetSettings->primary_color,
-                'welcome_message' => $widgetSettings->welcome_message ? substr($widgetSettings->welcome_message, 0, 50) . '...' : null,
+                'welcome_message' => $widgetSettings->welcome_message ? substr($widgetSettings->welcome_message, 0, 50).'...' : null,
             ] : null,
             'stats' => [
                 'products' => \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
@@ -4463,7 +4489,7 @@ class DiagnosticController extends Controller
      */
     public function migrateDataToTenant(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4474,7 +4500,7 @@ class DiagnosticController extends Controller
 
         // Only validate target tenant exists
         $toTenant = \App\Models\Tenant::find($toTenantId);
-        if (!$toTenant) {
+        if (! $toTenant) {
             return response()->json(['error' => 'Target tenant not found'], 404);
         }
 
@@ -4497,13 +4523,15 @@ class DiagnosticController extends Controller
         $results = [];
 
         foreach ($tables as $tableName => $config) {
-            if (!DB::getSchemaBuilder()->hasTable($tableName)) {
+            if (! DB::getSchemaBuilder()->hasTable($tableName)) {
                 $results[$tableName] = ['skipped' => 'table does not exist'];
+
                 continue;
             }
 
-            if (!DB::getSchemaBuilder()->hasColumn($tableName, 'tenant_id')) {
+            if (! DB::getSchemaBuilder()->hasColumn($tableName, 'tenant_id')) {
                 $results[$tableName] = ['skipped' => 'no tenant_id column'];
+
                 continue;
             }
 
@@ -4518,7 +4546,7 @@ class DiagnosticController extends Controller
             }
 
             $count = $query->count();
-            
+
             if ($dryRun) {
                 $results[$tableName] = ['would_migrate' => $count, 'from' => $fromLabel];
             } else {
@@ -4540,8 +4568,8 @@ class DiagnosticController extends Controller
             'from_tenant' => ['id' => $fromTenantId, 'name' => $fromTenant?->name ?? ($migrateNull ? '(NULL records)' : '(orphaned data)')],
             'to_tenant' => ['id' => $toTenantId, 'name' => $toTenant->name],
             'results' => $results,
-            'note' => $dryRun 
-                ? 'This is a dry run. Set dry_run=false to actually migrate data.' 
+            'note' => $dryRun
+                ? 'This is a dry run. Set dry_run=false to actually migrate data.'
                 : 'Data has been migrated. Remember to reindex Meilisearch!',
         ]);
     }
@@ -4552,7 +4580,7 @@ class DiagnosticController extends Controller
      */
     public function updateProductColor(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4577,7 +4605,7 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'No products found with given articles'], 404);
         }
 
-        $results = $products->map(fn($p) => [
+        $results = $products->map(fn ($p) => [
             'id' => $p->id,
             'article' => $p->article,
             'title' => $p->title,
@@ -4585,7 +4613,7 @@ class DiagnosticController extends Controller
             'new_color' => $color,
         ])->toArray();
 
-        if (!$dryRun) {
+        if (! $dryRun) {
             \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
                 ->whereIn('article', $articles)
                 ->update(['color' => $color]);
@@ -4596,8 +4624,8 @@ class DiagnosticController extends Controller
             'color' => $color,
             'updated_count' => count($results),
             'products' => $results,
-            'note' => $dryRun 
-                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch after!' 
+            'note' => $dryRun
+                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch after!'
                 : 'Products updated! Run Meilisearch reindex to update search.',
         ]);
     }
@@ -4608,19 +4636,19 @@ class DiagnosticController extends Controller
      */
     public function testColorPicker(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         try {
             $debug = [];
             $debug['step'] = 'init';
-            
+
             $searchQuery = $request->input('q', 'Level 7');
             $limit = min((int) $request->input('limit', 10), 20);
             $tenantId = (int) $request->input('tenant_id', 2);
             $analyzeImages = $request->boolean('analyze_images', true);
-            
+
             $debug['step'] = 'query_prepared';
             $debug['params'] = compact('searchQuery', 'limit', 'tenantId', 'analyzeImages');
 
@@ -4629,42 +4657,42 @@ class DiagnosticController extends Controller
                 ->select(['id', 'article', 'title', 'color', 'images', 'raw'])
                 ->where('tenant_id', $tenantId)
                 ->where('in_stock', true)
-                ->where(function($builder) {
+                ->where(function ($builder) {
                     $builder->whereNull('color')
                         ->orWhere('color', '')
                         ->orWhere('color', 'null');
                 })
-                ->where('title', 'like', '%' . $searchQuery . '%')
+                ->where('title', 'like', '%'.$searchQuery.'%')
                 ->limit($limit)
                 ->get();
-            
+
             $debug['step'] = 'products_fetched';
             $debug['products_count'] = count($products);
 
-            $colorService = new \App\Services\Catalog\ColorDetectionService();
+            $colorService = new \App\Services\Catalog\ColorDetectionService;
             $debug['step'] = 'service_created';
-            
+
             $results = [];
 
             foreach ($products as $product) {
                 // DB::table returns stdClass, raw is JSON string
                 $rawString = $product->raw ?? '';
                 $raw = is_string($rawString) ? (json_decode($rawString, true) ?: []) : [];
-                
+
                 // Get image URL - check multiple sources
                 $imageUrl = null;
-                
+
                 // First priority: images column (JSON array of URLs)
                 $imagesCol = $product->images ?? '';
-                if (is_string($imagesCol) && !empty($imagesCol)) {
+                if (is_string($imagesCol) && ! empty($imagesCol)) {
                     $imagesArr = json_decode($imagesCol, true);
-                    if (is_array($imagesArr) && !empty($imagesArr[0])) {
+                    if (is_array($imagesArr) && ! empty($imagesArr[0])) {
                         $imageUrl = $imagesArr[0];
                     }
                 }
-                
+
                 // Second priority: raw.pictures or raw.images
-                if (!$imageUrl) {
+                if (! $imageUrl) {
                     if (isset($raw['pictures'][0]['url'])) {
                         $imageUrl = $raw['pictures'][0]['url'];
                     } elseif (isset($raw['images'][0]['url'])) {
@@ -4683,7 +4711,7 @@ class DiagnosticController extends Controller
                     }
                     $descColor = is_string($descText) ? $colorService->extractColorFromText($descText) : null;
                 } catch (\Throwable $th) {
-                    $descColor = 'ERROR: ' . $th->getMessage();
+                    $descColor = 'ERROR: '.$th->getMessage();
                 }
 
                 $result = [
@@ -4724,7 +4752,7 @@ class DiagnosticController extends Controller
 
                 $results[] = $result;
             }
-            
+
             $debug['step'] = 'loop_completed';
 
             return response()->json([
@@ -4752,7 +4780,7 @@ class DiagnosticController extends Controller
      */
     public function colorPalette(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4764,7 +4792,7 @@ class DiagnosticController extends Controller
         }
 
         $colorService = app(\App\Services\Catalog\ColorDetectionService::class);
-        
+
         try {
             $palette = $colorService->getColorPalette($imageUrl, $count);
             $dominant = $colorService->analyzeImage($imageUrl);
@@ -4788,7 +4816,7 @@ class DiagnosticController extends Controller
      */
     public function autoDetectColors(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4802,7 +4830,7 @@ class DiagnosticController extends Controller
             ->select(['id', 'article', 'title', 'color', 'images', 'raw'])
             ->where('tenant_id', $tenantId)
             ->where('in_stock', true)
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->whereNull('color')->orWhere('color', '')->orWhere('color', 'null');
             })
             ->limit($limit)
@@ -4819,18 +4847,18 @@ class DiagnosticController extends Controller
             // Parse raw JSON (DB::table returns string)
             $rawString = $product->raw ?? '';
             $raw = is_string($rawString) ? (json_decode($rawString, true) ?: []) : [];
-            
+
             // Get image URL from images column first, then raw
             $imageUrl = null;
-            if (!$skipImages) {
+            if (! $skipImages) {
                 $imagesCol = $product->images ?? '';
-                if (is_string($imagesCol) && !empty($imagesCol)) {
+                if (is_string($imagesCol) && ! empty($imagesCol)) {
                     $imagesArr = json_decode($imagesCol, true);
-                    if (is_array($imagesArr) && !empty($imagesArr[0])) {
+                    if (is_array($imagesArr) && ! empty($imagesArr[0])) {
                         $imageUrl = $imagesArr[0];
                     }
                 }
-                if (!$imageUrl) {
+                if (! $imageUrl) {
                     $imageUrl = $raw['pictures'][0]['url'] ?? $raw['images'][0]['url'] ?? $raw['image'] ?? null;
                 }
             }
@@ -4856,7 +4884,7 @@ class DiagnosticController extends Controller
                     'detected_color' => $detectedColor,
                 ];
 
-                if (!$dryRun) {
+                if (! $dryRun) {
                     DB::table('products')
                         ->where('id', $product->id)
                         ->update(['color' => $detectedColor]);
@@ -4881,8 +4909,8 @@ class DiagnosticController extends Controller
             'updated_count' => $results['updated'],
             'detected' => $results['detected'],
             'not_detected' => array_slice($results['not_detected'], 0, 20), // Limit output
-            'note' => $dryRun 
-                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch!' 
+            'note' => $dryRun
+                ? 'Dry run - set dry_run=false to apply changes. Remember to reindex Meilisearch!'
                 : 'Colors updated! Run Meilisearch reindex.',
         ]);
     }
@@ -4893,26 +4921,26 @@ class DiagnosticController extends Controller
      */
     public function seedTriggers(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = $request->input('tenant_id');
         $force = $request->boolean('force', false);
 
-        if (!$tenantId) {
+        if (! $tenantId) {
             return response()->json(['error' => 'tenant_id is required'], 400);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => "Tenant {$tenantId} not found"], 404);
         }
 
         $service = app(\App\Services\Tenant\DefaultTriggerService::class);
         $existingCount = \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)->count();
 
-        if ($existingCount > 0 && !$force) {
+        if ($existingCount > 0 && ! $force) {
             return response()->json([
                 'status' => 'skipped',
                 'message' => "Tenant {$tenantId} already has {$existingCount} triggers. Use force=true to recreate.",
@@ -4925,7 +4953,7 @@ class DiagnosticController extends Controller
         }
 
         $service->createDefaultTriggers($tenant);
-        
+
         $triggers = \App\Models\ProactiveTriggerRule::where('tenant_id', $tenantId)
             ->orderBy('priority')
             ->get(['id', 'name', 'trigger_type', 'is_enabled', 'message']);
@@ -4936,12 +4964,12 @@ class DiagnosticController extends Controller
             'tenant_name' => $tenant->name,
             'deleted' => $force ? $existingCount : 0,
             'created' => $triggers->count(),
-            'triggers' => $triggers->map(fn($t) => [
+            'triggers' => $triggers->map(fn ($t) => [
                 'id' => $t->id,
                 'name' => $t->name,
                 'type' => $t->trigger_type,
                 'enabled' => $t->is_enabled,
-                'message_preview' => mb_substr(str_replace("\n", " ", $t->message), 0, 60) . '...',
+                'message_preview' => mb_substr(str_replace("\n", ' ', $t->message), 0, 60).'...',
             ]),
         ]);
     }
@@ -4952,7 +4980,7 @@ class DiagnosticController extends Controller
      */
     public function seedTestData(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -4960,12 +4988,12 @@ class DiagnosticController extends Controller
         $numSessions = $request->input('sessions', 5);
         $numDays = $request->input('days', 7);
 
-        if (!$tenantId) {
+        if (! $tenantId) {
             return response()->json(['error' => 'tenant_id is required'], 400);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => "Tenant {$tenantId} not found"], 404);
         }
 
@@ -5018,14 +5046,14 @@ class DiagnosticController extends Controller
 
         for ($i = 0; $i < $numSessions; $i++) {
             $createdAt = now()->subDays(rand(0, $numDays))->subHours(rand(0, 23))->subMinutes(rand(0, 59));
-            $sessionId = 'test_session_' . uniqid();
-            $clientId = 'test_client_' . rand(1000, 9999);
-            
+            $sessionId = 'test_session_'.uniqid();
+            $clientId = 'test_client_'.rand(1000, 9999);
+
             // Random UTM params
             $utmSources = ['google', 'facebook', 'instagram', null];
             $utmMediums = ['cpc', 'organic', 'social', null];
             $utmCampaigns = ['summer_sale', 'new_arrivals', 'tactical_gear', null];
-            
+
             $utmSource = $utmSources[array_rand($utmSources)];
             $utmMedium = $utmMediums[array_rand($utmMediums)];
             $utmCampaign = $utmCampaigns[array_rand($utmCampaigns)];
@@ -5048,18 +5076,18 @@ class DiagnosticController extends Controller
             $numMessages = rand(3, 6);
             $messageTime = $createdAt->copy();
             $shownProducts = $products->random(min(3, $products->count()));
-            
+
             for ($m = 0; $m < $numMessages; $m++) {
                 $isUser = $m % 2 === 0;
                 $messageTime->addSeconds(rand(10, 120));
-                
+
                 if ($isUser) {
                     $content = $userQueries[array_rand($userQueries)];
                 } else {
                     $content = $assistantResponses[array_rand($assistantResponses)];
                     // Add product references
                     if (rand(0, 1) && $shownProducts->isNotEmpty()) {
-                        $content .= "\n\n[Показані товари: " . $shownProducts->take(3)->pluck('article')->implode(', ') . "]";
+                        $content .= "\n\n[Показані товари: ".$shownProducts->take(3)->pluck('article')->implode(', ').']';
                     }
                 }
 
@@ -5086,7 +5114,7 @@ class DiagnosticController extends Controller
                 'event_source' => 'widget',
                 'client_id' => $clientId,
                 'device_type' => ['mobile', 'desktop'][rand(0, 1)],
-                'page_url' => 'https://' . $tenant->domain . '/product/' . $shownProducts->first()->article,
+                'page_url' => 'https://'.$tenant->domain.'/product/'.$shownProducts->first()->article,
                 'utm_source' => $utmSource,
                 'utm_medium' => $utmMedium,
                 'utm_campaign' => $utmCampaign,
@@ -5176,7 +5204,7 @@ class DiagnosticController extends Controller
                             'product_price' => $clickedProduct->price,
                             'client_id' => $clientId,
                             'metadata' => json_encode([
-                                'order_id' => 'ORD-' . strtoupper(substr(md5(uniqid()), 0, 8)),
+                                'order_id' => 'ORD-'.strtoupper(substr(md5(uniqid()), 0, 8)),
                                 'order_total' => $clickedProduct->price,
                                 'items_count' => 1,
                                 'product_from_chat' => true,
@@ -5192,7 +5220,7 @@ class DiagnosticController extends Controller
                             'client_id' => $clientId,
                             'conversion_type' => 'purchase',
                             'conversion_status' => 'confirmed',
-                            'order_id' => 'ORD-' . strtoupper(substr(md5(uniqid()), 0, 8)),
+                            'order_id' => 'ORD-'.strtoupper(substr(md5(uniqid()), 0, 8)),
                             'order_total' => $clickedProduct->price,
                             'items_count' => 1,
                             'product_ids' => json_encode([$clickedProduct->id]),
@@ -5226,7 +5254,7 @@ class DiagnosticController extends Controller
      */
     public function fixMessagesTenant(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -5235,28 +5263,29 @@ class DiagnosticController extends Controller
         // Get sessions with their tenant_id
         $query = DB::table('chat_sessions')
             ->select('id', 'tenant_id', 'session_id');
-        
+
         if ($tenantId) {
             $query->where('tenant_id', $tenantId);
         }
-        
+
         $sessions = $query->get();
-        
+
         $fixed = 0;
         $skipped = 0;
-        
+
         foreach ($sessions as $session) {
-            if (!$session->tenant_id) {
+            if (! $session->tenant_id) {
                 $skipped++;
+
                 continue;
             }
-            
+
             // Update messages that don't have tenant_id
             $updated = DB::table('chat_messages')
                 ->where('chat_session_id', $session->id)
                 ->whereNull('tenant_id')
                 ->update(['tenant_id' => $session->tenant_id]);
-            
+
             $fixed += $updated;
         }
 
@@ -5276,14 +5305,14 @@ class DiagnosticController extends Controller
      */
     public function horoshopStockCount(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = (int) $request->query('tenant_id', 2);
         $tenant = \App\Models\Tenant::find($tenantId);
-        
-        if (!$tenant) {
+
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -5298,14 +5327,14 @@ class DiagnosticController extends Controller
             $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
             $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
             $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
-            
+
             $client = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
-            
+
             // Fetch all products with presence field
             $allProducts = [];
             $offset = 0;
             $limit = 500;
-            
+
             do {
                 $response = $client->request('catalog/export', [
                     'expr' => ['display_in_showcase' => 1],
@@ -5313,16 +5342,16 @@ class DiagnosticController extends Controller
                     'offset' => $offset,
                     'includedParams' => ['article', 'presence', 'title'],
                 ]);
-                
+
                 $products = $response['products'] ?? [];
                 if (empty($products)) {
                     break;
                 }
-                
+
                 foreach ($products as $product) {
                     $allProducts[] = $product;
                 }
-                
+
                 $offset += $limit;
             } while (count($products) === $limit);
 
@@ -5330,22 +5359,22 @@ class DiagnosticController extends Controller
             $presenceCounts = [];
             $inStockCount = 0;
             $outOfStockCount = 0;
-            
+
             foreach ($allProducts as $product) {
                 $presence = $product['presence'] ?? 'unknown';
                 if (is_array($presence)) {
                     $presence = $presence['value'] ?? $presence['ua'] ?? $presence['ru'] ?? json_encode($presence);
                 }
                 $presenceLower = mb_strtolower(trim($presence));
-                
+
                 $presenceCounts[$presence] = ($presenceCounts[$presence] ?? 0) + 1;
-                
+
                 // Check if in stock
-                $isOutOfStock = str_contains($presenceLower, 'немає') || 
+                $isOutOfStock = str_contains($presenceLower, 'немає') ||
                                 str_contains($presenceLower, 'нема') ||
                                 str_contains($presenceLower, 'нет в') ||
                                 str_contains($presenceLower, 'відсутн');
-                
+
                 if ($isOutOfStock) {
                     $outOfStockCount++;
                 } else {
@@ -5373,14 +5402,14 @@ class DiagnosticController extends Controller
     /**
      * GET /api/diagnostic/benchmark-models
      * Compare GPT models speed and quality
-     * 
-     * @param Request $request
-     *   - models: comma-separated list of models (default: gpt-4o,gpt-5.1)
-     *   - runs: number of runs per model (default: 1)
+     *
+     * @param  Request  $request
+     *                            - models: comma-separated list of models (default: gpt-4o,gpt-5.1)
+     *                            - runs: number of runs per model (default: 1)
      */
     public function benchmarkModels(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -5451,7 +5480,7 @@ class DiagnosticController extends Controller
                         ];
 
                         // gpt-5 models don't support temperature parameter
-                        if (!str_starts_with($model, 'gpt-5')) {
+                        if (! str_starts_with($model, 'gpt-5')) {
                             $payload['temperature'] = 0.3;
                         }
 
@@ -5460,9 +5489,9 @@ class DiagnosticController extends Controller
                             $payload['tool_choice'] = 'auto';
                         }
 
-                        $response = $client->post($baseUrl . '/chat/completions', [
+                        $response = $client->post($baseUrl.'/chat/completions', [
                             'headers' => [
-                                'Authorization' => 'Bearer ' . $apiKey,
+                                'Authorization' => 'Bearer '.$apiKey,
                                 'Content-Type' => 'application/json',
                             ],
                             'json' => $payload,
@@ -5504,7 +5533,7 @@ class DiagnosticController extends Controller
                     'min_ms' => min($times),
                     'max_ms' => max($times),
                     'tokens' => $lastResponse['tokens'] ?? 0,
-                    'has_tool_call' => !empty($lastResponse['tool_calls']),
+                    'has_tool_call' => ! empty($lastResponse['tool_calls']),
                     'tool_name' => $lastResponse['tool_calls'][0]['function']['name'] ?? null,
                     'content_preview' => mb_substr($lastResponse['content'] ?? '', 0, 100),
                     'error' => $lastResponse['error'] ?? null,
@@ -5513,7 +5542,7 @@ class DiagnosticController extends Controller
 
             // Calculate average across all tests
             $avgTotal = round(array_sum(array_column($modelResults, 'avg_ms')) / count($testCases));
-            
+
             $results[$model] = [
                 'tests' => $modelResults,
                 'avg_total_ms' => $avgTotal,
@@ -5527,21 +5556,21 @@ class DiagnosticController extends Controller
             $m2 = $models[1];
             $avg1 = $results[$m1]['avg_total_ms'] ?? 0;
             $avg2 = $results[$m2]['avg_total_ms'] ?? 0;
-            
+
             if ($avg2 > 0) {
                 $ratio = round($avg1 / $avg2, 2);
                 $diff = $avg1 - $avg2;
                 $diffPercent = round(($avg1 / $avg2 - 1) * 100);
-                
+
                 $summary = [
                     'faster_model' => $avg1 < $avg2 ? $m1 : $m2,
                     'slower_model' => $avg1 < $avg2 ? $m2 : $m1,
                     'ratio' => $avg1 < $avg2 ? round($avg2 / $avg1, 2) : $ratio,
                     'diff_ms' => abs($diff),
                     'diff_percent' => abs($diffPercent),
-                    'recommendation' => $avg1 < $avg2 
-                        ? "Use {$m1} - it's " . round($avg2 / $avg1, 1) . "x faster"
-                        : "Use {$m2} - it's " . round($avg1 / $avg2, 1) . "x faster",
+                    'recommendation' => $avg1 < $avg2
+                        ? "Use {$m1} - it's ".round($avg2 / $avg1, 1).'x faster'
+                        : "Use {$m2} - it's ".round($avg1 / $avg2, 1).'x faster',
                 ];
             }
         }
@@ -5551,7 +5580,7 @@ class DiagnosticController extends Controller
             'runs_per_test' => $runs,
             'results' => $results,
             'summary' => $summary,
-            'api_key_prefix' => substr($apiKey, 0, 8) . '...',
+            'api_key_prefix' => substr($apiKey, 0, 8).'...',
         ]);
     }
 
@@ -5584,36 +5613,36 @@ class DiagnosticController extends Controller
             ],
         ];
     }
-    
+
     /**
      * POST /api/diagnostic/rebuild-categories
      * Rebuild categories from products for a specific tenant or all tenants
      */
     public function rebuildCategories(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         try {
             $tenantId = $request->input('tenant_id');
             $service = app(\App\Services\Catalog\CategoryIndexService::class);
-            
+
             $beforeCounts = [];
             $afterCounts = [];
-            
+
             if ($tenantId) {
                 // Rebuild for specific tenant
                 $beforeCounts[$tenantId] = \App\Models\Category::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
                     ->count();
-                    
+
                 $service->rebuildForTenant((int) $tenantId);
-                
+
                 $afterCounts[$tenantId] = \App\Models\Category::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
                     ->count();
-                    
+
                 return response()->json([
                     'success' => true,
                     'message' => "Categories rebuilt for tenant {$tenantId}",
@@ -5624,27 +5653,27 @@ class DiagnosticController extends Controller
             } else {
                 // Rebuild for all tenants
                 $tenantIds = \App\Models\Product::distinct()->pluck('tenant_id')->filter()->toArray();
-                
+
                 foreach ($tenantIds as $tid) {
                     $beforeCounts[$tid] = \App\Models\Category::withoutGlobalScopes()
                         ->where('tenant_id', $tid)
                         ->count();
                 }
-                
+
                 $service->rebuild();
-                
+
                 foreach ($tenantIds as $tid) {
                     $afterCounts[$tid] = \App\Models\Category::withoutGlobalScopes()
                         ->where('tenant_id', $tid)
                         ->count();
                 }
-                
+
                 $totalBefore = array_sum($beforeCounts);
                 $totalAfter = array_sum($afterCounts);
-                
+
                 return response()->json([
                     'success' => true,
-                    'message' => "Categories rebuilt for " . count($tenantIds) . " tenants",
+                    'message' => 'Categories rebuilt for '.count($tenantIds).' tenants',
                     'tenants_processed' => $tenantIds,
                     'before_counts' => $beforeCounts,
                     'after_counts' => $afterCounts,
@@ -5661,20 +5690,20 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
-    
+
     /**
      * POST /api/diagnostic/onboard-tenant
      * Run full onboarding for a tenant (sync, categories, AI, Meili)
      */
     public function onboardTenant(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenantId = $request->input('tenant_id');
-        
-        if (!$tenantId) {
+
+        if (! $tenantId) {
             return response()->json([
                 'success' => false,
                 'error' => 'tenant_id is required',
@@ -5682,8 +5711,8 @@ class DiagnosticController extends Controller
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        
-        if (!$tenant) {
+
+        if (! $tenant) {
             return response()->json([
                 'success' => false,
                 'error' => "Tenant {$tenantId} not found",
@@ -5691,11 +5720,11 @@ class DiagnosticController extends Controller
         }
 
         $sync = $request->boolean('sync', false); // Run synchronously?
-        
+
         if ($sync) {
             // Run synchronously (blocking)
             \App\Jobs\OnboardTenantJob::dispatchSync($tenantId);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => "Onboarding completed for tenant {$tenantId}",
@@ -5705,7 +5734,7 @@ class DiagnosticController extends Controller
         } else {
             // Dispatch to queue (async)
             \App\Jobs\OnboardTenantJob::dispatch($tenantId)->onQueue('default');
-            
+
             return response()->json([
                 'success' => true,
                 'message' => "Onboarding job dispatched for tenant {$tenantId}",
@@ -5722,13 +5751,13 @@ class DiagnosticController extends Controller
      */
     public function findOrder(Request $request, $orderId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $order = DB::table('orders')->where('order_id', $orderId)->first();
-        
-        if (!$order) {
+
+        if (! $order) {
             return response()->json([
                 'error' => 'Order not found',
                 'order_id' => $orderId,
@@ -5739,7 +5768,7 @@ class DiagnosticController extends Controller
         $items = DB::table('order_items')
             ->where('order_id', $order->id)
             ->get()
-            ->map(fn($item) => [
+            ->map(fn ($item) => [
                 'article' => $item->article,
                 'title' => $item->title,
                 'price' => $item->price,
@@ -5753,13 +5782,13 @@ class DiagnosticController extends Controller
             $chatSession = DB::table('chat_sessions')
                 ->where('session_id', $order->session_id)
                 ->first();
-            
+
             if ($chatSession) {
                 $chatMessages = DB::table('chat_messages')
                     ->where('chat_session_id', $chatSession->id)
                     ->orderBy('created_at')
                     ->get()
-                    ->map(fn($m) => [
+                    ->map(fn ($m) => [
                         'role' => $m->role,
                         'content' => mb_substr($m->content, 0, 200),
                         'created_at' => $m->created_at,
@@ -5774,7 +5803,7 @@ class DiagnosticController extends Controller
                 ->where('session_id', $order->session_id)
                 ->orderBy('created_at')
                 ->get()
-                ->map(fn($e) => [
+                ->map(fn ($e) => [
                     'type' => $e->event_type,
                     'product_article' => $e->product_article,
                     'created_at' => $e->created_at,
@@ -5787,12 +5816,12 @@ class DiagnosticController extends Controller
             // Normalize phone for search
             $phone = preg_replace('/[^0-9]/', '', $order->customer_phone);
             $phoneShort = substr($phone, -10); // last 10 digits
-            
+
             $cartEventsByPhone = DB::table('chat_events')
                 ->where('event_type', 'add_to_cart')
-                ->where(function($q) use ($phone, $phoneShort, $order) {
-                    $q->where('metadata', 'like', '%' . $phoneShort . '%')
-                      ->orWhere('metadata', 'like', '%' . ($order->customer_name ?? 'NO_MATCH') . '%');
+                ->where(function ($q) use ($phoneShort, $order) {
+                    $q->where('metadata', 'like', '%'.$phoneShort.'%')
+                        ->orWhere('metadata', 'like', '%'.($order->customer_name ?? 'NO_MATCH').'%');
                 })
                 ->orderByDesc('created_at')
                 ->limit(20)
@@ -5809,7 +5838,7 @@ class DiagnosticController extends Controller
             ])
             ->orderBy('created_at')
             ->get()
-            ->map(fn($e) => [
+            ->map(fn ($e) => [
                 'id' => $e->id,
                 'session_id' => $e->session_id,
                 'product_article' => $e->product_article,
@@ -5842,8 +5871,8 @@ class DiagnosticController extends Controller
             'chat_events_for_session' => $chatEvents,
             'cart_events_around_order_time' => $cartEventsAroundTime,
             'analysis' => [
-                'has_session_id' => !empty($order->session_id),
-                'has_chat_session' => !empty($chatSession),
+                'has_session_id' => ! empty($order->session_id),
+                'has_chat_session' => ! empty($chatSession),
                 'has_chat_messages' => count($chatMessages) > 0,
                 'had_actual_chat' => count($chatMessages) > 0,
                 'should_count_in_funnel' => count($chatMessages) > 0,
@@ -5857,13 +5886,13 @@ class DiagnosticController extends Controller
      */
     public function fixOrderChat(Request $request, $orderId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $order = DB::table('orders')->where('order_id', $orderId)->first();
-        
-        if (!$order) {
+
+        if (! $order) {
             return response()->json([
                 'error' => 'Order not found',
                 'order_id' => $orderId,
@@ -5876,7 +5905,7 @@ class DiagnosticController extends Controller
             $chatSession = DB::table('chat_sessions')
                 ->where('session_id', $order->session_id)
                 ->first();
-            
+
             if ($chatSession) {
                 $messagesCount = DB::table('chat_messages')
                     ->where('chat_session_id', $chatSession->id)
@@ -5895,7 +5924,7 @@ class DiagnosticController extends Controller
 
         // Delete related cart events if no actual chat
         $deletedEvents = 0;
-        if (!$hadActualChat && $order->session_id) {
+        if (! $hadActualChat && $order->session_id) {
             $deletedEvents = DB::table('chat_events')
                 ->where('session_id', $order->session_id)
                 ->whereIn('event_type', ['add_to_cart', 'checkout_success', 'checkout_submit'])
@@ -5908,8 +5937,8 @@ class DiagnosticController extends Controller
             'had_actual_chat' => $hadActualChat,
             'order_updated' => $updated > 0,
             'events_deleted' => $deletedEvents,
-            'message' => $hadActualChat 
-                ? 'Order had actual chat conversation, kept attribution' 
+            'message' => $hadActualChat
+                ? 'Order had actual chat conversation, kept attribution'
                 : 'No actual chat found, removed attribution',
         ]);
     }
@@ -5920,7 +5949,7 @@ class DiagnosticController extends Controller
      */
     public function cleanupFalseChatEvents(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -5941,19 +5970,19 @@ class DiagnosticController extends Controller
         foreach ($events as $event) {
             $meta = json_decode($event->metadata ?? '{}', true);
             $hadChatInMeta = $meta['had_chat_conversation'] ?? false;
-            
+
             // Skip events that don't claim to have had chat
-            if (!$hadChatInMeta) {
+            if (! $hadChatInMeta) {
                 continue;
             }
-            
+
             // Check if chat session actually exists and has user messages
             $hasActualChat = false;
-            
+
             $chatSession = DB::table('chat_sessions')
                 ->where('session_id', $event->session_id)
                 ->first();
-            
+
             if ($chatSession) {
                 $userMessages = DB::table('chat_messages')
                     ->where('chat_session_id', $chatSession->id)
@@ -5962,7 +5991,7 @@ class DiagnosticController extends Controller
                 $hasActualChat = $userMessages > 0;
             }
 
-            if (!$hasActualChat) {
+            if (! $hasActualChat) {
                 $falseEvents[] = [
                     'id' => $event->id,
                     'session_id' => $event->session_id,
@@ -5976,7 +6005,7 @@ class DiagnosticController extends Controller
         }
 
         $deletedCount = 0;
-        if (!$dryRun && count($falseEvents) > 0) {
+        if (! $dryRun && count($falseEvents) > 0) {
             $idsToDelete = array_column($falseEvents, 'id');
             $deletedCount = DB::table('chat_events')
                 ->whereIn('id', $idsToDelete)
@@ -5999,7 +6028,7 @@ class DiagnosticController extends Controller
      */
     public function colorSynonyms(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6042,7 +6071,7 @@ class DiagnosticController extends Controller
      */
     public function categoryAliases(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6085,7 +6114,7 @@ class DiagnosticController extends Controller
                 'total_categories' => $totalCategories,
                 'total_aliases' => $totalAliases,
                 'ai_generated' => $aiGenerated,
-                'by_source' => $aliases->groupBy('source')->map(fn($items) => $items->sum('aliases_count')),
+                'by_source' => $aliases->groupBy('source')->map(fn ($items) => $items->sum('aliases_count')),
                 'sample_aliases' => $sampleAliases,
             ]);
         } catch (\Exception $e) {
@@ -6102,12 +6131,12 @@ class DiagnosticController extends Controller
      */
     public function onboardingStatus(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -6123,7 +6152,7 @@ class DiagnosticController extends Controller
             'tenant_id' => $tenantId,
             'tenant_name' => $tenant->name,
             'platform' => $tenant->platform,
-            'has_credentials' => !empty($tenant->platform_credentials),
+            'has_credentials' => ! empty($tenant->platform_credentials),
             'last_sync_at' => $tenant->last_sync_at?->toDateTimeString(),
             'onboarding_completed_at' => $tenant->onboarding_completed_at?->toDateTimeString(),
             'onboarding_progress' => $progress ? [
@@ -6151,12 +6180,12 @@ class DiagnosticController extends Controller
      */
     public function fixOnboardingProgress(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
-        if (!$progress) {
+        if (! $progress) {
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
@@ -6173,7 +6202,7 @@ class DiagnosticController extends Controller
             ->whereNotNull('product_ai_index.keywords')
             ->count();
 
-        $percent = $totalProducts > 0 
+        $percent = $totalProducts > 0
             ? min(95, (int) round($enrichedCount / $totalProducts * 100))
             : 0;
 
@@ -6202,12 +6231,12 @@ class DiagnosticController extends Controller
      */
     public function restartAiEnrichment(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
-        if (!$progress) {
+        if (! $progress) {
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
@@ -6224,7 +6253,7 @@ class DiagnosticController extends Controller
             ->whereNotNull('product_ai_index.keywords')
             ->count();
 
-        $percent = $totalProducts > 0 
+        $percent = $totalProducts > 0
             ? min(95, (int) round($enrichedCount / $totalProducts * 100))
             : 0;
 
@@ -6232,12 +6261,12 @@ class DiagnosticController extends Controller
         $progress->status = 'in_progress';
         $progress->save();
 
-        $progress->updateStep('ai_enrichment', 'in_progress', $percent, 
+        $progress->updateStep('ai_enrichment', 'in_progress', $percent,
             "AI аналіз: {$enrichedCount} з {$totalProducts} товарів", [
-            'total' => $totalProducts,
-            'enriched' => $enrichedCount,
-            'processed' => $enrichedCount,
-        ]);
+                'total' => $totalProducts,
+                'enriched' => $enrichedCount,
+                'processed' => $enrichedCount,
+            ]);
 
         return response()->json([
             'success' => true,
@@ -6255,17 +6284,17 @@ class DiagnosticController extends Controller
      */
     public function completeOnboarding(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenantId)->first();
-        if (!$progress) {
+        if (! $progress) {
             return response()->json(['error' => 'No progress record found'], 404);
         }
 
         $tenant = \App\Models\Tenant::withoutGlobalScopes()->find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -6277,7 +6306,7 @@ class DiagnosticController extends Controller
 
         // Mark entire onboarding as completed
         $progress->complete();
-        
+
         $now = now();
         DB::table('tenants')->where('id', $tenantId)->update(['onboarding_completed_at' => $now]);
 
@@ -6295,12 +6324,12 @@ class DiagnosticController extends Controller
      */
     public function generateSynonyms(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $tenant = \App\Models\Tenant::withoutGlobalScopes()->find($tenantId);
-        if (!$tenant) {
+        if (! $tenant) {
             return response()->json(['error' => 'Tenant not found'], 404);
         }
 
@@ -6327,7 +6356,7 @@ class DiagnosticController extends Controller
             ]);
 
             $output = \Illuminate\Support\Facades\Artisan::output();
-            
+
             // Count generated synonyms
             $synonymsCount = \App\Models\ProductSynonym::where('tenant_id', $tenantId)->count();
 
@@ -6352,7 +6381,7 @@ class DiagnosticController extends Controller
      */
     public function categoriesByTenant(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6362,7 +6391,7 @@ class DiagnosticController extends Controller
         $query = DB::table('categories')
             ->select('tenant_id', DB::raw('COUNT(*) as count'))
             ->groupBy('tenant_id');
-        
+
         $byTenant = $query->get()->pluck('count', 'tenant_id')->toArray();
 
         // Get categories for specific tenant if requested
@@ -6388,13 +6417,13 @@ class DiagnosticController extends Controller
      */
     public function unlinkOrderSession(Request $request, $orderId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $order = DB::table('orders')->where('order_id', $orderId)->first();
-        
-        if (!$order) {
+
+        if (! $order) {
             return response()->json([
                 'error' => 'Order not found',
                 'order_id' => $orderId,
@@ -6439,7 +6468,7 @@ class DiagnosticController extends Controller
      */
     public function closeInactiveSessions(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6459,7 +6488,7 @@ class DiagnosticController extends Controller
             'cutoff_time' => $cutoffTime->toDateTimeString(),
             'dry_run' => $dryRun,
             'sessions_found' => $sessionsToClose->count(),
-            'sessions' => $sessionsToClose->map(fn($s) => [
+            'sessions' => $sessionsToClose->map(fn ($s) => [
                 'id' => $s->id,
                 'session_id' => $s->session_id,
                 'tenant_id' => $s->tenant_id,
@@ -6469,16 +6498,16 @@ class DiagnosticController extends Controller
             'sessions_closed' => 0,
         ];
 
-        if (!$dryRun && $sessionsToClose->count() > 0) {
+        if (! $dryRun && $sessionsToClose->count() > 0) {
             $closed = DB::table('chat_sessions')
                 ->where('status', 'open')
                 ->where('updated_at', '<', $cutoffTime)
                 ->update(['status' => 'closed']);
-            
+
             $results['sessions_closed'] = $closed;
         }
 
-        $results['message'] = $dryRun 
+        $results['message'] = $dryRun
             ? 'Dry run. Use ?dry_run=false to close sessions.'
             : "Closed {$results['sessions_closed']} sessions.";
 
@@ -6491,7 +6520,7 @@ class DiagnosticController extends Controller
      */
     public function sessionStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6532,7 +6561,7 @@ class DiagnosticController extends Controller
                 'total' => $totalMessages,
                 'avg_per_session' => round($avgMessagesPerSession ?? 0, 1),
             ],
-            'recommended_action' => $older > 0 
+            'recommended_action' => $older > 0
                 ? "Consider closing {$older} stale sessions with: POST /api/diagnostic/close-inactive-sessions?timeout=1440&dry_run=false"
                 : 'All sessions are healthy',
         ]);
@@ -6544,7 +6573,7 @@ class DiagnosticController extends Controller
      */
     public function promptPresets(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6564,22 +6593,22 @@ class DiagnosticController extends Controller
             $service = app(\App\Services\Ai\PromptPresetService::class);
             $testContext = ['tenant_id' => (int) $tenantId, 'language' => 'uk'];
             $layers = $service->findLayersForContext($testContext);
-            
+
             // Also test with a furniture category
             $testContextFurniture = array_merge($testContext, ['category' => 'МЕБЛІ ТА ОРГАНІЗАЦІЯ']);
             $layersFurniture = $service->findLayersForContext($testContextFurniture);
-            
+
             $layerTest = [
                 'general_query' => [
                     'context' => $testContext,
                     'base' => $layers['base'] ? $layers['base']['name'] : null,
-                    'overlays' => array_map(fn($o) => "{$o['name']} (p{$o['priority']})", $layers['overlays']),
+                    'overlays' => array_map(fn ($o) => "{$o['name']} (p{$o['priority']})", $layers['overlays']),
                     'merged_prompt_length' => mb_strlen($service->getSystemPromptForContext($testContext) ?? ''),
                 ],
                 'furniture_query' => [
                     'context' => $testContextFurniture,
                     'base' => $layersFurniture['base'] ? $layersFurniture['base']['name'] : null,
-                    'overlays' => array_map(fn($o) => "{$o['name']} (p{$o['priority']})", $layersFurniture['overlays']),
+                    'overlays' => array_map(fn ($o) => "{$o['name']} (p{$o['priority']})", $layersFurniture['overlays']),
                     'merged_prompt_length' => mb_strlen($service->getSystemPromptForContext($testContextFurniture) ?? ''),
                 ],
             ];
@@ -6588,7 +6617,7 @@ class DiagnosticController extends Controller
         return response()->json([
             'count' => $presets->count(),
             'layer_test' => $layerTest,
-            'presets' => $presets->map(fn($p) => [
+            'presets' => $presets->map(fn ($p) => [
                 'id' => $p->id,
                 'tenant_id' => $p->tenant_id,
                 'name' => $p->name,
@@ -6614,7 +6643,7 @@ class DiagnosticController extends Controller
     /**
      * POST /api/diagnostic/run-command
      * Run artisan commands safely
-     * 
+     *
      * Allowed commands (whitelist for security):
      * - migrate
      * - synonyms:products --tenant=X
@@ -6627,12 +6656,12 @@ class DiagnosticController extends Controller
      */
     public function runCommand(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         $command = $request->input('command');
-        
+
         if (empty($command)) {
             return response()->json([
                 'error' => 'Missing command parameter',
@@ -6644,12 +6673,12 @@ class DiagnosticController extends Controller
         // Parse command and arguments
         $parts = explode(' ', trim($command));
         $artisanCommand = array_shift($parts);
-        
+
         // Security: whitelist of allowed commands
         $allowedCommands = [
             'migrate',
             'synonyms:products',
-            'synonyms:regenerate', 
+            'synonyms:regenerate',
             'meili:reindex-products',
             'meili:setup-products',
             'sync:horoshop-products',
@@ -6661,7 +6690,7 @@ class DiagnosticController extends Controller
             'view:clear',
         ];
 
-        if (!in_array($artisanCommand, $allowedCommands)) {
+        if (! in_array($artisanCommand, $allowedCommands)) {
             return response()->json([
                 'error' => "Command '{$artisanCommand}' is not allowed",
                 'allowed_commands' => $allowedCommands,
@@ -6684,7 +6713,7 @@ class DiagnosticController extends Controller
 
         // Always force non-interactive
         $arguments['--no-interaction'] = true;
-        
+
         // Add --force for migrate command in production
         if ($artisanCommand === 'migrate') {
             $arguments['--force'] = true;
@@ -6692,10 +6721,10 @@ class DiagnosticController extends Controller
 
         try {
             $startTime = microtime(true);
-            
+
             $exitCode = \Illuminate\Support\Facades\Artisan::call($artisanCommand, $arguments);
             $output = \Illuminate\Support\Facades\Artisan::output();
-            
+
             $duration = round(microtime(true) - $startTime, 2);
 
             return response()->json([
@@ -6722,16 +6751,16 @@ class DiagnosticController extends Controller
      */
     public function synonymsStats(Request $request): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
         try {
             $total = DB::table('product_synonyms')->count();
-            
+
             // Check if tenant_id column exists
             $hasTenantColumn = DB::getSchemaBuilder()->hasColumn('product_synonyms', 'tenant_id');
-            
+
             $byTenant = [];
             if ($hasTenantColumn) {
                 $byTenant = DB::table('product_synonyms')
@@ -6740,7 +6769,7 @@ class DiagnosticController extends Controller
                     ->pluck('count', 'tenant_id')
                     ->toArray();
             }
-            
+
             $byLanguage = DB::table('product_synonyms')
                 ->select('language', DB::raw('COUNT(*) as count'))
                 ->groupBy('language')
@@ -6768,7 +6797,7 @@ class DiagnosticController extends Controller
                 'sample' => $sampleSynonyms,
                 'table_exists' => true,
                 'has_tenant_column' => $hasTenantColumn,
-                'hint' => !$hasTenantColumn ? 'Run migrate to add tenant_id column' : null,
+                'hint' => ! $hasTenantColumn ? 'Run migrate to add tenant_id column' : null,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -6806,7 +6835,7 @@ class DiagnosticController extends Controller
      */
     public function triggerStats(Request $request, int $tenantId): JsonResponse
     {
-        if (!$this->checkKey($request)) {
+        if (! $this->checkKey($request)) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
@@ -6841,9 +6870,9 @@ class DiagnosticController extends Controller
                 'shown' => $t->shown_count,
                 'clicked' => $t->clicked_count,
                 'converted' => $t->converted_count,
-                'ctr' => $t->shown_count > 0 ? round($t->clicked_count / $t->shown_count * 100, 1) . '%' : '0%',
+                'ctr' => $t->shown_count > 0 ? round($t->clicked_count / $t->shown_count * 100, 1).'%' : '0%',
                 'conditions' => $t->conditions,
-                'message_preview' => mb_substr(str_replace("\n", " ", $t->message), 0, 80),
+                'message_preview' => mb_substr(str_replace("\n", ' ', $t->message), 0, 80),
             ];
         });
 
@@ -6854,4 +6883,3 @@ class DiagnosticController extends Controller
         ]);
     }
 }
-

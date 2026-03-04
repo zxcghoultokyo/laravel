@@ -3,9 +3,9 @@
 namespace App\Livewire\Admin;
 
 use App\Models\PromptPreset;
+use Illuminate\Support\Str;
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Str;
 
 class PromptPresetsManager extends Component
 {
@@ -13,32 +13,53 @@ class PromptPresetsManager extends Component
 
     // Form fields
     public $preset_id = null;
+
     public $name = '';
+
     public $description = '';
+
     public $system_prompt = '';
+
     public $categories = [];
+
     public $language = '';
+
     public $tone = '';
+
     public $storeType = '';
+
     public $campaign = '';
+
     public $variables = [];
+
     public $is_active = true;
+
     public $is_default = false;
+
     public $priority = 0;
 
     // UI state
     public $showModal = false;
+
     public $editMode = false;
+
     public $showTestModal = false;
+
     public $testMessage = '';
+
     public $testResponse = '';
+
     public $testLoading = false;
 
     // Variable editor
     public $newVarName = '';
+
     public $newVarDefault = '';
+
     public $customVarName = '';
+
     public $newCategory = '';
+
     public $customCategory = '';
 
     protected $rules = [
@@ -56,7 +77,7 @@ class PromptPresetsManager extends Component
     ];
 
     public bool $embedded = false;
-    
+
     // Track tenant to reset page on tenant switch
     private ?int $lastTenantId = null;
 
@@ -75,20 +96,25 @@ class PromptPresetsManager extends Component
                 ->paginate(10);
         }
 
-        // Load available categories from products
-        $availableCategories = \App\Models\Product::where('in_stock', true)
-            ->whereNotNull('category_path')
-            ->where('category_path', '!=', '')
-            ->select('category_path')
-            ->distinct()
-            ->orderBy('category_path')
-            ->pluck('category_path')
-            ->map(fn($path) => collect(explode(' > ', $path))->last())
-            ->unique()
-            ->sort()
-            ->values()
-            ->toArray();
-        
+        // Load available categories from products (cached 5 min to avoid heavy query on every render)
+        $tenantId = \App\Services\TenantContext::getTenantId();
+        $availableCategories = \Illuminate\Support\Facades\Cache::remember(
+            "preset_categories_{$tenantId}",
+            300,
+            fn () => \App\Models\Product::where('in_stock', true)
+                ->whereNotNull('category_path')
+                ->where('category_path', '!=', '')
+                ->select('category_path')
+                ->distinct()
+                ->orderBy('category_path')
+                ->pluck('category_path')
+                ->map(fn ($path) => collect(explode(' > ', $path))->last())
+                ->unique()
+                ->sort()
+                ->values()
+                ->toArray()
+        );
+
         // Load store types from StoreContext
         $storeTypes = [
             '' => 'Будь-який',
@@ -199,7 +225,7 @@ class PromptPresetsManager extends Component
     public function edit($id)
     {
         $preset = PromptPreset::findOrFail($id);
-        
+
         $this->preset_id = $preset->id;
         $this->name = $preset->name;
         $this->description = $preset->description ?? '';
@@ -209,7 +235,7 @@ class PromptPresetsManager extends Component
         $this->tone = $preset->tone ?? '';
         $this->storeType = $preset->store_type ?? '';
         $this->campaign = $preset->campaign ?? '';
-        
+
         // Normalize variables to array of ['name' => ..., 'default' => ...] format
         $rawVars = $preset->variables ?? [];
         $this->variables = [];
@@ -220,12 +246,12 @@ class PromptPresetsManager extends Component
             } else {
                 // Old format: key => default_value
                 $this->variables[] = [
-                    'name' => is_string($key) ? $key : (string)$key,
+                    'name' => is_string($key) ? $key : (string) $key,
                     'default' => is_string($value) ? $value : '',
                 ];
             }
         }
-        
+
         $this->is_active = $preset->is_active;
         $this->is_default = $preset->is_default;
         $this->priority = $preset->priority;
@@ -256,20 +282,20 @@ class PromptPresetsManager extends Component
 
         if ($this->editMode && $this->preset_id) {
             $preset = PromptPreset::findOrFail($this->preset_id);
-            
+
             // Check for duplicate slug
             if (PromptPreset::where('slug', $data['slug'])->where('id', '!=', $this->preset_id)->exists()) {
-                $data['slug'] = $data['slug'] . '-' . time();
+                $data['slug'] = $data['slug'].'-'.time();
             }
-            
+
             $preset->update($data);
             $this->dispatch('toast', message: 'Пресет оновлено', type: 'success');
         } else {
             // Check for duplicate slug
             if (PromptPreset::where('slug', $data['slug'])->exists()) {
-                $data['slug'] = $data['slug'] . '-' . time();
+                $data['slug'] = $data['slug'].'-'.time();
             }
-            
+
             PromptPreset::create($data);
             $this->dispatch('toast', message: 'Пресет створено', type: 'success');
         }
@@ -284,9 +310,10 @@ class PromptPresetsManager extends Component
     public function delete($id)
     {
         $preset = PromptPreset::findOrFail($id);
-        
+
         if ($preset->is_default) {
             $this->dispatch('toast', message: 'Не можна видалити дефолтний пресет', type: 'error');
+
             return;
         }
 
@@ -298,10 +325,10 @@ class PromptPresetsManager extends Component
     public function duplicate($id)
     {
         $preset = PromptPreset::findOrFail($id);
-        
+
         $newPreset = $preset->replicate();
-        $newPreset->name = $preset->name . ' (копія)';
-        $newPreset->slug = Str::slug($newPreset->name) . '-' . time();
+        $newPreset->name = $preset->name.' (копія)';
+        $newPreset->slug = Str::slug($newPreset->name).'-'.time();
         $newPreset->is_default = false;
         $newPreset->save();
 
@@ -312,8 +339,8 @@ class PromptPresetsManager extends Component
     public function toggleActive($id)
     {
         $preset = PromptPreset::findOrFail($id);
-        $preset->update(['is_active' => !$preset->is_active]);
-        
+        $preset->update(['is_active' => ! $preset->is_active]);
+
         app(\App\Services\Ai\PromptPresetService::class)->clearCache();
         $status = $preset->is_active ? 'активовано' : 'деактивовано';
         $this->dispatch('toast', message: "Пресет {$status}", type: 'success');
@@ -330,13 +357,13 @@ class PromptPresetsManager extends Component
                 return;
             }
         }
-        
+
         if (empty($varName)) {
             return;
         }
 
         $varName = Str::snake($varName);
-        
+
         // Get default from available variables if not provided
         $default = $this->newVarDefault;
         if (empty($default)) {
@@ -345,8 +372,8 @@ class PromptPresetsManager extends Component
         }
 
         // Check if already exists
-        $exists = collect($this->variables)->contains(fn($v) => $v['name'] === $varName);
-        if (!$exists) {
+        $exists = collect($this->variables)->contains(fn ($v) => $v['name'] === $varName);
+        if (! $exists) {
             $this->variables[] = [
                 'name' => $varName,
                 'default' => $default,
@@ -371,7 +398,7 @@ class PromptPresetsManager extends Component
             return;
         }
 
-        if (!in_array($this->newCategory, $this->categories)) {
+        if (! in_array($this->newCategory, $this->categories)) {
             $this->categories[] = $this->newCategory;
         }
 
@@ -385,7 +412,7 @@ class PromptPresetsManager extends Component
         }
 
         $cat = trim($this->customCategory);
-        if (!in_array($cat, $this->categories)) {
+        if (! in_array($cat, $this->categories)) {
             $this->categories[] = $cat;
         }
 
@@ -403,11 +430,11 @@ class PromptPresetsManager extends Component
     {
         preg_match_all('/\{\{(\w+)\}\}/', $this->system_prompt, $matches);
         $found = array_unique($matches[1] ?? []);
-        
+
         $existing = array_column($this->variables, 'name');
-        
+
         foreach ($found as $varName) {
-            if (!in_array($varName, $existing)) {
+            if (! in_array($varName, $existing)) {
                 $this->variables[] = [
                     'name' => $varName,
                     'default' => '',
@@ -415,7 +442,7 @@ class PromptPresetsManager extends Component
             }
         }
 
-        $this->dispatch('toast', message: 'Знайдено ' . count($found) . ' змінних', type: 'info');
+        $this->dispatch('toast', message: 'Знайдено '.count($found).' змінних', type: 'info');
     }
 
     // Test chat
@@ -434,10 +461,10 @@ class PromptPresetsManager extends Component
         }
 
         $this->testLoading = true;
-        
+
         try {
             $preset = PromptPreset::findOrFail($this->preset_id);
-            
+
             // Build variable values from preset defaults
             $values = [];
             foreach ($preset->variables ?? [] as $var) {
@@ -451,12 +478,13 @@ class PromptPresetsManager extends Component
             if (empty($apiKey)) {
                 $this->testResponse = '⚠️ OpenAI API ключ не налаштований. Перевірте OPENAI_API_KEY в .env';
                 $this->testLoading = false;
+
                 return;
             }
-            
+
             $response = \Illuminate\Support\Facades\Http::withToken($apiKey)
                 ->timeout(30)
-                ->post(config('services.openai.base_url', 'https://api.openai.com/v1') . '/chat/completions', [
+                ->post(config('services.openai.base_url', 'https://api.openai.com/v1').'/chat/completions', [
                     'model' => config('services.openai.model', 'gpt-4.1-mini'),
                     'messages' => [
                         ['role' => 'system', 'content' => $renderedPrompt],
@@ -467,17 +495,17 @@ class PromptPresetsManager extends Component
                 ]);
 
             $data = $response->json();
-            
+
             if (isset($data['error'])) {
-                $this->testResponse = '❌ OpenAI помилка: ' . ($data['error']['message'] ?? json_encode($data['error']));
-            } elseif (!$response->successful()) {
-                $this->testResponse = '❌ HTTP помилка ' . $response->status() . ': ' . $response->body();
+                $this->testResponse = '❌ OpenAI помилка: '.($data['error']['message'] ?? json_encode($data['error']));
+            } elseif (! $response->successful()) {
+                $this->testResponse = '❌ HTTP помилка '.$response->status().': '.$response->body();
             } else {
                 $this->testResponse = $data['choices'][0]['message']['content'] ?? '⚠️ Порожня відповідь від API';
             }
-            
+
         } catch (\Throwable $e) {
-            $this->testResponse = 'Помилка: ' . $e->getMessage();
+            $this->testResponse = 'Помилка: '.$e->getMessage();
         }
 
         $this->testLoading = false;
@@ -487,7 +515,7 @@ class PromptPresetsManager extends Component
     public function exportPreset($id)
     {
         $preset = PromptPreset::findOrFail($id);
-        
+
         $export = [
             'name' => $preset->name,
             'description' => $preset->description,
@@ -500,8 +528,8 @@ class PromptPresetsManager extends Component
             'priority' => $preset->priority,
         ];
 
-        $this->dispatch('download', 
-            filename: Str::slug($preset->name) . '.json',
+        $this->dispatch('download',
+            filename: Str::slug($preset->name).'.json',
             content: json_encode($export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
         );
     }
@@ -513,22 +541,22 @@ class PromptPresetsManager extends Component
     {
         try {
             $generator = app(\App\Services\Ai\PromptGeneratorService::class);
-            
+
             // Analyze store first
             $context = $generator->analyzeStore(null);
-            
+
             // Generate prompt (use AI if OpenAI is configured)
-            $useAi = !empty(config('services.openai.key'));
+            $useAi = ! empty(config('services.openai.key'));
             $prompt = $generator->generatePrompt($context, $useAi);
-            
+
             // Extract store name properly (from FAQ text, not bot_name)
             $settings = \App\Models\WidgetSettings::first();
             $storeName = $this->extractStoreNameFromSettings($settings);
-            $presetName = "Auto: {$storeName} (" . now()->format('d.m.Y') . ")";
-            
+            $presetName = "Auto: {$storeName} (".now()->format('d.m.Y').')';
+
             $preset = PromptPreset::create([
                 'name' => $presetName,
-                'slug' => Str::slug($presetName) . '-' . time(),
+                'slug' => Str::slug($presetName).'-'.time(),
                 'description' => "Автоматично згенерований промпт для {$storeName}. Тип магазину: {$context->store_type}",
                 'system_prompt' => $prompt,
                 'categories' => $context->primary_categories ? array_slice($context->primary_categories, 0, 5) : null,
@@ -543,12 +571,12 @@ class PromptPresetsManager extends Component
                 'is_default' => false,
                 'priority' => 50,
             ]);
-            
-            $this->dispatch('toast', message: "Промпт згенеровано! Тип: {$context->store_type}, Категорій: " . count($context->primary_categories ?? []), type: 'success');
-            
+
+            $this->dispatch('toast', message: "Промпт згенеровано! Тип: {$context->store_type}, Категорій: ".count($context->primary_categories ?? []), type: 'success');
+
         } catch (\Throwable $e) {
             \Log::error('[PromptPresetsManager] Generate failed', ['error' => $e->getMessage()]);
-            $this->dispatch('toast', message: 'Помилка: ' . $e->getMessage(), type: 'error');
+            $this->dispatch('toast', message: 'Помилка: '.$e->getMessage(), type: 'error');
         }
     }
 
@@ -581,13 +609,13 @@ class PromptPresetsManager extends Component
     protected function extractStoreNameFromSettings(?\App\Models\WidgetSettings $settings): string
     {
         // First try explicit store_name field
-        if (!empty($settings?->store_name)) {
+        if (! empty($settings?->store_name)) {
             return $settings->store_name;
         }
-        
+
         // Try to extract from FAQ about text
         $aboutText = $settings?->faq_about_text ?? '';
-        if (!empty($aboutText)) {
+        if (! empty($aboutText)) {
             // Look for uppercase brand name followed by em-dash (CONTRACTOR — ...)
             if (preg_match('/^([A-ZА-ЯІЇЄҐ][A-Za-zА-Яа-яІіЇїЄєҐґ0-9]*)\s*[—–-]\s*/m', $aboutText, $matches)) {
                 $name = trim($matches[1]);
@@ -595,8 +623,8 @@ class PromptPresetsManager extends Component
                     return $name;
                 }
             }
-            
-            // Try "Магазин X" pattern  
+
+            // Try "Магазин X" pattern
             if (preg_match('/магазин[у]?\s+["\']?([А-Яа-яA-Za-z][А-Яа-яA-Za-z0-9\s\.]+)["\']?/iu', $aboutText, $matches)) {
                 $name = trim($matches[1]);
                 if (mb_strlen($name) > 2 && mb_strlen($name) < 50) {
@@ -604,18 +632,18 @@ class PromptPresetsManager extends Component
                 }
             }
         }
-        
+
         // Fallback to bot_name
-        if (!empty($settings?->bot_name)) {
+        if (! empty($settings?->bot_name)) {
             return $settings->bot_name;
         }
-        
+
         return 'Магазин';
     }
 
     protected function getDefaultPromptTemplate(): string
     {
-        return <<<PROMPT
+        return <<<'PROMPT'
 Ти — AI-продавець магазину "{{brand_name}}". Твоя мета — допомогти клієнту знайти та купити товар.
 
 ПРАВИЛА:

@@ -2,7 +2,7 @@
     "servers": {
         "laravel-boost": {
             "type": "stdio",
-            "command": "php",
+            "command": "/usr/bin/php8.3",
             "args": [
                 "artisan",
                 "boost:mcp"

@@ -18,15 +18,17 @@ class BenchmarkModels extends Command
     protected $description = 'Порівняння швидкості та якості GPT моделей';
 
     private ?string $apiKey = null;
+
     private string $baseUrl = 'https://api.openai.com/v1';
 
     public function handle(): int
     {
-        $this->apiKey = config('services.openai.api_key') ?: null;
+        $this->apiKey = config('services.openai.key') ?: null;
         $this->baseUrl = config('services.openai.base_url', 'https://api.openai.com/v1');
 
         if (empty($this->apiKey)) {
             $this->error('❌ OPENAI_API_KEY не налаштовано!');
+
             return 1;
         }
 
@@ -38,9 +40,9 @@ class BenchmarkModels extends Command
         $this->info('╚══════════════════════════════════════════════════════════════════╝');
         $this->newLine();
 
-        $this->info("🔑 API Key: " . substr($this->apiKey, 0, 8) . '...' . substr($this->apiKey, -4));
+        $this->info('🔑 API Key: '.substr($this->apiKey, 0, 8).'...'.substr($this->apiKey, -4));
         $this->info("🌐 Base URL: {$this->baseUrl}");
-        $this->info("🤖 Моделі: " . implode(', ', $models));
+        $this->info('🤖 Моделі: '.implode(', ', $models));
         $this->info("🔄 Запусків на модель: {$runs}");
         $this->newLine();
 
@@ -84,9 +86,9 @@ class BenchmarkModels extends Command
 
         foreach ($models as $model) {
             $model = trim($model);
-            $this->info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             $this->info("🤖 Тестуємо модель: {$model}");
-            $this->info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            $this->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
             $modelResults = [];
 
@@ -98,7 +100,7 @@ class BenchmarkModels extends Command
                     $result = $this->callOpenAI($model, $case['messages'], $case['tools']);
                     $times[] = $result['time_ms'];
                     $lastResponse = $result;
-                    
+
                     if ($runs > 1) {
                         usleep(500000); // 0.5s пауза між запусками
                     }
@@ -108,14 +110,14 @@ class BenchmarkModels extends Command
                 $minTime = min($times);
                 $maxTime = max($times);
 
-                $hasToolCall = !empty($lastResponse['tool_calls']);
+                $hasToolCall = ! empty($lastResponse['tool_calls']);
                 $toolName = $hasToolCall ? $lastResponse['tool_calls'][0]['function']['name'] : '-';
                 $content = mb_substr($lastResponse['content'] ?? '', 0, 80);
 
                 $this->line("  📝 {$case['name']}:");
                 $this->line("     ⏱️  Час: {$avgTime}ms (min: {$minTime}, max: {$maxTime})");
                 $this->line("     🔧 Tool: {$toolName}");
-                $this->line("     💬 " . ($content ?: '[tool call]'));
+                $this->line('     💬 '.($content ?: '[tool call]'));
 
                 if ($lastResponse['error']) {
                     $this->error("     ❌ Error: {$lastResponse['error']}");
@@ -143,7 +145,7 @@ class BenchmarkModels extends Command
 
         $headers = ['Тест'];
         foreach ($models as $m) {
-            $headers[] = trim($m) . ' (ms)';
+            $headers[] = trim($m).' (ms)';
         }
         $headers[] = 'Різниця';
 
@@ -155,9 +157,11 @@ class BenchmarkModels extends Command
                 $m = trim($m);
                 $time = $results[$m][$i]['avg_ms'] ?? '?';
                 $row[] = $time;
-                if (is_numeric($time)) $times[] = $time;
+                if (is_numeric($time)) {
+                    $times[] = $time;
+                }
             }
-            
+
             // Різниця
             if (count($times) >= 2) {
                 $diff = $times[0] - $times[1];
@@ -167,7 +171,7 @@ class BenchmarkModels extends Command
             } else {
                 $row[] = '-';
             }
-            
+
             $rows[] = $row;
         }
 
@@ -199,10 +203,10 @@ class BenchmarkModels extends Command
             $faster = $avgTimes[0] < $avgTimes[1] ? $models[0] : $models[1];
             $slower = $avgTimes[0] < $avgTimes[1] ? $models[1] : $models[0];
             $ratio = max($avgTimes) / max(1, min($avgTimes));
-            
-            $this->info("💡 ВИСНОВОК:");
-            $this->info("   {$faster} швидша за {$slower} в " . round($ratio, 1) . "x разів");
-            
+
+            $this->info('💡 ВИСНОВОК:');
+            $this->info("   {$faster} швидша за {$slower} в ".round($ratio, 1).'x разів');
+
             if ($ratio > 2) {
                 $this->warn("   ⚡ Рекомендую переключитись на {$faster} для кращого UX");
             }
@@ -229,7 +233,7 @@ class BenchmarkModels extends Command
 
             $response = Http::withToken($this->apiKey)
                 ->timeout(60)
-                ->post($this->baseUrl . '/chat/completions', $payload);
+                ->post($this->baseUrl.'/chat/completions', $payload);
 
             $elapsed = round((microtime(true) - $start) * 1000);
             $data = $response->json();

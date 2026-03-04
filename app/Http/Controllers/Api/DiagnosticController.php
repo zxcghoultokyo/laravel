@@ -6882,4 +6882,125 @@ class DiagnosticController extends Controller
             'triggers' => $triggerData,
         ]);
     }
+
+    /**
+     * GET /api/diagnostic/openai-check
+     * Quick health check: API key presence, minimal GPT call, error diagnosis.
+     */
+    public function openaiCheck(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $config = config('services.openai', []);
+        $apiKey = $config['key'] ?? '';
+        $model = $config['model'] ?? 'gpt-4o';
+        $baseUrl = rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/');
+
+        $result = [
+            'config' => [
+                'api_key_set' => ! empty($apiKey),
+                'api_key_prefix' => $apiKey ? substr($apiKey, 0, 12).'...' : 'EMPTY',
+                'model' => $model,
+                'model_chat' => $config['model_chat'] ?? null,
+                'base_url' => $baseUrl,
+                'use_function_calling' => $config['use_function_calling'] ?? null,
+            ],
+            'env_check' => [
+                'OPENAI_API_KEY' => env('OPENAI_API_KEY') ? 'SET ('.strlen(env('OPENAI_API_KEY')).' chars)' : 'NOT SET',
+                'OPENAI_MODEL' => env('OPENAI_MODEL', 'not set (default: gpt-4o)'),
+                'OPENAI_BASE_URL' => env('OPENAI_BASE_URL', 'not set (default: api.openai.com)'),
+            ],
+        ];
+
+        if (empty($apiKey)) {
+            $result['error'] = 'No API key configured! Check OPENAI_API_KEY in .env';
+            $result['gpt_call'] = null;
+
+            return response()->json($result);
+        }
+
+        // Minimal GPT call to verify connectivity
+        try {
+            $startTime = microtime(true);
+            $response = \Illuminate\Support\Facades\Http::withToken($apiKey)
+                ->timeout(15)
+                ->connectTimeout(5)
+                ->post($baseUrl.'/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'user', 'content' => 'Say "OK" in one word.'],
+                    ],
+                    'max_tokens' => 5,
+                    'temperature' => 0,
+                ]);
+
+            $elapsed = round((microtime(true) - $startTime) * 1000);
+            $data = $response->json();
+
+            $result['gpt_call'] = [
+                'status' => $response->status(),
+                'elapsed_ms' => $elapsed,
+                'success' => $response->successful(),
+                'response_text' => $data['choices'][0]['message']['content'] ?? null,
+                'model_used' => $data['model'] ?? null,
+                'error' => $data['error'] ?? null,
+                'response_keys' => array_keys($data ?? []),
+            ];
+        } catch (\Throwable $e) {
+            $result['gpt_call'] = [
+                'success' => false,
+                'error_class' => get_class($e),
+                'error_message' => $e->getMessage(),
+            ];
+        }
+
+        // Also test with tools (same as FCA does)
+        if ($request->query('with_tools') === '1') {
+            try {
+                $agent = app(\App\Services\Agent\FunctionCallingAgent::class);
+                $tools = (new \ReflectionMethod($agent, 'getTools'))->invoke($agent);
+
+                $startTime = microtime(true);
+                $response2 = \Illuminate\Support\Facades\Http::withToken($apiKey)
+                    ->timeout(30)
+                    ->connectTimeout(10)
+                    ->post($baseUrl.'/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            ['role' => 'system', 'content' => 'You are a shop assistant.'],
+                            ['role' => 'user', 'content' => 'покажи іграшки'],
+                        ],
+                        'tools' => $tools,
+                        'tool_choice' => 'auto',
+                        'temperature' => 0.3,
+                    ]);
+
+                $elapsed2 = round((microtime(true) - $startTime) * 1000);
+                $data2 = $response2->json();
+
+                $result['gpt_with_tools'] = [
+                    'status' => $response2->status(),
+                    'elapsed_ms' => $elapsed2,
+                    'success' => $response2->successful(),
+                    'has_tool_calls' => isset($data2['choices'][0]['message']['tool_calls']),
+                    'finish_reason' => $data2['choices'][0]['finish_reason'] ?? null,
+                    'tool_calls' => isset($data2['choices'][0]['message']['tool_calls'])
+                        ? array_map(fn ($tc) => $tc['function']['name'] ?? 'unknown', $data2['choices'][0]['message']['tool_calls'])
+                        : null,
+                    'error' => $data2['error'] ?? null,
+                    'tools_count' => count($tools),
+                ];
+            } catch (\Throwable $e) {
+                $result['gpt_with_tools'] = [
+                    'success' => false,
+                    'error_class' => get_class($e),
+                    'error_message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json($result);
+    }
 }

@@ -7,12 +7,12 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Modular prompt builder - loads only relevant prompt modules based on context.
- * 
+ *
  * Reduces prompt size from ~14,500 tokens to ~3,000-4,000 by:
  * 1. Eliminating duplicate rules
  * 2. Loading modules conditionally based on query type
  * 3. Caching compiled prompts per session
- * 
+ *
  * @see docs/PROMPT_OPTIMIZATION.md for architecture details
  */
 class PromptModulesService
@@ -35,6 +35,14 @@ class PromptModulesService
 📝 ФОРМАТ intro:
 - Пиши КОНТЕКСТ запиту: "Ось куртки:" / "Ось дешевші варіанти:" / "Ось Ops-Core:"
 - ❌ ЗАБОРОНЕНО: "Ось що я знайшов" / "Here's what I found"
+
+⛔ ПОСИЛАННЯ — ЗАБОРОНЕНО!
+- НЕ генеруй URL/посилання на товари в тексті!
+- НЕ пиши "Детальніше: https://..." або "[Переглянути](url)" або "Дивіться тут: ..."
+- НЕ пиши "[Детальніше]" або "[Переглянути]" — навіть без URL!
+- НЕ використовуй Markdown-посилання [текст](url) — НІКОЛИ!
+- Посилання на товари додаються АВТОМАТИЧНО через картки віджету
+- Якщо клієнт хоче подробиці — кажи "Натисніть на картку товару"
 
 🛒 ЗАМОВЛЕННЯ:
 Ти НЕ приймаєш замовлення! На запит "хочу замовити":
@@ -69,6 +77,12 @@ CORE;
 - Синоніми через OR: "шолом OR каска OR helmet"
 - Автовиправлення: плитноска→плитоноска, опс кор→Ops-Core
 
+🔄 ЯКЩО ПОШУК НЕ ДАВ РЕЗУЛЬТАТІВ — СПРОБУЙ ІНАКШЕ!
+- Використай синоніми/ширший запит: "фігурки планет" → search_products("планети OR сонячна система OR космос")
+- Розбий складний запит: "дерев'яна кухня для дітей" → search_products("кухня дерев'яна OR іграшкова кухня")
+- Спробуй ключове слово: "щось для малювання" → search_products("малювання OR фарби OR олівці OR мольберт")
+- НЕ КАЖИ "такого немає" після лише ОДНОГО невдалого пошуку! Спробуй 2-3 варіанти!
+
 ⚠️ ПЕРЕВІРКА АТРИБУТІВ:
 Якщо "жіноча термобілизна" — перевір чи є "жіноча/women" в назвах результатів!
 Якщо немає → "Жіночої немає. Є універсальна:" + показ товарів
@@ -88,7 +102,7 @@ SEARCH;
      */
     public function getFollowUpModule(): string
     {
-        return <<<FOLLOWUP
+        return <<<'FOLLOWUP'
 
 🔄 FOLLOW-UP ЗАПИТИ:
 - "покажи ще" → search_products з тією ж категорією + exclude_shown=true
@@ -113,7 +127,7 @@ FOLLOWUP;
      */
     public function getSizeModule(): string
     {
-        return <<<SIZE
+        return <<<'SIZE'
 
 📏 ПІДБІР РОЗМІРІВ:
 Коли клієнт називає зріст/вагу → ОБОВ'ЯЗКОВО виклич recommend_size()!
@@ -135,7 +149,7 @@ SIZE;
      */
     public function getComparisonModule(): string
     {
-        return <<<COMPARE
+        return <<<'COMPARE'
 
 🔀 ПОРІВНЯННЯ ("X vs Y", "що краще"):
 1. Зроби ДВА пошуки окремо
@@ -152,7 +166,7 @@ COMPARE;
      */
     public function getChitchatModule(): string
     {
-        return <<<CHITCHAT
+        return <<<'CHITCHAT'
 
 💬 CHITCHAT (НЕ шукай товари!):
 - "дякую/thanks" → "Будь ласка! Якщо потрібна допомога — питай!"
@@ -190,7 +204,7 @@ FAQ;
      */
     public function getTriggerModule(): string
     {
-        return <<<TRIGGER
+        return <<<'TRIGGER'
 
 🚨 ТРИГЕРНИЙ ЗАПИТ (клієнт з "Допоможіть з товаром"):
 1. ОДРАЗУ покажи детальну інфо через get_product_details
@@ -205,7 +219,7 @@ TRIGGER;
      */
     public function getLevelContextModule(): string
     {
-        return <<<LEVEL
+        return <<<'LEVEL'
 
 🔢 РОЗПІЗНАВАННЯ "LEVEL":
 - "level 7", "левел 7" = ECWCS одяг (куртки/штани)
@@ -218,39 +232,39 @@ LEVEL;
 
     /**
      * Build optimized prompt based on query analysis.
-     * 
-     * @param string $query User's message
-     * @param array $context Session context (has_history, is_trigger, etc.)
-     * @param array $storeInfo Store info (name, phone, faq)
+     *
+     * @param  string  $query  User's message
+     * @param  array  $context  Session context (has_history, is_trigger, etc.)
+     * @param  array  $storeInfo  Store info (name, phone, faq)
      * @return string Compiled prompt
      */
     public function buildPrompt(string $query, array $context, array $storeInfo): string
     {
         $modules = [];
-        
+
         // Core is ALWAYS included
         $modules[] = $this->getCoreModule(
             $storeInfo['phone'] ?? '',
             $storeInfo['name'] ?? 'Магазин'
         );
-        
+
         $lowerQuery = mb_strtolower($query);
-        
+
         // Detect query type and add relevant modules
-        
+
         // Chitchat detection (greetings, thanks, trust questions - don't need search module)
         $isChitchat = preg_match('/^(привіт|hello|hi|дякую|спасибі|thanks|до побачення|bye|ок|добре)\b/ui', $lowerQuery);
-        
+
         // Trust/scam questions (Ukrainian "counter-intelligence" queries 😄)
         $isTrustQuestion = preg_match('/\b(кидал|шахра|розвод|лохотрон|обман|скам|scam|довіря|надійн|не кида)/ui', $lowerQuery);
-        
+
         if ($isChitchat || $isTrustQuestion) {
             $modules[] = $this->getChitchatModule();
         } else {
             // Product-related query - add search module
             $modules[] = $this->getSearchModule();
         }
-        
+
         // FAQ detection
         $isFaq = preg_match('/\b(доставк|оплат|поверн|замовит|контакт|телефон|адрес)/ui', $lowerQuery);
         if ($isFaq) {
@@ -259,39 +273,39 @@ LEVEL;
                 $storeInfo['phone'] ?? ''
             );
         }
-        
+
         // Comparison detection
         if (preg_match('/\b(vs|порівн|що краще|чи|або)\b/ui', $lowerQuery)) {
             $modules[] = $this->getComparisonModule();
         }
-        
+
         // Size detection
         if (preg_match('/\b(розмір|size|зріст|вага|height|weight|\d{2,3}\s*(кг|kg|см|cm))/ui', $lowerQuery)) {
             $modules[] = $this->getSizeModule();
         }
-        
+
         // Level detection (ECWCS vs armor)
         if (preg_match('/\b(level|рівень|левел)\b/ui', $lowerQuery)) {
             $modules[] = $this->getLevelContextModule();
         }
-        
+
         // Follow-up detection (has history)
-        if (!empty($context['has_history'])) {
+        if (! empty($context['has_history'])) {
             $modules[] = $this->getFollowUpModule();
         }
-        
+
         // Trigger query detection
-        if (!empty($context['is_trigger'])) {
+        if (! empty($context['is_trigger'])) {
             $modules[] = $this->getTriggerModule();
         }
-        
+
         // Add tone section if provided
-        if (!empty($storeInfo['tone_section'])) {
-            $modules[] = "\n" . $storeInfo['tone_section'];
+        if (! empty($storeInfo['tone_section'])) {
+            $modules[] = "\n".$storeInfo['tone_section'];
         }
-        
+
         $prompt = implode("\n", $modules);
-        
+
         // Log prompt size for monitoring
         $tokenEstimate = intval(strlen($prompt) / 2.5);
         Log::debug('PromptModules: built prompt', [
@@ -300,7 +314,7 @@ LEVEL;
             'estimated_tokens' => $tokenEstimate,
             'query_type' => $isChitchat ? 'chitchat' : ($isFaq ? 'faq' : 'product'),
         ]);
-        
+
         return $prompt;
     }
 
@@ -311,7 +325,7 @@ LEVEL;
     public function getCachedPrompt(string $sessionId, int $tenantId, callable $builder): string
     {
         $cacheKey = "prompt:v2:{$tenantId}:{$sessionId}";
-        
+
         return Cache::remember($cacheKey, 1800, $builder); // 30 min cache
     }
 

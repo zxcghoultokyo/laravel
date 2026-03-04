@@ -715,6 +715,138 @@
                 </div>
             </div>
             @endif
+
+            <!-- Icon trigger preview -->
+            <div class="mt-4 p-3 bg-white rounded-lg shadow-sm"
+                 x-data="{
+                    phase: 'idle',
+                    timer: null,
+                    attnTimer: null,
+                    entrance: @entangle('icon_entrance_animation').live,
+                    effect: @entangle('icon_attention_effect').live,
+                    delay: @entangle('icon_attention_delay').live,
+                    countdown: 0,
+                    replay() {
+                        clearTimeout(this.timer);
+                        clearInterval(this.attnTimer);
+                        this.phase = 'idle';
+                        const hasEntrance = this.entrance && this.entrance !== 'none';
+                        const hasEffect = this.effect && this.effect !== 'none';
+                        this.$nextTick(() => {
+                            if (hasEntrance) {
+                                this.phase = 'entrance';
+                                this.timer = setTimeout(() => {
+                                    this.phase = 'visible';
+                                    if (hasEffect) this.startDelay();
+                                }, 800);
+                            } else {
+                                this.phase = 'visible';
+                                if (hasEffect) this.startDelay();
+                            }
+                        });
+                    },
+                    startDelay() {
+                        const d = Math.min(this.delay || 0, 10);
+                        if (d > 0) {
+                            this.countdown = d;
+                            this.phase = 'waiting';
+                            this.attnTimer = setInterval(() => {
+                                this.countdown--;
+                                if (this.countdown <= 0) {
+                                    clearInterval(this.attnTimer);
+                                    this.phase = 'attention';
+                                }
+                            }, 1000);
+                        } else {
+                            this.phase = 'attention';
+                        }
+                    },
+                    destroy() {
+                        clearTimeout(this.timer);
+                        clearInterval(this.attnTimer);
+                    }
+                 }"
+                 x-init="replay()"
+                 x-effect="entrance; effect; delay; replay()">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-sm font-medium text-gray-700">💬 Кнопка чату (як бачить відвідувач)</h4>
+                    <button type="button" @click="replay()" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors" title="Програти анімацію знову">🔄 Повтор</button>
+                </div>
+                <div class="flex items-center justify-{{ $position === 'left' ? 'start' : 'end' }}">
+                    @php
+                        $iconSizeMap = ['small' => '48px', 'medium' => '56px', 'large' => '64px'];
+                        $iconSizePx = $iconSizeMap[$icon_size ?? 'medium'] ?? '56px';
+                        $iconRadius = match($icon_style ?? 'circle') { 'rounded-square' => '16px', 'squircle' => '28%', default => '50%' };
+                    @endphp
+                    <style>
+                        @keyframes admin-wiggle {
+                            0%, 100% { transform: rotate(0deg); }
+                            15% { transform: rotate(-8deg); }
+                            30% { transform: rotate(8deg); }
+                            45% { transform: rotate(-5deg); }
+                            60% { transform: rotate(5deg); }
+                            75% { transform: rotate(-2deg); }
+                            90% { transform: rotate(2deg); }
+                        }
+                        @keyframes admin-pulse-ring {
+                            0% { box-shadow: 0 0 0 0 {{ $glow_color ?: $primary_color }}99, 0 4px 12px rgba(0,0,0,0.15); }
+                            70% { box-shadow: 0 0 0 14px {{ $glow_color ?: $primary_color }}00, 0 4px 12px rgba(0,0,0,0.15); }
+                            100% { box-shadow: 0 0 0 0 {{ $glow_color ?: $primary_color }}00, 0 4px 12px rgba(0,0,0,0.15); }
+                        }
+                        @keyframes admin-glow {
+                            0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                            50% { box-shadow: 0 0 20px {{ $glow_color ?: $primary_color }}B3, 0 0 40px {{ $glow_color ?: $primary_color }}59, 0 4px 12px rgba(0,0,0,0.15); }
+                        }
+                        @keyframes admin-bounce {
+                            0% { opacity: 0; transform: scale(0) translateY(40px); }
+                            50% { opacity: 1; transform: scale(1.15) translateY(-5px); }
+                            70% { transform: scale(0.95) translateY(2px); }
+                            100% { opacity: 1; transform: scale(1) translateY(0); }
+                        }
+                        @keyframes admin-entrance-scale {
+                            0% { opacity: 0; transform: scale(0); }
+                            80% { opacity: 1; transform: scale(1.05); }
+                            100% { opacity: 1; transform: scale(1); }
+                        }
+                        @keyframes admin-entrance-slide {
+                            0% { opacity: 0; transform: translateY(40px); }
+                            100% { opacity: 1; transform: translateY(0); }
+                        }
+                    </style>
+                    <div class="relative inline-flex items-center justify-center cursor-pointer"
+                         :style="`width: {{ $iconSizePx }}; height: {{ $iconSizePx }}; border-radius: {{ $iconRadius }}; background-color: {{ $primary_color }}; overflow: hidden; aspect-ratio: 1; box-shadow: 0 4px 15px rgba(0,0,0,0.2);`
+                            + (phase === 'idle' ? 'opacity: 0; transform: scale(0);' : '')
+                            + (phase === 'entrance' && entrance === 'bounce' ? 'animation: admin-bounce 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards;' : '')
+                            + (phase === 'entrance' && entrance === 'scale' ? 'animation: admin-entrance-scale 0.5s ease-out forwards;' : '')
+                            + (phase === 'entrance' && entrance === 'slide' ? 'animation: admin-entrance-slide 0.6s ease-out forwards;' : '')
+                            + (phase === 'visible' || phase === 'waiting' ? 'opacity: 1; transform: scale(1);' : '')
+                            + (phase === 'attention' && effect === 'glow' ? 'opacity: 1; animation: admin-glow 2s ease-in-out infinite;' : '')
+                            + (phase === 'attention' && effect === 'pulse-ring' ? 'opacity: 1; animation: admin-pulse-ring 2s ease-out infinite;' : '')
+                            + (phase === 'attention' && effect === 'wiggle' ? 'opacity: 1; animation: admin-wiggle 1s ease-in-out;' : '')"
+                    >
+                        @if($bot_avatar_base64 || $bot_avatar_url)
+                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" alt="" style="width: 100%; height: 100%; border-radius: {{ $iconRadius }}; object-fit: cover; display: block;">
+                        @else
+                            <svg style="width: 60%; height: 60%;" fill="{{ $text_color }}" viewBox="0 0 24 24">
+                                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
+                            </svg>
+                        @endif
+                    </div>
+                </div>
+                <div class="mt-2 text-xs text-gray-500">
+                    <span x-show="phase === 'waiting'" x-cloak class="text-blue-600 font-medium">
+                        ⏳ Ефект через <span x-text="countdown"></span>с…
+                    </span>
+                    <span x-show="phase === 'attention'" x-cloak class="text-green-600 font-medium">
+                        ✨ Ефект активний
+                    </span>
+                    <span x-show="phase !== 'waiting' && phase !== 'attention'">
+                        Розмір: {{ $icon_size ?? 'medium' }} · 
+                        Форма: {{ match($icon_style ?? 'circle') { 'rounded-square' => 'скруглений квадрат', 'squircle' => 'сквіркл', default => 'коло' } }} · 
+                        Ефект: {{ match($icon_attention_effect ?? 'none') { 'glow' => 'свічення', 'pulse-ring' => 'пульс', 'wiggle' => 'покачування', default => 'немає' } }}
+                    </span>
+                </div>
+            </div>
         </div>
     </div>
 </div>

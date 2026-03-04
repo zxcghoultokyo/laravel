@@ -197,6 +197,50 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
     Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
     Route::get('/prompt-presets', [\App\Http\Controllers\Api\DiagnosticController::class, 'promptPresets']);
+    
+    // Quick OpenAI health check (inline — no controller method needed)
+    Route::get('/openai-check', function (\Illuminate\Http\Request $request) {
+        $secretKey = config('services.diagnostic.secret_key', 'diagnostic_secret_key_2025');
+        if ($request->query('key') !== $secretKey) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $cfg = config('services.openai', []);
+        $key = $cfg['key'] ?? '';
+        $model = $cfg['model'] ?? 'gpt-4o';
+        $baseUrl = rtrim($cfg['base_url'] ?? 'https://api.openai.com/v1', '/');
+
+        $result = [
+            'api_key_set' => !empty($key),
+            'api_key_len' => strlen($key),
+            'api_key_prefix' => $key ? substr($key, 0, 12) . '...' : 'EMPTY',
+            'model' => $model,
+            'base_url' => $baseUrl,
+            'env_OPENAI_API_KEY' => env('OPENAI_API_KEY') ? 'SET (' . strlen(env('OPENAI_API_KEY')) . ' chars)' : 'NOT SET',
+        ];
+
+        if (!empty($key)) {
+            try {
+                $t = microtime(true);
+                $resp = \Illuminate\Support\Facades\Http::withToken($key)
+                    ->timeout(15)->connectTimeout(5)
+                    ->post($baseUrl . '/chat/completions', [
+                        'model' => $model,
+                        'messages' => [['role' => 'user', 'content' => 'Say OK']],
+                        'max_tokens' => 5,
+                    ]);
+                $result['gpt_status'] = $resp->status();
+                $result['gpt_ms'] = round((microtime(true) - $t) * 1000);
+                $data = $resp->json();
+                $result['gpt_response'] = $data['choices'][0]['message']['content'] ?? null;
+                $result['gpt_error'] = $data['error'] ?? null;
+            } catch (\Throwable $e) {
+                $result['gpt_error'] = get_class($e) . ': ' . $e->getMessage();
+            }
+        }
+
+        return response()->json($result);
+    });
 });
 
 // Cross-sell suggestions (async, called after main chat response)

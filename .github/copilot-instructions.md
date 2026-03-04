@@ -2,6 +2,25 @@
 
 Purpose: make agents productive fast in this Laravel 12 multi-tenant AI‑commerce SaaS backend. Keep to existing patterns and use the services layer.
 
+## 🚨 Git Workflow (ОБОВ'ЯЗКОВО!)
+
+- **Завжди працюй на `dev` гілці** — ніколи не пуш напряму в `main`
+- Після змін: запусти тести, перевір що все працює як очікується
+- Тільки після підтвердження що працює на dev: запитай користувача **"Пушимо на прод?"** перед мержем в main
+- **Production** = `main` branch → `aintento.laravel.cloud`
+- **Staging** = `dev` branch → `aintento-dev.laravel.cloud`
+
+```bash
+# Правильний порядок роботи:
+git checkout dev
+# ... робиш зміни ...
+php artisan test --compact
+git add -A && git commit -m "..." && git push origin dev
+# ... чекаєш деплой на staging, перевіряєш ...
+# ... питаєш користувача "Пушимо на прод?" ...
+git checkout main && git merge dev && git push origin main
+```
+
 ## 🏗️ Multi-Tenant Architecture
 
 This is a **multi-tenant SaaS** where each tenant (customer) has their own:

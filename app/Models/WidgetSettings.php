@@ -24,6 +24,12 @@ class WidgetSettings extends Model
         'bot_avatar_url',
         'bot_avatar_base64',
         'glow_color',
+        // Icon customization
+        'icon_size',
+        'icon_style',
+        'icon_entrance_animation',
+        'icon_attention_effect',
+        'icon_attention_delay',
         'bot_status_text',
         'welcome_message',
         'greetings',
@@ -82,6 +88,7 @@ class WidgetSettings extends Model
         'brand_transliterations' => 'array',
         'ai_use_dynamic_prompts' => 'boolean',
         'ai_strict_category_filter' => 'boolean',
+        'icon_attention_delay' => 'integer',
     ];
 
     protected static function boot()

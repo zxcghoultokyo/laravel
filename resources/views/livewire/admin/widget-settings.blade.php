@@ -221,6 +221,123 @@
                             </div>
                             <p class="mt-1 text-xs text-gray-500">За замовчуванням використовує основний колір</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Icon Customization -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">✨ Іконка чату</h3>
+                    
+                    <div class="space-y-5">
+                        <!-- Icon Size -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Розмір іконки</label>
+                            <div class="grid grid-cols-3 gap-3">
+                                @foreach([
+                                    'small' => ['label' => 'Компактний', 'size' => '52px', 'desc' => 'Непомітний, для мінімалізму'],
+                                    'medium' => ['label' => 'Стандартний', 'size' => '64px', 'desc' => 'Оптимальний баланс'],
+                                    'large' => ['label' => 'Великий', 'size' => '72px', 'desc' => 'Максимальна помітність'],
+                                ] as $key => $opt)
+                                <label class="relative flex flex-col items-center p-3 border-2 rounded-xl cursor-pointer transition-all hover:border-blue-300
+                                    {{ $icon_size === $key ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200' }}">
+                                    <input type="radio" wire:model.live="icon_size" value="{{ $key }}" class="sr-only">
+                                    <div class="w-10 h-10 rounded-full bg-gray-300 mb-2 flex items-center justify-center text-xs font-bold text-gray-500"
+                                         style="width: {{ intval($opt['size']) * 0.55 }}px; height: {{ intval($opt['size']) * 0.55 }}px;">
+                                        {{ $opt['size'] }}
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-800">{{ $opt['label'] }}</span>
+                                    <span class="text-xs text-gray-500 text-center mt-0.5">{{ $opt['desc'] }}</span>
+                                </label>
+                                @endforeach
+                            </div>
+                        </div>
+                        
+                        <!-- Icon Shape -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Форма іконки</label>
+                            <div class="grid grid-cols-3 gap-3">
+                                @foreach([
+                                    'circle' => ['label' => 'Коло', 'icon' => '⭕', 'radius' => '50%'],
+                                    'rounded-square' => ['label' => 'Квадрат', 'icon' => '⬜', 'radius' => '16px'],
+                                    'squircle' => ['label' => 'Squircle', 'icon' => '🔲', 'radius' => '28%'],
+                                ] as $key => $opt)
+                                <label class="relative flex flex-col items-center p-3 border-2 rounded-xl cursor-pointer transition-all hover:border-blue-300
+                                    {{ $icon_style === $key ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200' }}">
+                                    <input type="radio" wire:model.live="icon_style" value="{{ $key }}" class="sr-only">
+                                    <div class="w-10 h-10 mb-2 flex items-center justify-center" 
+                                         style="border-radius: {{ $opt['radius'] }}; background: {{ $primary_color }};">
+                                        @if($bot_avatar_base64 || $bot_avatar_url)
+                                            <img src="{{ $bot_avatar_base64 ?: $bot_avatar_url }}" class="w-full h-full object-cover" style="border-radius: {{ $opt['radius'] }};">
+                                        @else
+                                            <span class="text-white text-lg">🤖</span>
+                                        @endif
+                                    </div>
+                                    <span class="text-sm font-medium text-gray-800">{{ $opt['label'] }}</span>
+                                </label>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <!-- Entrance Animation -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Анімація появи</label>
+                            <p class="text-xs text-gray-500 mb-2">Як іконка з'являється коли відвідувач заходить на сторінку</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                @foreach([
+                                    'none' => ['label' => 'Без анімації', 'icon' => '➖'],
+                                    'bounce' => ['label' => 'Пружинка', 'icon' => '🏀'],
+                                    'scale' => ['label' => 'Збільшення', 'icon' => '🔍'],
+                                    'slide' => ['label' => 'Виїзд знизу', 'icon' => '⬆️'],
+                                ] as $key => $opt)
+                                <label class="flex items-center gap-2 p-2.5 border-2 rounded-lg cursor-pointer transition-all hover:border-blue-300
+                                    {{ $icon_entrance_animation === $key ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}">
+                                    <input type="radio" wire:model.live="icon_entrance_animation" value="{{ $key }}" class="sr-only">
+                                    <span>{{ $opt['icon'] }}</span>
+                                    <span class="text-sm font-medium text-gray-700">{{ $opt['label'] }}</span>
+                                </label>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <!-- Attention Effect -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Ефект привертання уваги</label>
+                            <p class="text-xs text-gray-500 mb-2">Періодичний ефект щоб нагадати відвідувачу про чат</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                @foreach([
+                                    'none' => ['label' => 'Вимкнено', 'icon' => '➖'],
+                                    'glow' => ['label' => 'Сяйво', 'icon' => '💡'],
+                                    'pulse-ring' => ['label' => 'Пульсація', 'icon' => '🔔'],
+                                    'wiggle' => ['label' => 'Покачування', 'icon' => '👋'],
+                                ] as $key => $opt)
+                                <label class="flex items-center gap-2 p-2.5 border-2 rounded-lg cursor-pointer transition-all hover:border-blue-300
+                                    {{ $icon_attention_effect === $key ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}">
+                                    <input type="radio" wire:model.live="icon_attention_effect" value="{{ $key }}" class="sr-only">
+                                    <span>{{ $opt['icon'] }}</span>
+                                    <span class="text-sm font-medium text-gray-700">{{ $opt['label'] }}</span>
+                                </label>
+                                @endforeach
+                            </div>
+                        </div>
+                        
+                        <!-- Attention Delay -->
+                        @if($icon_attention_effect !== 'none')
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Затримка перед ефектом: <span class="text-blue-600 font-bold">{{ $icon_attention_delay }}с</span></label>
+                            <input type="range" wire:model.live="icon_attention_delay" min="0" max="30" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                            <div class="flex justify-between text-xs text-gray-400 mt-1">
+                                <span>Одразу</span>
+                                <span>30 секунд</span>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- Bot Status & Font (continued from Branding) -->
+                <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mt-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">📝 Додаткові налаштування</h3>
+                    <div class="space-y-4">
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Статус бота</label>

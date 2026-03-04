@@ -126,6 +126,11 @@
             bot_avatar_url: null,
             bot_avatar_base64: null,
             glow_color: null, // defaults to primary_color if null
+            icon_size: 'medium', // small, medium, large
+            icon_style: 'circle', // circle, rounded-square, squircle
+            icon_entrance_animation: 'bounce', // none, bounce, scale, slide
+            icon_attention_effect: 'glow', // none, glow, pulse-ring, wiggle
+            icon_attention_delay: 5, // seconds
             bot_status_text: 'Завжди онлайн',
             welcome_message: 'Вітаю! 👋 Я AIntento — ваш персональний помічник з підбору спорядження. Чим можу допомогти?',
             input_placeholder: 'Напишіть повідомлення...',
@@ -790,7 +795,64 @@
             }
             @keyframes aintento-glow {
                 0%, 100% { box-shadow: 0 0 5px rgba(${glowRgb}, 0.5); }
-                50% { box-shadow: 0 0 15px rgba(${glowRgb}, 0.8); }
+                50% { box-shadow: 0 0 20px rgba(${glowRgb}, 0.8), 0 0 40px rgba(${glowRgb}, 0.3); }
+            }
+            /* Entrance animations */
+            @keyframes aintento-entrance-bounce {
+                0% { opacity: 0; transform: scale(0) translateY(40px); }
+                50% { opacity: 1; transform: scale(1.15) translateY(-5px); }
+                70% { transform: scale(0.95) translateY(2px); }
+                100% { opacity: 1; transform: scale(1) translateY(0); }
+            }
+            @keyframes aintento-entrance-scale {
+                0% { opacity: 0; transform: scale(0); }
+                80% { opacity: 1; transform: scale(1.05); }
+                100% { opacity: 1; transform: scale(1); }
+            }
+            @keyframes aintento-entrance-slide {
+                0% { opacity: 0; transform: translateY(80px); }
+                100% { opacity: 1; transform: translateY(0); }
+            }
+            /* Attention effects */
+            @keyframes aintento-attention-glow {
+                0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+                50% { box-shadow: 0 0 20px rgba(${glowRgb}, 0.7), 0 0 40px rgba(${glowRgb}, 0.35), 0 4px 12px rgba(0,0,0,0.15); }
+            }
+            @keyframes aintento-attention-pulse-ring {
+                0% { box-shadow: 0 0 0 0 rgba(${glowRgb}, 0.6), 0 4px 12px rgba(0,0,0,0.15); }
+                70% { box-shadow: 0 0 0 14px rgba(${glowRgb}, 0), 0 4px 12px rgba(0,0,0,0.15); }
+                100% { box-shadow: 0 0 0 0 rgba(${glowRgb}, 0), 0 4px 12px rgba(0,0,0,0.15); }
+            }
+            @keyframes aintento-attention-wiggle {
+                0%, 100% { transform: rotate(0deg); }
+                15% { transform: rotate(-8deg); }
+                30% { transform: rotate(8deg); }
+                45% { transform: rotate(-5deg); }
+                60% { transform: rotate(5deg); }
+                75% { transform: rotate(-2deg); }
+                90% { transform: rotate(2deg); }
+            }
+            .aintento-toggle.aintento-entrance-bounce {
+                animation: aintento-entrance-bounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+            }
+            .aintento-toggle.aintento-entrance-scale {
+                animation: aintento-entrance-scale 0.5s ease-out forwards;
+            }
+            .aintento-toggle.aintento-entrance-slide {
+                animation: aintento-entrance-slide 0.6s ease-out forwards;
+            }
+            .aintento-toggle.aintento-attn-glow {
+                animation: aintento-attention-glow 2s ease-in-out infinite;
+            }
+            .aintento-toggle.aintento-attn-pulse-ring {
+                animation: aintento-attention-pulse-ring 2s ease-out infinite;
+            }
+            .aintento-toggle.aintento-attn-wiggle {
+                animation: aintento-attention-wiggle 1s ease-in-out;
+            }
+            .aintento-toggle:hover {
+                transform: scale(1.08) !important;
+                filter: brightness(1.1);
             }
             .aintento-messages::-webkit-scrollbar { width: 6px; }
             .aintento-messages::-webkit-scrollbar-track { background: #f1f1f1; }
@@ -827,8 +889,6 @@
                     bottom: 16px !important;
                     right: 16px !important;
                     z-index: 10000 !important;
-                    width: 56px !important;
-                    height: 56px !important;
                 }
                 .aintento-messages {
                     font-size: 15px !important;
@@ -847,6 +907,23 @@
 
     function createWidgetHTML(settings) {
         const s = settings;
+        
+        // Icon size mapping
+        const iconSizes = { small: 52, medium: 64, large: 72 };
+        const iconSize = iconSizes[s.icon_size] || iconSizes.medium;
+        
+        // Icon shape mapping (border-radius)
+        const iconShapes = {
+            'circle': '50%',
+            'rounded-square': '16px',
+            'squircle': '28%'
+        };
+        const iconBorderRadius = iconShapes[s.icon_style] || iconShapes.circle;
+        
+        // Entrance animation: start hidden, animation class adds later
+        const hasEntrance = s.icon_entrance_animation && s.icon_entrance_animation !== 'none';
+        const entranceOpacity = hasEntrance ? 'opacity: 0;' : '';
+        
         return `
             <div id="aintento-overlay" style="
                 display: none;
@@ -920,22 +997,31 @@
                 </div>
                 
                 <button id="aintento-toggle" class="aintento-toggle" style="
-                    width: 60px;
-                    height: 60px;
-                    border-radius: 50%;
+                    width: ${iconSize}px;
+                    height: ${iconSize}px;
+                    border-radius: ${iconBorderRadius};
                     background: ${s.primary_color};
                     color: white;
                     border: none;
                     cursor: pointer;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     font-size: 28px;
-                    transition: all 0.3s ease;
+                    transition: transform 0.3s ease, filter 0.3s ease, box-shadow 0.3s ease;
                     overflow: hidden;
+                    ${entranceOpacity}
+                    padding: 0;
+                    aspect-ratio: 1;
                 ">
-                    <img src="${BOT_AVATAR}" alt="Chat" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                    <img src="${BOT_AVATAR}" alt="Chat" style="
+                        width: 100%; 
+                        height: 100%; 
+                        border-radius: ${iconBorderRadius}; 
+                        object-fit: cover;
+                        display: block;
+                    ">
                 </button>
 
                 <div id="aintento-window" class="aintento-window" style="
@@ -1077,6 +1163,70 @@
 
     function setupEventHandlers(elements, state, settings, token, savedMessages) {
         const { toggle, close, window: chatWindow, overlay, input, send, messages, bubble, bubbleClose } = elements;
+
+        // === ICON ENTRANCE ANIMATION ===
+        if (toggle && settings.icon_entrance_animation && settings.icon_entrance_animation !== 'none') {
+            // Small delay for page to settle, then animate in
+            setTimeout(function() {
+                toggle.classList.add('aintento-entrance-' + settings.icon_entrance_animation);
+            }, 300);
+            // After entrance completes, start attention effect
+            toggle.addEventListener('animationend', function onEntranceEnd(e) {
+                if (e.animationName.includes('entrance')) {
+                    toggle.classList.remove('aintento-entrance-' + settings.icon_entrance_animation);
+                    toggle.style.opacity = '1';
+                    toggle.removeEventListener('animationend', onEntranceEnd);
+                    startAttentionEffect();
+                }
+            });
+        } else if (toggle) {
+            // No entrance animation — go straight to attention
+            startAttentionEffect();
+        }
+        
+        // === ICON ATTENTION EFFECT (periodic glow/pulse to draw attention) ===
+        let attentionInterval = null;
+        function startAttentionEffect() {
+            if (!toggle || !settings.icon_attention_effect || settings.icon_attention_effect === 'none') return;
+            
+            const delay = (settings.icon_attention_delay || 5) * 1000;
+            const effect = settings.icon_attention_effect;
+            
+            // First attention after delay
+            setTimeout(function() {
+                if (state.isOpen) return; // Don't distract if chat is open
+                applyAttention(effect);
+                
+                // Repeat every 8 seconds for glow/pulse, every 12 for wiggle
+                const repeatInterval = effect === 'wiggle' ? 12000 : 8000;
+                attentionInterval = setInterval(function() {
+                    if (state.isOpen) return;
+                    applyAttention(effect);
+                }, repeatInterval);
+            }, delay);
+        }
+        
+        function applyAttention(effect) {
+            if (!toggle || state.isOpen) return;
+            const className = 'aintento-attn-' + effect.replace('_', '-');
+            toggle.classList.add(className);
+            
+            // For wiggle - remove after animation completes
+            if (effect === 'wiggle') {
+                setTimeout(function() { toggle.classList.remove(className); }, 1100);
+            }
+            // For glow/pulse-ring - keep running (CSS infinite)
+            // They get removed when chat opens
+        }
+        
+        function stopAttention() {
+            if (!toggle) return;
+            toggle.classList.remove('aintento-attn-glow', 'aintento-attn-pulse-ring', 'aintento-attn-wiggle');
+            if (attentionInterval) {
+                clearInterval(attentionInterval);
+                attentionInterval = null;
+            }
+        }
 
         // Hide bubble helper function
         function hideBubble() {
@@ -1270,6 +1420,7 @@
             overlay.style.display = 'block';
             toggle.style.display = 'none';
             hideBubble(); // Hide bubble when chat opens
+            stopAttention(); // Stop attention animation
             input?.focus();
             
             // Track chat opened

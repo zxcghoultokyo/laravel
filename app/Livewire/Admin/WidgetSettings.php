@@ -34,6 +34,14 @@ class WidgetSettings extends Component
     public $bot_avatar_upload = null; // For file upload
     public $bot_avatar_base64 = null; // Base64 encoded avatar for serverless
     public $glow_color = '#798ffb'; // Glow color for avatar
+    
+    // Icon customization
+    public $icon_size = 'medium'; // small, medium, large
+    public $icon_style = 'circle'; // circle, rounded-square, squircle
+    public $icon_entrance_animation = 'bounce'; // none, bounce, scale, slide
+    public $icon_attention_effect = 'glow'; // none, glow, pulse-ring, wiggle
+    public $icon_attention_delay = 5; // seconds
+    
     public $bot_status_text = 'Завжди онлайн';
     public $font_family = '';
     public $show_shadow = true;
@@ -71,7 +79,9 @@ class WidgetSettings extends Component
                 'primary_color', 'text_color', 'position', 'start_state',
                 'border_radius', 'welcome_message', 'input_placeholder',
                 'consent_notice', 'enabled', 'api_token',
-                'bot_name', 'bot_avatar_url', 'bot_avatar_base64', 'glow_color', 'bot_status_text', 
+                'bot_name', 'bot_avatar_url', 'bot_avatar_base64', 'glow_color',
+                'icon_size', 'icon_style', 'icon_entrance_animation', 'icon_attention_effect', 'icon_attention_delay',
+                'bot_status_text', 
                 'font_family', 'show_shadow', 'tone', 'brand_rules',
                 'shop_phone', 'callback_form_url', 'nova_poshta_tracking_url',
                 'enable_delivery_tracking', 'enable_faq_from_horoshop', 'horoshop_domain',
@@ -115,6 +125,11 @@ class WidgetSettings extends Component
                 'bot_name' => 'nullable|string|max:100',
                 'bot_avatar_url' => 'nullable|url|max:500',
                 'glow_color' => 'nullable|string|max:20',
+                'icon_size' => 'required|in:small,medium,large',
+                'icon_style' => 'required|in:circle,rounded-square,squircle',
+                'icon_entrance_animation' => 'required|in:none,bounce,scale,slide',
+                'icon_attention_effect' => 'required|in:none,glow,pulse-ring,wiggle',
+                'icon_attention_delay' => 'required|integer|min:0|max:30',
                 'bot_status_text' => 'nullable|string|max:100',
                 'font_family' => 'nullable|string|max:100',
                 'tone' => 'nullable|in:official,spartan,friendly',
@@ -156,6 +171,11 @@ class WidgetSettings extends Component
                 'bot_avatar_url' => $this->bot_avatar_url ?: null,
                 'bot_avatar_base64' => $this->bot_avatar_base64 ?: null,
                 'glow_color' => $this->glow_color ?: null,
+                'icon_size' => $this->icon_size ?: 'medium',
+                'icon_style' => $this->icon_style ?: 'circle',
+                'icon_entrance_animation' => $this->icon_entrance_animation ?: 'bounce',
+                'icon_attention_effect' => $this->icon_attention_effect ?: 'glow',
+                'icon_attention_delay' => $this->icon_attention_delay ?? 5,
                 'bot_status_text' => $this->bot_status_text ?: 'Завжди онлайн',
                 'font_family' => $this->font_family ?: null,
                 'show_shadow' => $this->show_shadow,
@@ -195,6 +215,11 @@ class WidgetSettings extends Component
                 'bot_avatar_url' => $this->bot_avatar_url ?: null,
                 'bot_avatar_base64' => $this->bot_avatar_base64 ?: null,
                 'glow_color' => $this->glow_color ?: null,
+                'icon_size' => $this->icon_size ?: 'medium',
+                'icon_style' => $this->icon_style ?: 'circle',
+                'icon_entrance_animation' => $this->icon_entrance_animation ?: 'bounce',
+                'icon_attention_effect' => $this->icon_attention_effect ?: 'glow',
+                'icon_attention_delay' => $this->icon_attention_delay ?? 5,
                 'bot_status_text' => $this->bot_status_text ?: 'Завжди онлайн',
                 'font_family' => $this->font_family ?: null,
                 'show_shadow' => $this->show_shadow,

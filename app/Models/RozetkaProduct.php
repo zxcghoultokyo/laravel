@@ -70,8 +70,18 @@ class RozetkaProduct extends Model
     {
         $photos = $this->photos;
 
-        if (is_array($photos) && count($photos) > 0) {
-            return $photos[0]['url'] ?? $photos[0] ?? null;
+        if (! is_array($photos) || count($photos) === 0) {
+            return null;
+        }
+
+        $first = $photos[0];
+
+        if (is_string($first)) {
+            return $first;
+        }
+
+        if (is_array($first)) {
+            return $first['url'] ?? $first['original'] ?? $first['thumbnail'] ?? null;
         }
 
         return null;

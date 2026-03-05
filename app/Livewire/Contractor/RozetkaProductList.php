@@ -488,12 +488,19 @@ class RozetkaProductList extends Component
 
         $totalProducts = (clone $base)->count();
         $inStockCount = (clone $base)->where('in_stock', true)->count();
-        $activeCount = (clone $base)->where('upload_status', 2)->count();
-        $newCount = (clone $base)->where('upload_status', 0)->count();
-        $failedModerationCount = (clone $base)->where('upload_status', 9)->count();
-        $blockedCount = (clone $base)->whereNotNull('blocked_reasons')
-            ->where('blocked_reasons', '!=', '[]')
-            ->where('blocked_reasons', '!=', 'null')
+
+        // Dynamic upload_status counts — no hidden products
+        $statusCounts = (clone $base)
+            ->selectRaw('upload_status, upload_status_title, count(*) as cnt')
+            ->groupBy('upload_status', 'upload_status_title')
+            ->orderBy('upload_status')
+            ->get();
+
+        $blockedCount = (clone $base)
+            ->whereNotNull('blocked_reasons')
+            ->whereRaw("blocked_reasons != '[]'")
+            ->whereRaw("blocked_reasons != 'null'")
+            ->whereRaw('LENGTH(blocked_reasons) > 2')
             ->count();
         $matchedCount = (clone $base)->whereNotNull('local_product_id')->count();
         $unmatchedCount = $totalProducts - $matchedCount;
@@ -502,9 +509,7 @@ class RozetkaProductList extends Component
             'products' => $products,
             'totalProducts' => $totalProducts,
             'inStockCount' => $inStockCount,
-            'activeCount' => $activeCount,
-            'newCount' => $newCount,
-            'failedModerationCount' => $failedModerationCount,
+            'statusCounts' => $statusCounts,
             'blockedCount' => $blockedCount,
             'matchedCount' => $matchedCount,
             'unmatchedCount' => $unmatchedCount,

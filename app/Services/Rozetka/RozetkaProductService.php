@@ -215,9 +215,16 @@ class RozetkaProductService
             $page++;
         } while ($page <= $totalPages);
 
-        Log::info("Rozetka: synced {$synced} products for tenant {$tenantId}");
+        $uniqueCount = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where(function ($q) {
+                $q->whereNotNull('rozetka_item_id')->orWhereNotNull('raw');
+            })
+            ->count();
 
-        return $synced;
+        Log::info("Rozetka: synced {$synced} API items → {$uniqueCount} unique products for tenant {$tenantId}");
+
+        return $uniqueCount;
     }
 
     /**

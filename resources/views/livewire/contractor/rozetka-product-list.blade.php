@@ -34,31 +34,35 @@
         {{-- ═══════════ TAB 1: Products on Rozetka ═══════════ --}}
 
         {{-- Status stats bar --}}
+        @php
+            $statusMeta = [
+                0 => ['dot' => 'bg-blue-500', 'text' => 'text-blue-600', 'ring' => 'ring-blue-500', 'hover' => 'hover:ring-blue-300', 'label' => 'Нових'],
+                1 => ['dot' => 'bg-yellow-500', 'text' => 'text-yellow-600', 'ring' => 'ring-yellow-500', 'hover' => 'hover:ring-yellow-300', 'label' => 'На модерації'],
+                2 => ['dot' => 'bg-emerald-500', 'text' => 'text-emerald-600', 'ring' => 'ring-emerald-500', 'hover' => 'hover:ring-emerald-300', 'label' => 'Активних'],
+                3 => ['dot' => 'bg-gray-500', 'text' => 'text-gray-600', 'ring' => 'ring-gray-500', 'hover' => 'hover:ring-gray-300', 'label' => 'Вимкнених'],
+                4 => ['dot' => 'bg-indigo-500', 'text' => 'text-indigo-600', 'ring' => 'ring-indigo-500', 'hover' => 'hover:ring-indigo-300', 'label' => 'Архів'],
+                9 => ['dot' => 'bg-red-500', 'text' => 'text-red-600', 'ring' => 'ring-red-500', 'hover' => 'hover:ring-red-300', 'label' => 'Модерація ✗'],
+            ];
+            $defaultMeta = ['dot' => 'bg-gray-400', 'text' => 'text-gray-600', 'ring' => 'ring-gray-400', 'hover' => 'hover:ring-gray-300'];
+        @endphp
         <div class="mb-4 flex flex-wrap items-center gap-3">
             <div class="bg-white rounded-lg shadow-sm px-4 py-3 flex items-center gap-2">
                 <span class="text-2xl font-bold text-gray-800">{{ $totalProducts }}</span>
                 <span class="text-sm text-gray-500">всього</span>
             </div>
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 cursor-pointer hover:ring-2 hover:ring-emerald-300 transition {{ $uploadStatusFilter === '2' ? 'ring-2 ring-emerald-500' : '' }}"
-                 wire:click="$set('uploadStatusFilter', '{{ $uploadStatusFilter === '2' ? '' : '2' }}')">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span class="text-lg font-bold text-emerald-600">{{ $activeCount }}</span>
-                <span class="text-xs text-gray-500">Активних</span>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 cursor-pointer hover:ring-2 hover:ring-blue-300 transition {{ $uploadStatusFilter === '0' ? 'ring-2 ring-blue-500' : '' }}"
-                 wire:click="$set('uploadStatusFilter', '{{ $uploadStatusFilter === '0' ? '' : '0' }}')">
-                <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                <span class="text-lg font-bold text-blue-600">{{ $newCount }}</span>
-                <span class="text-xs text-gray-500">Нових</span>
-            </div>
-            @if ($failedModerationCount > 0)
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 cursor-pointer hover:ring-2 hover:ring-red-300 transition {{ $uploadStatusFilter === '9' ? 'ring-2 ring-red-500' : '' }}"
-                 wire:click="$set('uploadStatusFilter', '{{ $uploadStatusFilter === '9' ? '' : '9' }}')">
-                <span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                <span class="text-lg font-bold text-red-600">{{ $failedModerationCount }}</span>
-                <span class="text-xs text-gray-500">Модерація ✗</span>
-            </div>
-            @endif
+            @foreach ($statusCounts as $sc)
+                @php
+                    $st = (int) $sc->upload_status;
+                    $meta = $statusMeta[$st] ?? array_merge($defaultMeta, ['label' => $sc->upload_status_title ?? "Статус {$st}"]);
+                    $isActive = $uploadStatusFilter === (string) $st;
+                @endphp
+                <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 cursor-pointer {{ $meta['hover'] }} transition {{ $isActive ? 'ring-2 ' . $meta['ring'] : '' }}"
+                     wire:click="$set('uploadStatusFilter', '{{ $isActive ? '' : $st }}')">
+                    <span class="w-2.5 h-2.5 rounded-full {{ $meta['dot'] }}"></span>
+                    <span class="text-lg font-bold {{ $meta['text'] }}">{{ $sc->cnt }}</span>
+                    <span class="text-xs text-gray-500">{{ $meta['label'] }}</span>
+                </div>
+            @endforeach
             <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2">
                 <span class="text-lg font-bold text-emerald-600">{{ $inStockCount }}</span>
                 <span class="text-xs text-gray-500">В наявності</span>
@@ -66,7 +70,7 @@
             @if ($blockedCount > 0)
             <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2">
                 <span class="text-lg font-bold text-orange-600">{{ $blockedCount }}</span>
-                <span class="text-xs text-gray-500">⚠️ Заблоковані</span>
+                <span class="text-xs text-gray-500">⚠ Заблоковані</span>
             </div>
             @endif
             <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2 cursor-pointer hover:ring-2 hover:ring-purple-300 transition {{ $matchFilter === 'matched' ? 'ring-2 ring-purple-500' : '' }}"

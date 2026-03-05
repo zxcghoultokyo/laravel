@@ -144,6 +144,10 @@
                     <span class="text-gray-500 text-xs">Rozetka ID</span>
                     <span class="text-gray-800 text-xs font-mono">{{ $product->rozetka_item_id ?? '—' }}</span>
                 </div>
+                <div class="grid grid-cols-[100px_1fr] gap-1">
+                    <span class="text-gray-500 text-xs">Offer ID</span>
+                    <span class="text-gray-800 text-xs font-mono">{{ $product->price_offer_id ?? ($raw['price_offer_id'] ?? '—') }}</span>
+                </div>
                 @if ($commission)
                 <div class="grid grid-cols-[100px_1fr] gap-1">
                     <span class="text-gray-500 text-xs">Комісія</span>

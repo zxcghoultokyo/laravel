@@ -12,6 +12,7 @@ class RozetkaProduct extends Model
     protected $fillable = [
         'tenant_id',
         'rozetka_item_id',
+        'price_offer_id',
         'article',
         'parent_article',
         'title',

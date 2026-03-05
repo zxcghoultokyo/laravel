@@ -92,6 +92,11 @@ class RozetkaProductService
             $item['article'] = $product->article;
         }
 
+        // Offer ID — prevents duplicates on Rozetka
+        if ($product->price_offer_id) {
+            $item['price_offer_id'] = (int) $product->price_offer_id;
+        }
+
         // Producer
         if ($product->producer_name) {
             $producerId = $raw['rz_producer']['id'] ?? 0;
@@ -248,6 +253,7 @@ class RozetkaProductService
             ],
             [
                 'rozetka_item_id' => $item['rz_item_id'] ?? $item['item_id'] ?? null,
+                'price_offer_id' => $item['price_offer_id'] ?? null,
                 'parent_article' => $item['parent_article'] ?? null,
                 'title' => $item['name_ua'] ?? $item['name'] ?? '',
                 'description' => $item['description_ua'] ?? $item['description'] ?? null,

@@ -1,6 +1,7 @@
 @php
     $raw = $product->raw ?? [];
     $local = $product->localProduct;
+    $horoshop = $horoshop ?? $product->horoshopProduct ?? null;
     $commission = $raw['commission_percent'] ?? null;
     $commissionSum = $raw['commission_sum'] ?? null;
     $sold = $raw['sold'] ?? null;
@@ -424,4 +425,134 @@
             @endif
         </div>
     </div>
+
+    {{-- HOROSHOP DATA PANEL --}}
+    @if ($horoshop)
+        <div class="mt-4 border-t border-purple-200 pt-4" x-data="{ hsOpen: false }">
+            <button @click="hsOpen = !hsOpen" class="flex items-center gap-2 text-sm font-semibold text-purple-700 hover:text-purple-900 transition w-full text-left">
+                <span>🛍️ Дані з Хорошоп</span>
+                <span class="text-xs font-normal text-purple-400">({{ $horoshop->article }})</span>
+                <svg class="w-4 h-4 transition-transform ml-auto" :class="hsOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <div x-show="hsOpen" x-collapse class="mt-3 space-y-3">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {{-- HS: Basic info --}}
+                    <div class="space-y-2">
+                        <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                            <label class="text-xs font-medium text-purple-500 mb-1 block">Назва (Хорошоп)</label>
+                            <div class="text-sm text-purple-900">{{ $horoshop->title }}</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                                <label class="text-xs font-medium text-purple-500 mb-1 block">Ціна</label>
+                                <div class="text-sm font-bold text-purple-900">{{ number_format($horoshop->price, 0, '.', ' ') }} ₴</div>
+                                @if ($horoshop->price_old)
+                                    <div class="text-xs text-purple-400 line-through">{{ number_format($horoshop->price_old, 0, '.', ' ') }} ₴</div>
+                                @endif
+                            </div>
+                            <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                                <label class="text-xs font-medium text-purple-500 mb-1 block">Наявність</label>
+                                <div class="text-sm {{ $horoshop->in_stock ? 'text-emerald-700' : 'text-gray-500' }}">
+                                    {{ $horoshop->in_stock ? 'В наявності' : 'Немає' }}
+                                    @if ($horoshop->quantity)
+                                        <span class="text-xs text-purple-400">({{ $horoshop->quantity }} шт)</span>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        @if ($horoshop->brand || $horoshop->color || $horoshop->size)
+                            <div class="flex flex-wrap gap-2">
+                                @if ($horoshop->brand)
+                                    <span class="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">{{ $horoshop->brand }}</span>
+                                @endif
+                                @if ($horoshop->color)
+                                    <span class="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">🎨 {{ $horoshop->color }}</span>
+                                @endif
+                                @if ($horoshop->size)
+                                    <span class="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">📏 {{ $horoshop->size }}</span>
+                                @endif
+                            </div>
+                        @endif
+
+                        @if ($horoshop->category_path)
+                            <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                                <label class="text-xs font-medium text-purple-500 mb-1 block">Категорія</label>
+                                <div class="text-xs text-purple-700">{{ $horoshop->category_path }}</div>
+                            </div>
+                        @endif
+                    </div>
+
+                    {{-- HS: Description + Images --}}
+                    <div class="space-y-2">
+                        @if ($horoshop->description_ua)
+                            <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                                <label class="text-xs font-medium text-purple-500 mb-1 block">Опис (UA)</label>
+                                <div class="text-xs text-purple-800 max-h-24 overflow-y-auto">
+                                    {!! Str::limit(strip_tags($horoshop->description_ua), 500) !!}
+                                </div>
+                            </div>
+                        @endif
+
+                        {{-- Horoshop images --}}
+                        @php
+                            $hsImages = $horoshop->images ?? [];
+                            $hsImgUrls = [];
+                            foreach ($hsImages as $img) {
+                                if (is_string($img)) { $hsImgUrls[] = $img; }
+                                elseif (is_array($img)) { $hsImgUrls[] = $img['url'] ?? $img['link'] ?? ''; }
+                            }
+                            $hsImgUrls = array_filter($hsImgUrls);
+                        @endphp
+                        @if (count($hsImgUrls) > 0)
+                            <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                                <label class="text-xs font-medium text-purple-500 mb-1 block">Фото Хорошоп ({{ count($hsImgUrls) }})</label>
+                                <div class="flex gap-1.5 overflow-x-auto">
+                                    @foreach (array_slice($hsImgUrls, 0, 8) as $imgUrl)
+                                        <img src="{{ $imgUrl }}" class="w-14 h-14 rounded object-cover border border-purple-200 flex-shrink-0" alt="">
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- HS: Characteristics --}}
+                @if (!empty($horoshop->characteristics))
+                    <div class="bg-purple-50 rounded-lg border border-purple-100 p-3">
+                        <label class="text-xs font-medium text-purple-500 mb-2 block">Характеристики Хорошоп</label>
+                        <div class="grid grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
+                            @foreach ($horoshop->characteristics as $char)
+                                @php
+                                    $charName = is_array($char) ? ($char['name'] ?? $char['title'] ?? '—') : '';
+                                    $charVal = is_array($char) ? ($char['value'] ?? '—') : $char;
+                                    if (is_array($charVal)) {
+                                        $charVal = $charVal['ua'] ?? $charVal['ru'] ?? json_encode($charVal, JSON_UNESCAPED_UNICODE);
+                                    }
+                                @endphp
+                                <div class="text-xs">
+                                    <span class="text-purple-500">{{ $charName }}:</span>
+                                    <span class="text-purple-800 font-medium">{{ $charVal }}</span>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                @if ($horoshop->synced_at)
+                    <div class="text-xs text-purple-400 text-right">
+                        Синхронізовано: {{ $horoshop->synced_at->format('d.m.Y H:i') }}
+                    </div>
+                @endif
+            </div>
+        </div>
+    @else
+        <div class="mt-4 border-t border-gray-100 pt-3">
+            <p class="text-xs text-gray-400 italic">🛍️ Дані Хорошоп не завантажені. Синхронізуйте каталог Хорошоп.</p>
+        </div>
+    @endif
 </div>

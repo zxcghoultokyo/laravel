@@ -1,4 +1,4 @@
-<div @if($syncing) wire:poll.3s="checkSyncStatus" @endif>
+<div @if($syncing) wire:poll.3s="checkSyncStatus" @endif @if($horoshopSyncing) wire:poll.3s="checkHoroshopSyncStatus" @endif>
     {{-- Tabs --}}
     <div class="mb-4 flex items-center gap-1 bg-white rounded-lg shadow-sm p-1">
         <button wire:click="switchTab('rozetka')"
@@ -25,6 +25,23 @@
             @if ($syncing)
                 <div class="w-full bg-blue-200 rounded-full h-2 mt-2">
                     <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: {{ $syncPercent }}%"></div>
+                </div>
+            @endif
+        </div>
+    @endif
+
+    {{-- Horoshop catalog sync progress --}}
+    @if ($horoshopSyncMessage)
+        <div class="mb-4 p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-700">
+            <div class="flex items-center justify-between mb-1">
+                <span>🛍️ {{ $horoshopSyncMessage }}</span>
+                @if ($horoshopSyncing && $horoshopSyncTotal > 0)
+                    <span class="text-xs font-mono text-purple-500">{{ $horoshopSyncTotal }} шт.</span>
+                @endif
+            </div>
+            @if ($horoshopSyncing)
+                <div class="w-full bg-purple-200 rounded-full h-2 mt-2">
+                    <div class="bg-purple-600 h-2 rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
             @endif
         </div>
@@ -91,11 +108,27 @@
                 <span class="text-xs text-gray-500">👥 Дублі</span>
             </div>
             @endif
+            @if (($horoshopTotal ?? 0) > 0)
+            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" title="Товари в каталозі Хорошоп">
+                <span class="text-lg font-bold text-purple-600">{{ $horoshopTotal }}</span>
+                <span class="text-xs text-gray-500">🛍️ Хорошоп</span>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" title="Хорошоп товари зв'язані з Розеткою">
+                <span class="text-lg font-bold text-purple-500">{{ $horoshopMatched ?? 0 }}</span>
+                <span class="text-xs text-gray-500">🔗 HS↔RZ</span>
+            </div>
+            @endif
 
-            <div class="ml-auto">
+            <div class="ml-auto flex items-center gap-2">
+                <button wire:click="syncHoroshopCatalog" wire:loading.attr="disabled"
+                        class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition text-sm font-medium disabled:opacity-50"
+                        @if($horoshopSyncing) disabled @endif>
+                    <span wire:loading.remove wire:target="syncHoroshopCatalog">🛍️ Синхронізувати Хорошоп</span>
+                    <span wire:loading wire:target="syncHoroshopCatalog">⏳ Завантаження...</span>
+                </button>
                 <button wire:click="syncProducts" wire:loading.attr="disabled"
                         class="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition text-sm font-medium disabled:opacity-50">
-                    <span wire:loading.remove wire:target="syncProducts">🔄 Синхронізувати</span>
+                    <span wire:loading.remove wire:target="syncProducts">🔄 Синхронізувати Розетку</span>
                     <span wire:loading wire:target="syncProducts">⏳ Завантаження...</span>
                 </button>
             </div>
@@ -200,7 +233,15 @@
 
                     {{-- Expanded product card (CRM-like with dual rows) --}}
                     @if ($expandedProductId === $product->id)
-                        @include('livewire.contractor.partials.rozetka-product-card', ['product' => $product, 'categoryAttributes' => $categoryAttributes, 'productAttributes' => $productAttributes, 'editingCategoryProductId' => $editingCategoryProductId, 'categorySearch' => $categorySearch, 'categorySearchResults' => $categorySearchResults])
+                        @include('livewire.contractor.partials.rozetka-product-card', [
+                            'product' => $product,
+                            'horoshop' => $product->horoshopProduct,
+                            'categoryAttributes' => $categoryAttributes,
+                            'productAttributes' => $productAttributes,
+                            'editingCategoryProductId' => $editingCategoryProductId,
+                            'categorySearch' => $categorySearch,
+                            'categorySearchResults' => $categorySearchResults,
+                        ])
                     @endif
                 </div>
             @empty

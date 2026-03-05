@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Contractor;
 
+use App\Models\HoroshopProduct;
 use App\Models\Product;
 use App\Models\RozetkaCategory;
 use App\Models\RozetkaCategoryAttribute;
@@ -55,6 +56,13 @@ class RozetkaProductList extends Component
     public array $productAttributes = [];
 
     public array $categoryAttributes = [];
+
+    // Horoshop catalog sync state
+    public bool $horoshopSyncing = false;
+
+    public string $horoshopSyncMessage = '';
+
+    public int $horoshopSyncTotal = 0;
 
     // Push to Rozetka feedback
     public string $pushMessage = '';
@@ -129,6 +137,49 @@ class RozetkaProductList extends Component
         if (in_array($status['status'], ['done', 'error'])) {
             $this->syncing = false;
             Cache::forget("rozetka_sync_status_{$this->tenantId}");
+        }
+    }
+
+    // ── Horoshop catalog sync ──
+
+    public function syncHoroshopCatalog(): void
+    {
+        $this->horoshopSyncing = true;
+        $this->horoshopSyncMessage = 'Завантаження каталогу Хорошоп запущено у фоні...';
+
+        \App\Jobs\SyncHoroshopCatalogJob::dispatch($this->tenantId);
+    }
+
+    public function checkHoroshopSyncStatus(): void
+    {
+        $status = Cache::get("horoshop_catalog_sync_status_{$this->tenantId}");
+
+        if (! $status) {
+            return;
+        }
+
+        if ($status['status'] === 'running') {
+            $progress = Cache::get("horoshop_catalog_sync_progress_{$this->tenantId}");
+            if ($progress) {
+                $this->horoshopSyncTotal = $progress['total'] ?? 0;
+                $this->horoshopSyncMessage = "Синхронізовано {$this->horoshopSyncTotal} товарів...";
+            }
+        } elseif ($status['status'] === 'completed') {
+            $result = $status['result'] ?? [];
+            $this->horoshopSyncing = false;
+            $this->horoshopSyncMessage = sprintf(
+                'Готово! Всього: %d, нових: %d, оновлено: %d, зв\'язано з Розеткою: %d',
+                $result['total'] ?? 0,
+                $result['created'] ?? 0,
+                $result['updated'] ?? 0,
+                $result['matched'] ?? 0
+            );
+            Cache::forget("horoshop_catalog_sync_status_{$this->tenantId}");
+            Cache::forget("horoshop_catalog_sync_progress_{$this->tenantId}");
+        } elseif ($status['status'] === 'failed') {
+            $this->horoshopSyncing = false;
+            $this->horoshopSyncMessage = 'Помилка синхронізації: '.($status['error'] ?? 'Невідома помилка');
+            Cache::forget("horoshop_catalog_sync_status_{$this->tenantId}");
         }
     }
 
@@ -446,7 +497,7 @@ class RozetkaProductList extends Component
             ->where('tenant_id', $this->tenantId)
             ->whereNotNull('price_offer_id')
             ->where('is_duplicate', false)
-            ->with('localProduct');
+            ->with(['localProduct', 'horoshopProduct']);
 
         if ($this->search) {
             $query->where(function ($q) {
@@ -504,6 +555,12 @@ class RozetkaProductList extends Component
         $matchedCount = (clone $base)->whereNotNull('local_product_id')->count();
         $unmatchedCount = $totalProducts - $matchedCount;
 
+        // Horoshop catalog stats
+        $horoshopTotal = HoroshopProduct::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $this->tenantId)->count();
+        $horoshopMatched = HoroshopProduct::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $this->tenantId)->whereNotNull('rozetka_product_id')->count();
+
         return view('livewire.contractor.rozetka-product-list', [
             'products' => $products,
             'totalProducts' => $totalProducts,
@@ -517,6 +574,8 @@ class RozetkaProductList extends Component
             'exportReadyCount' => 0,
             'notOnRozetkaCount' => $this->getNotOnRozetkaCount(),
             'duplicateCount' => $duplicateCount,
+            'horoshopTotal' => $horoshopTotal,
+            'horoshopMatched' => $horoshopMatched,
         ]);
     }
 

@@ -6,6 +6,7 @@ use App\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RozetkaProduct extends Model
 {
@@ -155,6 +156,11 @@ class RozetkaProduct extends Model
     public function localProduct(): BelongsTo
     {
         return $this->belongsTo(Product::class, 'local_product_id');
+    }
+
+    public function horoshopProduct(): HasOne
+    {
+        return $this->hasOne(HoroshopProduct::class, 'rozetka_product_id');
     }
 
     public function isOnRozetka(): bool

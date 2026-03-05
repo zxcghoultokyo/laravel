@@ -133,4 +133,33 @@ class RozetkaClient
 
         return $response->json();
     }
+
+    /**
+     * Make an authenticated PUT request.
+     */
+    public function put(string $path, array $data = [], array $headers = []): array
+    {
+        $token = $this->authenticate();
+
+        $response = Http::withHeaders(array_merge([
+            'Authorization' => 'Bearer '.$token,
+        ], $headers))->acceptJson()->asJson()->put(self::BASE_URL.$path, $data);
+
+        if (! $response->ok()) {
+            if ($response->status() === 401) {
+                Cache::forget($this->cacheKeyPrefix);
+                $token = $this->authenticate();
+
+                $response = Http::withHeaders(array_merge([
+                    'Authorization' => 'Bearer '.$token,
+                ], $headers))->acceptJson()->asJson()->put(self::BASE_URL.$path, $data);
+            }
+
+            if (! $response->ok()) {
+                throw new RuntimeException("Rozetka API PUT {$path} error: ".$response->status());
+            }
+        }
+
+        return $response->json();
+    }
 }

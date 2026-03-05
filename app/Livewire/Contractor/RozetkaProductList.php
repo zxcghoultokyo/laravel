@@ -4,8 +4,10 @@ namespace App\Livewire\Contractor;
 
 use App\Models\Product;
 use App\Models\RozetkaCategory;
+use App\Models\RozetkaCategoryAttribute;
 use App\Models\RozetkaProduct;
 use App\Services\Rozetka\RozetkaAttributeService;
+use App\Services\Rozetka\RozetkaProductService;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -53,6 +55,11 @@ class RozetkaProductList extends Component
     public array $productAttributes = [];
 
     public array $categoryAttributes = [];
+
+    // Push to Rozetka feedback
+    public string $pushMessage = '';
+
+    public bool $pushSuccess = false;
 
     protected int $tenantId = 2;
 
@@ -136,6 +143,7 @@ class RozetkaProductList extends Component
             $this->categoryAttributes = [];
             $this->productAttributes = [];
             $this->editingCategoryProductId = null;
+            $this->pushMessage = '';
 
             return;
         }
@@ -144,6 +152,7 @@ class RozetkaProductList extends Component
         $this->editingCategoryProductId = null;
         $this->categorySearch = '';
         $this->categorySearchResults = [];
+        $this->pushMessage = '';
 
         $this->loadProductAttributes($productId);
     }
@@ -192,6 +201,84 @@ class RozetkaProductList extends Component
     }
 
     // ── Attributes ──
+
+    public function saveProductField(int $productId, string $field, ?string $value): void
+    {
+        $allowedFields = ['title', 'description', 'description_ua', 'price', 'price_old', 'quantity', 'producer_name'];
+        if (! in_array($field, $allowedFields)) {
+            return;
+        }
+
+        $product = RozetkaProduct::withoutGlobalScopes()->find($productId);
+        if (! $product) {
+            return;
+        }
+
+        $edited = $product->edited_fields ?? [];
+        $edited[$field] = $value;
+
+        $product->update([
+            $field => $value,
+            'edited_fields' => $edited,
+            'has_local_changes' => true,
+        ]);
+    }
+
+    public function discardChanges(int $productId): void
+    {
+        $product = RozetkaProduct::withoutGlobalScopes()->find($productId);
+        if (! $product || ! $product->raw) {
+            return;
+        }
+
+        $raw = $product->raw;
+        $category = $raw['rz_category'] ?? [];
+        $producer = $raw['rz_producer'] ?? [];
+
+        $product->update([
+            'title' => $raw['name_ua'] ?? $raw['name'] ?? $product->title,
+            'description' => $raw['description_ua'] ?? $raw['description'] ?? null,
+            'description_ua' => $raw['description_ua'] ?? null,
+            'price' => $raw['price'] ?? $product->price,
+            'price_old' => ($raw['price_old'] ?? '0.00') !== '0.00' ? $raw['price_old'] : null,
+            'quantity' => $raw['stock_quantity'] ?? 0,
+            'producer_name' => $producer['title'] ?? null,
+            'edited_fields' => null,
+            'has_local_changes' => false,
+        ]);
+    }
+
+    public function pushToRozetka(int $productId, bool $autoApprove = false): void
+    {
+        $product = RozetkaProduct::withoutGlobalScopes()->find($productId);
+        if (! $product) {
+            $this->pushMessage = 'Товар не знайдено';
+            $this->pushSuccess = false;
+
+            return;
+        }
+
+        $service = app(RozetkaProductService::class);
+        $result = $service->pushToRozetka($product, $autoApprove);
+
+        $this->pushMessage = $result['message'];
+        $this->pushSuccess = $result['success'];
+    }
+
+    public function refreshAttributes(int $productId): void
+    {
+        $product = RozetkaProduct::withoutGlobalScopes()->find($productId);
+        if (! $product || ! $product->rozetka_category_id) {
+            return;
+        }
+
+        // Force re-sync attributes from API
+        $attrService = app(RozetkaAttributeService::class);
+        RozetkaCategoryAttribute::where('rozetka_category_id', $product->rozetka_category_id)->delete();
+        $attrService->syncCategoryAttributes($product->rozetka_category_id);
+
+        $this->loadProductAttributes($productId);
+    }
 
     public function saveAttribute(int $productId, int $attributeId, string $attributeName, ?string $valueId, ?string $valueText): void
     {
@@ -433,7 +520,8 @@ class RozetkaProductList extends Component
         // Products in export pipeline (draft/ready in rozetka_products)
         $query = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
-            ->whereIn('export_status', ['draft', 'ready']);
+            ->whereIn('export_status', ['draft', 'ready'])
+            ->with('localProduct');
 
         if ($this->search) {
             $query->where(function ($q) {

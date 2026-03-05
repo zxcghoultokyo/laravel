@@ -19,12 +19,16 @@ class RozetkaProductAttributeValue extends Model
     {
         return [
             'attribute_id' => 'integer',
-            'value_id' => 'integer',
         ];
     }
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(RozetkaProduct::class, 'rozetka_product_id');
+    }
+
+    public function categoryAttribute(): BelongsTo
+    {
+        return $this->belongsTo(RozetkaCategoryAttribute::class, 'attribute_id', 'attribute_id');
     }
 }

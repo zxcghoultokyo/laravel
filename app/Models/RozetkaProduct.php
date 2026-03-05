@@ -37,7 +37,11 @@ class RozetkaProduct extends Model
         'local_product_id',
         'group_id',
         'photos',
+        'description',
+        'description_ua',
         'raw',
+        'edited_fields',
+        'has_local_changes',
         'synced_at',
     ];
 
@@ -60,6 +64,8 @@ class RozetkaProduct extends Model
             'blocked_reasons' => 'array',
             'photos' => 'array',
             'raw' => 'array',
+            'edited_fields' => 'array',
+            'has_local_changes' => 'boolean',
             'synced_at' => 'datetime',
         ];
     }

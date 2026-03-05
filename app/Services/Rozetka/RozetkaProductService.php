@@ -100,7 +100,7 @@ class RozetkaProductService
                 'producer_name' => $producer['title'] ?? null,
                 'url' => $item['url'] ?? null,
                 'status' => $item['upload_status'] ?? null,
-                'group_id' => $item['rz_group_id'] ?? $item['group_id'] ?? null,
+                'group_id' => $item['rz_group_id'] ?? $item['group_id'] ?? 0,
                 'local_product_id' => $localProductId,
                 'photos' => $photos,
                 'raw' => $item,

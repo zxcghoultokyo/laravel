@@ -76,12 +76,26 @@ class RozetkaProduct extends Model
 
         $first = $photos[0];
 
-        if (is_string($first)) {
-            return $first;
+        return $this->extractUrlString($first);
+    }
+
+    protected function extractUrlString(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            return $value;
         }
 
-        if (is_array($first)) {
-            return $first['url'] ?? $first['original'] ?? $first['thumbnail'] ?? null;
+        if (! is_array($value)) {
+            return null;
+        }
+
+        foreach (['url', 'original', 'thumbnail', 'big', 'small', 'photo'] as $key) {
+            if (isset($value[$key])) {
+                $result = $this->extractUrlString($value[$key]);
+                if ($result !== null) {
+                    return $result;
+                }
+            }
         }
 
         return null;

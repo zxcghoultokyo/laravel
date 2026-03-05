@@ -12,10 +12,12 @@
     $duplicateMark = $raw['duplicate_mark'] ?? false;
     $edited = $product->edited_fields ?? [];
     $rawDesc = $raw['description_ua'] ?? $raw['description'] ?? '';
+    $rawDesc = is_array($rawDesc) ? implode(' ', $rawDesc) : (string) $rawDesc;
     $localDesc = '';
     if ($local && !empty($local->raw)) {
         $localRaw = is_array($local->raw) ? $local->raw : json_decode($local->raw, true);
         $localDesc = $localRaw['description'] ?? $localRaw['description_short'] ?? '';
+        $localDesc = is_array($localDesc) ? implode(' ', $localDesc) : (string) $localDesc;
     }
 @endphp
 <div class="border-t border-gray-100 px-4 py-4 bg-gray-50">

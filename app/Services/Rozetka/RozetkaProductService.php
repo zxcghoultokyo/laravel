@@ -260,10 +260,13 @@ class RozetkaProductService
         $markedCount = 0;
 
         foreach ($duplicateArticles as $article => $count) {
+            // Force string cast — numeric-looking articles (e.g. '1910483359') become int keys
+            $article = (string) $article;
+
             // Pick the primary: latest synced, highest id as tiebreaker
             $primary = RozetkaProduct::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
-                ->where('article', $article)
+                ->whereRaw('article = ?', [$article])
                 ->whereNotNull('price_offer_id')
                 ->orderByDesc('synced_at')
                 ->orderByDesc('id')
@@ -276,11 +279,11 @@ class RozetkaProductService
             // Mark others as duplicates, pointing to the primary offer_id
             $marked = RozetkaProduct::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
-                ->where('article', $article)
+                ->whereRaw('article = ?', [$article])
                 ->where('id', '!=', $primary->id)
                 ->update([
                     'is_duplicate' => true,
-                    'primary_offer_id' => $primary->price_offer_id,
+                    'primary_offer_id' => (string) $primary->price_offer_id,
                 ]);
 
             $markedCount += $marked;

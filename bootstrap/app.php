@@ -1,9 +1,9 @@
 <?php
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Console\Scheduling\Schedule;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,29 +15,33 @@ return Application::configure(basePath: dirname(__DIR__))
             // Admin routes (Livewire)
             \Illuminate\Support\Facades\Route::middleware(['web'])
                 ->group(base_path('routes/admin.php'));
+
+            // Contractor routes (separate auth)
+            \Illuminate\Support\Facades\Route::middleware(['web'])
+                ->group(base_path('routes/contractor.php'));
         },
     )
     ->withSchedule(function (Schedule $schedule) {
         // Синхронізація з Horoshop: щоденно о 3:00 UTC
-        $schedule->job(new \App\Jobs\SyncHoroshopProductsJob())
+        $schedule->job(new \App\Jobs\SyncHoroshopProductsJob)
             ->dailyAt('03:00')
             ->onSuccess(fn () => \Log::info('SyncHoroshopProductsJob completed'))
             ->onFailure(fn () => \Log::error('SyncHoroshopProductsJob failed'));
 
         // Побудова сценаріїв для рекомендацій: щоденно о 4:00
-        $schedule->job(new \App\Jobs\GenerateCategoryScenariosJob())
+        $schedule->job(new \App\Jobs\GenerateCategoryScenariosJob)
             ->dailyAt('04:00')
             ->onSuccess(fn () => \Log::info('GenerateCategoryScenariosJob completed'))
             ->onFailure(fn () => \Log::error('GenerateCategoryScenariosJob failed'));
 
         // Генерація скриптів категорій: щотижня о 5:00 у понеділок
-        $schedule->job(new \App\Jobs\GenerateCategoryScriptsJob())
+        $schedule->job(new \App\Jobs\GenerateCategoryScriptsJob)
             ->weeklyOn(1, '05:00')
             ->onSuccess(fn () => \Log::info('GenerateCategoryScriptsJob completed'))
             ->onFailure(fn () => \Log::error('GenerateCategoryScriptsJob failed'));
 
         // Перебудова індексу категорій: щоденно о 3:20
-        $schedule->job(new \App\Jobs\RebuildCategoryIndexJob())
+        $schedule->job(new \App\Jobs\RebuildCategoryIndexJob)
             ->dailyAt('03:20')
             ->onSuccess(fn () => \Log::info('RebuildCategoryIndexJob completed'))
             ->onFailure(fn () => \Log::error('RebuildCategoryIndexJob failed'));
@@ -69,12 +73,12 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Сесія закінчилась. Будь ласка, оновіть сторінку.',
                 ], 419);
             }
-            
+
             // For web requests - redirect to login with message
             return redirect()->route('login')
                 ->with('warning', 'Сесія закінчилась. Будь ласка, увійдіть знову.');
         });
-        
+
         // Handle throttle (rate limit) exceptions with user-friendly message
         $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, $request) {
             if ($request->is('api/*')) {

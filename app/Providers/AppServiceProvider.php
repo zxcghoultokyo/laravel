@@ -2,20 +2,24 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use App\Services\Horoshop\HoroshopClient;
-use App\Services\Horoshop\ProductService;
-use App\Services\Horoshop\OrderService;
-use App\Services\Horoshop\OrderSearchService;
-use App\Services\Horoshop\HoroshopService;
-use App\Services\Ai\AiRouter;
-use App\Services\Horoshop\HoroshopDataService;
-use App\Services\Horoshop\DeliveryTrackingService;
 use App\Services\Ai\AiRecommender;
+use App\Services\Ai\AiRouter;
 use App\Services\FaqService;
-use App\Services\Support\FaqContentIngestService;
+use App\Services\Horoshop\DeliveryTrackingService;
+use App\Services\Horoshop\HoroshopClient;
+use App\Services\Horoshop\HoroshopDataService;
+use App\Services\Horoshop\HoroshopService;
+use App\Services\Horoshop\OrderSearchService;
+use App\Services\Horoshop\OrderService;
+use App\Services\Horoshop\ProductService;
+use App\Services\Rozetka\RozetkaAttributeService;
+use App\Services\Rozetka\RozetkaCategoryService;
+use App\Services\Rozetka\RozetkaClient;
+use App\Services\Rozetka\RozetkaProductService;
 use App\Services\Store\StoreContextService;
+use App\Services\Support\FaqContentIngestService;
 use App\Services\Tenant\TenantContext;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -23,44 +27,65 @@ class AppServiceProvider extends ServiceProvider
     {
         // TenantContext - Single source of truth for current tenant
         $this->app->singleton(TenantContext::class, function ($app) {
-            return new TenantContext();
+            return new TenantContext;
         });
-        
+
         // StoreContextService - provides dynamic store context for AI prompts
         $this->app->singleton(StoreContextService::class, function ($app) {
-            return new StoreContextService();
+            return new StoreContextService;
         });
-        
+
         // Horoshop HTTP client
         $this->app->singleton(HoroshopClient::class, function ($app) {
             $config = config('services.horoshop');
 
             return new HoroshopClient(
-                $config['domain']   ?? '',
-                $config['login']    ?? '',
+                $config['domain'] ?? '',
+                $config['login'] ?? '',
                 $config['password'] ?? '',
             );
         });
+
+        // Rozetka Seller API client
+        $this->app->singleton(RozetkaClient::class, function ($app) {
+            return new RozetkaClient(
+                config('services.rozetka.username'),
+                config('services.rozetka.password'),
+            );
+        });
+
+        $this->app->singleton(RozetkaCategoryService::class, function ($app) {
+            return new RozetkaCategoryService($app->make(RozetkaClient::class));
+        });
+
+        $this->app->singleton(RozetkaProductService::class, function ($app) {
+            return new RozetkaProductService($app->make(RozetkaClient::class));
+        });
+
+        $this->app->singleton(RozetkaAttributeService::class, function ($app) {
+            return new RozetkaAttributeService($app->make(RozetkaClient::class));
+        });
+
         // MeiliClient
         $this->app->singleton(\App\Services\Search\MeiliClient::class, function ($app) {
-            return new \App\Services\Search\MeiliClient();
+            return new \App\Services\Search\MeiliClient;
         });
-        
+
         // BrandDetectionService
         $this->app->singleton(\App\Services\Search\BrandDetectionService::class, function ($app) {
-            return new \App\Services\Search\BrandDetectionService();
+            return new \App\Services\Search\BrandDetectionService;
         });
-        
+
         // SlangDictionaryService
         $this->app->singleton(\App\Services\Search\SlangDictionaryService::class, function ($app) {
-            return new \App\Services\Search\SlangDictionaryService();
+            return new \App\Services\Search\SlangDictionaryService;
         });
-        
+
         // QueryPreprocessorService - normalizes queries before GPT (slang, brands, FAQ detection)
         $this->app->singleton(\App\Services\Search\QueryPreprocessorService::class, function ($app) {
-            return new \App\Services\Search\QueryPreprocessorService();
+            return new \App\Services\Search\QueryPreprocessorService;
         });
-        
+
         // HoroshopService (обгортка над клієнтом, якщо він у тебе є)
         $this->app->singleton(HoroshopService::class, function ($app) {
             return new HoroshopService(
@@ -70,9 +95,9 @@ class AppServiceProvider extends ServiceProvider
 
         // 🔥 ProductService — тепер приймає AiRouter, а НЕ HoroshopClient
         $this->app->singleton(ProductService::class, function ($app) {
-        return new ProductService(
-            $app->make(HoroshopClient::class), // 1) client
-            $app->make(AiRouter::class),       // 2) router
+            return new ProductService(
+                $app->make(HoroshopClient::class), // 1) client
+                $app->make(AiRouter::class),       // 2) router
             );
         });
 
@@ -88,18 +113,18 @@ class AppServiceProvider extends ServiceProvider
             return new OrderSearchService(
                 $app->make(HoroshopClient::class),
                 $app->make(OrderService::class),
-                            $app->make(DeliveryTrackingService::class),
+                $app->make(DeliveryTrackingService::class),
             );
         });
 
         // FAQ
         $this->app->singleton(FaqService::class, function ($app) {
-            return new FaqService();
+            return new FaqService;
         });
 
         // FAQ Content Ingest Service
         $this->app->singleton(FaqContentIngestService::class, function ($app) {
-            return new FaqContentIngestService();
+            return new FaqContentIngestService;
         });
 
         // HoroshopDataService
@@ -118,12 +143,12 @@ class AppServiceProvider extends ServiceProvider
 
         // AI Router
         $this->app->singleton(AiRouter::class, function ($app) {
-            return new AiRouter();
+            return new AiRouter;
         });
 
         // AI Recommender (якщо використовується)
         $this->app->singleton(AiRecommender::class, function ($app) {
-            return new AiRecommender();
+            return new AiRecommender;
         });
 
         // CrossSell Service
@@ -137,22 +162,22 @@ class AppServiceProvider extends ServiceProvider
 
         // Session Context Service (unified session handling)
         $this->app->singleton(\App\Services\Session\SessionContextService::class, function ($app) {
-            return new \App\Services\Session\SessionContextService();
+            return new \App\Services\Session\SessionContextService;
         });
 
         // Color Service (dynamic color detection from DB)
         $this->app->singleton(\App\Services\Search\ColorService::class, function ($app) {
-            return new \App\Services\Search\ColorService();
+            return new \App\Services\Search\ColorService;
         });
 
         // Billing Manager (multi-provider billing abstraction)
         $this->app->singleton(\App\Services\Billing\BillingManager::class, function ($app) {
-            return new \App\Services\Billing\BillingManager();
+            return new \App\Services\Billing\BillingManager;
         });
 
         // Usage Tracking Service (tenant message limits)
         $this->app->singleton(\App\Services\Usage\UsageTrackingService::class, function ($app) {
-            return new \App\Services\Usage\UsageTrackingService();
+            return new \App\Services\Usage\UsageTrackingService;
         });
 
         // === AGENT HANDLERS ===
@@ -200,15 +225,15 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(\App\Services\Agent\Tools\ProductDetailsTool::class, function ($app) {
-            return new \App\Services\Agent\Tools\ProductDetailsTool();
+            return new \App\Services\Agent\Tools\ProductDetailsTool;
         });
 
         $this->app->singleton(\App\Services\Agent\Tools\DeduperTool::class, function ($app) {
-            return new \App\Services\Agent\Tools\DeduperTool();
+            return new \App\Services\Agent\Tools\DeduperTool;
         });
 
         $this->app->singleton(\App\Services\Agent\Tools\AccessoryFilterTool::class, function ($app) {
-            return new \App\Services\Agent\Tools\AccessoryFilterTool();
+            return new \App\Services\Agent\Tools\AccessoryFilterTool;
         });
 
         $this->app->singleton(\App\Services\Agent\Tools\AiRerankTool::class, function ($app) {
@@ -240,17 +265,17 @@ class AppServiceProvider extends ServiceProvider
 
         // Escalation Service for human operator handover
         $this->app->singleton(\App\Services\Escalation\EscalationService::class, function ($app) {
-            return new \App\Services\Escalation\EscalationService();
+            return new \App\Services\Escalation\EscalationService;
         });
-        
+
         // A/B Testing Service
         $this->app->singleton(\App\Services\Analytics\ABTestingService::class, function ($app) {
-            return new \App\Services\Analytics\ABTestingService();
+            return new \App\Services\Analytics\ABTestingService;
         });
-        
+
         // Prompt Generator Service (auto-generates prompts from store data)
         $this->app->singleton(\App\Services\Ai\PromptGeneratorService::class, function ($app) {
-            return new \App\Services\Ai\PromptGeneratorService();
+            return new \App\Services\Ai\PromptGeneratorService;
         });
     }
 

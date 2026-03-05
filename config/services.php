@@ -60,6 +60,18 @@ return [
         'api_token' => env('ADMIN_API_TOKEN'),
     ],
 
+    // Rozetka Seller API
+    'rozetka' => [
+        'username' => env('ROZETKA_USERNAME'),
+        'password' => env('ROZETKA_PASSWORD'),
+    ],
+
+    // Contractor panel auth
+    'contractor' => [
+        'username' => env('CONTRACTOR_USERNAME', 'contractor'),
+        'password_hash' => env('CONTRACTOR_PASSWORD_HASH'),
+    ],
+
     // Diagnostic API
     'diagnostic' => [
         'secret_key' => env('DIAGNOSTIC_SECRET_KEY', 'diagnostic_secret_key_2025'),

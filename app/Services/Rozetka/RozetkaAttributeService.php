@@ -21,6 +21,10 @@ class RozetkaAttributeService
 
         $options = $response['data'] ?? $response['content'] ?? $response;
 
+        if (is_string($options)) {
+            $options = json_decode($options, true) ?? [];
+        }
+
         if (! is_array($options)) {
             Log::warning("Rozetka: unexpected response for category {$rozetkaCategoryId} attributes");
 

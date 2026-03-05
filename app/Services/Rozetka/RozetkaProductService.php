@@ -80,7 +80,7 @@ class RozetkaProductService
                 'article' => $article,
             ],
             [
-                'rozetka_item_id' => $item['rz_item_id'] ?? null,
+                'rozetka_item_id' => $item['rz_item_id'] ?? $item['item_id'] ?? null,
                 'parent_article' => $item['parent_article'] ?? null,
                 'title' => $item['name_ua'] ?? $item['name'] ?? '',
                 'price' => $item['price'] ?? 0,

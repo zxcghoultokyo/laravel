@@ -183,7 +183,7 @@
                     @if ($product->blocked_reasons && count($product->blocked_reasons) > 0)
                         <div class="px-4 py-2 bg-orange-50 border-t border-orange-100 text-xs text-orange-700">
                             ⚠️ @foreach ($product->blocked_reasons as $reason)
-                                <span>{{ $reason }}</span>@if (!$loop->last), @endif
+                                <span>{{ is_array($reason) ? ($reason['title'] ?? json_encode($reason, JSON_UNESCAPED_UNICODE)) : $reason }}</span>@if (!$loop->last), @endif
                             @endforeach
                         </div>
                     @endif

@@ -20,17 +20,36 @@ class SyncRozetkaProductsJob implements ShouldQueue
 
     public function handle(RozetkaProductService $service): void
     {
-        Cache::put("rozetka_sync_status_{$this->tenantId}", [
+        $tenantId = $this->tenantId;
+
+        Cache::put("rozetka_sync_status_{$tenantId}", [
             'status' => 'running',
             'message' => 'Завантаження товарів з Розетки...',
+            'synced' => 0,
+            'page' => 0,
+            'total_pages' => 0,
+            'percent' => 0,
         ], 600);
 
         try {
-            $count = $service->syncProducts($this->tenantId);
+            $count = $service->syncProducts($tenantId, function (int $synced, int $page, int $totalPages) use ($tenantId) {
+                $percent = $totalPages > 0 ? (int) round($page / $totalPages * 100) : 0;
 
-            Cache::put("rozetka_sync_status_{$this->tenantId}", [
+                Cache::put("rozetka_sync_status_{$tenantId}", [
+                    'status' => 'running',
+                    'message' => "Завантажено {$synced} товарів (сторінка {$page}/{$totalPages}) — {$percent}%",
+                    'synced' => $synced,
+                    'page' => $page,
+                    'total_pages' => $totalPages,
+                    'percent' => $percent,
+                ], 600);
+            });
+
+            Cache::put("rozetka_sync_status_{$tenantId}", [
                 'status' => 'done',
-                'message' => "Синхронізовано {$count} товарів.",
+                'message' => "✅ Синхронізовано {$count} товарів.",
+                'synced' => $count,
+                'percent' => 100,
             ], 600);
 
             Log::info("SyncRozetkaProductsJob: synced {$count} products for tenant {$this->tenantId}");

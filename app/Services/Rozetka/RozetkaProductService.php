@@ -11,8 +11,10 @@ class RozetkaProductService
 
     /**
      * Sync all products from Rozetka Seller API for given tenant.
+     *
+     * @param  callable|null  $onProgress  fn(int $synced, int $page, int $totalPages)
      */
-    public function syncProducts(int $tenantId): int
+    public function syncProducts(int $tenantId, ?callable $onProgress = null): int
     {
         $page = 1;
         $perPage = 20; // Rozetka max
@@ -37,6 +39,10 @@ class RozetkaProductService
 
             $totalPages = $response['content']['total_pages']
                 ?? (int) ceil(($response['content']['total_count'] ?? 0) / $perPage);
+
+            if ($onProgress) {
+                $onProgress($synced, $page, $totalPages);
+            }
 
             $page++;
         } while ($page <= $totalPages);

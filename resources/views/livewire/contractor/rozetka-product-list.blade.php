@@ -25,7 +25,17 @@
 
     @if ($syncMessage)
         <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
-            {{ $syncMessage }}
+            <div class="flex items-center justify-between mb-1">
+                <span>{{ $syncMessage }}</span>
+                @if ($syncing && $syncedCount > 0)
+                    <span class="text-xs font-mono text-blue-500">{{ $syncedCount }} шт.</span>
+                @endif
+            </div>
+            @if ($syncing)
+                <div class="w-full bg-blue-200 rounded-full h-2 mt-2">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: {{ $syncPercent }}%"></div>
+                </div>
+            @endif
         </div>
     @endif
 
@@ -129,12 +139,12 @@
                                 </div>
 
                                 {{-- Photos --}}
-                                @if ($product->photos && count($product->photos) > 0)
+                                @if (count($product->clean_photo_urls) > 0)
                                     <div class="mt-3">
                                         <span class="text-sm text-gray-500">Фото:</span>
                                         <div class="flex gap-2 mt-1 flex-wrap">
-                                            @foreach (array_slice($product->photos, 0, 5) as $photo)
-                                                <img src="{{ $photo['url'] ?? $photo }}"
+                                            @foreach (array_slice($product->clean_photo_urls, 0, 5) as $photoUrl)
+                                                <img src="{{ $photoUrl }}"
                                                      class="w-16 h-16 rounded object-cover border border-gray-200" alt="">
                                             @endforeach
                                         </div>

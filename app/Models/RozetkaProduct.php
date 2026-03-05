@@ -68,15 +68,31 @@ class RozetkaProduct extends Model
 
     public function getFirstPhotoAttribute(): ?string
     {
+        $urls = $this->clean_photo_urls;
+
+        return $urls[0] ?? null;
+    }
+
+    /**
+     * @return string[]
+     */
+    public function getCleanPhotoUrlsAttribute(): array
+    {
         $photos = $this->photos;
 
-        if (! is_array($photos) || count($photos) === 0) {
-            return null;
+        if (! is_array($photos)) {
+            return [];
         }
 
-        $first = $photos[0];
+        $urls = [];
+        foreach ($photos as $photo) {
+            $url = $this->extractUrlString($photo);
+            if ($url) {
+                $urls[] = $url;
+            }
+        }
 
-        return $this->extractUrlString($first);
+        return $urls;
     }
 
     protected function extractUrlString(mixed $value): ?string

@@ -28,6 +28,10 @@ class RozetkaProductList extends Component
 
     public string $syncMessage = '';
 
+    public int $syncPercent = 0;
+
+    public int $syncedCount = 0;
+
     // Expanded product card
     public ?int $expandedProductId = null;
 
@@ -85,6 +89,8 @@ class RozetkaProductList extends Component
         }
 
         $this->syncMessage = $status['message'];
+        $this->syncPercent = $status['percent'] ?? 0;
+        $this->syncedCount = $status['synced'] ?? 0;
 
         if (in_array($status['status'], ['done', 'error'])) {
             $this->syncing = false;

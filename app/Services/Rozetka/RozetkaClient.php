@@ -78,13 +78,13 @@ class RozetkaClient
     /**
      * Make an authenticated GET request.
      */
-    public function get(string $path, array $query = []): array
+    public function get(string $path, array $query = [], array $headers = []): array
     {
         $token = $this->authenticate();
 
-        $response = Http::withHeaders([
+        $response = Http::withHeaders(array_merge([
             'Authorization' => 'Bearer '.$token,
-        ])->acceptJson()->get(self::BASE_URL.$path, $query);
+        ], $headers))->acceptJson()->get(self::BASE_URL.$path, $query);
 
         if (! $response->ok()) {
             // Token might be expired
@@ -92,9 +92,9 @@ class RozetkaClient
                 Cache::forget($this->cacheKeyPrefix);
                 $token = $this->authenticate();
 
-                $response = Http::withHeaders([
+                $response = Http::withHeaders(array_merge([
                     'Authorization' => 'Bearer '.$token,
-                ])->acceptJson()->get(self::BASE_URL.$path, $query);
+                ], $headers))->acceptJson()->get(self::BASE_URL.$path, $query);
             }
 
             if (! $response->ok()) {

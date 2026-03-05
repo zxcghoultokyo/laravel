@@ -2,9 +2,11 @@
 
 namespace App\Livewire\Contractor;
 
+use App\Models\Product;
 use App\Models\RozetkaCategory;
 use App\Models\RozetkaProduct;
 use App\Services\Rozetka\RozetkaAttributeService;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -14,14 +16,19 @@ class RozetkaProductList extends Component
 {
     use WithPagination;
 
+    // Tab
+    public string $activeTab = 'rozetka'; // 'rozetka' or 'export'
+
     // Filters
     public string $search = '';
 
-    public string $statusFilter = '';
-
     public string $stockFilter = '';
 
-    public string $categoryFilter = '';
+    public string $uploadStatusFilter = '';
+
+    public string $matchFilter = '';
+
+    public string $exportStatusFilter = '';
 
     // Sync state
     public bool $syncing = false;
@@ -50,22 +57,42 @@ class RozetkaProductList extends Component
     protected int $tenantId = 2;
 
     protected $queryString = [
+        'activeTab' => ['except' => 'rozetka'],
         'search' => ['except' => ''],
-        'statusFilter' => ['except' => ''],
         'stockFilter' => ['except' => ''],
     ];
 
     public function mount(): void
     {
-        // Check if we have any products synced
         $count = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
+            ->where(function ($q) {
+                $q->whereNotNull('rozetka_item_id')
+                    ->orWhereNotNull('raw');
+            })
             ->count();
 
         if ($count === 0) {
             $this->syncMessage = 'Товари ще не завантажені. Натисніть "Синхронізувати" для завантаження з Розетки.';
         }
     }
+
+    public function switchTab(string $tab): void
+    {
+        $this->activeTab = $tab;
+        $this->search = '';
+        $this->stockFilter = '';
+        $this->uploadStatusFilter = '';
+        $this->matchFilter = '';
+        $this->exportStatusFilter = '';
+        $this->expandedProductId = null;
+        $this->categoryAttributes = [];
+        $this->productAttributes = [];
+        $this->editingCategoryProductId = null;
+        $this->resetPage();
+    }
+
+    // ── Sync ──
 
     public function syncProducts(): void
     {
@@ -74,15 +101,17 @@ class RozetkaProductList extends Component
 
         \App\Jobs\SyncRozetkaProductsJob::dispatch($this->tenantId);
 
-        \Illuminate\Support\Facades\Cache::put("rozetka_sync_status_{$this->tenantId}", [
+        Cache::put("rozetka_sync_status_{$this->tenantId}", [
             'status' => 'running',
             'message' => 'Завантаження товарів з Розетки...',
+            'synced' => 0,
+            'percent' => 0,
         ], 600);
     }
 
     public function checkSyncStatus(): void
     {
-        $status = \Illuminate\Support\Facades\Cache::get("rozetka_sync_status_{$this->tenantId}");
+        $status = Cache::get("rozetka_sync_status_{$this->tenantId}");
 
         if (! $status) {
             return;
@@ -94,9 +123,11 @@ class RozetkaProductList extends Component
 
         if (in_array($status['status'], ['done', 'error'])) {
             $this->syncing = false;
-            \Illuminate\Support\Facades\Cache::forget("rozetka_sync_status_{$this->tenantId}");
+            Cache::forget("rozetka_sync_status_{$this->tenantId}");
         }
     }
+
+    // ── Product card ──
 
     public function toggleProduct(int $productId): void
     {
@@ -116,6 +147,8 @@ class RozetkaProductList extends Component
 
         $this->loadProductAttributes($productId);
     }
+
+    // ── Category editing ──
 
     public function startCategoryEdit(int $productId): void
     {
@@ -155,9 +188,10 @@ class RozetkaProductList extends Component
         $this->categorySearch = '';
         $this->categorySearchResults = [];
 
-        // Reload attributes for new category
         $this->loadProductAttributes($productId);
     }
+
+    // ── Attributes ──
 
     public function saveAttribute(int $productId, int $attributeId, string $attributeName, ?string $valueId, ?string $valueText): void
     {
@@ -191,7 +225,6 @@ class RozetkaProductList extends Component
             return;
         }
 
-        // Fetch category attributes (from cache or API)
         $attrService = app(RozetkaAttributeService::class);
         $attrs = $attrService->getAttributesForCategory($product->rozetka_category_id);
 
@@ -207,7 +240,6 @@ class RozetkaProductList extends Component
             ];
         })->toArray();
 
-        // Load saved values
         $savedValues = $product->attributeValues->keyBy('attribute_id');
         $this->productAttributes = [];
         foreach ($savedValues as $attrId => $val) {
@@ -218,12 +250,75 @@ class RozetkaProductList extends Component
         }
     }
 
-    public function updatedSearch(): void
+    // ── Export tab: prepare products ──
+
+    public function prepareForExport(int $localProductId): void
     {
-        $this->resetPage();
+        $localProduct = Product::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->find($localProductId);
+
+        if (! $localProduct) {
+            return;
+        }
+
+        // Check if already prepared
+        $exists = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->where('local_product_id', $localProductId)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        RozetkaProduct::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenantId,
+            'article' => $localProduct->article,
+            'parent_article' => $localProduct->parent_article,
+            'title' => $localProduct->title,
+            'price' => $localProduct->price,
+            'price_old' => $localProduct->price_old,
+            'in_stock' => $localProduct->in_stock,
+            'quantity' => $localProduct->quantity ?? 0,
+            'export_status' => 'draft',
+            'local_product_id' => $localProductId,
+            'photos' => $localProduct->images ?? [],
+        ]);
     }
 
-    public function updatedStatusFilter(): void
+    public function markReady(int $rozetkaProductId): void
+    {
+        RozetkaProduct::withoutGlobalScopes()
+            ->where('id', $rozetkaProductId)
+            ->where('export_status', 'draft')
+            ->update(['export_status' => 'ready']);
+    }
+
+    public function markDraft(int $rozetkaProductId): void
+    {
+        RozetkaProduct::withoutGlobalScopes()
+            ->where('id', $rozetkaProductId)
+            ->where('export_status', 'ready')
+            ->update(['export_status' => 'draft']);
+    }
+
+    public function removeFromExport(int $rozetkaProductId): void
+    {
+        RozetkaProduct::withoutGlobalScopes()
+            ->where('id', $rozetkaProductId)
+            ->whereIn('export_status', ['draft', 'ready'])
+            ->whereNull('rozetka_item_id')
+            ->delete();
+
+        if ($this->expandedProductId === $rozetkaProductId) {
+            $this->expandedProductId = null;
+        }
+    }
+
+    // ── Pagination resets ──
+
+    public function updatedSearch(): void
     {
         $this->resetPage();
     }
@@ -233,10 +328,42 @@ class RozetkaProductList extends Component
         $this->resetPage();
     }
 
+    public function updatedUploadStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedMatchFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedExportStatusFilter(): void
+    {
+        $this->resetPage();
+    }
+
+    // ── Render ──
+
     public function render()
     {
+        if ($this->activeTab === 'rozetka') {
+            return $this->renderRozetkaTab();
+        }
+
+        return $this->renderExportTab();
+    }
+
+    protected function renderRozetkaTab()
+    {
+        // Show all products synced from Rozetka (both published and new/draft)
         $query = RozetkaProduct::withoutGlobalScopes()
-            ->where('tenant_id', $this->tenantId);
+            ->where('tenant_id', $this->tenantId)
+            ->where(function ($q) {
+                $q->whereNotNull('rozetka_item_id')
+                    ->orWhereNotNull('raw'); // products from /goods/all that don't have rz_item_id yet
+            })
+            ->with('localProduct');
 
         if ($this->search) {
             $query->where(function ($q) {
@@ -251,24 +378,126 @@ class RozetkaProductList extends Component
             $query->where('in_stock', false);
         }
 
-        // Sort: in stock first, then by title
+        if ($this->uploadStatusFilter !== '') {
+            $query->where('upload_status', (int) $this->uploadStatusFilter);
+        }
+
+        if ($this->matchFilter === 'matched') {
+            $query->whereNotNull('local_product_id');
+        } elseif ($this->matchFilter === 'unmatched') {
+            $query->whereNull('local_product_id');
+        }
+
         $query->orderByDesc('in_stock')->orderBy('title');
 
         $products = $query->paginate(25);
 
-        // Stats
-        $totalProducts = RozetkaProduct::withoutGlobalScopes()
-            ->where('tenant_id', $this->tenantId)->count();
-        $inStockCount = RozetkaProduct::withoutGlobalScopes()
-            ->where('tenant_id', $this->tenantId)->where('in_stock', true)->count();
-        $withCategoryCount = RozetkaProduct::withoutGlobalScopes()
-            ->where('tenant_id', $this->tenantId)->whereNotNull('rozetka_category_id')->count();
+        $base = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->where(function ($q) {
+                $q->whereNotNull('rozetka_item_id')
+                    ->orWhereNotNull('raw');
+            });
+
+        $totalProducts = (clone $base)->count();
+        $inStockCount = (clone $base)->where('in_stock', true)->count();
+        $activeCount = (clone $base)->where('upload_status', 2)->count();
+        $newCount = (clone $base)->where('upload_status', 0)->count();
+        $failedModerationCount = (clone $base)->where('upload_status', 9)->count();
+        $blockedCount = (clone $base)->whereNotNull('blocked_reasons')
+            ->where('blocked_reasons', '!=', '[]')
+            ->where('blocked_reasons', '!=', 'null')
+            ->count();
+        $matchedCount = (clone $base)->whereNotNull('local_product_id')->count();
+        $unmatchedCount = $totalProducts - $matchedCount;
 
         return view('livewire.contractor.rozetka-product-list', [
             'products' => $products,
             'totalProducts' => $totalProducts,
             'inStockCount' => $inStockCount,
-            'withCategoryCount' => $withCategoryCount,
+            'activeCount' => $activeCount,
+            'newCount' => $newCount,
+            'failedModerationCount' => $failedModerationCount,
+            'blockedCount' => $blockedCount,
+            'matchedCount' => $matchedCount,
+            'unmatchedCount' => $unmatchedCount,
+            'localProducts' => collect(),
+            'draftCount' => 0,
+            'exportReadyCount' => 0,
+            'notOnRozetkaCount' => $this->getNotOnRozetkaCount(),
         ]);
+    }
+
+    protected function renderExportTab()
+    {
+        // Products in export pipeline (draft/ready in rozetka_products)
+        $query = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->whereIn('export_status', ['draft', 'ready']);
+
+        if ($this->search) {
+            $query->where(function ($q) {
+                $q->where('title', 'like', '%'.$this->search.'%')
+                    ->orWhere('article', 'like', '%'.$this->search.'%');
+            });
+        }
+
+        if ($this->exportStatusFilter === 'draft') {
+            $query->where('export_status', 'draft');
+        } elseif ($this->exportStatusFilter === 'ready') {
+            $query->where('export_status', 'ready');
+        }
+
+        $query->orderByRaw("CASE WHEN export_status = 'ready' THEN 0 ELSE 1 END")->orderBy('title');
+
+        $products = $query->paginate(25);
+
+        // Local products NOT on Rozetka yet (for "add" button)
+        $rozetkaArticles = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->pluck('article')
+            ->toArray();
+
+        $localQuery = Product::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->whereNotIn('article', $rozetkaArticles);
+
+        if ($this->search) {
+            $localQuery->where(function ($q) {
+                $q->where('title', 'like', '%'.$this->search.'%')
+                    ->orWhere('article', 'like', '%'.$this->search.'%');
+            });
+        }
+
+        $localProducts = $localQuery->orderBy('title')->limit(50)->get();
+
+        $draftCount = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)->where('export_status', 'draft')->count();
+        $exportReadyCount = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)->where('export_status', 'ready')->count();
+
+        return view('livewire.contractor.rozetka-product-list', [
+            'products' => $products,
+            'totalProducts' => $draftCount + $exportReadyCount,
+            'inStockCount' => 0,
+            'readyCount' => $exportReadyCount,
+            'localProducts' => $localProducts,
+            'draftCount' => $draftCount,
+            'exportReadyCount' => $exportReadyCount,
+            'notOnRozetkaCount' => $this->getNotOnRozetkaCount(),
+        ]);
+    }
+
+    protected function getNotOnRozetkaCount(): int
+    {
+        $rozetkaArticles = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->pluck('article')
+            ->toArray();
+
+        return Product::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->whereNotIn('article', $rozetkaArticles)
+            ->count();
     }
 }

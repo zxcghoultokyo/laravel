@@ -22,7 +22,19 @@ class RozetkaProduct extends Model
         'in_stock',
         'quantity',
         'moderation_status',
+        'upload_status',
+        'upload_status_title',
+        'rz_status',
+        'rz_sell_status',
+        'available',
+        'available_title',
+        'blocked_reasons',
+        'change_status',
+        'producer_name',
+        'url',
         'status',
+        'export_status',
+        'local_product_id',
         'group_id',
         'photos',
         'raw',
@@ -39,7 +51,13 @@ class RozetkaProduct extends Model
             'in_stock' => 'boolean',
             'quantity' => 'integer',
             'moderation_status' => 'integer',
+            'upload_status' => 'integer',
+            'rz_status' => 'integer',
+            'rz_sell_status' => 'integer',
+            'available' => 'integer',
+            'change_status' => 'integer',
             'group_id' => 'integer',
+            'blocked_reasons' => 'array',
             'photos' => 'array',
             'raw' => 'array',
             'synced_at' => 'datetime',
@@ -86,9 +104,13 @@ class RozetkaProduct extends Model
 
         $urls = [];
         foreach ($photos as $photo) {
-            $url = $this->extractUrlString($photo);
-            if ($url) {
-                $urls[] = $url;
+            if (is_string($photo)) {
+                $urls[] = $photo;
+            } elseif (is_array($photo)) {
+                $url = $this->extractUrlString($photo);
+                if ($url) {
+                    $urls[] = $url;
+                }
             }
         }
 
@@ -118,10 +140,25 @@ class RozetkaProduct extends Model
     }
 
     /**
-     * Match with local Horoshop product by article.
+     * Match with local Horoshop product by local_product_id or article.
      */
     public function localProduct(): BelongsTo
     {
-        return $this->belongsTo(Product::class, 'article', 'article');
+        return $this->belongsTo(Product::class, 'local_product_id');
+    }
+
+    public function isOnRozetka(): bool
+    {
+        return $this->rozetka_item_id !== null;
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->export_status === 'draft';
+    }
+
+    public function isReady(): bool
+    {
+        return $this->export_status === 'ready';
     }
 }

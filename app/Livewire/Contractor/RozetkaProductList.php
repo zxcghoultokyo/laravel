@@ -5,7 +5,6 @@ namespace App\Livewire\Contractor;
 use App\Models\RozetkaCategory;
 use App\Models\RozetkaProduct;
 use App\Services\Rozetka\RozetkaAttributeService;
-use App\Services\Rozetka\RozetkaProductService;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -67,17 +66,30 @@ class RozetkaProductList extends Component
     public function syncProducts(): void
     {
         $this->syncing = true;
-        $this->syncMessage = 'Завантаження товарів з Розетки...';
+        $this->syncMessage = 'Завантаження товарів з Розетки запущено у фоні...';
 
-        try {
-            $service = app(RozetkaProductService::class);
-            $count = $service->syncProducts($this->tenantId);
-            $this->syncMessage = "Синхронізовано {$count} товарів.";
-        } catch (\Throwable $e) {
-            $this->syncMessage = 'Помилка: '.$e->getMessage();
+        \App\Jobs\SyncRozetkaProductsJob::dispatch($this->tenantId);
+
+        \Illuminate\Support\Facades\Cache::put("rozetka_sync_status_{$this->tenantId}", [
+            'status' => 'running',
+            'message' => 'Завантаження товарів з Розетки...',
+        ], 600);
+    }
+
+    public function checkSyncStatus(): void
+    {
+        $status = \Illuminate\Support\Facades\Cache::get("rozetka_sync_status_{$this->tenantId}");
+
+        if (! $status) {
+            return;
         }
 
-        $this->syncing = false;
+        $this->syncMessage = $status['message'];
+
+        if (in_array($status['status'], ['done', 'error'])) {
+            $this->syncing = false;
+            \Illuminate\Support\Facades\Cache::forget("rozetka_sync_status_{$this->tenantId}");
+        }
     }
 
     public function toggleProduct(int $productId): void

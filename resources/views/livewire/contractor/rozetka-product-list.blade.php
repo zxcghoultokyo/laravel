@@ -1,4 +1,4 @@
-<div>
+<div @if($syncing) wire:poll.3s="checkSyncStatus" @endif>
     {{-- Stats bar --}}
     <div class="mb-4 flex flex-wrap items-center gap-4">
         <div class="bg-white rounded-lg shadow-sm px-4 py-3 flex items-center gap-2">

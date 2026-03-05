@@ -43,6 +43,8 @@ class RozetkaProduct extends Model
         'raw',
         'edited_fields',
         'has_local_changes',
+        'is_duplicate',
+        'primary_offer_id',
         'synced_at',
     ];
 
@@ -67,6 +69,7 @@ class RozetkaProduct extends Model
             'raw' => 'array',
             'edited_fields' => 'array',
             'has_local_changes' => 'boolean',
+            'is_duplicate' => 'boolean',
             'synced_at' => 'datetime',
         ];
     }

@@ -47,7 +47,7 @@ class SyncRozetkaProductsJob implements ShouldQueue
 
             Cache::put("rozetka_sync_status_{$tenantId}", [
                 'status' => 'done',
-                'message' => "✅ Синхронізовано {$count} товарів (унікальних за артикулом).",
+                'message' => "✅ Синхронізовано {$count} товарів.",
                 'synced' => $count,
                 'percent' => 100,
             ], 600);

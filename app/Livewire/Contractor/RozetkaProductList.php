@@ -73,10 +73,8 @@ class RozetkaProductList extends Component
     {
         $count = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
-            ->where(function ($q) {
-                $q->whereNotNull('rozetka_item_id')
-                    ->orWhereNotNull('raw');
-            })
+            ->whereNotNull('price_offer_id')
+            ->where('is_duplicate', false)
             ->count();
 
         if ($count === 0) {
@@ -443,13 +441,11 @@ class RozetkaProductList extends Component
 
     protected function renderRozetkaTab()
     {
-        // Show all products synced from Rozetka (both published and new/draft)
+        // Show all products synced from Rozetka (excluding duplicates)
         $query = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
-            ->where(function ($q) {
-                $q->whereNotNull('rozetka_item_id')
-                    ->orWhereNotNull('raw'); // products from /goods/all that don't have rz_item_id yet
-            })
+            ->whereNotNull('price_offer_id')
+            ->where('is_duplicate', false)
             ->with('localProduct');
 
         if ($this->search) {
@@ -481,10 +477,13 @@ class RozetkaProductList extends Component
 
         $base = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantId)
-            ->where(function ($q) {
-                $q->whereNotNull('rozetka_item_id')
-                    ->orWhereNotNull('raw');
-            });
+            ->whereNotNull('price_offer_id')
+            ->where('is_duplicate', false);
+
+        $duplicateCount = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantId)
+            ->where('is_duplicate', true)
+            ->count();
 
         $totalProducts = (clone $base)->count();
         $inStockCount = (clone $base)->where('in_stock', true)->count();
@@ -517,6 +516,7 @@ class RozetkaProductList extends Component
             'draftCount' => 0,
             'exportReadyCount' => 0,
             'notOnRozetkaCount' => $this->getNotOnRozetkaCount(),
+            'duplicateCount' => $duplicateCount,
         ]);
     }
 

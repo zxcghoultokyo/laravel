@@ -17,6 +17,10 @@ class RozetkaProductService
      */
     public function pushToRozetka(RozetkaProduct $product, bool $autoApprove = false): array
     {
+        if ($product->is_duplicate) {
+            return ['success' => false, 'message' => 'Цей товар є дублем — відправляється лише основний варіант'];
+        }
+
         $itemId = $product->rozetka_item_id ?? null;
         $raw = $product->raw ?? [];
         $internalItemId = $raw['item_id'] ?? null;
@@ -220,16 +224,73 @@ class RozetkaProductService
             $page++;
         } while ($page <= $totalPages);
 
-        $uniqueCount = RozetkaProduct::withoutGlobalScopes()
+        $totalCount = RozetkaProduct::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->where(function ($q) {
-                $q->whereNotNull('rozetka_item_id')->orWhereNotNull('raw');
-            })
+            ->whereNotNull('price_offer_id')
             ->count();
 
-        Log::info("Rozetka: synced {$synced} API items → {$uniqueCount} unique products for tenant {$tenantId}");
+        $duplicateCount = $this->markDuplicates($tenantId);
 
-        return $uniqueCount;
+        Log::info("Rozetka: synced {$synced} API items → {$totalCount} products ({$duplicateCount} duplicates) for tenant {$tenantId}");
+
+        return $totalCount;
+    }
+
+    /**
+     * Mark duplicate offer_ids for articles that appear more than once.
+     * Keeps ONE offer per article (the one with the latest synced_at), marks the rest as is_duplicate.
+     */
+    protected function markDuplicates(int $tenantId): int
+    {
+        // Reset all duplicates first
+        RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('is_duplicate', true)
+            ->update(['is_duplicate' => false, 'primary_offer_id' => null]);
+
+        // Find articles with multiple offer_ids
+        $duplicateArticles = RozetkaProduct::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNotNull('price_offer_id')
+            ->selectRaw('article, COUNT(*) as cnt')
+            ->groupBy('article')
+            ->havingRaw('COUNT(*) > 1')
+            ->pluck('cnt', 'article');
+
+        $markedCount = 0;
+
+        foreach ($duplicateArticles as $article => $count) {
+            // Pick the primary: latest synced, highest id as tiebreaker
+            $primary = RozetkaProduct::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('article', $article)
+                ->whereNotNull('price_offer_id')
+                ->orderByDesc('synced_at')
+                ->orderByDesc('id')
+                ->first();
+
+            if (! $primary) {
+                continue;
+            }
+
+            // Mark others as duplicates, pointing to the primary offer_id
+            $marked = RozetkaProduct::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('article', $article)
+                ->where('id', '!=', $primary->id)
+                ->update([
+                    'is_duplicate' => true,
+                    'primary_offer_id' => $primary->price_offer_id,
+                ]);
+
+            $markedCount += $marked;
+        }
+
+        if ($markedCount > 0) {
+            Log::info("Rozetka: marked {$markedCount} duplicate variants for tenant {$tenantId}");
+        }
+
+        return $markedCount;
     }
 
     /**
@@ -246,14 +307,16 @@ class RozetkaProductService
         // Auto-match with local product by article
         $localProductId = $localArticleMap[$article] ?? null;
 
+        $priceOfferId = $item['price_offer_id'] ?? null;
+
         return RozetkaProduct::withoutGlobalScopes()->updateOrCreate(
             [
                 'tenant_id' => $tenantId,
-                'article' => $article,
+                'price_offer_id' => $priceOfferId,
             ],
             [
                 'rozetka_item_id' => $item['rz_item_id'] ?? $item['item_id'] ?? null,
-                'price_offer_id' => $item['price_offer_id'] ?? null,
+                'article' => $article,
                 'parent_article' => $item['parent_article'] ?? null,
                 'title' => $item['name_ua'] ?? $item['name'] ?? '',
                 'description' => $item['description_ua'] ?? $item['description'] ?? null,

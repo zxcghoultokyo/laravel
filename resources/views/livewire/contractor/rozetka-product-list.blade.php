@@ -85,6 +85,12 @@
                 <span class="text-xs text-gray-500">❌ Не зв'язані</span>
             </div>
             @endif
+            @if (($duplicateCount ?? 0) > 0)
+            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" title="Товари з однаковим артикулом — дублі не відправляються на Розетку">
+                <span class="text-lg font-bold text-gray-400">{{ $duplicateCount }}</span>
+                <span class="text-xs text-gray-500">👥 Дублі</span>
+            </div>
+            @endif
 
             <div class="ml-auto">
                 <button wire:click="syncProducts" wire:loading.attr="disabled"

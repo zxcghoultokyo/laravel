@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
-        <title>Contractor Panel — Розетка</title>
+        <title>Contractor Panel</title>
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700" rel="stylesheet" />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -20,8 +20,12 @@
                     <div class="flex items-center space-x-4">
                         <span class="text-lg font-semibold text-gray-800">📦 Contractor Panel</span>
                         <a href="{{ route('contractor.rozetka.index') }}"
-                           class="text-sm font-medium text-emerald-600 hover:text-emerald-800">
-                            Розетка
+                           class="text-sm font-medium {{ request()->routeIs('contractor.rozetka.*') ? 'text-emerald-600 border-b-2 border-emerald-600 pb-0.5' : 'text-gray-500 hover:text-emerald-600' }}">
+                            🛒 Розетка
+                        </a>
+                        <a href="{{ route('contractor.horoshop.index') }}"
+                           class="text-sm font-medium {{ request()->routeIs('contractor.horoshop.*') ? 'text-purple-600 border-b-2 border-purple-600 pb-0.5' : 'text-gray-500 hover:text-purple-600' }}">
+                            🛍️ Хорошоп
                         </a>
                     </div>
                     <div class="flex items-center">

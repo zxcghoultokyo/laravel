@@ -1,18 +1,4 @@
-<div @if($syncing) wire:poll.3s="checkSyncStatus" @endif @if($horoshopSyncing) wire:poll.3s="checkHoroshopSyncStatus" @endif>
-    {{-- Tabs --}}
-    <div class="mb-4 flex items-center gap-1 bg-white rounded-lg shadow-sm p-1">
-        <button wire:click="switchTab('rozetka')"
-                class="flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition {{ $activeTab === 'rozetka' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100' }}">
-            🛒 На Розетці
-            <span class="ml-1 text-xs opacity-75">({{ $totalProducts }})</span>
-        </button>
-        <button wire:click="switchTab('export')"
-                class="flex-1 px-4 py-2.5 rounded-md text-sm font-medium transition {{ $activeTab === 'export' ? 'bg-emerald-600 text-white shadow' : 'text-gray-600 hover:bg-gray-100' }}">
-            📦 Підготовка до експорту
-            <span class="ml-1 text-xs opacity-75">({{ $notOnRozetkaCount }})</span>
-        </button>
-    </div>
-
+<div @if($syncing) wire:poll.3s="checkSyncStatus" @endif>
     {{-- Sync progress --}}
     @if ($syncMessage)
         <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
@@ -30,25 +16,7 @@
         </div>
     @endif
 
-    {{-- Horoshop catalog sync progress --}}
-    @if ($horoshopSyncMessage)
-        <div class="mb-4 p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-700">
-            <div class="flex items-center justify-between mb-1">
-                <span>🛍️ {{ $horoshopSyncMessage }}</span>
-                @if ($horoshopSyncing && $horoshopSyncTotal > 0)
-                    <span class="text-xs font-mono text-purple-500">{{ $horoshopSyncTotal }} шт.</span>
-                @endif
-            </div>
-            @if ($horoshopSyncing)
-                <div class="w-full bg-purple-200 rounded-full h-2 mt-2">
-                    <div class="bg-purple-600 h-2 rounded-full animate-pulse" style="width: 100%"></div>
-                </div>
-            @endif
-        </div>
-    @endif
-
-    @if ($activeTab === 'rozetka')
-        {{-- ═══════════ TAB 1: Products on Rozetka ═══════════ --}}
+        {{-- ═══════════ Products on Rozetka ═══════════ --}}
 
         {{-- Status stats bar --}}
         @php
@@ -108,24 +76,7 @@
                 <span class="text-xs text-gray-500">👥 Дублі</span>
             </div>
             @endif
-            @if (($horoshopTotal ?? 0) > 0)
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" title="Товари в каталозі Хорошоп">
-                <span class="text-lg font-bold text-purple-600">{{ $horoshopTotal }}</span>
-                <span class="text-xs text-gray-500">🛍️ Хорошоп</span>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2" title="Хорошоп товари зв'язані з Розеткою">
-                <span class="text-lg font-bold text-purple-500">{{ $horoshopMatched ?? 0 }}</span>
-                <span class="text-xs text-gray-500">🔗 HS↔RZ</span>
-            </div>
-            @endif
-
-            <div class="ml-auto flex items-center gap-2">
-                <button wire:click="syncHoroshopCatalog" wire:loading.attr="disabled"
-                        class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition text-sm font-medium disabled:opacity-50"
-                        @if($horoshopSyncing) disabled @endif>
-                    <span wire:loading.remove wire:target="syncHoroshopCatalog">🛍️ Синхронізувати Хорошоп</span>
-                    <span wire:loading wire:target="syncHoroshopCatalog">⏳ Завантаження...</span>
-                </button>
+            <div class="ml-auto">
                 <button wire:click="syncProducts" wire:loading.attr="disabled"
                         class="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition text-sm font-medium disabled:opacity-50">
                     <span wire:loading.remove wire:target="syncProducts">🔄 Синхронізувати Розетку</span>
@@ -254,107 +205,6 @@
                 </div>
             @endforelse
         </div>
-
-    @else
-        {{-- ═══════════ TAB 2: Export preparation ═══════════ --}}
-
-        {{-- Export stats --}}
-        <div class="mb-4 flex flex-wrap items-center gap-3">
-            <div class="bg-white rounded-lg shadow-sm px-4 py-3 flex items-center gap-2">
-                <span class="text-2xl font-bold text-gray-800">{{ $notOnRozetkaCount }}</span>
-                <span class="text-sm text-gray-500">немає на Розетці</span>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
-                <span class="text-lg font-bold text-yellow-600">{{ $draftCount }}</span>
-                <span class="text-xs text-gray-500">Чернетки</span>
-            </div>
-            <div class="bg-white rounded-lg shadow-sm px-3 py-2 flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <span class="text-lg font-bold text-emerald-600">{{ $exportReadyCount }}</span>
-                <span class="text-xs text-gray-500">Готові до експорту</span>
-            </div>
-        </div>
-
-        {{-- Filters --}}
-        <div class="mb-4 bg-white rounded-lg shadow-sm p-4 flex flex-wrap items-center gap-4">
-            <div class="flex-1 min-w-[200px]">
-                <input type="text" wire:model.live.debounce.300ms="search"
-                       placeholder="Пошук за назвою або артикулом..."
-                       class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-            </div>
-            <select wire:model.live="exportStatusFilter"
-                    class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                <option value="">Всі статуси</option>
-                <option value="draft">Чернетки</option>
-                <option value="ready">Готові</option>
-            </select>
-        </div>
-
-        {{-- Export pipeline products --}}
-        @if ($products->count() > 0)
-            <h3 class="text-sm font-semibold text-gray-600 mb-2">📋 Підготовлені товари</h3>
-            <div class="space-y-2 mb-6">
-                @foreach ($products as $product)
-                    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
-                        <div class="flex items-center gap-4 px-4 py-3">
-                            <div class="w-10 h-10 rounded overflow-hidden bg-gray-100 flex-shrink-0">
-                                @if ($product->first_photo)
-                                    <img src="{{ $product->first_photo }}" alt="" class="w-full h-full object-cover">
-                                @else
-                                    <div class="w-full h-full flex items-center justify-center text-gray-400 text-xs">📷</div>
-                                @endif
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium text-gray-800 truncate">{{ $product->title }}</div>
-                                <div class="text-xs text-gray-500">{{ $product->article }}</div>
-                            </div>
-                            <div class="text-sm text-gray-700">{{ number_format($product->price, 0, '.', ' ') }} ₴</div>
-                            {{-- Status badge --}}
-                            @if ($product->export_status === 'ready')
-                                <span class="inline-block px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">Готовий</span>
-                            @else
-                                <span class="inline-block px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">Чернетка</span>
-                            @endif
-                            {{-- Actions --}}
-                            <div class="flex items-center gap-1">
-                                @if ($product->export_status === 'draft')
-                                    <button wire:click="markReady({{ $product->id }})" class="text-xs text-emerald-600 hover:text-emerald-800 px-2 py-1 rounded hover:bg-emerald-50" title="Позначити готовим">✓</button>
-                                @else
-                                    <button wire:click="markDraft({{ $product->id }})" class="text-xs text-yellow-600 hover:text-yellow-800 px-2 py-1 rounded hover:bg-yellow-50" title="Повернути в чернетки">↩</button>
-                                @endif
-                                <button wire:click="removeFromExport({{ $product->id }})" class="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50" title="Видалити">✕</button>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @endif
-
-        {{-- Local products not on Rozetka --}}
-        @if ($localProducts->count() > 0)
-            <h3 class="text-sm font-semibold text-gray-600 mb-2">🏪 Товари з каталогу (не на Розетці)</h3>
-            <div class="space-y-1">
-                @foreach ($localProducts as $lp)
-                    <div class="bg-white rounded-lg shadow-sm px-4 py-2 flex items-center gap-4">
-                        <div class="flex-1 min-w-0">
-                            <div class="text-sm text-gray-800 truncate">{{ $lp->title }}</div>
-                            <div class="text-xs text-gray-500">{{ $lp->article }}</div>
-                        </div>
-                        <div class="text-sm text-gray-700">{{ number_format($lp->price, 0, '.', ' ') }} ₴</div>
-                        <button wire:click="prepareForExport({{ $lp->id }})"
-                                class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded hover:bg-emerald-100 transition font-medium">
-                            + Додати
-                        </button>
-                    </div>
-                @endforeach
-            </div>
-        @elseif (!$search)
-            <div class="bg-white rounded-lg shadow-sm p-8 text-center text-gray-500">
-                Всі товари з каталогу вже є на Розетці 🎉
-            </div>
-        @endif
-    @endif
 
     {{-- Pagination --}}
     <div class="mt-4">

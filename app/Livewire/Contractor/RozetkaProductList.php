@@ -2,7 +2,6 @@
 
 namespace App\Livewire\Contractor;
 
-use App\Models\HoroshopProduct;
 use App\Models\Product;
 use App\Models\RozetkaCategory;
 use App\Models\RozetkaCategoryAttribute;
@@ -18,9 +17,6 @@ use Livewire\WithPagination;
 class RozetkaProductList extends Component
 {
     use WithPagination;
-
-    // Tab
-    public string $activeTab = 'rozetka'; // 'rozetka' or 'export'
 
     // Filters
     public string $search = '';
@@ -57,13 +53,6 @@ class RozetkaProductList extends Component
 
     public array $categoryAttributes = [];
 
-    // Horoshop catalog sync state
-    public bool $horoshopSyncing = false;
-
-    public string $horoshopSyncMessage = '';
-
-    public int $horoshopSyncTotal = 0;
-
     // Push to Rozetka feedback
     public string $pushMessage = '';
 
@@ -72,7 +61,6 @@ class RozetkaProductList extends Component
     protected int $tenantId = 2;
 
     protected $queryString = [
-        'activeTab' => ['except' => 'rozetka'],
         'search' => ['except' => ''],
         'stockFilter' => ['except' => ''],
     ];
@@ -88,21 +76,6 @@ class RozetkaProductList extends Component
         if ($count === 0) {
             $this->syncMessage = 'Товари ще не завантажені. Натисніть "Синхронізувати" для завантаження з Розетки.';
         }
-    }
-
-    public function switchTab(string $tab): void
-    {
-        $this->activeTab = $tab;
-        $this->search = '';
-        $this->stockFilter = '';
-        $this->uploadStatusFilter = '';
-        $this->matchFilter = '';
-        $this->exportStatusFilter = '';
-        $this->expandedProductId = null;
-        $this->categoryAttributes = [];
-        $this->productAttributes = [];
-        $this->editingCategoryProductId = null;
-        $this->resetPage();
     }
 
     // ── Sync ──
@@ -137,49 +110,6 @@ class RozetkaProductList extends Component
         if (in_array($status['status'], ['done', 'error'])) {
             $this->syncing = false;
             Cache::forget("rozetka_sync_status_{$this->tenantId}");
-        }
-    }
-
-    // ── Horoshop catalog sync ──
-
-    public function syncHoroshopCatalog(): void
-    {
-        $this->horoshopSyncing = true;
-        $this->horoshopSyncMessage = 'Завантаження каталогу Хорошоп запущено у фоні...';
-
-        \App\Jobs\SyncHoroshopCatalogJob::dispatch($this->tenantId);
-    }
-
-    public function checkHoroshopSyncStatus(): void
-    {
-        $status = Cache::get("horoshop_catalog_sync_status_{$this->tenantId}");
-
-        if (! $status) {
-            return;
-        }
-
-        if ($status['status'] === 'running') {
-            $progress = Cache::get("horoshop_catalog_sync_progress_{$this->tenantId}");
-            if ($progress) {
-                $this->horoshopSyncTotal = $progress['total'] ?? 0;
-                $this->horoshopSyncMessage = "Синхронізовано {$this->horoshopSyncTotal} товарів...";
-            }
-        } elseif ($status['status'] === 'completed') {
-            $result = $status['result'] ?? [];
-            $this->horoshopSyncing = false;
-            $this->horoshopSyncMessage = sprintf(
-                'Готово! Всього: %d, нових: %d, оновлено: %d, зв\'язано з Розеткою: %d',
-                $result['total'] ?? 0,
-                $result['created'] ?? 0,
-                $result['updated'] ?? 0,
-                $result['matched'] ?? 0
-            );
-            Cache::forget("horoshop_catalog_sync_status_{$this->tenantId}");
-            Cache::forget("horoshop_catalog_sync_progress_{$this->tenantId}");
-        } elseif ($status['status'] === 'failed') {
-            $this->horoshopSyncing = false;
-            $this->horoshopSyncMessage = 'Помилка синхронізації: '.($status['error'] ?? 'Невідома помилка');
-            Cache::forget("horoshop_catalog_sync_status_{$this->tenantId}");
         }
     }
 
@@ -483,11 +413,7 @@ class RozetkaProductList extends Component
 
     public function render()
     {
-        if ($this->activeTab === 'rozetka') {
-            return $this->renderRozetkaTab();
-        }
-
-        return $this->renderExportTab();
+        return $this->renderRozetkaTab();
     }
 
     protected function renderRozetkaTab()
@@ -555,12 +481,6 @@ class RozetkaProductList extends Component
         $matchedCount = (clone $base)->whereNotNull('local_product_id')->count();
         $unmatchedCount = $totalProducts - $matchedCount;
 
-        // Horoshop catalog stats
-        $horoshopTotal = HoroshopProduct::withoutGlobalScope(\App\Scopes\TenantScope::class)
-            ->where('tenant_id', $this->tenantId)->count();
-        $horoshopMatched = HoroshopProduct::withoutGlobalScope(\App\Scopes\TenantScope::class)
-            ->where('tenant_id', $this->tenantId)->whereNotNull('rozetka_product_id')->count();
-
         return view('livewire.contractor.rozetka-product-list', [
             'products' => $products,
             'totalProducts' => $totalProducts,
@@ -574,8 +494,6 @@ class RozetkaProductList extends Component
             'exportReadyCount' => 0,
             'notOnRozetkaCount' => $this->getNotOnRozetkaCount(),
             'duplicateCount' => $duplicateCount,
-            'horoshopTotal' => $horoshopTotal,
-            'horoshopMatched' => $horoshopMatched,
         ]);
     }
 

@@ -16,4 +16,6 @@ Route::prefix('contractor')
     ->group(function () {
         Route::get('/rozetka', \App\Livewire\Contractor\RozetkaProductList::class)
             ->name('contractor.rozetka.index');
+        Route::get('/horoshop', \App\Livewire\Contractor\HoroshopProductList::class)
+            ->name('contractor.horoshop.index');
     });

@@ -155,9 +155,12 @@ class MeiliProductSearchTool
             }
 
             // Category filter: filter by category_path (e.g., age groups for toy stores)
-            if (! empty($filters['category'])) {
-                $categoryValue = str_replace("'", "\\'", (string) $filters['category']);
-                $filterParts[] = "category_path = '{$categoryValue}'";
+            // Uses post-filtering since category_path values may have trailing spaces or slight variations
+            $categoryFilter = $filters['category'] ?? null;
+
+            // Auto-detect age from query and map to category if no explicit category given
+            if (! $categoryFilter) {
+                $categoryFilter = $this->detectAgeCategoryFromQuery($query);
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
@@ -313,6 +316,22 @@ class MeiliProductSearchTool
                 Log::info('MeiliProductSearchTool: post-filtered by color', [
                     'color' => $filters['color'],
                     'before' => $hitsBeforeFilter,
+                    'after' => count($hits),
+                ]);
+            }
+
+            // Post-filter by category (age group, etc.)
+            if ($categoryFilter && count($hits) > 0) {
+                $hitsBeforeCategory = count($hits);
+                $catLower = mb_strtolower(trim($categoryFilter));
+                $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                    $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                    return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                }));
+                Log::info('MeiliProductSearchTool: post-filtered by category', [
+                    'category' => $categoryFilter,
+                    'before' => $hitsBeforeCategory,
                     'after' => count($hits),
                 ]);
             }
@@ -1669,6 +1688,63 @@ class MeiliProductSearchTool
         $context = app(\App\Services\Tenant\TenantContext::class);
 
         return $context->getMerchantId();
+    }
+
+    /**
+     * Detect age-based category from query text.
+     * Maps age mentions to known category patterns used in toy/kids stores.
+     */
+    private function detectAgeCategoryFromQuery(string $query): ?string
+    {
+        $lower = mb_strtolower($query);
+
+        // Match explicit age patterns: "3 роки", "2 років", "1 рік", "від 3", etc.
+        if (preg_match('/(?:для|від|вік|дитин[іа]?)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
+            $age = (int) $matches[1];
+        } elseif (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $matches)) {
+            $age = (int) $matches[1];
+        } else {
+            $age = null;
+        }
+
+        // Map age keywords
+        if ($age === null) {
+            if (preg_match('/\b(немовл|новонародж)/ui', $lower)) {
+                $age = 0;
+            } elseif (preg_match('/\b(малюк|малят)/ui', $lower)) {
+                $age = 0;
+            } elseif (preg_match('/\b(тодлер)/ui', $lower)) {
+                $age = 2;
+            } elseif (preg_match('/\b(дошкільн|дошколят)/ui', $lower)) {
+                $age = 4;
+            } elseif (preg_match('/\b(школяр|першоклас)/ui', $lower)) {
+                $age = 7;
+            }
+        }
+
+        if ($age === null) {
+            return null;
+        }
+
+        // Map age to category keywords (common patterns in toy stores)
+        if ($age < 1) {
+            $category = 'малюкам 0';
+        } elseif ($age < 3) {
+            $category = 'тодлерам 1';
+        } elseif ($age < 7) {
+            $category = 'дошкільнятам 3';
+        } else {
+            // School-age: no specific filter, let search return all
+            return null;
+        }
+
+        Log::info('MeiliProductSearchTool: detected age category from query', [
+            'query' => $query,
+            'age' => $age,
+            'category' => $category,
+        ]);
+
+        return $category;
     }
 }
 // Deploy trigger 1769760953

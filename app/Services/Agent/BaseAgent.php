@@ -1195,6 +1195,13 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - Розбий запит інакше: "дерев'яна кухня" → search_products("кухня дерев'яна OR іграшкова кухня")
 - НЕ КАЖИ "такого немає" після ОДНОГО пошуку! Зроби 2-3 варіанти!
 
+👶 ВІКОВА ФІЛЬТРАЦІЯ (для дитячих магазинів):
+Якщо клієнт вказує ВІК дитини — ОБОВ'ЯЗКОВО передай category у search_products!
+Спочатку виклич get_categories() для списку категорій, потім обери відповідну.
+- "для дитини 3 роки" → category з віковою групою 3-7
+- "для малюка/немовляти" → category з віковою групою 0-1
+- БЕЗ category фільтра будуть показані товари БУДЬ-ЯКОГО віку!
+
 ЗАБОРОНА ГАЛЮЦИНАЦІЙ — КРИТИЧНО!
 - НЕ ВИГАДУЙ факти! Відповідай ТІЛЬКИ на основі результатів search_products!
 - Якщо питають про характеристики яких немає в каталозі — кажи "уточніть у менеджера"
@@ -1740,6 +1747,7 @@ PROMPT;
                             'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум)'],
                             'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (для бюджетних)'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
+                            'category' => ['type' => 'string', 'description' => 'Категорія товару (category_path) для фільтрації, наприклад вікова група: "МАЛЮКАМ 0 – 1", "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7". Використовуй коли клієнт вказує вік дитини або конкретну категорію.'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово з назви'],
                             'exclude_shown' => ['type' => 'boolean', 'description' => 'true = виключити вже показані товари (для "покажи ще"). false = показати всі включаючи раніше показані'],
                             'limit' => ['type' => 'integer', 'description' => 'Кількість (максимум 3)'],
@@ -1898,6 +1906,9 @@ PROMPT;
         }
         if (! empty($args['brand'])) {
             $filters['brand'] = $args['brand'];
+        }
+        if (! empty($args['category'])) {
+            $filters['category'] = $args['category'];
         }
         if ($sortBy !== 'relevance') {
             $filters['sort_by'] = $sortBy;

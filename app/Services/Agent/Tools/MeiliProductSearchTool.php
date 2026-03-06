@@ -154,6 +154,12 @@ class MeiliProductSearchTool
                 $filterParts[] = "color_norm = '{$canonical}'";
             }
 
+            // Category filter: filter by category_path (e.g., age groups for toy stores)
+            if (! empty($filters['category'])) {
+                $categoryValue = str_replace("'", "\\'", (string) $filters['category']);
+                $filterParts[] = "category_path = '{$categoryValue}'";
+            }
+
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
             // This is done at Meili level for efficiency - no need to fetch accessories just to filter them out
             $queryLower = mb_strtolower($query);

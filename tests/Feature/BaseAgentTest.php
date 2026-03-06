@@ -410,6 +410,19 @@ class BaseAgentTest extends TestCase
         $this->assertArrayHasKey('query', $params['properties']);
         $this->assertContains('query', $params['required']);
     }
+
+    public function test_get_tools_search_products_has_category_parameter(): void
+    {
+        $tools = $this->agent->exposeGetTools();
+
+        $searchTool = collect($tools)->first(fn ($t) => $t['function']['name'] === 'search_products');
+
+        $this->assertNotNull($searchTool);
+
+        $params = $searchTool['function']['parameters'];
+        $this->assertArrayHasKey('category', $params['properties']);
+        $this->assertSame('string', $params['properties']['category']['type']);
+    }
 }
 
 /**

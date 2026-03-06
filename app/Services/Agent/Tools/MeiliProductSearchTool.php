@@ -334,6 +334,54 @@ class MeiliProductSearchTool
                     'before' => $hitsBeforeCategory,
                     'after' => count($hits),
                 ]);
+
+                // If post-filter removed all results, retry with Meili-level category_path filter
+                // This handles categories with few products that don't match the generic search query
+                if (count($hits) === 0 && $hitsBeforeCategory > 0) {
+                    Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with Meili filter', [
+                        'category' => $categoryFilter,
+                    ]);
+
+                    $catFilterEscaped = str_replace("'", "\\'", $catLower);
+                    $categoryFilterParts = $filterParts;
+                    $categoryFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
+                    $categorySearchParams = $searchParams;
+                    $categorySearchParams['filter'] = implode(' AND ', $categoryFilterParts);
+
+                    $categoryResult = $index->search('', $categorySearchParams);
+                    $hits = $categoryResult->getHits();
+
+                    Log::info('MeiliProductSearchTool: Meili category filter retry', [
+                        'filter' => $categorySearchParams['filter'],
+                        'results' => count($hits),
+                    ]);
+                }
+            }
+
+            // If we had a category filter but no hits at all from the initial search
+            if ($categoryFilter && count($hits) === 0) {
+                Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search', [
+                    'category' => $categoryFilter,
+                ]);
+
+                $catFilterEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                $directFilterParts = $filterParts;
+                $directFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
+                $directSearchParams = $searchParams;
+                $directSearchParams['filter'] = implode(' AND ', $directFilterParts);
+
+                $directResult = $index->search($enhancedQuery, $directSearchParams);
+                $hits = $directResult->getHits();
+
+                // If still nothing with query, try empty query to get any products from category
+                if (count($hits) === 0) {
+                    $directResult = $index->search('', $directSearchParams);
+                    $hits = $directResult->getHits();
+                }
+
+                Log::info('MeiliProductSearchTool: direct category search result', [
+                    'results' => count($hits),
+                ]);
             }
 
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);

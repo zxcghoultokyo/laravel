@@ -97,7 +97,7 @@ class PromptPresetsManager extends Component
         }
 
         // Load available categories from products (cached 5 min to avoid heavy query on every render)
-        $tenantId = \App\Services\TenantContext::getTenantId();
+        $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
         $availableCategories = \Illuminate\Support\Facades\Cache::remember(
             "preset_categories_{$tenantId}",
             300,

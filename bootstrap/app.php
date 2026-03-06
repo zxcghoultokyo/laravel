@@ -65,7 +65,13 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Handle CSRF token expiration (419) - redirect to login instead of showing error page
-        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+        // Note: Laravel's prepareException() converts TokenMismatchException → HttpException(419)
+        // BEFORE render callbacks are checked, so we must catch HttpException and filter by status
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, $request) {
+            if ($e->getStatusCode() !== 419) {
+                return null;
+            }
+
             // For API requests - return JSON error
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
@@ -75,7 +81,7 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             // For web requests - redirect to login with message
-            return redirect()->route('login')
+            return redirect('/login')
                 ->with('warning', 'Сесія закінчилась. Будь ласка, увійдіть знову.');
         });
 

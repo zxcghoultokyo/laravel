@@ -1910,6 +1910,21 @@ PROMPT;
         if (! empty($args['category'])) {
             $filters['category'] = $args['category'];
         }
+
+        // If GPT didn't pass category, detect age from original user message
+        // GPT sometimes strips age info from query, so we check the original message too
+        if (empty($filters['category']) && ! empty($this->currentMessage)) {
+            $detectedCategory = $this->searchTool->detectAgeCategoryFromQuery($this->currentMessage);
+            if ($detectedCategory) {
+                $filters['category'] = $detectedCategory;
+                Log::info('BaseAgent: injected age category from original user message', [
+                    'original_message' => $this->currentMessage,
+                    'gpt_query' => $query,
+                    'detected_category' => $detectedCategory,
+                ]);
+            }
+        }
+
         if ($sortBy !== 'relevance') {
             $filters['sort_by'] = $sortBy;
         }

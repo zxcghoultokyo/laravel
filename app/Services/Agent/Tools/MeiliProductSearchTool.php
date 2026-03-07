@@ -165,7 +165,8 @@ class MeiliProductSearchTool
 
             // Add category to Meili filter so ALL searches (including retries) respect it
             if ($categoryFilter) {
-                $catFilterEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                // IMPORTANT: Meili CONTAINS is case-sensitive for Cyrillic, data stored UPPERCASE
+                $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
                 $filterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
             }
 
@@ -348,7 +349,7 @@ class MeiliProductSearchTool
                         'category' => $categoryFilter,
                     ]);
 
-                    $catFilterEscaped = str_replace("'", "\\'", $catLower);
+                    $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
                     $categoryFilterParts = $filterParts;
                     $categoryFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
                     $categorySearchParams = $searchParams;
@@ -370,7 +371,7 @@ class MeiliProductSearchTool
                     'category' => $categoryFilter,
                 ]);
 
-                $catFilterEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
                 $directFilterParts = $filterParts;
                 $directFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
                 $directSearchParams = $searchParams;

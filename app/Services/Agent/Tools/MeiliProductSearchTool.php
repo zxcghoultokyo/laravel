@@ -1749,6 +1749,11 @@ class MeiliProductSearchTool
         // Match explicit age patterns: "3 роки", "2 років", "1 рік", "від 3", "до 1 року", "на 5 років"
         if (preg_match('/(?:для|від|до|на|вік|дитин[іа]?)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
+
+            // "до X років" means "under X", so use lower age group
+            if (preg_match('/до\s*\d/ui', $lower) && $age > 0) {
+                $age = $age - 1;
+            }
         } elseif (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
         } else {

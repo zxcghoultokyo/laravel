@@ -535,6 +535,19 @@ CONTEXT;
                 $args = $this->injectCategoryContext($args, $originalMessage, $lastCategory);
             }
 
+            // Inject age-based category from original user message if GPT didn't pass one
+            if ($functionName === 'search_products' && empty($args['category'])) {
+                $ageCategory = $this->searchTool->detectAgeCategoryFromQuery($originalMessage);
+                if ($ageCategory) {
+                    $args['category'] = $ageCategory;
+                    Log::info('FunctionCallingAgent: injected age category from user message', [
+                        'user_message' => $originalMessage,
+                        'gpt_query' => $args['query'] ?? '',
+                        'detected_category' => $ageCategory,
+                    ]);
+                }
+            }
+
             Log::info('FunctionCallingAgent: executing tool', [
                 'function' => $functionName,
                 'args' => $args,

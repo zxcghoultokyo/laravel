@@ -490,6 +490,45 @@ abstract class BaseAgent
             }
         }
 
+        // AGE-BASED QUERY INTERCEPTOR (for toy stores)
+        // "для малюка", "для тодлера", "для дошкільняти" etc. → direct search with category
+        $ageCategory = $this->searchTool->detectAgeCategoryFromQuery($message);
+        if ($ageCategory) {
+            $wordCount = count(preg_split('/\s+/u', trim($message)));
+            if ($wordCount <= 3) {
+                PipelineTracer::current()?->step('agent.age_query_interceptor', [
+                    'message' => $message,
+                    'age_category' => $ageCategory,
+                ]);
+
+                $products = $this->searchTool->search('', ['category' => $ageCategory], 3);
+                if (! empty($products)) {
+                    $ids = array_column($products, 'id');
+                    $tenantId = $this->searchTool->getCurrentTenantId();
+                    $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+                    if (! empty($cards)) {
+                        $products = $cards;
+                    }
+
+                    $catUpper = mb_strtoupper($ageCategory);
+
+                    return [
+                        'message' => "Ось товари з категорії {$catUpper}:",
+                        'products' => $products,
+                        'messages' => [
+                            ['type' => 'text', 'content' => "Ось товари з категорії {$catUpper}:"],
+                            ['type' => 'products', 'products' => $products],
+                        ],
+                        'meta' => [
+                            'intent' => 'product_search',
+                            'agent' => 'function_calling',
+                            'source' => 'age_query_interceptor',
+                        ],
+                    ];
+                }
+            }
+        }
+
         // UNIVERSAL SHORT QUERY HANDLER
         // If message is 1-3 words and looks like a product type/category, search directly.
         // This prevents GPT from asking "уточніть запит" for valid product queries like "підсумки".
@@ -1096,6 +1135,9 @@ IF USER SAYS ANYTHING that IMPLIES a product need → SEARCH IMMEDIATELY:
 - "something to write" → search_products("pen OR ручка")
 - "head protection" → search_products("helmet OR шолом")
 - "stay warm" → search_products("jacket OR куртка")
+- "для малюка" → search_products("іграшки", category: "МАЛЮКАМ 0 – 1")
+- "для тодлера" → search_products("іграшки", category: "ТОДЛЕРАМ 1 – 3")
+- "для дошкільняти" → search_products("іграшки", category: "ДОШКІЛЬНЯТАМ 3 – 7")
 - "термуха", "термо білизна", "термобілизна" → search_products("термобілизна OR термо OR Level 1 OR Level 2")
 - "жіноча термуха" → search_products("термобілизна жіноча OR термо жіноча")
 - "чоловіча термобілизна" → search_products("термобілизна чоловіча OR термо OR Level 1")
@@ -1204,10 +1246,15 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - НЕ КАЖИ "такого немає" після ОДНОГО пошуку! Зроби 2-3 варіанти!
 
 👶 ВІКОВА ФІЛЬТРАЦІЯ (для дитячих магазинів):
-Якщо клієнт вказує ВІК дитини — ОБОВ'ЯЗКОВО передай category у search_products!
-Спочатку виклич get_categories() для списку категорій, потім обери відповідну.
-- "для дитини 3 роки" → category з віковою групою 3-7
-- "для малюка/немовляти" → category з віковою групою 0-1
+Якщо клієнт вказує ВІК або вікову групу — НЕГАЙНО виклич search_products() з відповідним category!
+НЕ ПРОСИ УТОЧНИТИ ВІК якщо вже є вікове слово! Це прямий запит на товари!
+
+Вікові слова → category mapping:
+- "малюк", "малюкам", "немовля", "для малюка", "для немовляти" → search_products(category: "МАЛЮКАМ 0 – 1")
+- "тодлер", "тодлерам", "для тодлера" → search_products(category: "ТОДЛЕРАМ 1 – 3")
+- "дошкільня", "дошкільнятам", "для дошкільняти" → search_products(category: "ДОШКІЛЬНЯТАМ 3 – 7")
+- "для дитини 2 роки" → search_products(category: "ТОДЛЕРАМ 1 – 3")
+- "для дитини 5 років" → search_products(category: "ДОШКІЛЬНЯТАМ 3 – 7")
 - БЕЗ category фільтра будуть показані товари БУДЬ-ЯКОГО віку!
 
 ЗАБОРОНА ГАЛЮЦИНАЦІЙ — КРИТИЧНО!

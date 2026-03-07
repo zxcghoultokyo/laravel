@@ -170,11 +170,12 @@ class MeiliProductSearchTool
                 'category' => $categoryFilter,
             ]);
 
-            // Add category to Meili filter so ALL searches (including retries) respect it
+            // Category filtering: handled via post-filtering in PHP (str_contains),
+            // NOT via Meili filter — deployed Meili version doesn't support CONTAINS operator.
+            // Post-filter at line ~355 and safety net at line ~550 ensure correct categories.
+            // We increase Meili limit when category is active to get enough diverse results.
             if ($categoryFilter) {
-                // IMPORTANT: Meili CONTAINS is case-sensitive for Cyrillic, data stored UPPERCASE
-                $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
-                $filterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
+                $meiliLimit = max($meiliLimit, $limit * 5);
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
@@ -363,28 +364,33 @@ class MeiliProductSearchTool
                     'after' => count($hits),
                 ]);
 
-                // If post-filter removed all results, retry with Meili-level category_path filter
-                // This handles categories with few products that don't match the generic search query
+                // If post-filter removed all results, retry by searching with category keyword as query
+                // This uses Meili's text search to find products in the right category
                 if (count($hits) === 0 && $hitsBeforeCategory > 0) {
                     PipelineTracer::current()?->step('meili.category_retry_meili_filter', [
                         'reason' => 'post_filter_emptied_results',
                         'category' => $categoryFilter,
                     ]);
-                    Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with Meili filter', [
+                    Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with category as query', [
                         'category' => $categoryFilter,
                     ]);
 
-                    $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
-                    $categoryFilterParts = $filterParts;
-                    $categoryFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
-                    $categorySearchParams = $searchParams;
-                    $categorySearchParams['filter'] = implode(' AND ', $categoryFilterParts);
-
-                    $categoryResult = $index->search('', $categorySearchParams);
+                    // Search using the category name as search text — Meili keyword search will match
+                    // category_path since it's a searchable attribute
+                    $categoryResult = $index->search(mb_strtoupper(trim($categoryFilter)), $searchParams);
                     $hits = $categoryResult->getHits();
 
-                    Log::info('MeiliProductSearchTool: Meili category filter retry', [
-                        'filter' => $categorySearchParams['filter'],
+                    // Post-filter results to ensure category match
+                    if (count($hits) > 0) {
+                        $catLower = mb_strtolower(trim($categoryFilter));
+                        $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                        }));
+                    }
+
+                    Log::info('MeiliProductSearchTool: Meili category keyword retry', [
                         'results' => count($hits),
                     ]);
                 }
@@ -396,26 +402,26 @@ class MeiliProductSearchTool
                     'reason' => 'zero_hits_with_category',
                     'category' => $categoryFilter,
                 ]);
-                Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search', [
+                Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search via keyword', [
                     'category' => $categoryFilter,
                 ]);
 
-                $catFilterEscaped = str_replace("'", "\\'", mb_strtoupper(trim($categoryFilter)));
-                $directFilterParts = $filterParts;
-                $directFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
-                $directSearchParams = $searchParams;
-                $directSearchParams['filter'] = implode(' AND ', $directFilterParts);
-
-                $directResult = $index->search($enhancedQuery, $directSearchParams);
+                // Search using category name as text query — avoids unsupported CONTAINS filter
+                $catQuery = mb_strtoupper(trim($categoryFilter));
+                $directResult = $index->search($catQuery, $searchParams);
                 $hits = $directResult->getHits();
 
-                // If still nothing with query, try empty query to get any products from category
-                if (count($hits) === 0) {
-                    $directResult = $index->search('', $directSearchParams);
-                    $hits = $directResult->getHits();
+                // Post-filter to ensure category match
+                if (count($hits) > 0) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
                 }
 
-                Log::info('MeiliProductSearchTool: direct category search result', [
+                Log::info('MeiliProductSearchTool: direct category keyword search result', [
                     'results' => count($hits),
                 ]);
             }

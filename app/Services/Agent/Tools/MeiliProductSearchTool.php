@@ -163,6 +163,12 @@ class MeiliProductSearchTool
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
             }
 
+            // Add category to Meili filter so ALL searches (including retries) respect it
+            if ($categoryFilter) {
+                $catFilterEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                $filterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
+            }
+
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
             // This is done at Meili level for efficiency - no need to fetch accessories just to filter them out
             $queryLower = mb_strtolower($query);
@@ -494,6 +500,19 @@ class MeiliProductSearchTool
                     'keyword_results' => count($filtered),
                     'query' => $query,
                 ]);
+            }
+
+            // Final safety net: ensure category filter is respected after all retries
+            if ($categoryFilter && count($filtered) > 1) {
+                $catLower = mb_strtolower(trim($categoryFilter));
+                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower) {
+                    $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                    return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                }));
+                if (count($catFiltered) > 0) {
+                    $filtered = $catFiltered;
+                }
             }
 
             // DEBUG: Log final results to see if ai_product_type survived
@@ -1747,7 +1766,7 @@ class MeiliProductSearchTool
         $lower = mb_strtolower($query);
 
         // Match explicit age patterns: "3 роки", "2 років", "1 рік", "від 3", "до 1 року", "на 5 років"
-        if (preg_match('/(?:для|від|до|на|вік|дитин[іа]?)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
+        if (preg_match('/(?:для|від|до|на|вік|дитин\w*)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
 
             // "до X років" means "under X", so use lower age group

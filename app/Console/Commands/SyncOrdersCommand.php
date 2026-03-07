@@ -58,8 +58,9 @@ class SyncOrdersCommand extends Command
         $tenantId = $this->option('tenant-id');
         if ($tenantId) {
             $tenant = Tenant::find((int) $tenantId);
-            if (!$tenant || empty($tenant->platform_credentials)) {
+            if (! $tenant || empty($tenant->platform_credentials)) {
                 $this->error("Tenant #{$tenantId} not found or has no Horoshop credentials.");
+
                 return self::FAILURE;
             }
             $this->currentTenantId = $tenant->id;
@@ -85,12 +86,12 @@ class SyncOrdersCommand extends Command
         // Date range
         $from = $this->option('from');
         $to = $this->option('to');
-        
-        if (!$from) {
+
+        if (! $from) {
             $days = (int) $this->option('days');
             $from = now()->subDays($days)->format('Y-m-d');
         }
-        if (!$to) {
+        if (! $to) {
             $to = now()->format('Y-m-d');
         }
 
@@ -109,13 +110,13 @@ class SyncOrdersCommand extends Command
             }
         }
 
-        $this->info("=================================================");
+        $this->info('=================================================');
         $this->info("[START] Syncing orders from {$from} to {$to}");
         $this->info("  Limit: {$limit} | Timeout: {$timeout}s");
         if ($statuses) {
-            $this->info("  Statuses: " . implode(', ', $statuses));
+            $this->info('  Statuses: '.implode(', ', $statuses));
         }
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         // Create SyncLog entry
         $syncLog = SyncLog::create([
@@ -141,15 +142,16 @@ class SyncOrdersCommand extends Command
             $elapsed = microtime(true) - $startTime;
             if ($elapsed >= $timeout) {
                 $this->newLine();
-                $this->warn("=================================================");
+                $this->warn('=================================================');
                 $this->warn("[TIMEOUT] Reached {$timeout}s limit after {$totalSynced} orders.");
                 $this->warn("[RESUME] Run with --resume to continue from offset {$offset}");
-                $this->warn("=================================================");
+                $this->warn('=================================================');
                 Cache::put(self::CACHE_KEY, $offset, now()->addDays(7));
-                
+
                 if ($this->option('update-counts')) {
                     $this->updateOrdersCounts();
                 }
+
                 return self::SUCCESS;
             }
 
@@ -181,7 +183,7 @@ class SyncOrdersCommand extends Command
                         $totalItems += count($raw['products'] ?? []);
                     } catch (\Throwable $e) {
                         $errors++;
-                        $this->error("[ERROR] Order #{$raw['order_id']}: " . $e->getMessage());
+                        $this->error("[ERROR] Order #{$raw['order_id']}: ".$e->getMessage());
                     }
                 }
 
@@ -192,7 +194,7 @@ class SyncOrdersCommand extends Command
                     $batchNum++;
                     $elapsed = round(microtime(true) - $startTime, 1);
                     $this->info(sprintf(
-                        "[BATCH %d] %d orders synced | %d items | %.1fs elapsed | offset: %d",
+                        '[BATCH %d] %d orders synced | %d items | %.1fs elapsed | offset: %d',
                         $batchNum,
                         $totalSynced,
                         $totalItems,
@@ -209,13 +211,13 @@ class SyncOrdersCommand extends Command
 
             } catch (\Throwable $e) {
                 $errors++;
-                $this->error("[API ERROR] " . $e->getMessage());
-                
+                $this->error('[API ERROR] '.$e->getMessage());
+
                 if ($errors > 10) {
-                    $this->error("[ABORT] Too many API errors.");
+                    $this->error('[ABORT] Too many API errors.');
                     break;
                 }
-                
+
                 // Wait and retry
                 sleep(2);
             }
@@ -223,12 +225,12 @@ class SyncOrdersCommand extends Command
 
         $elapsed = round(microtime(true) - $startTime, 1);
         $this->newLine();
-        $this->info("=================================================");
+        $this->info('=================================================');
         $this->info("[DONE] Synced {$totalSynced} orders with {$totalItems} items in {$elapsed}s");
         if ($errors > 0) {
             $this->warn("[WARN] {$errors} errors encountered");
         }
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         // Update SyncLog
         $syncLog->update([
@@ -264,12 +266,13 @@ class SyncOrdersCommand extends Command
 
         if ($tenants->isEmpty()) {
             $this->info('[ALL-TENANTS] No active tenants with Horoshop credentials found.');
+
             return self::SUCCESS;
         }
 
-        $this->info("=================================================");
+        $this->info('=================================================');
         $this->info("[ALL-TENANTS] Syncing orders for {$tenants->count()} tenants");
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         $totalSuccess = 0;
         $totalFailed = 0;
@@ -283,11 +286,12 @@ class SyncOrdersCommand extends Command
 
                 if (empty($domain) || empty($login)) {
                     $this->warn("  [SKIP] Tenant #{$tenant->id} ({$tenant->name}): incomplete credentials");
+
                     continue;
                 }
 
                 $this->info("  [TENANT #{$tenant->id}] {$tenant->name} ({$domain})...");
-                
+
                 // Call self with --tenant-id to reuse existing sync logic
                 $exitCode = $this->call('orders:sync', [
                     '--tenant-id' => $tenant->id,
@@ -309,17 +313,17 @@ class SyncOrdersCommand extends Command
         }
 
         $this->newLine();
-        $this->info("=================================================");
+        $this->info('=================================================');
         $this->info("[ALL-TENANTS] Done: {$totalSuccess} success, {$totalFailed} failed");
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         return self::SUCCESS;
     }
 
     protected function syncOrder(array $raw): Order
     {
-        $orderedAt = isset($raw['stat_created']) 
-            ? \Carbon\Carbon::parse($raw['stat_created']) 
+        $orderedAt = isset($raw['stat_created'])
+            ? \Carbon\Carbon::parse($raw['stat_created'])
             : null;
 
         // Try to find and link chat session
@@ -339,54 +343,54 @@ class SyncOrdersCommand extends Command
                 ...(($this->currentTenantId) ? ['tenant_id' => $this->currentTenantId] : []),
             ],
             [
-                'tenant_id'             => $this->currentTenantId,
-                'session_id'            => $chatData['session_id'],
-                'had_chat'              => $chatData['had_chat'],
-                'products_from_chat'    => $chatData['products_from_chat'],
-                'analytics'             => $raw['analytics'] ?? null,
-                'status_code'           => $raw['stat_status'] ?? 1,
-                'status_label'          => $this->getStatusLabel($raw['stat_status'] ?? 1),
-                'currency'              => $raw['currency'] ?? 'UAH',
-                'total_default'         => $raw['total_default'] ?? 0,
-                'total_sum'             => $raw['total_sum'] ?? 0,
-                'total_quantity'        => $raw['total_quantity'] ?? 0,
-                'discount_value'        => $raw['discount_value'] ?? 0,
-                'coupon_code'           => $raw['coupon_code'] ?? null,
+                'tenant_id' => $this->currentTenantId,
+                'session_id' => $chatData['session_id'],
+                'had_chat' => $chatData['had_chat'],
+                'products_from_chat' => $chatData['products_from_chat'],
+                'analytics' => $raw['analytics'] ?? null,
+                'status_code' => $raw['stat_status'] ?? 1,
+                'status_label' => $this->getStatusLabel($raw['stat_status'] ?? 1),
+                'currency' => $raw['currency'] ?? 'UAH',
+                'total_default' => $raw['total_default'] ?? 0,
+                'total_sum' => $raw['total_sum'] ?? 0,
+                'total_quantity' => $raw['total_quantity'] ?? 0,
+                'discount_value' => $raw['discount_value'] ?? 0,
+                'coupon_code' => $raw['coupon_code'] ?? null,
                 'coupon_discount_value' => $raw['coupon_discount_value'] ?? 0,
-                'customer_name'         => $raw['delivery_name'] ?? null,
-                'customer_email'        => $raw['delivery_email'] ?? null,
-                'customer_phone'        => $raw['delivery_phone'] ?? null,
-                'customer_city'         => $raw['delivery_city'] ?? ($raw['delivery_city_stable'] ?? null),
-                'customer_address'      => $raw['delivery_address'] ?? null,
-                'delivery_type_id'      => $raw['delivery_type']['id'] ?? null,
-                'delivery_type_title'   => $raw['delivery_type']['title'] ?? null,
-                'delivery_price'        => $raw['delivery_price'] ?? 0,
-                'delivery_comment'      => $raw['comment'] ?? null,
-                'payment_type_id'       => $raw['payment_type']['id'] ?? null,
-                'payment_type_title'    => $raw['payment_type']['title'] ?? null,
-                'payment_price'         => $raw['payment_price'] ?? 0,
-                'payed'                 => (bool) ($raw['payed'] ?? false),
-                'raw'                   => $raw,
-                'ordered_at'            => $orderedAt,
+                'customer_name' => $raw['delivery_name'] ?? null,
+                'customer_email' => $raw['delivery_email'] ?? null,
+                'customer_phone' => $raw['delivery_phone'] ?? null,
+                'customer_city' => $raw['delivery_city'] ?? ($raw['delivery_city_stable'] ?? null),
+                'customer_address' => $raw['delivery_address'] ?? null,
+                'delivery_type_id' => $raw['delivery_type']['id'] ?? null,
+                'delivery_type_title' => $raw['delivery_type']['title'] ?? null,
+                'delivery_price' => $raw['delivery_price'] ?? 0,
+                'delivery_comment' => $raw['comment'] ?? null,
+                'payment_type_id' => $raw['payment_type']['id'] ?? null,
+                'payment_type_title' => $raw['payment_type']['title'] ?? null,
+                'payment_price' => $raw['payment_price'] ?? 0,
+                'payed' => (bool) ($raw['payed'] ?? false),
+                'raw' => $raw,
+                'ordered_at' => $orderedAt,
             ]
         );
 
         // Sync order items
         $order->items()->delete();
-        
+
         foreach ($raw['products'] ?? [] as $item) {
             // Skip gifts and set items for counting (only count main products)
             $type = $item['type'] ?? 'product';
-            
+
             OrderItem::create([
-                'order_id'        => $order->id,
-                'article'         => $item['article'] ?? '',
-                'title'           => $item['title'] ?? '',
-                'price'           => $item['price'] ?? 0,
-                'quantity'        => $item['quantity'] ?? 1,
-                'total_price'     => $item['total_price'] ?? 0,
+                'order_id' => $order->id,
+                'article' => $item['article'] ?? '',
+                'title' => $item['title'] ?? '',
+                'price' => $item['price'] ?? 0,
+                'quantity' => $item['quantity'] ?? 1,
+                'total_price' => $item['total_price'] ?? 0,
                 'discount_marker' => $item['discount_marker'] ?? null,
-                'type'            => $type,
+                'type' => $type,
             ]);
         }
 
@@ -409,7 +413,7 @@ class SyncOrdersCommand extends Command
         $chatSession = DB::table('chat_sessions')
             ->where('session_id', $chatData['session_id'])
             ->first();
-        
+
         if ($chatSession) {
             $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
             $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
@@ -419,10 +423,10 @@ class SyncOrdersCommand extends Command
         $existingEvent = DB::table('chat_events')
             ->where('event_type', 'checkout_success')
             ->where('session_id', $chatData['session_id'])
-            ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+            ->where('metadata', 'like', '%"order_id":'.$order->order_id.'%')
             ->exists();
 
-        if (!$existingEvent) {
+        if (! $existingEvent) {
             DB::table('chat_events')->insert([
                 'session_id' => $chatData['session_id'],
                 'merchant_id' => $merchantId,
@@ -474,13 +478,14 @@ class SyncOrdersCommand extends Command
                 $result['session_id'] = $sessionId;
                 $result['had_chat'] = true;
                 $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+
                 return $result;
             }
         }
 
         // Normalize phone for comparison (last 10 digits)
         $phoneLast10 = $phone ? substr(preg_replace('/[^0-9]/', '', $phone), -10) : null;
-        
+
         // Time window: look for chat sessions 24h before order
         $orderTime = $orderedAt ?? now();
         $windowStart = $orderTime->copy()->subHours(24);
@@ -492,19 +497,19 @@ class SyncOrdersCommand extends Command
             ->where('event_type', 'checkout_submit')
             ->whereBetween('created_at', [$windowStart, $windowEnd])
             ->orderByDesc('created_at');
-        
+
         // Filter by phone or email in metadata
         if ($phoneLast10 || $email) {
-            $checkoutQuery->where(function($q) use ($phoneLast10, $email) {
+            $checkoutQuery->where(function ($q) use ($phoneLast10, $email) {
                 if ($phoneLast10) {
-                    $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+                    $q->where('metadata', 'like', '%'.$phoneLast10.'%');
                 }
                 if ($email) {
-                    $q->orWhere('metadata', 'like', '%' . $email . '%');
+                    $q->orWhere('metadata', 'like', '%'.$email.'%');
                 }
             });
         }
-        
+
         $checkoutEvent = $checkoutQuery->first();
 
         if ($checkoutEvent) {
@@ -513,6 +518,7 @@ class SyncOrdersCommand extends Command
                 $result['session_id'] = $sessionId;
                 $result['had_chat'] = true;
                 $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+
                 return $result;
             }
         }
@@ -520,7 +526,7 @@ class SyncOrdersCommand extends Command
         // Strategy 2: Look for add_to_cart events with matching products
         // This is safer as it matches by product article
         $orderArticles = array_filter(array_column($products, 'article'));
-        if (!empty($orderArticles)) {
+        if (! empty($orderArticles)) {
             $cartEvent = DB::table('chat_events')
                 ->where('event_type', 'add_to_cart')
                 ->whereIn('product_article', $orderArticles)
@@ -534,6 +540,7 @@ class SyncOrdersCommand extends Command
                     $result['session_id'] = $sessionId;
                     $result['had_chat'] = true;
                     $result['products_from_chat'] = $this->countProductsFromChat($sessionId, $products);
+
                     return $result;
                 }
             }
@@ -543,7 +550,7 @@ class SyncOrdersCommand extends Command
         if ($phoneLast10) {
             $messageWithPhone = DB::table('chat_messages')
                 ->where('role', 'user')
-                ->where('content', 'like', '%' . $phoneLast10 . '%')
+                ->where('content', 'like', '%'.$phoneLast10.'%')
                 ->whereBetween('created_at', [$windowStart, $windowEnd])
                 ->orderByDesc('created_at')
                 ->first();
@@ -557,13 +564,14 @@ class SyncOrdersCommand extends Command
                     $result['session_id'] = $session->session_id;
                     $result['had_chat'] = true;
                     $result['products_from_chat'] = $this->countProductsFromChat($session->session_id, $products);
+
                     return $result;
                 }
             }
         }
 
         // Strategy 4: Look for any chat session with product_shown events for ordered products
-        if (!empty($orderArticles)) {
+        if (! empty($orderArticles)) {
             $shownEvent = DB::table('chat_events')
                 ->whereIn('event_type', ['product_shown', 'product_click'])
                 ->whereIn('product_article', $orderArticles)
@@ -575,6 +583,7 @@ class SyncOrdersCommand extends Command
                 $result['session_id'] = $shownEvent->session_id;
                 $result['had_chat'] = true;
                 $result['products_from_chat'] = $this->countProductsFromChat($shownEvent->session_id, $products);
+
                 return $result;
             }
         }
@@ -591,25 +600,25 @@ class SyncOrdersCommand extends Command
         // Look for checkout_success event with this order_id
         $event = DB::table('chat_events')
             ->where('event_type', 'checkout_success')
-            ->where(function($q) use ($orderId) {
-                // order_id can be in dedicated column or in metadata JSON
-                $q->where('order_id', $orderId)
-                  ->orWhere('metadata', 'like', '%"order_id":"' . $orderId . '"%')
-                  ->orWhere('metadata', 'like', '%"order_id":' . $orderId . '%');
+            ->where(function ($q) use ($orderId) {
+                // order_id is stored in metadata JSON
+                $q->where('metadata', 'like', '%"order_id":"'.$orderId.'"%')
+                    ->orWhere('metadata', 'like', '%"order_id":'.$orderId.'%');
             })
             ->first();
-        
+
         if ($event && $event->session_id) {
             $this->info("  Found session by order_id: {$event->session_id}");
+
             return $event->session_id;
         }
-        
+
         return null;
     }
 
     /**
      * Check if session had meaningful chat conversation.
-     * 
+     *
      * A "meaningful" conversation requires:
      * - At least 2 user messages (excludes single trigger response like "Так")
      * - OR products were shown in chat (via product_shown events)
@@ -634,24 +643,24 @@ class SyncOrdersCommand extends Command
         if ($messageCount >= 2) {
             return true;
         }
-        
+
         // Check if products were shown in chat (real interaction)
         $productsShown = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'product_shown')
             ->exists();
-        
+
         if ($productsShown) {
             return true;
         }
-        
+
         // Check if add_to_cart was from chat recommendations
         $cartFromChat = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'add_to_cart')
             ->whereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true")
             ->exists();
-        
+
         if ($cartFromChat) {
             return true;
         }
@@ -701,7 +710,7 @@ class SyncOrdersCommand extends Command
             ->get()
             ->pluck('total_ordered', 'article');
 
-        $this->info("  Found orders for " . $counts->count() . " unique articles");
+        $this->info('  Found orders for '.$counts->count().' unique articles');
 
         // Reset to 0 — only for current tenant if multi-tenant, otherwise all
         $resetQuery = Product::query();
@@ -713,23 +722,27 @@ class SyncOrdersCommand extends Command
         // Update products with counts - separate queries to avoid type mismatch
         $updated = 0;
         $notFound = 0;
-        
+
         foreach ($counts as $article => $count) {
             // Cast article to string for safe comparison
             $articleStr = (string) $article;
-            
+
             // First try exact article match (scoped to tenant if multi-tenant)
             $query = Product::where('article', $articleStr);
-            if ($this->currentTenantId) $query->where('tenant_id', $this->currentTenantId);
+            if ($this->currentTenantId) {
+                $query->where('tenant_id', $this->currentTenantId);
+            }
             $affected = $query->update(['orders_count' => $count]);
-            
+
             // If not found, try parent_article
             if ($affected === 0) {
                 $query = Product::where('parent_article', $articleStr);
-                if ($this->currentTenantId) $query->where('tenant_id', $this->currentTenantId);
+                if ($this->currentTenantId) {
+                    $query->where('tenant_id', $this->currentTenantId);
+                }
                 $affected = $query->update(['orders_count' => $count]);
             }
-            
+
             if ($affected > 0) {
                 $updated += $affected;
             } else {
@@ -741,14 +754,14 @@ class SyncOrdersCommand extends Command
         if ($notFound > 0) {
             $this->info("  {$notFound} articles not found in products table");
         }
-        $this->info("[DONE] orders_count updated");
+        $this->info('[DONE] orders_count updated');
     }
 
     protected function showStats(): int
     {
-        $this->info("=================================================");
-        $this->info("              ORDERS STATISTICS                  ");
-        $this->info("=================================================");
+        $this->info('=================================================');
+        $this->info('              ORDERS STATISTICS                  ');
+        $this->info('=================================================');
 
         $total = Order::count();
         $this->info("Total orders in DB: {$total}");
@@ -771,11 +784,11 @@ class SyncOrdersCommand extends Command
 
             $oldest = Order::orderBy('ordered_at')->first();
             $newest = Order::orderByDesc('ordered_at')->first();
-            
+
             if ($oldest && $newest) {
                 $this->info("\nDate range: {$oldest->ordered_at->format('Y-m-d')} to {$newest->ordered_at->format('Y-m-d')}");
             }
-            
+
             // Chat linking stats
             $withChat = Order::where('had_chat', true)->count();
             $this->info("\nOrders with chat: {$withChat}");
@@ -786,7 +799,7 @@ class SyncOrdersCommand extends Command
         $totalProducts = Product::count();
         $this->info("Products with orders_count > 0: {$productsWithOrders} / {$totalProducts}");
 
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         return self::SUCCESS;
     }
@@ -796,9 +809,9 @@ class SyncOrdersCommand extends Command
      */
     protected function linkExistingOrdersToChat(): int
     {
-        $this->info("=================================================");
-        $this->info("[LINK] Linking existing orders to chat sessions...");
-        $this->info("=================================================");
+        $this->info('=================================================');
+        $this->info('[LINK] Linking existing orders to chat sessions...');
+        $this->info('=================================================');
 
         $orders = Order::whereNull('session_id')
             ->orWhere('session_id', '')
@@ -837,9 +850,9 @@ class SyncOrdersCommand extends Command
         }
 
         $this->newLine();
-        $this->info("=================================================");
+        $this->info('=================================================');
         $this->info("[DONE] Linked: {$linked} | Not linked: {$notLinked}");
-        $this->info("=================================================");
+        $this->info('=================================================');
 
         return self::SUCCESS;
     }

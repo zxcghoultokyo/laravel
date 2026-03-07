@@ -240,9 +240,8 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $event = DB::table('chat_events')
             ->where('event_type', 'checkout_success')
             ->where(function ($q) use ($orderId) {
-                // order_id can be in dedicated column or in metadata JSON
-                $q->where('order_id', $orderId)
-                    ->orWhere('metadata', 'like', '%"order_id":"'.$orderId.'"%')
+                // order_id is stored in metadata JSON
+                $q->where('metadata', 'like', '%"order_id":"'.$orderId.'"%')
                     ->orWhere('metadata', 'like', '%"order_id":'.$orderId.'%');
             })
             ->first();

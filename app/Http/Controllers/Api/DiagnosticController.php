@@ -4466,6 +4466,38 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/purge-orders
+     * Delete all orders (and items) so they can be re-synced cleanly with tenant_id
+     */
+    public function purgeOrders(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id') ? (int) $request->input('tenant_id') : null;
+
+        $query = \App\Models\Order::withoutGlobalScopes();
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        } elseif ($request->input('null_only')) {
+            $query->whereNull('tenant_id');
+        }
+
+        $count = $query->count();
+        $orderIds = $query->pluck('id');
+
+        $itemsDeleted = \App\Models\OrderItem::whereIn('order_id', $orderIds)->delete();
+        $ordersDeleted = $query->delete();
+
+        return response()->json([
+            'success' => true,
+            'orders_deleted' => $ordersDeleted,
+            'items_deleted' => $itemsDeleted,
+        ]);
+    }
+
+    /**
      * GET /api/diagnostic/tenants
      * List all tenants with stats
      */

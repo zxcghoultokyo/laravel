@@ -166,6 +166,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);
     Route::post('/fix-null-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixNullTenants']);
     Route::post('/backfill-order-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'backfillOrderTenants']);
+    Route::post('/purge-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'purgeOrders']);
     Route::post('/update-product-color', [\App\Http\Controllers\Api\DiagnosticController::class, 'updateProductColor']);
     Route::get('/test-color-picker', [\App\Http\Controllers\Api\DiagnosticController::class, 'testColorPicker']);
     Route::get('/color-palette', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorPalette']);

@@ -17,25 +17,26 @@ class AnalyticsController extends Controller
     {
         // Read raw body directly from php://input (most reliable)
         $rawBody = file_get_contents('php://input');
-        
+
         // Log incoming request for debugging
         Log::info('Analytics events received', [
             'content_type' => $request->header('Content-Type'),
             'content_length' => strlen($rawBody),
             'raw_body_preview' => substr($rawBody, 0, 500),
         ]);
-        
+
         // Parse JSON
         $data = json_decode($rawBody, true);
-        
+
         if ($data === null && json_last_error() !== JSON_ERROR_NONE) {
             Log::warning('Analytics JSON parse error', [
                 'error' => json_last_error_msg(),
                 'raw_body' => substr($rawBody, 0, 200),
             ]);
+
             return response()->json(['status' => 'ok', 'received' => 0, 'error' => 'json_parse_failed']);
         }
-        
+
         $events = $data['events'] ?? [];
 
         Log::info('Analytics events parsed', [
@@ -51,35 +52,36 @@ class AnalyticsController extends Controller
 
         try {
             $rows = [];
-            
+
             // Pre-resolve tenant_id from merchant_id for all events
             // merchant_id can be either tenant slug or api_token
             $tenantCache = [];
-            
+
             foreach ($events as $event) {
                 // Validate required fields
                 if (empty($event['event_type']) || empty($event['session_id'])) {
                     continue;
                 }
-                
+
                 // Skip checkout and add_to_cart events without actual chat conversation
                 // These are noise from users who never used the chat
                 $eventType = $event['event_type'] ?? '';
                 if (in_array($eventType, ['checkout_submit', 'checkout_success', 'add_to_cart'])) {
-                    $hadChat = !empty($event['had_chat_conversation']);
-                    $fromChat = !empty($event['product_from_chat']);
-                    if (!$hadChat && !$fromChat) {
+                    $hadChat = ! empty($event['had_chat_conversation']);
+                    $fromChat = ! empty($event['product_from_chat']);
+                    if (! $hadChat && ! $fromChat) {
                         Log::debug('Skipping event without chat conversation', [
                             'event_type' => $eventType,
-                            'session_id' => $event['session_id'] ?? ''
+                            'session_id' => $event['session_id'] ?? '',
                         ]);
+
                         continue;
                     }
                 }
 
                 // Convert ISO 8601 timestamp to MySQL format
                 $createdAt = now();
-                if (!empty($event['timestamp'])) {
+                if (! empty($event['timestamp'])) {
                     try {
                         $createdAt = \Carbon\Carbon::parse($event['timestamp'])->format('Y-m-d H:i:s');
                     } catch (\Exception $e) {
@@ -89,61 +91,61 @@ class AnalyticsController extends Controller
 
                 // Build metadata from extra fields
                 $metadata = $event['metadata'] ?? [];
-                if (!empty($event['had_chat_conversation'])) {
+                if (! empty($event['had_chat_conversation'])) {
                     $metadata['had_chat_conversation'] = $event['had_chat_conversation'];
                 }
-                if (!empty($event['product_from_chat'])) {
+                if (! empty($event['product_from_chat'])) {
                     $metadata['product_from_chat'] = $event['product_from_chat'];
                 }
-                if (!empty($event['chat_session_id'])) {
+                if (! empty($event['chat_session_id'])) {
                     $metadata['chat_session_id'] = $event['chat_session_id'];
                 }
                 // Store product title for display in analytics
-                if (!empty($event['product_title'])) {
+                if (! empty($event['product_title'])) {
                     $metadata['product_title'] = $event['product_title'];
                 }
                 // Store order/checkout fields in metadata for display in dashboard
-                if (!empty($event['order_id'])) {
+                if (! empty($event['order_id'])) {
                     $metadata['order_id'] = $event['order_id'];
                 }
-                if (!empty($event['order_total'])) {
+                if (! empty($event['order_total'])) {
                     $metadata['order_total'] = $event['order_total'];
                 }
-                if (!empty($event['items_count'])) {
+                if (! empty($event['items_count'])) {
                     $metadata['items_count'] = $event['items_count'];
                 }
-                if (!empty($event['order_items_count'])) {
+                if (! empty($event['order_items_count'])) {
                     $metadata['order_items_count'] = $event['order_items_count'];
                 }
-                if (!empty($event['has_product_from_chat'])) {
+                if (! empty($event['has_product_from_chat'])) {
                     $metadata['has_product_from_chat'] = $event['has_product_from_chat'];
                 }
-                if (!empty($event['customer_name']) || !empty($event['name'])) {
+                if (! empty($event['customer_name']) || ! empty($event['name'])) {
                     $metadata['customer_name'] = $event['customer_name'] ?? $event['name'];
                 }
-                if (!empty($event['phone'])) {
+                if (! empty($event['phone'])) {
                     $metadata['phone'] = $event['phone'];
                 }
-                if (!empty($event['email'])) {
+                if (! empty($event['email'])) {
                     $metadata['email'] = $event['email'];
                 }
-                if (!empty($event['delivery_type'])) {
+                if (! empty($event['delivery_type'])) {
                     $metadata['delivery_type'] = $event['delivery_type'];
                 }
-                if (!empty($event['payment_type'])) {
+                if (! empty($event['payment_type'])) {
                     $metadata['payment_type'] = $event['payment_type'];
                 }
-                
+
                 // Resolve tenant_id from merchant_id (slug) or tenant_id from event
                 $merchantId = $event['merchant_id'] ?? '';
                 $tenantId = $event['tenant_id'] ?? null;
-                
-                if (!$tenantId && $merchantId) {
+
+                if (! $tenantId && $merchantId) {
                     // Check cache first
-                    if (!isset($tenantCache[$merchantId])) {
+                    if (! isset($tenantCache[$merchantId])) {
                         // Try to find tenant by slug first
                         $tenant = DB::table('tenants')->where('slug', $merchantId)->first();
-                        if (!$tenant) {
+                        if (! $tenant) {
                             // Try to find by api_token in widget_settings
                             $widgetSettings = DB::table('widget_settings')
                                 ->where('api_token', $merchantId)
@@ -180,20 +182,20 @@ class AnalyticsController extends Controller
                     'device_type' => isset($event['device_type']) ? substr($event['device_type'], 0, 20) : null,
                     'page_url' => isset($event['page_url']) ? substr($event['page_url'], 0, 500) : null,
                     'referrer' => isset($event['referrer']) ? substr($event['referrer'], 0, 500) : null,
-                    'metadata' => !empty($metadata) ? json_encode($metadata) : null,
+                    'metadata' => ! empty($metadata) ? json_encode($metadata) : null,
                     'created_at' => $createdAt,
                 ];
             }
 
-            if (!empty($rows)) {
+            if (! empty($rows)) {
                 // Batch insert
                 DB::table('chat_events')->insert($rows);
                 $inserted = count($rows);
                 Log::info('Analytics events inserted', ['count' => $inserted]);
-                
+
                 // Auto-create conversions for add_to_cart and checkout_submit events
                 $this->createConversionsFromEvents($events);
-                
+
                 // Auto-create ChatSession for message/quick_action events
                 // This ensures analytics links work even for quick actions that don't hit the agent
                 $this->ensureChatSessionsExist($events);
@@ -203,20 +205,21 @@ class AnalyticsController extends Controller
             Log::error('Analytics events insert failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'events_count' => count($events)
+                'events_count' => count($events),
             ]);
+
             return response()->json([
                 'status' => 'error',
                 'received' => 0,
                 'version' => 'v5',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
 
         return response()->json([
             'status' => 'ok',
             'received' => $inserted,
-            'version' => 'v5'
+            'version' => 'v5',
         ]);
     }
 
@@ -226,20 +229,20 @@ class AnalyticsController extends Controller
     public function debugEvents(Request $request)
     {
         $hours = $request->get('hours', 1);
-        
+
         try {
             $events = DB::table('chat_events')
                 ->where('created_at', '>=', now()->subHours($hours))
                 ->orderByDesc('created_at')
                 ->limit(50)
                 ->get(['id', 'event_type', 'session_id', 'created_at']);
-            
+
             $counts = DB::table('chat_events')
                 ->where('created_at', '>=', now()->subHours($hours))
                 ->selectRaw('event_type, COUNT(*) as cnt')
                 ->groupBy('event_type')
                 ->get();
-            
+
             return response()->json([
                 'status' => 'ok',
                 'hours' => $hours,
@@ -262,7 +265,7 @@ class AnalyticsController extends Controller
     {
         $rawBody = $request->getContent();
         $parsed = json_decode($rawBody, true);
-        
+
         return response()->json([
             'content_type' => $request->header('Content-Type'),
             'content_length' => strlen($rawBody),
@@ -311,7 +314,7 @@ class AnalyticsController extends Controller
 
             // Check if converted product was from chat
             $productFromChat = false;
-            if (!empty($data['product_id']) && in_array($data['product_id'], $chatProducts)) {
+            if (! empty($data['product_id']) && in_array($data['product_id'], $chatProducts)) {
                 $productFromChat = true;
             }
 
@@ -324,13 +327,13 @@ class AnalyticsController extends Controller
                 'order_id' => $data['order_id'] ?? null,
                 'order_total' => $data['order_total'] ?? null,
                 'items_count' => $data['items_count'] ?? null,
-                'product_ids' => !empty($data['product_ids']) ? json_encode($data['product_ids']) : null,
+                'product_ids' => ! empty($data['product_ids']) ? json_encode($data['product_ids']) : null,
                 'product_from_chat' => $productFromChat,
                 'chat_attributed_value' => $data['chat_attributed_value'] ?? null,
                 'chat_timestamp' => $chatSession->created_at ?? null,
                 'conversion_timestamp' => now(),
-                'minutes_to_conversion' => $chatSession 
-                    ? now()->diffInMinutes($chatSession->created_at) 
+                'minutes_to_conversion' => $chatSession
+                    ? now()->diffInMinutes($chatSession->created_at)
                     : null,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -344,8 +347,9 @@ class AnalyticsController extends Controller
         } catch (\Throwable $e) {
             Log::error('Conversion tracking failed', [
                 'error' => $e->getMessage(),
-                'data' => $data
+                'data' => $data,
             ]);
+
             return response()->json(['error' => 'Failed to track'], 500);
         }
     }
@@ -360,7 +364,7 @@ class AnalyticsController extends Controller
 
         Log::info('Analytics webhook received', [
             'type' => $type,
-            'data_keys' => array_keys($data)
+            'data_keys' => array_keys($data),
         ]);
 
         try {
@@ -383,8 +387,9 @@ class AnalyticsController extends Controller
         } catch (\Throwable $e) {
             Log::error('Webhook processing failed', [
                 'error' => $e->getMessage(),
-                'type' => $type
+                'type' => $type,
             ]);
+
             return response()->json(['error' => 'Processing failed'], 500);
         }
     }
@@ -401,7 +406,7 @@ class AnalyticsController extends Controller
         // Try to find associated chat session
         // Option 1: By client_id cookie
         $clientId = $data['client_id'] ?? $data['customer']['client_id'] ?? null;
-        
+
         // Option 2: By UTM params
         $utmContent = $data['utm_content'] ?? null; // We put session_id there
 
@@ -410,7 +415,7 @@ class AnalyticsController extends Controller
 
         $sessionId = $utmContent;
 
-        if (!$sessionId && $clientId) {
+        if (! $sessionId && $clientId) {
             // Find recent session by client_id
             $recentSession = DB::table('chat_events')
                 ->where('client_id', $clientId)
@@ -420,7 +425,7 @@ class AnalyticsController extends Controller
             $sessionId = $recentSession;
         }
 
-        if (!$sessionId && !empty($productIds)) {
+        if (! $sessionId && ! empty($productIds)) {
             // Find session where these products were clicked
             $sessionWithProduct = DB::table('chat_events')
                 ->whereIn('product_id', $productIds)
@@ -458,7 +463,7 @@ class AnalyticsController extends Controller
                 'order_total' => $orderTotal,
                 'items_count' => count($items),
                 'product_ids' => json_encode($productIds),
-                'product_from_chat' => !empty($chatClickedProducts),
+                'product_from_chat' => ! empty($chatClickedProducts),
                 'chat_attributed_value' => $chatAttributedValue > 0 ? $chatAttributedValue : null,
                 'conversion_timestamp' => now(),
                 'created_at' => now(),
@@ -470,7 +475,7 @@ class AnalyticsController extends Controller
             Log::info('Order attributed to chat', [
                 'order_id' => $orderId,
                 'session_id' => $sessionId,
-                'attributed_value' => $chatAttributedValue
+                'attributed_value' => $chatAttributedValue,
             ]);
         }
     }
@@ -484,12 +489,18 @@ class AnalyticsController extends Controller
         $clientId = $data['client_id'] ?? null;
         $productId = $data['product_id'] ?? null;
 
-        if (!$clientId && !$productId) return;
+        if (! $clientId && ! $productId) {
+            return;
+        }
 
         $sessionId = DB::table('chat_events')
             ->where(function ($q) use ($clientId, $productId) {
-                if ($clientId) $q->orWhere('client_id', $clientId);
-                if ($productId) $q->orWhere('product_id', $productId);
+                if ($clientId) {
+                    $q->orWhere('client_id', $clientId);
+                }
+                if ($productId) {
+                    $q->orWhere('product_id', $productId);
+                }
             })
             ->where('created_at', '>=', now()->subHours(72))
             ->orderBy('created_at', 'desc')
@@ -581,14 +592,14 @@ class AnalyticsController extends Controller
             ->get();
 
         // Average messages per session
-        $avgMessages = $messagesCount > 0 && $sessionsCount > 0 
-            ? round($messagesCount / $sessionsCount, 1) 
+        $avgMessages = $messagesCount > 0 && $sessionsCount > 0
+            ? round($messagesCount / $sessionsCount, 1)
             : 0;
 
         // Conversion rate
         $purchaseConversions = $conversions->get('purchase')?->count ?? 0;
-        $conversionRate = $sessionsCount > 0 
-            ? round(($purchaseConversions / $sessionsCount) * 100, 2) 
+        $conversionRate = $sessionsCount > 0
+            ? round(($purchaseConversions / $sessionsCount) * 100, 2)
             : 0;
 
         return response()->json([
@@ -620,7 +631,7 @@ class AnalyticsController extends Controller
             'outcomes' => $outcomes,
         ]);
     }
-    
+
     /**
      * Auto-create conversions from add_to_cart and checkout_submit events.
      * This ensures these events are tracked in both chat_events AND chat_conversions.
@@ -629,46 +640,47 @@ class AnalyticsController extends Controller
     {
         foreach ($events as $event) {
             $eventType = $event['event_type'] ?? '';
-            
+
             // Only process conversion-relevant events
-            if (!in_array($eventType, ['add_to_cart', 'checkout_submit', 'checkout_success'])) {
+            if (! in_array($eventType, ['add_to_cart', 'checkout_submit', 'checkout_success'])) {
                 continue;
             }
-            
+
             $sessionId = $event['session_id'] ?? '';
             if (empty($sessionId)) {
                 continue;
             }
-            
+
             // Skip add_to_cart events without actual chat conversation
             // These are noise from users who never used the chat
             if ($eventType === 'add_to_cart') {
-                $hadChat = !empty($event['had_chat_conversation']);
-                $fromChat = !empty($event['product_from_chat']);
-                if (!$hadChat && !$fromChat) {
+                $hadChat = ! empty($event['had_chat_conversation']);
+                $fromChat = ! empty($event['product_from_chat']);
+                if (! $hadChat && ! $fromChat) {
                     continue;
                 }
             }
-            
+
             // For checkout_success - fetch order details from Horoshop
             if ($eventType === 'checkout_success') {
                 $this->handleCheckoutSuccess($event, $sessionId);
+
                 continue;
             }
-            
+
             try {
                 // Determine conversion type
                 $conversionType = $eventType === 'checkout_submit' ? 'checkout' : 'add_to_cart';
-                
+
                 // Find related chat session
                 $chatSession = DB::table('chat_sessions')
                     ->where('session_id', $sessionId)
                     ->first();
-                
+
                 // Check if product was from chat recommendations
-                $productFromChat = !empty($event['product_from_chat']);
-                $hadChatConversation = !empty($event['had_chat_conversation']);
-                
+                $productFromChat = ! empty($event['product_from_chat']);
+                $hadChatConversation = ! empty($event['had_chat_conversation']);
+
                 // Build conversion record
                 $conversionData = [
                     'session_id' => substr($sessionId, 0, 64),
@@ -678,12 +690,12 @@ class AnalyticsController extends Controller
                     'conversion_status' => 'confirmed',
                     'order_total' => $event['product_price'] ?? $event['order_total'] ?? null,
                     'items_count' => $event['order_items_count'] ?? $event['items_count'] ?? 1,
-                    'product_ids' => !empty($event['product_id']) ? json_encode([$event['product_id']]) : null,
+                    'product_ids' => ! empty($event['product_id']) ? json_encode([$event['product_id']]) : null,
                     'product_from_chat' => $productFromChat,
                     'chat_timestamp' => $chatSession->created_at ?? null,
                     'conversion_timestamp' => now(),
-                    'minutes_to_conversion' => $chatSession 
-                        ? now()->diffInMinutes($chatSession->created_at) 
+                    'minutes_to_conversion' => $chatSession
+                        ? now()->diffInMinutes($chatSession->created_at)
                         : null,
                     'metadata' => json_encode([
                         'had_chat_conversation' => $hadChatConversation,
@@ -694,21 +706,21 @@ class AnalyticsController extends Controller
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
-                
+
                 DB::table('chat_conversions')->insert($conversionData);
-                
+
                 Log::info('Conversion auto-created from event', [
                     'event_type' => $eventType,
                     'conversion_type' => $conversionType,
                     'session_id' => $sessionId,
                     'product_from_chat' => $productFromChat,
                 ]);
-                
+
                 // Update session outcome
                 if ($hadChatConversation) {
                     $this->updateSessionOutcome($sessionId, $conversionType);
                 }
-                
+
             } catch (\Throwable $e) {
                 Log::warning('Failed to auto-create conversion from event', [
                     'event_type' => $eventType,
@@ -717,36 +729,51 @@ class AnalyticsController extends Controller
             }
         }
     }
-    
+
     /**
      * Handle checkout_success event - dispatch job to fetch order details from Horoshop
      */
     private function handleCheckoutSuccess(array $event, string $sessionId): void
     {
         $orderId = $event['order_id'] ?? $event['metadata']['order_id'] ?? null;
-        
+
+        // Resolve tenant_id from session or event context
+        $tenantId = $event['tenant_id'] ?? null;
+        if (! $tenantId) {
+            $chatSession = \Illuminate\Support\Facades\DB::table('chat_sessions')
+                ->where('session_id', $sessionId)
+                ->first();
+            $tenantId = $chatSession->tenant_id ?? null;
+        }
+        if (! $tenantId && ! empty($event['merchant_id'])) {
+            $tenant = \Illuminate\Support\Facades\DB::table('tenants')->where('slug', $event['merchant_id'])->first();
+            if ($tenant) {
+                $tenantId = $tenant->id;
+            }
+        }
+
         Log::info('Checkout success event received', [
             'session_id' => $sessionId,
             'order_id' => $orderId,
+            'tenant_id' => $tenantId,
             'event' => $event,
         ]);
-        
+
         try {
-            // Dispatch job to fetch order details from Horoshop API
-            // Job will run with delay to allow order to be fully created in Horoshop
             \App\Jobs\FetchHoroshopOrdersJob::dispatch(
                 sessionId: $sessionId,
-                fromDate: now()->subMinutes(30)->format('Y-m-d H:i:s'), // Look at recent orders
+                fromDate: now()->subMinutes(30)->format('Y-m-d H:i:s'),
                 toDate: now()->addMinutes(5)->format('Y-m-d H:i:s'),
                 orderIds: $orderId ? [$orderId] : null,
-                linkToChat: true
-            )->delay(now()->addSeconds(30)); // Wait 30s for order to be created in Horoshop
-            
+                linkToChat: true,
+                tenantId: $tenantId ? (int) $tenantId : null
+            )->delay(now()->addSeconds(30));
+
             Log::info('FetchHoroshopOrdersJob dispatched for checkout_success', [
                 'session_id' => $sessionId,
                 'order_id' => $orderId,
             ]);
-            
+
         } catch (\Throwable $e) {
             Log::error('Failed to dispatch FetchHoroshopOrdersJob', [
                 'session_id' => $sessionId,
@@ -763,23 +790,23 @@ class AnalyticsController extends Controller
     private function ensureChatSessionsExist(array $events): void
     {
         $sessionsToCreate = [];
-        
+
         foreach ($events as $event) {
             $eventType = $event['event_type'] ?? '';
-            
+
             // Only create sessions for chat interaction events
-            if (!in_array($eventType, ['message', 'quick_action_click', 'session_start'])) {
+            if (! in_array($eventType, ['message', 'quick_action_click', 'session_start'])) {
                 continue;
             }
-            
+
             $sessionId = $event['session_id'] ?? '';
             if (empty($sessionId) || isset($sessionsToCreate[$sessionId])) {
                 continue;
             }
-            
+
             // Resolve tenant_id
             $tenantId = $event['tenant_id'] ?? null;
-            if (!$tenantId && !empty($event['merchant_id'])) {
+            if (! $tenantId && ! empty($event['merchant_id'])) {
                 $tenant = DB::table('tenants')->where('slug', $event['merchant_id'])->first();
                 if ($tenant) {
                     $tenantId = $tenant->id;
@@ -792,7 +819,7 @@ class AnalyticsController extends Controller
                     }
                 }
             }
-            
+
             $sessionsToCreate[$sessionId] = [
                 'session_id' => $sessionId,
                 'tenant_id' => $tenantId,
@@ -803,16 +830,16 @@ class AnalyticsController extends Controller
                 'updated_at' => now(),
             ];
         }
-        
+
         if (empty($sessionsToCreate)) {
             return;
         }
-        
+
         // Insert only sessions that don't exist yet
         foreach ($sessionsToCreate as $sessionId => $data) {
             try {
                 $exists = DB::table('chat_sessions')->where('session_id', $sessionId)->exists();
-                if (!$exists) {
+                if (! $exists) {
                     DB::table('chat_sessions')->insert($data);
                     Log::debug('ChatSession created from analytics event', ['session_id' => $sessionId]);
                 }

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\Horoshop\HoroshopClient;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -12,42 +13,51 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class FetchHoroshopOrdersJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $backoff = 60;
 
     protected ?string $sessionId;
+
     protected ?string $fromDate;
+
     protected ?string $toDate;
+
     protected ?array $orderIds;
+
     protected bool $linkToChat;
+
+    protected ?int $tenantId;
 
     /**
      * Create a new job instance.
      *
-     * @param string|null $sessionId  Link orders to this chat session
-     * @param string|null $fromDate   Fetch orders from this date (YYYY-MM-DD)
-     * @param string|null $toDate     Fetch orders to this date (YYYY-MM-DD)
-     * @param array|null  $orderIds   Specific order IDs to fetch
-     * @param bool        $linkToChat Whether to try linking orders to chat sessions
+     * @param  string|null  $sessionId  Link orders to this chat session
+     * @param  string|null  $fromDate  Fetch orders from this date (YYYY-MM-DD)
+     * @param  string|null  $toDate  Fetch orders to this date (YYYY-MM-DD)
+     * @param  array|null  $orderIds  Specific order IDs to fetch
+     * @param  bool  $linkToChat  Whether to try linking orders to chat sessions
+     * @param  int|null  $tenantId  Tenant ID to assign to created orders
      */
     public function __construct(
         ?string $sessionId = null,
         ?string $fromDate = null,
         ?string $toDate = null,
         ?array $orderIds = null,
-        bool $linkToChat = true
+        bool $linkToChat = true,
+        ?int $tenantId = null
     ) {
         $this->sessionId = $sessionId;
         $this->fromDate = $fromDate;
         $this->toDate = $toDate;
         $this->orderIds = $orderIds;
         $this->linkToChat = $linkToChat;
+        $this->tenantId = $tenantId;
     }
 
     /**
@@ -55,14 +65,29 @@ class FetchHoroshopOrdersJob implements ShouldQueue
      */
     public function handle(HoroshopClient $client): void
     {
-        if (!$client->isConfigured()) {
+        // If tenant specified, create tenant-specific client
+        if ($this->tenantId) {
+            $tenant = \App\Models\Tenant::find($this->tenantId);
+            if ($tenant && ! empty($tenant->platform_credentials)) {
+                $creds = $tenant->platform_credentials;
+                $domain = is_array($creds['domain'] ?? null) ? ($creds['domain']['value'] ?? '') : (string) ($creds['domain'] ?? '');
+                $login = is_array($creds['login'] ?? null) ? ($creds['login']['value'] ?? '') : (string) ($creds['login'] ?? '');
+                $password = is_array($creds['password'] ?? null) ? ($creds['password']['value'] ?? '') : (string) ($creds['password'] ?? '');
+                if ($domain && $login && $password) {
+                    $client = new HoroshopClient($domain, $login, $password);
+                }
+            }
+        }
+
+        if (! $client->isConfigured()) {
             Log::warning('FetchHoroshopOrdersJob: Horoshop not configured, skipping');
+
             return;
         }
 
         try {
             $params = ['additionalData' => true];
-            
+
             if ($this->orderIds) {
                 $params['ids'] = $this->orderIds;
             } else {
@@ -97,32 +122,36 @@ class FetchHoroshopOrdersJob implements ShouldQueue
     protected function processOrder(array $data): void
     {
         $orderId = $data['order_id'] ?? null;
-        if (!$orderId) {
+        if (! $orderId) {
             return;
         }
 
-        // Check if already exists
-        $existing = Order::where('order_id', $orderId)->first();
-        
+        // Check if already exists (scoped to tenant if set)
+        $query = Order::withoutGlobalScopes()->where('order_id', $orderId);
+        if ($this->tenantId) {
+            $query->where('tenant_id', $this->tenantId);
+        }
+        $existing = $query->first();
+
         // Determine chat attribution
         $hadChat = false;
         $productsFromChat = 0;
         $sessionId = $this->sessionId;
-        
-        if ($this->linkToChat && !$sessionId) {
+
+        if ($this->linkToChat && ! $sessionId) {
             // PRIORITY 1: Find session by order_id in checkout_success event
             // This is the most reliable - direct link from frontend
             $sessionId = $this->findSessionByOrderId($orderId);
-            
+
             // PRIORITY 2: Fallback to phone/email matching
-            if (!$sessionId) {
+            if (! $sessionId) {
                 $sessionId = $this->findSessionByCustomer(
                     $data['delivery_phone'] ?? null,
                     $data['delivery_email'] ?? null
                 );
             }
         }
-        
+
         if ($sessionId) {
             $hadChat = $this->checkIfHadChat($sessionId);
             $productsFromChat = $this->countProductsFromChat($sessionId, $data['products'] ?? []);
@@ -130,6 +159,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
 
         // Prepare order data
         $orderPayload = [
+            'tenant_id' => $this->tenantId,
             'order_id' => $orderId,
             'session_id' => $sessionId,
             'status_code' => $data['stat_status'] ?? 1,
@@ -170,7 +200,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             // Create new order
             $order = Order::create($orderPayload);
             Log::info('FetchHoroshopOrdersJob: Created order', ['order_id' => $orderId, 'had_chat' => $hadChat]);
-            
+
             // Record checkout_success event for new orders (for funnel consistency)
             if ($sessionId && ($data['stat_status'] ?? 1) != 5) {
                 $this->recordCheckoutSuccessEvent($order, $sessionId, $hadChat, $productsFromChat);
@@ -209,22 +239,23 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         // Look for checkout_success event with this order_id
         $event = DB::table('chat_events')
             ->where('event_type', 'checkout_success')
-            ->where(function($q) use ($orderId) {
+            ->where(function ($q) use ($orderId) {
                 // order_id can be in dedicated column or in metadata JSON
                 $q->where('order_id', $orderId)
-                  ->orWhere('metadata', 'like', '%"order_id":"' . $orderId . '"%')
-                  ->orWhere('metadata', 'like', '%"order_id":' . $orderId . '%');
+                    ->orWhere('metadata', 'like', '%"order_id":"'.$orderId.'"%')
+                    ->orWhere('metadata', 'like', '%"order_id":'.$orderId.'%');
             })
             ->first();
-        
+
         if ($event && $event->session_id) {
             Log::info('FetchHoroshopOrdersJob: Found session by order_id (direct link)', [
                 'order_id' => $orderId,
                 'session_id' => $event->session_id,
             ]);
+
             return $event->session_id;
         }
-        
+
         return null;
     }
 
@@ -234,7 +265,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
      */
     protected function findSessionByCustomer(?string $phone, ?string $email): ?string
     {
-        if (!$phone && !$email) {
+        if (! $phone && ! $email) {
             return null;
         }
 
@@ -248,21 +279,21 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             ->where('event_type', 'checkout_submit')
             ->where('created_at', '>=', now()->subHours(24))
             ->orderByDesc('created_at');
-        
+
         // Try to match by phone or email in metadata
         if ($phoneLast10) {
-            $checkoutQuery->where(function($q) use ($phoneLast10, $email) {
-                $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+            $checkoutQuery->where(function ($q) use ($phoneLast10, $email) {
+                $q->where('metadata', 'like', '%'.$phoneLast10.'%');
                 if ($email) {
-                    $q->orWhere('metadata', 'like', '%' . $email . '%');
+                    $q->orWhere('metadata', 'like', '%'.$email.'%');
                 }
             });
         } elseif ($email) {
-            $checkoutQuery->where('metadata', 'like', '%' . $email . '%');
+            $checkoutQuery->where('metadata', 'like', '%'.$email.'%');
         }
-        
+
         $checkoutEvent = $checkoutQuery->first();
-        
+
         if ($checkoutEvent) {
             // Check if this session had chat activity
             $hadChat = $this->checkIfHadChat($checkoutEvent->session_id);
@@ -272,6 +303,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
                     'phone' => $phone,
                     'email' => $email,
                 ]);
+
                 return $checkoutEvent->session_id;
             }
         }
@@ -291,21 +323,22 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             $hasMatchingCheckout = DB::table('chat_events')
                 ->where('session_id', $sessionId)
                 ->where('event_type', 'checkout_submit')
-                ->where(function($q) use ($phoneLast10, $email) {
+                ->where(function ($q) use ($phoneLast10, $email) {
                     if ($phoneLast10) {
-                        $q->where('metadata', 'like', '%' . $phoneLast10 . '%');
+                        $q->where('metadata', 'like', '%'.$phoneLast10.'%');
                     }
                     if ($email) {
-                        $q->orWhere('metadata', 'like', '%' . $email . '%');
+                        $q->orWhere('metadata', 'like', '%'.$email.'%');
                     }
                 })
                 ->exists();
-            
+
             if ($hasMatchingCheckout && $this->checkIfHadChat($sessionId)) {
                 Log::info('FetchHoroshopOrdersJob: Found session from add_to_cart with matching checkout', [
                     'session_id' => $sessionId,
                     'phone' => $phone,
                 ]);
+
                 return $sessionId;
             }
         }
@@ -316,7 +349,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
             $messageWithPhone = DB::table('chat_messages')
                 ->where('role', 'user')
                 ->where('created_at', '>=', now()->subHours(24))
-                ->where('content', 'like', '%' . $phoneLast10 . '%')
+                ->where('content', 'like', '%'.$phoneLast10.'%')
                 ->orderByDesc('created_at')
                 ->first();
 
@@ -325,12 +358,13 @@ class FetchHoroshopOrdersJob implements ShouldQueue
                 $session = DB::table('chat_sessions')
                     ->where('id', $messageWithPhone->chat_session_id)
                     ->first();
-                
+
                 if ($session) {
                     Log::info('FetchHoroshopOrdersJob: Found session from phone in chat message', [
                         'session_id' => $session->session_id,
                         'phone' => $phone,
                     ]);
+
                     return $session->session_id;
                 }
             }
@@ -341,7 +375,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
 
     /**
      * Check if session had meaningful chat conversation.
-     * 
+     *
      * A "meaningful" conversation requires:
      * - At least 2 user messages (excludes single trigger response like "Так")
      * - OR products were shown in chat (via product_shown events)
@@ -353,9 +387,9 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $chatSession = DB::table('chat_sessions')
             ->where('session_id', $sessionId)
             ->first();
-        
+
         $chatSessionId = $chatSession?->id;
-        
+
         // Count user messages
         $messageCount = DB::table('chat_messages')
             ->where(function ($q) use ($sessionId, $chatSessionId) {
@@ -371,28 +405,28 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         if ($messageCount >= 2) {
             return true;
         }
-        
+
         // Check if products were shown in chat (real interaction)
         $productsShown = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'product_shown')
             ->exists();
-        
+
         if ($productsShown) {
             return true;
         }
-        
+
         // Check if add_to_cart was from chat recommendations
         $cartFromChat = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'add_to_cart')
             ->whereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true")
             ->exists();
-        
+
         if ($cartFromChat) {
             return true;
         }
-        
+
         return false;
     }
 
@@ -432,7 +466,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $chatSession = DB::table('chat_sessions')
             ->where('session_id', $sessionId)
             ->first();
-        
+
         if ($chatSession) {
             $tenant = \App\Models\Tenant::find($chatSession->tenant_id);
             $merchantId = $tenant?->slug ?? $tenant?->widgetSettings?->api_token;
@@ -442,10 +476,10 @@ class FetchHoroshopOrdersJob implements ShouldQueue
         $existingEvent = DB::table('chat_events')
             ->where('event_type', 'checkout_success')
             ->where('session_id', $sessionId)
-            ->where('metadata', 'like', '%"order_id":' . $order->order_id . '%')
+            ->where('metadata', 'like', '%"order_id":'.$order->order_id.'%')
             ->exists();
 
-        if (!$existingEvent) {
+        if (! $existingEvent) {
             DB::table('chat_events')->insert([
                 'session_id' => $sessionId,
                 'merchant_id' => $merchantId,
@@ -463,7 +497,7 @@ class FetchHoroshopOrdersJob implements ShouldQueue
                 ]),
                 'created_at' => $order->ordered_at ?? now(),
             ]);
-            
+
             Log::info('FetchHoroshopOrdersJob: Recorded checkout_success event', [
                 'order_id' => $order->order_id,
                 'session_id' => $sessionId,

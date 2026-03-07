@@ -16,6 +16,7 @@ use App\Services\Ai\PromptPresetService;
 use App\Services\Ai\ToneService;
 use App\Services\Catalog\CategoryPatternService;
 use App\Services\Catalog\PriceStatsService;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Horoshop\OrderSearchService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -592,6 +593,13 @@ abstract class BaseAgent
 
         // If it's a single noun-like query, try searching directly
         // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
+        PipelineTracer::current()?->step('agent.short_query_handler', [
+            'handler' => 'handleShortProductQuery',
+            'message' => $message,
+            'search_query' => $searchQuery,
+            'word_count' => $wordCount,
+        ]);
+
         Log::info('BaseAgent::handleShortProductQuery attempting search', [
             'message' => $message,
             'search_query' => $searchQuery,
@@ -1897,6 +1905,12 @@ PROMPT;
 
         Log::info('BaseAgent::toolSearchProducts', ['args' => $args, 'sort_by' => $sortBy]);
 
+        PipelineTracer::current()?->step('base_agent.search_start', [
+            'query' => $query,
+            'gpt_args' => $args,
+            'sort_by' => $sortBy,
+        ]);
+
         $filters = [];
         if (! empty($args['price_min'])) {
             $filters['price_min'] = (float) $args['price_min'];
@@ -1917,6 +1931,11 @@ PROMPT;
             $detectedCategory = $this->searchTool->detectAgeCategoryFromQuery($this->currentMessage);
             if ($detectedCategory) {
                 $filters['category'] = $detectedCategory;
+                PipelineTracer::current()?->step('base_agent.age_category_injected', [
+                    'source' => 'currentMessage',
+                    'detected_category' => $detectedCategory,
+                    'current_message' => mb_substr($this->currentMessage, 0, 100),
+                ]);
                 Log::info('BaseAgent: injected age category from original user message', [
                     'original_message' => $this->currentMessage,
                     'gpt_query' => $query,
@@ -1931,6 +1950,13 @@ PROMPT;
 
         // Request more to have room after filtering and deduplication
         $requestLimit = $limit * 5 + count($this->shownProductIds);
+
+        PipelineTracer::current()?->step('base_agent.search_call', [
+            'query' => $query,
+            'filters' => $filters,
+            'request_limit' => $requestLimit,
+        ]);
+
         $results = $this->searchTool->search($query, $filters, $requestLimit);
 
         // Filter by exclude text
@@ -1979,6 +2005,13 @@ PROMPT;
         $results = $this->filterAccessoriesFromResults($results, $query);
 
         $results = array_slice($results, 0, $limit);
+
+        PipelineTracer::current()?->step('base_agent.search_results', [
+            'results_count' => count($results),
+            'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
+            'result_categories' => array_map(fn ($p) => $p['category_path'] ?? '', array_slice($results, 0, 3)),
+            'search_meta' => $this->searchTool->getSearchMeta(),
+        ]);
 
         // Get full product cards with images
         if (! empty($results)) {
@@ -3824,6 +3857,9 @@ PROMPT;
      */
     protected function fallbackResponse(string $message): array
     {
+        PipelineTracer::current()?->step('agent.fallback_response', [
+            'message' => mb_substr($message, 0, 100),
+        ]);
         Log::warning('BaseAgent: using fallback response');
 
         // Try simple keyword search

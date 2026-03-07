@@ -4,6 +4,7 @@ namespace App\Services\Agent\Tools;
 
 use App\Models\Product;
 use App\Services\Analytics\ABTestingService;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
 use App\Services\Search\MeiliClient;
@@ -163,6 +164,12 @@ class MeiliProductSearchTool
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
             }
 
+            PipelineTracer::current()?->step('meili.category_resolved', [
+                'source_filter' => $filters['category'] ?? null,
+                'auto_detected' => $categoryFilter && empty($filters['category']),
+                'category' => $categoryFilter,
+            ]);
+
             // Add category to Meili filter so ALL searches (including retries) respect it
             if ($categoryFilter) {
                 // IMPORTANT: Meili CONTAINS is case-sensitive for Cyrillic, data stored UPPERCASE
@@ -246,8 +253,21 @@ class MeiliProductSearchTool
                 'limit' => $meiliLimit,
             ]);
 
+            PipelineTracer::current()?->step('meili.search_execute', [
+                'query' => $enhancedQuery,
+                'filter' => $filterString,
+                'limit' => $meiliLimit,
+                'category_filter' => $categoryFilter,
+            ]);
+
             $result = $index->search($enhancedQuery, $searchParams);
             $hits = $result->getHits();
+
+            PipelineTracer::current()?->step('meili.search_result', [
+                'results_count' => count($hits),
+                'hit_categories' => array_unique(array_map(fn ($h) => $h['category_path'] ?? '', array_slice($hits, 0, 10))),
+                'hit_titles' => array_map(fn ($h) => mb_substr($h['title'] ?? '', 0, 40), array_slice($hits, 0, 3)),
+            ]);
 
             // Save raw hits count for debugging
             $this->searchMeta['raw_hits_count'] = count($hits);
@@ -336,7 +356,8 @@ class MeiliProductSearchTool
 
                     return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
                 }));
-                Log::info('MeiliProductSearchTool: post-filtered by category', [
+
+                PipelineTracer::current()?->step('meili.post_filter_category', [
                     'category' => $categoryFilter,
                     'before' => $hitsBeforeCategory,
                     'after' => count($hits),
@@ -345,6 +366,10 @@ class MeiliProductSearchTool
                 // If post-filter removed all results, retry with Meili-level category_path filter
                 // This handles categories with few products that don't match the generic search query
                 if (count($hits) === 0 && $hitsBeforeCategory > 0) {
+                    PipelineTracer::current()?->step('meili.category_retry_meili_filter', [
+                        'reason' => 'post_filter_emptied_results',
+                        'category' => $categoryFilter,
+                    ]);
                     Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with Meili filter', [
                         'category' => $categoryFilter,
                     ]);
@@ -367,6 +392,10 @@ class MeiliProductSearchTool
 
             // If we had a category filter but no hits at all from the initial search
             if ($categoryFilter && count($hits) === 0) {
+                PipelineTracer::current()?->step('meili.direct_category_search', [
+                    'reason' => 'zero_hits_with_category',
+                    'category' => $categoryFilter,
+                ]);
                 Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search', [
                     'category' => $categoryFilter,
                 ]);
@@ -431,6 +460,11 @@ class MeiliProductSearchTool
             if (count($filtered) < 3 && ! empty($query)) {
                 $simplifiedQuery = $this->simplifyQuery($query);
                 if ($simplifiedQuery && $simplifiedQuery !== $enhancedQuery) {
+                    PipelineTracer::current()?->step('meili.simplified_retry', [
+                        'original' => $enhancedQuery,
+                        'simplified' => $simplifiedQuery,
+                        'original_results' => count($filtered),
+                    ]);
                     Log::info('MeiliProductSearchTool: retrying with simplified query', [
                         'original' => $enhancedQuery,
                         'simplified' => $simplifiedQuery,
@@ -472,6 +506,11 @@ class MeiliProductSearchTool
             $isCategoryQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate.?carrier|бронежилет|жилет)/ui', $query);
 
             if (count($filtered) < 3 && $semanticEnabled && ! $isCategoryQuery && $this->semanticSearch?->isAvailable()) {
+                PipelineTracer::current()?->step('meili.semantic_fallback_start', [
+                    'keyword_results' => count($filtered),
+                    'query' => $query,
+                    'category_filter' => $categoryFilter,
+                ]);
                 Log::info('MeiliProductSearchTool: trying semantic search fallback', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
@@ -481,6 +520,10 @@ class MeiliProductSearchTool
                 $semanticResults = $this->semanticSearchFallback($query, $filters, $limit);
 
                 if (count($semanticResults) > count($filtered)) {
+                    PipelineTracer::current()?->step('meili.semantic_fallback_used', [
+                        'semantic_results' => count($semanticResults),
+                        'semantic_categories' => array_unique(array_map(fn ($r) => $r['category_path'] ?? '', $semanticResults)),
+                    ]);
                     Log::info('MeiliProductSearchTool: semantic search found more results', [
                         'semantic_results' => count($semanticResults),
                     ]);
@@ -505,6 +548,7 @@ class MeiliProductSearchTool
 
             // Final safety net: ensure category filter is respected after all retries
             if ($categoryFilter && count($filtered) > 1) {
+                $beforeSafetyNet = count($filtered);
                 $catLower = mb_strtolower(trim($categoryFilter));
                 $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower) {
                     $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
@@ -514,6 +558,14 @@ class MeiliProductSearchTool
                 if (count($catFiltered) > 0) {
                     $filtered = $catFiltered;
                 }
+
+                PipelineTracer::current()?->step('meili.safety_net', [
+                    'category' => $categoryFilter,
+                    'before' => $beforeSafetyNet,
+                    'after_filter' => count($catFiltered),
+                    'kept_wrong' => count($catFiltered) === 0,
+                    'final_categories' => array_unique(array_map(fn ($h) => $h['category_path'] ?? '', array_slice($filtered, 0, 5))),
+                ]);
             }
 
             // DEBUG: Log final results to see if ai_product_type survived
@@ -542,9 +594,22 @@ class MeiliProductSearchTool
                 'search_meta' => $this->searchMeta,
             ]);
 
+            PipelineTracer::current()?->step('meili.final_return', [
+                'results_count' => count($filtered),
+                'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($filtered, 0, 3)),
+                'result_categories' => array_map(fn ($p) => $p['category_path'] ?? '', array_slice($filtered, 0, 3)),
+                'used_semantic' => $this->searchMeta['used_semantic'] ?? false,
+                'filter_used' => $filterString ?? 'none',
+                'category_filter' => $categoryFilter,
+            ]);
+
             return $filtered;
 
         } catch (\Exception $e) {
+            PipelineTracer::current()?->step('meili.error', [
+                'error' => $e->getMessage(),
+                'fallback' => 'eloquent',
+            ]);
             Log::error('MeiliProductSearchTool: error, falling back to Eloquent', [
                 'error' => $e->getMessage(),
                 'query' => $query,

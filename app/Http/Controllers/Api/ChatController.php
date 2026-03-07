@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\NewChatMessage;
 use App\Http\Controllers\Controller;
 use App\Services\Chat\ChatService;
-use App\Services\Metrics\MetricsService;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Escalation\EscalationService;
-use App\Events\NewChatMessage;
+use App\Services\Metrics\MetricsService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
@@ -21,6 +22,7 @@ class ChatController extends Controller
     ) {}
 
     private const MAX_MESSAGE_LENGTH = 2000;
+
     private const MIN_SESSION_ID_LENGTH = 8;
 
     public function handle(Request $request)
@@ -42,22 +44,22 @@ class ChatController extends Controller
             // Check message length
             if (mb_strlen($message) > self::MAX_MESSAGE_LENGTH) {
                 return response()->json([
-                    'type'       => 'text',
-                    'text'       => 'Повідомлення занадто довге. Скоротіть до ' . self::MAX_MESSAGE_LENGTH . ' символів.',
-                    'data'       => null,
+                    'type' => 'text',
+                    'text' => 'Повідомлення занадто довге. Скоротіть до '.self::MAX_MESSAGE_LENGTH.' символів.',
+                    'data' => null,
                     'session_id' => $sessionId,
-                    'meta'       => ['request_id' => $requestId],
+                    'meta' => ['request_id' => $requestId],
                 ], 400);
             }
 
             // Check for empty message
             if (trim($message) === '') {
                 return response()->json([
-                    'type'       => 'text',
-                    'text'       => 'Напишіть, будь ласка, запит 🙂',
-                    'data'       => null,
+                    'type' => 'text',
+                    'text' => 'Напишіть, будь ласка, запит 🙂',
+                    'data' => null,
                     'session_id' => $sessionId,
-                    'meta'       => ['request_id' => $requestId],
+                    'meta' => ['request_id' => $requestId],
                 ]);
             }
 
@@ -84,14 +86,14 @@ class ChatController extends Controller
             // Check message limit for tenant
             $tenantContext = app(\App\Services\Tenant\TenantContext::class);
             $tenant = $tenantContext->getTenant();
-            if ($tenant && !$tenant->canSendMessage()) {
+            if ($tenant && ! $tenant->canSendMessage()) {
                 Log::warning('ChatController: message limit exceeded', [
                     'request_id' => $requestId,
                     'tenant_id' => $tenant->id,
                     'messages_used' => $tenant->messages_used,
                     'messages_limit' => $tenant->messages_limit,
                 ]);
-                
+
                 return response()->json([
                     'type' => 'text',
                     'text' => 'На жаль, вичерпано ліміт повідомлень на цей місяць. Зверніться до адміністратора магазину.',
@@ -101,11 +103,16 @@ class ChatController extends Controller
             }
 
             $startTime = microtime(true);
+            $tracer = PipelineTracer::start($sessionId, $message);
+            $tracer->step('controller.entry', ['request_id' => $requestId]);
+
             $response = $this->chatService->handleMessage($message, $sessionId);
             $responseTime = (int) ((microtime(true) - $startTime) * 1000);
 
+            $trace = $tracer->finish();
+
             // Increment message usage for AI response
-            if ($tenant && !empty($response['text'])) {
+            if ($tenant && ! empty($response['text'])) {
                 $tenant->incrementMessageUsage();
             }
 
@@ -152,6 +159,7 @@ class ChatController extends Controller
             $response['session_id'] = $sessionId;
             $response['meta'] = array_merge($response['meta'] ?? [], [
                 'request_id' => $requestId,
+                'trace_summary' => $tracer->getSummary(),
             ]);
 
             Log::info('ChatController::handle response', [
@@ -169,11 +177,11 @@ class ChatController extends Controller
             ]);
 
             return response()->json([
-                'type'       => 'text',
-                'text'       => 'Сталася помилка. Спробуйте ще раз 🙏',
-                'data'       => null,
+                'type' => 'text',
+                'text' => 'Сталася помилка. Спробуйте ще раз 🙏',
+                'data' => null,
                 'session_id' => $sessionId ?? $payload['session_id'] ?? null,
-                'meta'       => ['request_id' => $requestId, 'error' => true],
+                'meta' => ['request_id' => $requestId, 'error' => true],
             ], 500);
         }
     }
@@ -184,16 +192,16 @@ class ChatController extends Controller
      */
     private function sanitizeMessage(mixed $input): string
     {
-        if (!is_string($input)) {
+        if (! is_string($input)) {
             return '';
         }
 
         // Remove control characters except newlines
         $message = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $input);
-        
+
         // Normalize whitespace
         $message = preg_replace('/\s+/', ' ', $message);
-        
+
         return trim($message);
     }
 
@@ -202,13 +210,13 @@ class ChatController extends Controller
      */
     private function validateSessionId(mixed $input): string
     {
-        if (!is_string($input) || mb_strlen(trim($input)) < self::MIN_SESSION_ID_LENGTH) {
+        if (! is_string($input) || mb_strlen(trim($input)) < self::MIN_SESSION_ID_LENGTH) {
             return (string) Str::uuid();
         }
 
         // Remove invalid characters
         $normalized = preg_replace('/[^a-zA-Z0-9_-]/', '', $input);
-        
+
         if (mb_strlen($normalized) < self::MIN_SESSION_ID_LENGTH) {
             return (string) Str::uuid();
         }
@@ -258,29 +266,29 @@ class ChatController extends Controller
     public function poll(Request $request, string $sessionId)
     {
         $lastMessageId = (int) $request->input('last_message_id', 0);
-        
+
         // Check operator mode status
         $activeSession = $this->metricsService->getSession($sessionId);
         $isOperatorMode = $activeSession && $activeSession->status === 'operator';
-        
+
         // Get new messages if in operator mode
         $newMessages = [];
         if ($isOperatorMode) {
             $chatSession = \App\Models\ChatSession::where('session_id', $sessionId)->first();
             if ($chatSession) {
                 $query = \App\Models\ChatMessage::where('chat_session_id', $chatSession->id)
-                    ->where(function($q) {
+                    ->where(function ($q) {
                         $q->where('role', 'operator')
-                          ->orWhere('meta->operator', true);
+                            ->orWhere('meta->operator', true);
                     })
                     ->orderBy('id', 'asc');
-                    
+
                 if ($lastMessageId > 0) {
                     $query->where('id', '>', $lastMessageId);
                 }
-                
+
                 $messages = $query->get();
-                
+
                 foreach ($messages as $msg) {
                     $newMessages[] = [
                         'id' => $msg->id,
@@ -291,7 +299,7 @@ class ChatController extends Controller
                 }
             }
         }
-        
+
         return response()->json([
             'operator_mode' => $isOperatorMode,
             'messages' => $newMessages,

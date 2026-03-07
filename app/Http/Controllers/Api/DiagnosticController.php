@@ -2564,6 +2564,33 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/pipeline-trace/{sessionId}
+     * View pipeline traces for debugging message flow
+     */
+    public function pipelineTrace(Request $request, string $sessionId): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $cacheKey = "pipeline_trace_{$sessionId}";
+        $traces = cache()->get($cacheKey, []);
+
+        if (empty($traces)) {
+            return response()->json([
+                'error' => 'No traces found for this session. Traces expire after 2 hours.',
+                'session_id' => $sessionId,
+            ], 404);
+        }
+
+        return response()->json([
+            'session_id' => $sessionId,
+            'trace_count' => count($traces),
+            'traces' => $traces,
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/sync-faq
      * Sync FAQ content from URLs
      */

@@ -4,6 +4,7 @@ namespace App\Services\Agent;
 
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Search\QueryPreprocessorService;
 use Illuminate\Support\Facades\Http;
@@ -44,6 +45,12 @@ class FunctionCallingAgent extends BaseAgent
 
         // PRE-PROCESS: Normalize slang, brands, detect FAQ/greetings
         $preprocessed = $this->queryPreprocessor->preprocess($message);
+
+        PipelineTracer::current()?->step('agent.preprocess', [
+            'intercepted' => $preprocessed['intercepted'],
+            'response_type' => $preprocessed['response_type'] ?? null,
+            'normalized_query' => $preprocessed['query'] ?? $message,
+        ]);
 
         if ($preprocessed['intercepted']) {
             Log::info('FunctionCallingAgent: query intercepted by preprocessor', [
@@ -116,6 +123,7 @@ class FunctionCallingAgent extends BaseAgent
         $response = $this->callGptWithTools($messages);
 
         if (! $response) {
+            PipelineTracer::current()?->step('agent.gpt_failed', ['fallback' => true]);
             Log::error('FunctionCallingAgent: callGptWithTools returned null, falling back', [
                 'message' => $normalizedMessage,
                 'session_id' => $sessionId,
@@ -133,10 +141,15 @@ class FunctionCallingAgent extends BaseAgent
         $toolCalls = $response['choices'][0]['message']['tool_calls'] ?? null;
 
         if ($toolCalls) {
+            PipelineTracer::current()?->step('agent.gpt_tool_calls', [
+                'tools' => array_map(fn ($tc) => $tc['function']['name'], $toolCalls),
+            ]);
+
             return $this->handleToolCalls($toolCalls, $messages, $normalizedMessage, $sessionId);
         }
 
         // Direct text response (small talk, FAQ, follow-up questions)
+        PipelineTracer::current()?->step('agent.gpt_no_tools', ['intent' => 'general']);
         $text = $response['choices'][0]['message']['content'] ?? '';
         $text = $this->stripUrlsFromText($text);
 

@@ -561,6 +561,22 @@ abstract class BaseAgent
         $requestLimit = 3 + count($this->shownProductIds);
         $products = $this->searchTool->search($searchQuery, $searchFilters, $requestLimit);
 
+        // If 0 results for 1-word query, try stripping Ukrainian plural endings
+        // "сортери" → "сортер", "конструктори" → "конструктор", "пазли" → "пазл"
+        if (empty($products) && $wordCount === 1) {
+            $singular = $this->stripUkrainianPlural($searchQuery);
+            if ($singular !== mb_strtolower($searchQuery)) {
+                $products = $this->searchTool->search($singular, $searchFilters, $requestLimit);
+                if (! empty($products)) {
+                    Log::info('BaseAgent: singular fallback worked', [
+                        'original' => $searchQuery,
+                        'singular' => $singular,
+                        'results' => count($products),
+                    ]);
+                }
+            }
+        }
+
         // If color filter returned no results, retry without filter and post-filter instead
         if (empty($products) && ! empty($detectedColor)) {
             $products = $this->searchTool->search($searchQuery, [], $requestLimit);
@@ -920,6 +936,26 @@ abstract class BaseAgent
     // ============================================================
     // CONTEXTUAL INTRO GENERATOR
     // ============================================================
+
+    /**
+     * Strip common Ukrainian plural endings for search retry.
+     * "сортери" → "сортер", "конструктори" → "конструктор", "пазли" → "пазл"
+     */
+    protected function stripUkrainianPlural(string $word): string
+    {
+        $lower = mb_strtolower(trim($word));
+
+        // Common Ukrainian plural endings (longest first)
+        $plurals = ['ери', 'ори', 'ари', 'ики', 'очі', 'ачі', 'ини', 'они', 'алі', 'олі', 'лі', 'ки', 'ці', 'ні', 'ті', 'зі', 'рі', 'ди', 'ги', 'си', 'зи', 'и', 'і'];
+
+        foreach ($plurals as $ending) {
+            if (mb_substr($lower, -mb_strlen($ending)) === $ending && mb_strlen($lower) > mb_strlen($ending) + 2) {
+                return mb_substr($lower, 0, -mb_strlen($ending));
+            }
+        }
+
+        return $lower;
+    }
 
     /**
      * Generate contextual intro based on user message instead of generic "Ось що я знайшов".

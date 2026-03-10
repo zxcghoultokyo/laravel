@@ -320,6 +320,37 @@ class MeiliProductSearchTool
                         'results_after_merge' => count($hits),
                     ]);
                 }
+
+                // Step 3: If still not enough, try adjacent lower category (e.g., школярам → дошкільнятам)
+                // Products marked "3+" also fit for 5, 7, 8 year olds
+                if (count($hits) < 3) {
+                    $adjacentCat = $this->getAdjacentLowerCategory($categoryFilter);
+                    if ($adjacentCat) {
+                        $adjacentBoost = mb_strtoupper(trim($adjacentCat));
+                        $adjResult = $index->search($enhancedQuery.' '.$adjacentBoost, $searchParams);
+                        $adjHits = $adjResult->getHits();
+
+                        $adjCatLower = mb_strtolower(trim($adjacentCat));
+                        $adjHits = array_values(array_filter($adjHits, function ($hit) use ($adjCatLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $adjCatLower) || str_contains($adjCatLower, $hitCat);
+                        }));
+
+                        $existingIds = array_column($hits, 'id');
+                        foreach ($adjHits as $hit) {
+                            if (! in_array($hit['id'], $existingIds)) {
+                                $hits[] = $hit;
+                                $existingIds[] = $hit['id'];
+                            }
+                        }
+
+                        Log::info('MeiliProductSearchTool: adjacent category fallback', [
+                            'adjacent_category' => $adjacentCat,
+                            'results_after_merge' => count($hits),
+                        ]);
+                    }
+                }
             } else {
                 $result = $index->search($enhancedQuery, $searchParams);
                 $hits = $result->getHits();
@@ -2036,6 +2067,22 @@ class MeiliProductSearchTool
         ]);
 
         return $category;
+    }
+
+    /**
+     * Get the adjacent lower age category for fallback when primary returns too few results.
+     * E.g., "школярам" → "дошкільнятам" (products marked 3+ also fit 8-year-olds).
+     */
+    public function getAdjacentLowerCategory(string $category): ?string
+    {
+        $catLower = mb_strtolower(trim($category));
+
+        return match (true) {
+            str_contains($catLower, 'школяр') => 'дошкільнятам',
+            str_contains($catLower, 'дошкільн') => 'тодлерам',
+            str_contains($catLower, 'тодлер') => 'малюкам',
+            default => null,
+        };
     }
 }
 // Deploy trigger 1769760953

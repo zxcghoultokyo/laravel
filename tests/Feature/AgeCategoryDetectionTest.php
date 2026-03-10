@@ -137,4 +137,12 @@ class AgeCategoryDetectionTest extends TestCase
         $normalized = $normalizeMethod->invoke($this->tool, 'тодлерам (1-3)');
         $this->assertTrue(str_contains('іграшки/тодлерам 1 – 3', $normalized));
     }
+
+    public function test_adjacent_lower_category(): void
+    {
+        $this->assertEquals('дошкільнятам', $this->tool->getAdjacentLowerCategory('школярам'));
+        $this->assertEquals('тодлерам', $this->tool->getAdjacentLowerCategory('дошкільнятам'));
+        $this->assertEquals('малюкам', $this->tool->getAdjacentLowerCategory('тодлерам'));
+        $this->assertNull($this->tool->getAdjacentLowerCategory('малюкам'));
+    }
 }

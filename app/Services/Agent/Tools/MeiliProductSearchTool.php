@@ -179,9 +179,25 @@ class MeiliProductSearchTool
             // and increase limit to ensure enough products survive post-filtering.
             // CONTAINS filter is NOT supported by deployed Meili version.
             $categoryQueryBoost = null;
+            $adjacentUpperCat = null;
             if ($categoryFilter) {
                 $categoryQueryBoost = mb_strtoupper(trim($categoryFilter));
                 $meiliLimit = max($meiliLimit, 200);
+
+                // For boundary ages (1, 3, 7) also search in adjacent upper category
+                // E.g., child turning 1 year = both МАЛЮКАМ and ТОДЛЕРАМ are relevant
+                // Check both search query AND original user message (passed via filters)
+                $boundaryCheckText = $query.' '.($filters['_user_message'] ?? '');
+                if ($this->isBoundaryAge($boundaryCheckText)) {
+                    $adjacentUpperCat = $this->getAdjacentUpperCategory($categoryFilter);
+                    if ($adjacentUpperCat) {
+                        Log::info('MeiliProductSearchTool: boundary age detected, including adjacent upper category', [
+                            'primary' => $categoryFilter,
+                            'adjacent_upper' => $adjacentUpperCat,
+                            'query' => $query,
+                        ]);
+                    }
+                }
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
@@ -282,13 +298,20 @@ class MeiliProductSearchTool
                     'results' => count($hits),
                 ]);
 
-                // Post-filter to keep only matching category
+                // Post-filter to keep only matching category (include adjacent upper for boundary ages)
                 if (count($hits) > 0) {
                     $catLower = mb_strtolower(trim($categoryFilter));
-                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                    $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower) {
                         $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                        if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
+                            return true;
+                        }
+                        if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
+                            return true;
+                        }
 
-                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                        return false;
                     }));
                 }
 
@@ -299,10 +322,17 @@ class MeiliProductSearchTool
 
                     // Post-filter
                     $catLower = mb_strtolower(trim($categoryFilter));
-                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower) {
+                    $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
+                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower, $adjUpperLower) {
                         $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                        if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
+                            return true;
+                        }
+                        if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
+                            return true;
+                        }
 
-                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                        return false;
                     }));
 
                     // Merge unique results
@@ -440,13 +470,21 @@ class MeiliProductSearchTool
             }
 
             // Post-filter by category (age group, etc.)
+            // For boundary ages (1, 3, 7) adjacentUpperCat is already computed above
             if ($categoryFilter && count($hits) > 0) {
                 $hitsBeforeCategory = count($hits);
                 $catLower = mb_strtolower(trim($categoryFilter));
-                $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
+                $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower) {
                     $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                    if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
+                        return true;
+                    }
+                    if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
+                        return true;
+                    }
 
-                    return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    return false;
                 }));
 
                 PipelineTracer::current()?->step('meili.post_filter_category', [
@@ -2120,6 +2158,39 @@ class MeiliProductSearchTool
             str_contains($catLower, 'тодлер') => 'малюкам',
             default => null,
         };
+    }
+
+    /**
+     * Get the adjacent upper age category.
+     * E.g., "малюкам" → "тодлерам" (a child turning 1 is already a toddler).
+     */
+    public function getAdjacentUpperCategory(string $category): ?string
+    {
+        $catLower = mb_strtolower(trim($category));
+
+        return match (true) {
+            str_contains($catLower, 'малюк') => 'тодлерам',
+            str_contains($catLower, 'тодлер') => 'дошкільнятам',
+            str_contains($catLower, 'дошкільн') => 'школярам',
+            default => null,
+        };
+    }
+
+    /**
+     * Check if query contains an age that sits on a category boundary (1, 3, 7).
+     * These ages belong to BOTH adjacent categories equally.
+     * E.g., "1 рік" → child is at МАЛЮКАМ/ТОДЛЕРАМ boundary.
+     */
+    public function isBoundaryAge(string $query): bool
+    {
+        $lower = mb_strtolower($query);
+        if (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
+            $age = (int) $m[1];
+
+            return in_array($age, [1, 3, 7]);
+        }
+
+        return false;
     }
 }
 // Deploy trigger 1769760953

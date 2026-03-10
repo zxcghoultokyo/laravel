@@ -2091,6 +2091,12 @@ PROMPT;
             $filters['sort_by'] = $sortBy;
         }
 
+        // Pass original user message so MeiliProductSearchTool can detect boundary ages
+        // (GPT often strips age info from the query parameter)
+        if (! empty($this->currentMessage)) {
+            $filters['_user_message'] = $this->currentMessage;
+        }
+
         // Request more to have room after filtering and deduplication
         $requestLimit = $limit * 5 + count($this->shownProductIds);
 

@@ -145,4 +145,26 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertEquals('малюкам', $this->tool->getAdjacentLowerCategory('тодлерам'));
         $this->assertNull($this->tool->getAdjacentLowerCategory('малюкам'));
     }
+
+    public function test_adjacent_upper_category(): void
+    {
+        $this->assertEquals('тодлерам', $this->tool->getAdjacentUpperCategory('малюкам'));
+        $this->assertEquals('дошкільнятам', $this->tool->getAdjacentUpperCategory('тодлерам'));
+        $this->assertEquals('школярам', $this->tool->getAdjacentUpperCategory('дошкільнятам'));
+        $this->assertNull($this->tool->getAdjacentUpperCategory('школярам'));
+    }
+
+    public function test_boundary_age_detection(): void
+    {
+        // Ages on category boundaries
+        $this->assertTrue($this->tool->isBoundaryAge('іграшки для дитини 1 рік'));
+        $this->assertTrue($this->tool->isBoundaryAge('подарунок на 3 роки'));
+        $this->assertTrue($this->tool->isBoundaryAge('що купити на 7 років'));
+
+        // Ages NOT on boundaries
+        $this->assertFalse($this->tool->isBoundaryAge('іграшки для 2 років'));
+        $this->assertFalse($this->tool->isBoundaryAge('подарунок на 5 років'));
+        $this->assertFalse($this->tool->isBoundaryAge('для малюка'));
+        $this->assertFalse($this->tool->isBoundaryAge('покажи сортери'));
+    }
 }

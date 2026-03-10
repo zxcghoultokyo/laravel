@@ -1417,6 +1417,14 @@ GPT повинен САМ визначити які товари з асорти
 - Клієнт може порівнювати, вибирати — йому потрібно бачити товари!
 - Виклич search_products БЕЗ exclude_shown для повторних запитів
 
+🚨 AFTER 0 RESULTS — RETRY, НЕ ВИГАДУЙ!
+Якщо попередній search_products повернув 0 товарів і користувач скаржиться або перепитує:
+- ЗАВЖДИ виклич search_products ЗНОВУ з ПРОСТІШИМ запитом (1-2 слова)!
+- НІКОЛИ не описуй товари текстом з пам'яті!
+- Якщо шукав "іграшки для 5 років" і 0 результатів → спробуй search_products("іграшки", category="дошкільнятам")
+- Якщо шукав "подарунок для дитини" і 0 → search_products("подарунок")
+- ЗАВЖДИ повертай товарні картки через search_products, НІКОЛИ не перераховуй назви в тексті!
+
 ЛАКОНІЧНІСТЬ — ЗОЛОТЕ ПРАВИЛО:
 - МАКСИМУМ 1-2 речення перед показом товарів!
 - НЕ описуй товари словами — картки це зроблять краще!
@@ -2701,35 +2709,73 @@ PROMPT;
     }
 
     /**
-     * Extract products mentioned by article in GPT plain-text response
+     * Extract products mentioned by article or title in GPT plain-text response
      * and look them up in the database.
      *
      * Handles patterns like: "арт. 107", "(арт. ABC-1)", "article: ABC-1"
+     * Also tries to find products by name from numbered lists when no articles found.
      *
      * @return array{products: array}|null
      */
     protected function extractProductsFromTextResponse(string $text, ?int $tenantId): ?array
     {
-        // Match article patterns: "арт. XXX", "(арт. XXX)", "article: XXX", "артикул XXX"
-        if (! preg_match_all('/(?:арт(?:икул)?[\.\s:]*|article[\s:]+)([a-zA-Z0-9\-_]+)/ui', $text, $matches)) {
-            return null;
+        // Step 1: Match article patterns: "арт. XXX", "(арт. XXX)", "article: XXX", "артикул XXX"
+        if (preg_match_all('/(?:арт(?:икул)?[\.\s:]*|article[\s:]+)([a-zA-Z0-9\-_]+)/ui', $text, $matches)) {
+            $articles = array_unique($matches[1]);
+            if (! empty($articles)) {
+                $query = Product::whereIn('article', $articles);
+                if ($tenantId) {
+                    $query->where('tenant_id', $tenantId);
+                }
+                $dbProducts = $query->get();
+
+                if ($dbProducts->isNotEmpty()) {
+                    return ['products' => $this->formatProductCards($dbProducts)];
+                }
+            }
         }
 
-        $articles = array_unique($matches[1]);
-        if (empty($articles)) {
-            return null;
+        // Step 2: Try to extract product names from numbered lists
+        // Matches: "1. Product Name", "2. Product Name - description", "- Product Name"
+        if (preg_match_all('/(?:^\s*\d+[\.\)]\s*\*{0,2}|^\s*[-•]\s*\*{0,2})(.+?)(?:\*{0,2}\s*[-–—\n]|$)/um', $text, $nameMatches)) {
+            $names = array_map(fn ($n) => trim(preg_replace('/[\*\n]/', '', $n)), $nameMatches[1]);
+            $names = array_filter($names, fn ($n) => mb_strlen($n) >= 3 && mb_strlen($n) <= 100);
+
+            if (! empty($names)) {
+                $foundProducts = collect();
+                $query = Product::query();
+                if ($tenantId) {
+                    $query->where('tenant_id', $tenantId);
+                }
+                $query->where('in_stock', true);
+
+                foreach ($names as $name) {
+                    $clean = mb_strtolower(trim($name));
+                    $found = (clone $query)->whereRaw('LOWER(title) LIKE ?', ["%{$clean}%"])->first();
+                    if ($found) {
+                        $foundProducts->push($found);
+                    }
+                }
+
+                if ($foundProducts->isNotEmpty()) {
+                    Log::info('extractProductsFromTextResponse: found products by title', [
+                        'names' => $names,
+                        'found' => $foundProducts->pluck('title')->toArray(),
+                    ]);
+
+                    return ['products' => $this->formatProductCards($foundProducts)];
+                }
+            }
         }
 
-        $query = Product::whereIn('article', $articles);
-        if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
-        }
-        $dbProducts = $query->get();
+        return null;
+    }
 
-        if ($dbProducts->isEmpty()) {
-            return null;
-        }
-
+    /**
+     * Format product models into card arrays with images.
+     */
+    protected function formatProductCards($dbProducts): array
+    {
         $products = [];
         foreach ($dbProducts as $product) {
             $images = $this->extractProductImages($product);
@@ -2745,6 +2791,8 @@ PROMPT;
                 'images' => $images,
             ];
         }
+
+        return $products;
 
         return ['products' => $products];
     }

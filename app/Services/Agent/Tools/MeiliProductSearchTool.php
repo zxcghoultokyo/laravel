@@ -4,6 +4,7 @@ namespace App\Services\Agent\Tools;
 
 use App\Models\Product;
 use App\Services\Analytics\ABTestingService;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Search\BrandDetectionService;
 use App\Services\Search\ColorService;
 use App\Services\Search\MeiliClient;
@@ -168,12 +169,19 @@ class MeiliProductSearchTool
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
             }
 
-            // Add category as Meili-level CONTAINS filter (not just post-filter)
-            // In a toy store, "іграшки" matches ALL products, so without Meili filter
-            // we get random 75 products and post-filtering leaves almost nothing
+            PipelineTracer::current()?->step('meili.category_resolved', [
+                'source_filter' => $filters['category'] ?? null,
+                'auto_detected' => $categoryFilter && empty($filters['category']),
+                'category' => $categoryFilter,
+            ]);
+
+            // When category is detected, boost Meili results by including category keyword in query
+            // and increase limit to ensure enough products survive post-filtering.
+            // CONTAINS filter is NOT supported by deployed Meili version.
+            $categoryQueryBoost = null;
             if ($categoryFilter) {
-                $catEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
-                $filterParts[] = "category_path CONTAINS '{$catEscaped}'";
+                $categoryQueryBoost = mb_strtoupper(trim($categoryFilter));
+                $meiliLimit = max($meiliLimit, 200);
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
@@ -252,8 +260,106 @@ class MeiliProductSearchTool
                 'limit' => $meiliLimit,
             ]);
 
-            $result = $index->search($enhancedQuery, $searchParams);
-            $hits = $result->getHits();
+            PipelineTracer::current()?->step('meili.search_execute', [
+                'query' => $enhancedQuery,
+                'filter' => $filterString,
+                'limit' => $meiliLimit,
+                'category_filter' => $categoryFilter,
+                'category_query_boost' => $categoryQueryBoost,
+            ]);
+
+            // When category is detected, do a two-step search:
+            // 1. First search with category keyword added to query (ranks category products higher)
+            // 2. If not enough results, search with just category as query (finds all products in category)
+            if ($categoryQueryBoost) {
+                // Step 1: Original query + category keyword (e.g., "іграшки ДОШКІЛЬНЯТАМ")
+                $boostedQuery = $enhancedQuery.' '.$categoryQueryBoost;
+                $result = $index->search($boostedQuery, $searchParams);
+                $hits = $result->getHits();
+
+                Log::info('MeiliProductSearchTool: category-boosted search', [
+                    'boosted_query' => $boostedQuery,
+                    'results' => count($hits),
+                ]);
+
+                // Post-filter to keep only matching category
+                if (count($hits) > 0) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
+                }
+
+                // Step 2: If not enough results, search with JUST category keyword
+                if (count($hits) < 3) {
+                    $catOnlyResult = $index->search($categoryQueryBoost, $searchParams);
+                    $catOnlyHits = $catOnlyResult->getHits();
+
+                    // Post-filter
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
+
+                    // Merge unique results
+                    $existingIds = array_column($hits, 'id');
+                    foreach ($catOnlyHits as $hit) {
+                        if (! in_array($hit['id'], $existingIds)) {
+                            $hits[] = $hit;
+                            $existingIds[] = $hit['id'];
+                        }
+                    }
+
+                    Log::info('MeiliProductSearchTool: category-only fallback search', [
+                        'category_query' => $categoryQueryBoost,
+                        'results_after_merge' => count($hits),
+                    ]);
+                }
+
+                // Step 3: If still not enough, try adjacent lower category (e.g., школярам → дошкільнятам)
+                // Products marked "3+" also fit for 5, 7, 8 year olds
+                if (count($hits) < 3) {
+                    $adjacentCat = $this->getAdjacentLowerCategory($categoryFilter);
+                    if ($adjacentCat) {
+                        $adjacentBoost = mb_strtoupper(trim($adjacentCat));
+                        $adjResult = $index->search($enhancedQuery.' '.$adjacentBoost, $searchParams);
+                        $adjHits = $adjResult->getHits();
+
+                        $adjCatLower = mb_strtolower(trim($adjacentCat));
+                        $adjHits = array_values(array_filter($adjHits, function ($hit) use ($adjCatLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $adjCatLower) || str_contains($adjCatLower, $hitCat);
+                        }));
+
+                        $existingIds = array_column($hits, 'id');
+                        foreach ($adjHits as $hit) {
+                            if (! in_array($hit['id'], $existingIds)) {
+                                $hits[] = $hit;
+                                $existingIds[] = $hit['id'];
+                            }
+                        }
+
+                        Log::info('MeiliProductSearchTool: adjacent category fallback', [
+                            'adjacent_category' => $adjacentCat,
+                            'results_after_merge' => count($hits),
+                        ]);
+                    }
+                }
+            } else {
+                $result = $index->search($enhancedQuery, $searchParams);
+                $hits = $result->getHits();
+            }
+
+            PipelineTracer::current()?->step('meili.search_result', [
+                'results_count' => count($hits),
+                'hit_categories' => array_unique(array_map(fn ($h) => $h['category_path'] ?? '', array_slice($hits, 0, 10))),
+                'hit_titles' => array_map(fn ($h) => mb_substr($h['title'] ?? '', 0, 40), array_slice($hits, 0, 3)),
+            ]);
 
             // Save raw hits count for debugging
             $this->searchMeta['raw_hits_count'] = count($hits);
@@ -342,30 +448,40 @@ class MeiliProductSearchTool
 
                     return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
                 }));
-                Log::info('MeiliProductSearchTool: post-filtered by category', [
+
+                PipelineTracer::current()?->step('meili.post_filter_category', [
                     'category' => $categoryFilter,
                     'before' => $hitsBeforeCategory,
                     'after' => count($hits),
                 ]);
 
-                // If post-filter removed all results, retry with Meili-level category_path filter
-                // This handles categories with few products that don't match the generic search query
+                // If post-filter removed all results, retry by searching with category keyword as query
+                // This uses Meili's text search to find products in the right category
                 if (count($hits) === 0 && $hitsBeforeCategory > 0) {
-                    Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with Meili filter', [
+                    PipelineTracer::current()?->step('meili.category_retry_meili_filter', [
+                        'reason' => 'post_filter_emptied_results',
+                        'category' => $categoryFilter,
+                    ]);
+                    Log::info('MeiliProductSearchTool: category post-filter emptied results, retrying with category as query', [
                         'category' => $categoryFilter,
                     ]);
 
-                    $catFilterEscaped = str_replace("'", "\\'", $catLower);
-                    $categoryFilterParts = $filterParts;
-                    $categoryFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
-                    $categorySearchParams = $searchParams;
-                    $categorySearchParams['filter'] = implode(' AND ', $categoryFilterParts);
-
-                    $categoryResult = $index->search('', $categorySearchParams);
+                    // Search using the category name as search text — Meili keyword search will match
+                    // category_path since it's a searchable attribute
+                    $categoryResult = $index->search(mb_strtoupper(trim($categoryFilter)), $searchParams);
                     $hits = $categoryResult->getHits();
 
-                    Log::info('MeiliProductSearchTool: Meili category filter retry', [
-                        'filter' => $categorySearchParams['filter'],
+                    // Post-filter results to ensure category match
+                    if (count($hits) > 0) {
+                        $catLower = mb_strtolower(trim($categoryFilter));
+                        $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                        }));
+                    }
+
+                    Log::info('MeiliProductSearchTool: Meili category keyword retry', [
                         'results' => count($hits),
                     ]);
                 }
@@ -373,28 +489,70 @@ class MeiliProductSearchTool
 
             // If we had a category filter but no hits at all from the initial search
             if ($categoryFilter && count($hits) === 0) {
-                Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search', [
+                PipelineTracer::current()?->step('meili.direct_category_search', [
+                    'reason' => 'zero_hits_with_category',
+                    'category' => $categoryFilter,
+                ]);
+                Log::info('MeiliProductSearchTool: zero hits with category, trying direct category search via keyword', [
                     'category' => $categoryFilter,
                 ]);
 
-                $catFilterEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
-                $directFilterParts = $filterParts;
-                $directFilterParts[] = "category_path CONTAINS '{$catFilterEscaped}'";
-                $directSearchParams = $searchParams;
-                $directSearchParams['filter'] = implode(' AND ', $directFilterParts);
-
-                $directResult = $index->search($enhancedQuery, $directSearchParams);
+                // Search using category name as text query — avoids unsupported CONTAINS filter
+                $catQuery = mb_strtoupper(trim($categoryFilter));
+                $directResult = $index->search($catQuery, $searchParams);
                 $hits = $directResult->getHits();
 
-                // If still nothing with query, try empty query to get any products from category
-                if (count($hits) === 0) {
-                    $directResult = $index->search('', $directSearchParams);
-                    $hits = $directResult->getHits();
+                // Post-filter to ensure category match
+                if (count($hits) > 0) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
                 }
 
-                Log::info('MeiliProductSearchTool: direct category search result', [
+                Log::info('MeiliProductSearchTool: direct category keyword search result', [
                     'results' => count($hits),
                 ]);
+
+                // Adjacent category fallback: школярам → дошкільнятам, etc.
+                // Products marked "3+" also fit for 5, 7, 8 year olds
+                if (count($hits) < 3) {
+                    $adjacentCat = $this->getAdjacentLowerCategory($categoryFilter);
+                    if ($adjacentCat) {
+                        $adjBoost = mb_strtoupper(trim($adjacentCat));
+                        $adjResult = $index->search($enhancedQuery.' '.$adjBoost, $searchParams);
+                        $adjHits = $adjResult->getHits();
+
+                        $adjCatLower = mb_strtolower(trim($adjacentCat));
+                        $adjHits = array_values(array_filter($adjHits, function ($hit) use ($adjCatLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $adjCatLower) || str_contains($adjCatLower, $hitCat);
+                        }));
+
+                        $existingIds = array_column($hits, 'id');
+                        foreach ($adjHits as $hit) {
+                            if (! in_array($hit['id'], $existingIds)) {
+                                $hits[] = $hit;
+                                $existingIds[] = $hit['id'];
+                            }
+                        }
+
+                        PipelineTracer::current()?->step('meili.adjacent_category_fallback', [
+                            'primary_category' => $categoryFilter,
+                            'adjacent_category' => $adjacentCat,
+                            'results_after_merge' => count($hits),
+                        ]);
+
+                        Log::info('MeiliProductSearchTool: adjacent category fallback (post-filter)', [
+                            'primary' => $categoryFilter,
+                            'adjacent' => $adjacentCat,
+                            'results' => count($hits),
+                        ]);
+                    }
+                }
             }
 
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);
@@ -437,6 +595,11 @@ class MeiliProductSearchTool
             if (count($filtered) < 3 && ! empty($query)) {
                 $simplifiedQuery = $this->simplifyQuery($query);
                 if ($simplifiedQuery && $simplifiedQuery !== $enhancedQuery) {
+                    PipelineTracer::current()?->step('meili.simplified_retry', [
+                        'original' => $enhancedQuery,
+                        'simplified' => $simplifiedQuery,
+                        'original_results' => count($filtered),
+                    ]);
                     Log::info('MeiliProductSearchTool: retrying with simplified query', [
                         'original' => $enhancedQuery,
                         'simplified' => $simplifiedQuery,
@@ -478,6 +641,11 @@ class MeiliProductSearchTool
             $isCategoryQuery = preg_match('/(шолом|каска|helmet|плитоноск|plate.?carrier|бронежилет|жилет)/ui', $query);
 
             if (count($filtered) < 3 && $semanticEnabled && ! $isCategoryQuery && $this->semanticSearch?->isAvailable()) {
+                PipelineTracer::current()?->step('meili.semantic_fallback_start', [
+                    'keyword_results' => count($filtered),
+                    'query' => $query,
+                    'category_filter' => $categoryFilter,
+                ]);
                 Log::info('MeiliProductSearchTool: trying semantic search fallback', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
@@ -487,6 +655,10 @@ class MeiliProductSearchTool
                 $semanticResults = $this->semanticSearchFallback($query, $filters, $limit);
 
                 if (count($semanticResults) > count($filtered)) {
+                    PipelineTracer::current()?->step('meili.semantic_fallback_used', [
+                        'semantic_results' => count($semanticResults),
+                        'semantic_categories' => array_unique(array_map(fn ($r) => $r['category_path'] ?? '', $semanticResults)),
+                    ]);
                     Log::info('MeiliProductSearchTool: semantic search found more results', [
                         'semantic_results' => count($semanticResults),
                     ]);
@@ -506,6 +678,28 @@ class MeiliProductSearchTool
                 Log::info('MeiliProductSearchTool: skipping semantic fallback for category query', [
                     'keyword_results' => count($filtered),
                     'query' => $query,
+                ]);
+            }
+
+            // Final safety net: ensure category filter is respected after all retries
+            if ($categoryFilter && count($filtered) > 1) {
+                $beforeSafetyNet = count($filtered);
+                $catLower = mb_strtolower(trim($categoryFilter));
+                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower) {
+                    $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                    return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                }));
+                if (count($catFiltered) > 0) {
+                    $filtered = $catFiltered;
+                }
+
+                PipelineTracer::current()?->step('meili.safety_net', [
+                    'category' => $categoryFilter,
+                    'before' => $beforeSafetyNet,
+                    'after_filter' => count($catFiltered),
+                    'kept_wrong' => count($catFiltered) === 0,
+                    'final_categories' => array_unique(array_map(fn ($h) => $h['category_path'] ?? '', array_slice($filtered, 0, 5))),
                 ]);
             }
 
@@ -535,9 +729,22 @@ class MeiliProductSearchTool
                 'search_meta' => $this->searchMeta,
             ]);
 
+            PipelineTracer::current()?->step('meili.final_return', [
+                'results_count' => count($filtered),
+                'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($filtered, 0, 3)),
+                'result_categories' => array_map(fn ($p) => $p['category_path'] ?? '', array_slice($filtered, 0, 3)),
+                'used_semantic' => $this->searchMeta['used_semantic'] ?? false,
+                'filter_used' => $filterString ?? 'none',
+                'category_filter' => $categoryFilter,
+            ]);
+
             return $filtered;
 
         } catch (\Exception $e) {
+            PipelineTracer::current()?->step('meili.error', [
+                'error' => $e->getMessage(),
+                'fallback' => 'eloquent',
+            ]);
             Log::error('MeiliProductSearchTool: error, falling back to Eloquent', [
                 'error' => $e->getMessage(),
                 'query' => $query,
@@ -1842,13 +2049,18 @@ class MeiliProductSearchTool
      * Detect age-based category from query text.
      * Maps age mentions to known category patterns used in toy/kids stores.
      */
-    private function detectAgeCategoryFromQuery(string $query): ?string
+    public function detectAgeCategoryFromQuery(string $query): ?string
     {
         $lower = mb_strtolower($query);
 
-        // Match explicit age patterns: "3 роки", "2 років", "1 рік", "від 3", etc.
-        if (preg_match('/(?:для|від|вік|дитин[іа]?)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
+        // Match explicit age patterns: "3 роки", "2 років", "1 рік", "від 3", "до 1 року", "на 5 років"
+        if (preg_match('/(?:для|від|до|на|вік|дитин\w*)\s*(\d{1,2})\s*(?:рок|рік|річ|міс|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
+
+            // "до X років" means "under X", so use lower age group
+            if (preg_match('/до\s*\d/ui', $lower) && $age > 0) {
+                $age = $age - 1;
+            }
         } elseif (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
         } else {
@@ -1882,8 +2094,7 @@ class MeiliProductSearchTool
         } elseif ($age < 7) {
             $category = 'дошкільнятам';
         } else {
-            // School-age: no specific filter, let search return all
-            return null;
+            $category = 'школярам';
         }
 
         Log::info('MeiliProductSearchTool: detected age category from query', [
@@ -1893,6 +2104,22 @@ class MeiliProductSearchTool
         ]);
 
         return $category;
+    }
+
+    /**
+     * Get the adjacent lower age category for fallback when primary returns too few results.
+     * E.g., "школярам" → "дошкільнятам" (products marked 3+ also fit 8-year-olds).
+     */
+    public function getAdjacentLowerCategory(string $category): ?string
+    {
+        $catLower = mb_strtolower(trim($category));
+
+        return match (true) {
+            str_contains($catLower, 'школяр') => 'дошкільнятам',
+            str_contains($catLower, 'дошкільн') => 'тодлерам',
+            str_contains($catLower, 'тодлер') => 'малюкам',
+            default => null,
+        };
     }
 }
 // Deploy trigger 1769760953

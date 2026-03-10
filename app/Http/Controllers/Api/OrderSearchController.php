@@ -3,17 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\Horoshop\OrderSearchService;
-use Illuminate\Http\Request;
 use App\Services\Horoshop\DeliveryTrackingService;
+use App\Services\Horoshop\HoroshopClient;
+use App\Services\Horoshop\OrderSearchService;
+use App\Services\Horoshop\OrderService;
+use Illuminate\Http\Request;
 
 class OrderSearchController extends Controller
 {
-    public function __construct(
-        protected OrderSearchService $searchService,
-        protected DeliveryTrackingService $trackingService,
-    ) {}
-
     /**
      * Search orders by flexible criteria.
      *
@@ -30,6 +27,9 @@ class OrderSearchController extends Controller
      */
     public function search(Request $request)
     {
+        $searchService = $this->resolveSearchService();
+        $trackingService = app(DeliveryTrackingService::class);
+
         // Accept either natural language query or structured criteria
         $query = $request->input('query');
         $orderIdParam = $request->input('order_id');
@@ -40,20 +40,19 @@ class OrderSearchController extends Controller
 
         // If query provided, parse it
         $criteria = [];
-        if (!empty($query)) {
-            $criteria = $this->searchService->parseQuery($query);
+        if (! empty($query)) {
+            $criteria = $searchService->parseQuery($query);
         } else {
-            // Use explicit criteria
-            if (!empty($orderIdParam)) {
+            if (! empty($orderIdParam)) {
                 $criteria['order_id'] = (int) $orderIdParam;
             }
-            if (!empty($phone)) {
+            if (! empty($phone)) {
                 $criteria['phone'] = $phone;
             }
-            if (!empty($name)) {
+            if (! empty($name)) {
                 $criteria['name'] = $name;
             }
-            if (!empty($email)) {
+            if (! empty($email)) {
                 $criteria['email'] = $email;
             }
         }
@@ -70,22 +69,21 @@ class OrderSearchController extends Controller
 
         $criteria['limit'] = $limit;
 
-        // Perform search
-        $result = $this->searchService->search($criteria);
+        $result = $searchService->search($criteria);
 
         $status = match ($result['total']) {
             0 => 'not_found',
             1 => 'single_result',
             default => 'multiple_results',
         };
-        // Enrich orders with delivery tracking info
-        $enrichedOrders = array_map(function ($order) {
-            $deliveryInfo = $this->trackingService->formatDeliveryInfo($order);
+
+        $enrichedOrders = array_map(function ($order) use ($trackingService) {
+            $deliveryInfo = $trackingService->formatDeliveryInfo($order);
+
             return array_merge($order, [
                 'delivery_tracking' => $deliveryInfo,
             ]);
         }, $result['orders']);
-
 
         return response()->json([
             'type' => 'orders_search',
@@ -99,13 +97,36 @@ class OrderSearchController extends Controller
         ]);
     }
 
+    /**
+     * Build tenant-specific OrderSearchService.
+     */
+    protected function resolveSearchService(): OrderSearchService
+    {
+        $tenant = app()->bound('current_tenant') ? app('current_tenant') : null;
+
+        if ($tenant && ! empty($tenant->platform_credentials)) {
+            $creds = $tenant->platform_credentials;
+            $domain = is_array($creds['domain'] ?? null) ? ($creds['domain']['value'] ?? '') : (string) ($creds['domain'] ?? '');
+            $login = is_array($creds['login'] ?? null) ? ($creds['login']['value'] ?? '') : (string) ($creds['login'] ?? '');
+            $password = is_array($creds['password'] ?? null) ? ($creds['password']['value'] ?? '') : (string) ($creds['password'] ?? '');
+            if ($domain && $login && $password) {
+                $client = new HoroshopClient($domain, $login, $password);
+                $orderService = new OrderService($client);
+
+                return new OrderSearchService($client, $orderService, app(DeliveryTrackingService::class));
+            }
+        }
+
+        return app(OrderSearchService::class);
+    }
+
     private function buildMessage(string $status, int $total, string $searchType): string
     {
         return match ($status) {
             'not_found' => "Замовлення не знайдено за цими параметрами ({$searchType}).",
-            'single_result' => "Знайдено 1 замовлення.",
+            'single_result' => 'Знайдено 1 замовлення.',
             'multiple_results' => "Знайдено {$total} замовлень.",
-            default => "Пошук завершено.",
+            default => 'Пошук завершено.',
         };
     }
 }

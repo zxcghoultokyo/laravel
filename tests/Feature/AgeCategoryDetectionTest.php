@@ -61,10 +61,10 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertNull($result);
     }
 
-    public function test_no_detection_for_school_age(): void
+    public function test_detects_school_age(): void
     {
         $result = $this->method->invoke($this->tool, 'для дитини 10 років');
-        $this->assertNull($result);
+        $this->assertEquals('школярам', $result);
     }
 
     public function test_detects_malyuk_keyword(): void
@@ -136,5 +136,13 @@ class AgeCategoryDetectionTest extends TestCase
         // GPT passes "тодлерам (1-3)" → normalized to "тодлерам"
         $normalized = $normalizeMethod->invoke($this->tool, 'тодлерам (1-3)');
         $this->assertTrue(str_contains('іграшки/тодлерам 1 – 3', $normalized));
+    }
+
+    public function test_adjacent_lower_category(): void
+    {
+        $this->assertEquals('дошкільнятам', $this->tool->getAdjacentLowerCategory('школярам'));
+        $this->assertEquals('тодлерам', $this->tool->getAdjacentLowerCategory('дошкільнятам'));
+        $this->assertEquals('малюкам', $this->tool->getAdjacentLowerCategory('тодлерам'));
+        $this->assertNull($this->tool->getAdjacentLowerCategory('малюкам'));
     }
 }

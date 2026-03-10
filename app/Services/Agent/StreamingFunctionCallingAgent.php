@@ -4,6 +4,7 @@ namespace App\Services\Agent;
 
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Horoshop\OrderSearchService;
 use App\Services\Search\QueryPreprocessorService;
 use Generator;
@@ -55,6 +56,14 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // PRE-PROCESS: Normalize slang, brands, detect FAQ/greetings
         $preprocessed = $this->queryPreprocessor->preprocess($message);
 
+        PipelineTracer::current()?->step('agent.preprocess', [
+            'intercepted' => $preprocessed['intercepted'],
+            'response_type' => $preprocessed['response_type'] ?? null,
+            'detected_slang' => $preprocessed['detected_slang'] ?? null,
+            'detected_brand' => $preprocessed['detected_brand'] ?? null,
+            'normalized_query' => $preprocessed['query'] ?? $message,
+        ]);
+
         if ($preprocessed['intercepted']) {
             Log::info('StreamingAgent: query intercepted by preprocessor', [
                 'message' => $message,
@@ -99,6 +108,10 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // PRE-PROCESS: Handle follow-up questions about previously shown products
         $followUpResult = $this->handleFollowUpQuestion($normalizedMessage, $sessionId);
         if ($followUpResult) {
+            PipelineTracer::current()?->step('agent.follow_up_handled', [
+                'handler' => 'handleFollowUpQuestion',
+                'type' => $followUpResult['meta']['follow_up_type'] ?? null,
+            ]);
             Log::info('StreamingAgent: follow-up question handled directly', [
                 'message' => $message,
                 'type' => $followUpResult['meta']['follow_up_type'] ?? null,
@@ -120,6 +133,10 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // PRE-PROCESS: Handle implicit queries directly
         $implicitResult = $this->handleImplicitQuery($normalizedMessage, $sessionId);
         if ($implicitResult) {
+            PipelineTracer::current()?->step('agent.implicit_handled', [
+                'handler' => 'handleImplicitQuery',
+                'products_count' => count($implicitResult['products'] ?? []),
+            ]);
             Log::info('StreamingAgent: implicit query handled directly', [
                 'message' => $normalizedMessage,
                 'products_found' => count($implicitResult['products'] ?? []),
@@ -150,6 +167,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         $responseIntent = 'streaming';
 
         if (empty($this->apiKey)) {
+            PipelineTracer::current()?->step('agent.no_api_key', ['fallback' => true]);
             Log::warning('StreamingAgent: no API key, using fallback');
             yield from $this->fallbackStream($normalizedMessage);
 
@@ -167,6 +185,14 @@ class StreamingFunctionCallingAgent extends BaseAgent
         $productDetails = $isFreshQuery ? '' : $this->loadRecentProductDetails($sessionId);
 
         // NOTE: shownProductIds already loaded early (before handleImplicitQuery)
+
+        PipelineTracer::current()?->step('agent.history_loaded', [
+            'history_count' => count($history),
+            'is_fresh_query' => $isFreshQuery,
+            'has_context' => ! empty($conversationContext),
+            'has_product_details' => ! empty($productDetails),
+            'shown_ids_count' => count($this->shownProductIds),
+        ]);
 
         // Set current message for modular prompt building
         $this->currentMessage = $normalizedMessage;
@@ -255,10 +281,17 @@ CONTEXT;
 
         yield ['type' => 'status', 'data' => ['text' => 'Аналізую запит...', 'phase' => 'thinking']];
 
+        PipelineTracer::current()?->step('agent.gpt_call', [
+            'model' => $this->model ?? 'unknown',
+            'messages_count' => count($messages),
+            'has_tools' => true,
+        ]);
+
         // First call: may need tool calls
         $response = $this->callGptWithTools($messages);
 
         if (! $response) {
+            PipelineTracer::current()?->step('agent.gpt_failed', ['fallback' => true]);
             yield from $this->fallbackStream($normalizedMessage);
 
             return;
@@ -268,6 +301,12 @@ CONTEXT;
 
         // Check if GPT wants to call tools
         if (! empty($assistantMessage['tool_calls'])) {
+            $toolNames = array_map(fn ($tc) => $tc['function']['name'], $assistantMessage['tool_calls']);
+            PipelineTracer::current()?->step('agent.gpt_tool_calls', [
+                'tools' => $toolNames,
+                'count' => count($assistantMessage['tool_calls']),
+            ]);
+
             yield ['type' => 'status', 'data' => ['text' => 'Шукаю товари...', 'phase' => 'searching']];
 
             // Execute tools
@@ -290,10 +329,37 @@ CONTEXT;
                     $args = $this->injectCategoryContext($args, $normalizedMessage, $lastCategory);
                 }
 
+                // Inject age-based category from original user message if GPT didn't pass one
+                if ($functionName === 'search_products' && empty($args['category'])) {
+                    $ageCategory = $this->searchTool->detectAgeCategoryFromQuery($normalizedMessage);
+                    if ($ageCategory) {
+                        $args['category'] = $ageCategory;
+                        PipelineTracer::current()?->step('agent.age_category_injected', [
+                            'source' => 'user_message',
+                            'detected_category' => $ageCategory,
+                            'gpt_query' => $args['query'] ?? '',
+                        ]);
+                        Log::info('StreamingAgent: injected age category from user message', [
+                            'user_message' => $normalizedMessage,
+                            'gpt_query' => $args['query'] ?? '',
+                            'detected_category' => $ageCategory,
+                        ]);
+                    }
+                }
+
                 Log::info('StreamingAgent: executing tool', [
                     'function' => $functionName,
                     'args' => $args,
                     'last_category' => $lastCategory,
+                ]);
+
+                PipelineTracer::current()?->step('agent.tool_execute', [
+                    'tool' => $functionName,
+                    'query' => $args['query'] ?? null,
+                    'category' => $args['category'] ?? null,
+                    'brand' => $args['brand'] ?? null,
+                    'price_min' => $args['price_min'] ?? null,
+                    'price_max' => $args['price_max'] ?? null,
                 ]);
 
                 $result = $this->executeTool($functionName, $args);
@@ -374,6 +440,13 @@ CONTEXT;
             // Dedupe products
             $allProducts = $this->dedupeProducts($allProducts);
 
+            PipelineTracer::current()?->step('agent.tools_completed', [
+                'products_count' => count($allProducts),
+                'search_was_called' => $searchWasCalled,
+                'search_found_products' => $searchFoundProducts,
+                'product_categories' => array_unique(array_map(fn ($p) => $p['category_path'] ?? 'unknown', array_slice($allProducts, 0, 5))),
+            ]);
+
             yield ['type' => 'status', 'data' => ['text' => 'Готую відповідь...', 'phase' => 'generating']];
 
             // Collect full response (GPT returns JSON, we need to parse it)
@@ -396,6 +469,13 @@ CONTEXT;
             $responseText = $introText ?: $collectedText;
             $responseProducts = $structured['products'] ?? [];
             $responseIntent = 'product_search';
+
+            PipelineTracer::current()?->step('agent.response_parsed', [
+                'has_intro' => ! empty($introText),
+                'products_count' => count($responseProducts),
+                'product_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($responseProducts, 0, 3)),
+                'product_categories' => array_map(fn ($p) => $p['category_path'] ?? '', array_slice($responseProducts, 0, 3)),
+            ]);
 
             // CRITICAL: If GPT says "not found"/"no products" in the text, don't show irrelevant products
             // This prevents showing термобілизна when GPT says "немає наборів для чищення"
@@ -447,6 +527,12 @@ CONTEXT;
             $content = $assistantMessage['content'] ?? '';
             $responseText = $this->stripUrlsFromText($content);
             $responseIntent = 'general';
+
+            PipelineTracer::current()?->step('agent.gpt_no_tools', [
+                'intent' => 'general',
+                'response_length' => mb_strlen($content),
+                'response_preview' => mb_substr($content, 0, 100),
+            ]);
 
             // Check if response contains JSON with products
             $structured = $this->parseStructuredResponse($responseText, []);

@@ -2564,6 +2564,33 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/pipeline-trace/{sessionId}
+     * View pipeline traces for debugging message flow
+     */
+    public function pipelineTrace(Request $request, string $sessionId): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $cacheKey = "pipeline_trace_{$sessionId}";
+        $traces = cache()->get($cacheKey, []);
+
+        if (empty($traces)) {
+            return response()->json([
+                'error' => 'No traces found for this session. Traces expire after 2 hours.',
+                'session_id' => $sessionId,
+            ], 404);
+        }
+
+        return response()->json([
+            'session_id' => $sessionId,
+            'trace_count' => count($traces),
+            'traces' => $traces,
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/sync-faq
      * Sync FAQ content from URLs
      */
@@ -2793,20 +2820,36 @@ class DiagnosticController extends Controller
         }
 
         $days = (int) $request->input('days', 90);
+        $tenantId = $request->input('tenant_id') ? (int) $request->input('tenant_id') : null;
+        $backfill = (bool) $request->input('backfill', false);
 
         try {
+            // Backfill: assign tenant_id to orders that have NULL
+            $backfilled = 0;
+            if ($backfill && $tenantId) {
+                $backfilled = \App\Models\Order::withoutGlobalScopes()
+                    ->whereNull('tenant_id')
+                    ->update(['tenant_id' => $tenantId]);
+            }
+
             // Run the sync command
-            \Illuminate\Support\Facades\Artisan::call('orders:sync', [
+            $syncParams = [
                 '--days' => $days,
                 '--update-counts' => true,
                 '--timeout' => 300,
-            ]);
+            ];
+            if ($tenantId) {
+                $syncParams['--tenant-id'] = $tenantId;
+            }
+
+            \Illuminate\Support\Facades\Artisan::call('orders:sync', $syncParams);
 
             $output = \Illuminate\Support\Facades\Artisan::output();
 
             // Get stats after sync
-            $ordersCount = \App\Models\Order::count();
+            $ordersCount = \App\Models\Order::withoutGlobalScopes()->count();
             $itemsCount = \App\Models\OrderItem::count();
+            $nullTenantOrders = \App\Models\Order::withoutGlobalScopes()->whereNull('tenant_id')->count();
             $productsWithOrders = \App\Models\Product::where('orders_count', '>', 0)->count();
             $topProducts = \App\Models\Product::where('orders_count', '>', 0)
                 ->orderBy('orders_count', 'desc')
@@ -2816,7 +2859,10 @@ class DiagnosticController extends Controller
             return response()->json([
                 'success' => true,
                 'days_synced' => $days,
+                'tenant_id' => $tenantId,
+                'backfilled_orders' => $backfilled,
                 'orders_count' => $ordersCount,
+                'null_tenant_orders' => $nullTenantOrders,
                 'items_count' => $itemsCount,
                 'products_with_orders' => $productsWithOrders,
                 'top_10_products' => $topProducts,
@@ -4344,6 +4390,110 @@ class DiagnosticController extends Controller
             'sessions_fixed' => $sessionsFixed,
             'messages_fixed' => $messagesFixed,
             'tenant_id_used' => $defaultTenantId,
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/backfill-order-tenants
+     * Assign tenant_id to orders by matching order items articles → products.tenant_id
+     */
+    public function backfillOrderTenants(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $dryRun = (bool) $request->input('dry_run', true);
+        $fallbackTenantId = $request->input('fallback_tenant_id') ? (int) $request->input('fallback_tenant_id') : null;
+
+        $nullOrders = \App\Models\Order::withoutGlobalScopes()->whereNull('tenant_id')->get();
+
+        $results = ['matched' => 0, 'fallback' => 0, 'unmatched' => 0, 'details' => []];
+
+        foreach ($nullOrders as $order) {
+            // Try to find tenant by matching order items articles to products table
+            $items = \App\Models\OrderItem::where('order_id', $order->id)->pluck('article')->filter();
+            $tenantId = null;
+            $matchMethod = 'unmatched';
+
+            if ($items->isNotEmpty()) {
+                // Find which tenant owns products with these articles
+                $tenantMatch = \App\Models\Product::withoutGlobalScopes()
+                    ->whereIn('article', $items->toArray())
+                    ->select('tenant_id')
+                    ->whereNotNull('tenant_id')
+                    ->groupBy('tenant_id')
+                    ->orderByRaw('COUNT(*) DESC')
+                    ->first();
+
+                $tenantId = $tenantMatch?->tenant_id;
+            }
+
+            if ($tenantId) {
+                $matchMethod = 'article_match';
+                $results['matched']++;
+            } elseif ($fallbackTenantId) {
+                $tenantId = $fallbackTenantId;
+                $matchMethod = 'fallback';
+                $results['fallback']++;
+            } else {
+                $results['unmatched']++;
+            }
+
+            $results['details'][] = [
+                'order_id' => $order->order_id,
+                'db_id' => $order->id,
+                'articles' => $items->values()->toArray(),
+                'resolved_tenant_id' => $tenantId,
+                'method' => $matchMethod,
+            ];
+
+            if (! $dryRun && $tenantId) {
+                $order->tenant_id = $tenantId;
+                $order->saveQuietly();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'dry_run' => $dryRun,
+            'total_null_orders' => $nullOrders->count(),
+            'matched_by_article' => $results['matched'],
+            'assigned_by_fallback' => $results['fallback'],
+            'unmatched' => $results['unmatched'],
+            'details' => $results['details'],
+        ]);
+    }
+
+    /**
+     * POST /api/diagnostic/purge-orders
+     * Delete all orders (and items) so they can be re-synced cleanly with tenant_id
+     */
+    public function purgeOrders(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->input('tenant_id') ? (int) $request->input('tenant_id') : null;
+
+        $query = \App\Models\Order::withoutGlobalScopes();
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        } elseif ($request->input('null_only')) {
+            $query->whereNull('tenant_id');
+        }
+
+        $count = $query->count();
+        $orderIds = $query->pluck('id');
+
+        $itemsDeleted = \App\Models\OrderItem::whereIn('order_id', $orderIds)->delete();
+        $ordersDeleted = $query->delete();
+
+        return response()->json([
+            'success' => true,
+            'orders_deleted' => $ordersDeleted,
+            'items_deleted' => $itemsDeleted,
         ]);
     }
 
@@ -7346,5 +7496,68 @@ class DiagnosticController extends Controller
                 'function' => $function,
             ], 500);
         }
+    }
+
+    /**
+     * GET /api/diagnostic/tenant-settings
+     * Show prompt presets and widget settings for a tenant
+     */
+    public function tenantSettings(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = (int) $request->input('tenant_id', 0);
+        if (! $tenantId) {
+            return response()->json(['error' => 'tenant_id required'], 400);
+        }
+
+        $presets = \App\Models\PromptPreset::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('priority')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'slug' => $p->slug,
+                'is_active' => $p->is_active,
+                'is_default' => $p->is_default,
+                'priority' => $p->priority,
+                'language' => $p->language,
+                'tone' => $p->tone,
+                'campaign' => $p->campaign,
+                'store_type' => $p->store_type,
+                'categories' => $p->categories,
+                'system_prompt_length' => mb_strlen($p->system_prompt ?? ''),
+                'system_prompt_preview' => mb_substr($p->system_prompt ?? '', 0, 500),
+                'created_at' => $p->created_at?->toDateTimeString(),
+                'updated_at' => $p->updated_at?->toDateTimeString(),
+            ]);
+
+        $ws = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        return response()->json([
+            'tenant_id' => $tenantId,
+            'prompt_presets' => [
+                'count' => $presets->count(),
+                'items' => $presets,
+            ],
+            'widget_settings' => $ws ? [
+                'id' => $ws->id,
+                'shop_phone' => $ws->shop_phone,
+                'welcome_message' => $ws->welcome_message,
+                'theme_color' => $ws->theme_color,
+                'callback_form_url' => $ws->callback_form_url,
+                'faq_contacts_text' => $ws->faq_contacts_text,
+                'faq_payment_delivery_text' => mb_substr($ws->faq_payment_delivery_text ?? '', 0, 300),
+                'faq_returns_text' => mb_substr($ws->faq_returns_text ?? '', 0, 300),
+                'faq_about_text' => mb_substr($ws->faq_about_text ?? '', 0, 300),
+                'custom_system_prompt_length' => mb_strlen($ws->custom_system_prompt ?? ''),
+                'created_at' => $ws->created_at?->toDateTimeString(),
+            ] : null,
+        ]);
     }
 }

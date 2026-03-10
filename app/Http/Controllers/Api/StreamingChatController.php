@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Agent\StreamingFunctionCallingAgent;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Metrics\MetricsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -63,6 +64,13 @@ class StreamingChatController extends Controller
             while (ob_get_level() > 0) {
                 ob_end_flush();
             }
+
+            // Start pipeline tracing
+            $tracer = PipelineTracer::start($sessionId, $message);
+            $tracer->step('controller.entry', [
+                'request_id' => $requestId,
+                'debug_mode' => $debugMode,
+            ]);
 
             // Send initial keepalive to establish connection
             $this->sendEvent('status', [
@@ -136,6 +144,7 @@ class StreamingChatController extends Controller
                 // Set context for prompt preset matching
                 $presetContext = $this->buildPresetContext($sessionId, $message);
                 $this->streamingAgent->setContext($presetContext);
+                $tracer->step('controller.preset_context', ['keys' => array_keys($presetContext)]);
 
                 // Stream response from agent
                 $responseGenerated = false;
@@ -144,6 +153,15 @@ class StreamingChatController extends Controller
                     $data = $event['data'] ?? [];
                     $data['session_id'] = $sessionId;
                     $data['request_id'] = $requestId;
+
+                    // Attach trace to done event when debug mode
+                    if ($type === 'done') {
+                        $trace = $tracer->finish();
+                        if ($debugMode) {
+                            $data['trace'] = $trace;
+                        }
+                        $data['trace_summary'] = $tracer->getSummary();
+                    }
 
                     $this->sendEvent($type, $data);
 
@@ -178,8 +196,16 @@ class StreamingChatController extends Controller
                     $errorData['debug_class'] = get_class($e);
                 }
 
+                $tracer->step('controller.error', ['error' => $e->getMessage()]);
+                $trace = $tracer->finish();
+
                 $this->sendEvent('error', $errorData);
-                $this->sendEvent('done', ['session_id' => $sessionId]);
+                $doneData = ['session_id' => $sessionId];
+                if ($debugMode) {
+                    $doneData['trace'] = $trace;
+                }
+                $doneData['trace_summary'] = $tracer->getSummary();
+                $this->sendEvent('done', $doneData);
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

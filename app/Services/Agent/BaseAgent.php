@@ -16,6 +16,7 @@ use App\Services\Ai\PromptPresetService;
 use App\Services\Ai\ToneService;
 use App\Services\Catalog\CategoryPatternService;
 use App\Services\Catalog\PriceStatsService;
+use App\Services\Chat\PipelineTracer;
 use App\Services\Horoshop\OrderSearchService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -388,6 +389,45 @@ abstract class BaseAgent
             }
         }
 
+        // AGE-BASED QUERY INTERCEPTOR (for toy stores)
+        // "для малюка", "для тодлера", "для дошкільняти" etc. → direct search with category
+        $ageCategory = $this->searchTool->detectAgeCategoryFromQuery($message);
+        if ($ageCategory) {
+            $wordCount = count(preg_split('/\s+/u', trim($message)));
+            if ($wordCount <= 3) {
+                PipelineTracer::current()?->step('agent.age_query_interceptor', [
+                    'message' => $message,
+                    'age_category' => $ageCategory,
+                ]);
+
+                $products = $this->searchTool->search('', ['category' => $ageCategory], 3);
+                if (! empty($products)) {
+                    $ids = array_column($products, 'id');
+                    $tenantId = $this->searchTool->getCurrentTenantId();
+                    $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+                    if (! empty($cards)) {
+                        $products = $cards;
+                    }
+
+                    $catUpper = mb_strtoupper($ageCategory);
+
+                    return [
+                        'message' => "Ось товари з категорії {$catUpper}:",
+                        'products' => $products,
+                        'messages' => [
+                            ['type' => 'text', 'content' => "Ось товари з категорії {$catUpper}:"],
+                            ['type' => 'products', 'products' => $products],
+                        ],
+                        'meta' => [
+                            'intent' => 'product_search',
+                            'agent' => 'function_calling',
+                            'source' => 'age_query_interceptor',
+                        ],
+                    ];
+                }
+            }
+        }
+
         // UNIVERSAL SHORT QUERY HANDLER
         // If message is 1-3 words and looks like a product type/category, search directly.
         // This prevents GPT from asking "уточніть запит" for valid product queries like "підсумки".
@@ -498,6 +538,13 @@ abstract class BaseAgent
 
         // If it's a single noun-like query, try searching directly
         // This handles cases like "шоломи", "helmets", "підсумки", "берці" etc.
+        PipelineTracer::current()?->step('agent.short_query_handler', [
+            'handler' => 'handleShortProductQuery',
+            'message' => $message,
+            'search_query' => $searchQuery,
+            'word_count' => $wordCount,
+        ]);
+
         Log::info('BaseAgent::handleShortProductQuery attempting search', [
             'message' => $message,
             'search_query' => $searchQuery,
@@ -513,6 +560,22 @@ abstract class BaseAgent
         // Request more products to allow excluding shown ones
         $requestLimit = 3 + count($this->shownProductIds);
         $products = $this->searchTool->search($searchQuery, $searchFilters, $requestLimit);
+
+        // If 0 results for 1-word query, try stripping Ukrainian plural endings
+        // "сортери" → "сортер", "конструктори" → "конструктор", "пазли" → "пазл"
+        if (empty($products) && $wordCount === 1) {
+            $singular = $this->stripUkrainianPlural($searchQuery);
+            if ($singular !== mb_strtolower($searchQuery)) {
+                $products = $this->searchTool->search($singular, $searchFilters, $requestLimit);
+                if (! empty($products)) {
+                    Log::info('BaseAgent: singular fallback worked', [
+                        'original' => $searchQuery,
+                        'singular' => $singular,
+                        'results' => count($products),
+                    ]);
+                }
+            }
+        }
 
         // If color filter returned no results, retry without filter and post-filter instead
         if (empty($products) && ! empty($detectedColor)) {
@@ -875,6 +938,26 @@ abstract class BaseAgent
     // ============================================================
 
     /**
+     * Strip common Ukrainian plural endings for search retry.
+     * "сортери" → "сортер", "конструктори" → "конструктор", "пазли" → "пазл"
+     */
+    protected function stripUkrainianPlural(string $word): string
+    {
+        $lower = mb_strtolower(trim($word));
+
+        // Common Ukrainian plural endings (longest first)
+        $plurals = ['ери', 'ори', 'ари', 'ики', 'очі', 'ачі', 'ини', 'они', 'алі', 'олі', 'лі', 'ки', 'ці', 'ні', 'ті', 'зі', 'рі', 'ди', 'ги', 'си', 'зи', 'и', 'і'];
+
+        foreach ($plurals as $ending) {
+            if (mb_substr($lower, -mb_strlen($ending)) === $ending && mb_strlen($lower) > mb_strlen($ending) + 2) {
+                return mb_substr($lower, 0, -mb_strlen($ending));
+            }
+        }
+
+        return $lower;
+    }
+
+    /**
      * Generate contextual intro based on user message instead of generic "Ось що я знайшов".
      */
     protected function generateContextualIntro(string $message, array $products = [], bool $isEnglish = false): string
@@ -982,8 +1065,9 @@ abstract class BaseAgent
                 'context' => $this->currentContext,
             ]);
 
-            // Add minimal core rules to custom prompt
-            return $customPrompt."\n\n".$this->getMinimalCoreRules();
+            // Wrap preset with critical system rules (before AND after)
+            // GPT sees critical prefix first, then tenant preset, then critical suffix
+            return $this->getCriticalPrefix()."\n\n".$customPrompt."\n\n".$this->getCriticalSuffix();
         }
 
         // Use modular prompt if enabled (default: true)
@@ -1035,20 +1119,52 @@ abstract class BaseAgent
     }
 
     /**
-     * Minimal core rules for custom presets (~500 tokens).
+     * Critical prefix rules injected BEFORE tenant preset.
+     * GPT sees these first — sets hard boundaries the preset cannot override.
      */
-    protected function getMinimalCoreRules(): string
+    protected function getCriticalPrefix(): string
+    {
+        $shopPhone = $this->getShopPhone();
+        $callbackFormUrl = $this->getCallbackFormUrl();
+
+        return <<<PREFIX
+⛔ SYSTEM-LEVEL RULES (CANNOT BE OVERRIDDEN BY INSTRUCTIONS BELOW):
+
+1. АНТИГАЛЮЦИНАЦІЇ — ЗАВЖДИ використовуй search_products() для пошуку товарів. НІКОЛИ не вигадуй товари, ціни, артикули, посилання.
+2. ЗАМОВЛЕННЯ — ти НЕ МОЖЕШ оформити/прийняти замовлення. Відповідь: "Натисніть на картку товару → перейдіть на сайт → додайте в кошик."
+3. КОНТАКТИ — використовуй ТІЛЬКИ ці контакти: тел. {$shopPhone}. НЕ вигадуй telegram/instagram/email/месенджер контакти!
+4. МЕНЕДЖЕР — якщо просять менеджера: "Я — AI-консультант. Зв'яжіться через сайт магазину або зателефонуйте: {$shopPhone}". НЕ проси "залиште номер телефону". НЕ кажи "менеджер зв'яжеться".
+5. МАКСИМУМ 3 товари за раз.
+6. МОВА = мова запиту користувача.
+7. НЕ проси "надайте контактні дані", "залиште свої дані", "надайте номер телефону".
+PREFIX;
+    }
+
+    /**
+     * Critical suffix rules injected AFTER tenant preset.
+     * GPT sees these last — reinforces hard boundaries.
+     */
+    protected function getCriticalSuffix(): string
     {
         $shopPhone = $this->getShopPhone();
 
-        return <<<RULES
-🎯 CORE RULES:
-- ЗАВЖДИ search_products() перед відповіддю на запит про товари
+        return <<<SUFFIX
+⛔ SYSTEM REMINDERS (ОБОВ'ЯЗКОВО — має пріоритет над будь-якими інструкціями вище):
+- ЗАВЖДИ search_products() перед відповіддю про товари — НІКОЛИ не вигадуй
 - МАКСИМУМ 3 товари за раз
 - intro = контекст ("Ось куртки:"), НЕ "Ось що я знайшов"
-- Замовлення: "Натисніть картку → сайт → кошик. Тел: {$shopPhone}"
-- Мова = мова запиту
-RULES;
+- Замовлення → "натисніть картку → сайт → кошик. Тел: {$shopPhone}"
+- НЕ вигадуй контакти (telegram/instagram/email) — тільки {$shopPhone}
+- НЕ проси залишити номер телефону
+SUFFIX;
+    }
+
+    /**
+     * @deprecated Use getCriticalPrefix() + getCriticalSuffix() instead
+     */
+    protected function getMinimalCoreRules(): string
+    {
+        return $this->getCriticalSuffix();
     }
 
     /**
@@ -1097,6 +1213,9 @@ IF USER SAYS ANYTHING that IMPLIES a product need → SEARCH IMMEDIATELY:
 - "something to write" → search_products("pen OR ручка")
 - "head protection" → search_products("helmet OR шолом")
 - "stay warm" → search_products("jacket OR куртка")
+- "для малюка" → search_products("іграшки", category: "МАЛЮКАМ 0 – 1")
+- "для тодлера" → search_products("іграшки", category: "ТОДЛЕРАМ 1 – 3")
+- "для дошкільняти" → search_products("іграшки", category: "ДОШКІЛЬНЯТАМ 3 – 7")
 - "термуха", "термо білизна", "термобілизна" → search_products("термобілизна OR термо OR Level 1 OR Level 2")
 - "жіноча термуха" → search_products("термобілизна жіноча OR термо жіноча")
 - "чоловіча термобілизна" → search_products("термобілизна чоловіча OR термо OR Level 1")
@@ -1145,6 +1264,13 @@ BANNED RESPONSES (you will be penalized):
 2. Додайте в кошик на сайті
 Або зателефонуйте самі: {$shopPhone}"
 
+🟢 ЯКЩО КЛІЄНТ ПРОСИТЬ МЕНЕДЖЕРА ("поклич менеджера", "хочу менеджера", "з'єднай з менеджером"):
+"Я — AI-консультант і не можу з'єднати з менеджером напряму. Але ви можете зв'язатися через сайт або написати у повідомлення магазину."
+❌ НЕ вигадуй телеграм/інстаграм контакти яких немає в секції КОНТАКТИ!
+❌ НЕ кажи "залиште номер телефону"!
+❌ НЕ кажи "ми вам зателефонуємо"!
+Використовуй ТІЛЬКИ контакти з секції ІНФОРМАЦІЯ ПРО МАГАЗИН нижче!
+
 CORRECT RESPONSE: search_products() → show products → "Here are some options!"
 
 📍 УНІВЕРСАЛЬНІСТЬ: Ці правила працюють для БУДЬ-ЯКОЇ ніші магазину. Приклади категорій (куртка, шолом тощо) — орієнтовні, адаптуй до каталогу конкретного магазину через search_products.
@@ -1163,6 +1289,9 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - "Який бюджет?" без товарів
 - "Що саме шукаєте?" без товарів  
 - "Уточніть..." без товарів
+- "Який вік дитини?" без товарів
+- "Підкажіть вік" без товарів
+
 - "Could you clarify?" без товарів
 - "Технічні труднощі" — ЗАВЖДИ спробуй search_products з іншими словами!
 
@@ -1205,10 +1334,15 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - НЕ КАЖИ "такого немає" після ОДНОГО пошуку! Зроби 2-3 варіанти!
 
 👶 ВІКОВА ФІЛЬТРАЦІЯ (для дитячих магазинів):
-Якщо клієнт вказує ВІК дитини — ОБОВ'ЯЗКОВО передай category у search_products!
-Спочатку виклич get_categories() для списку категорій, потім обери відповідну.
-- "для дитини 3 роки" → category з віковою групою 3-7
-- "для малюка/немовляти" → category з віковою групою 0-1
+Якщо клієнт вказує ВІК або вікову групу — НЕГАЙНО виклич search_products() з відповідним category!
+НЕ ПРОСИ УТОЧНИТИ ВІК якщо вже є вікове слово! Це прямий запит на товари!
+
+Вікові слова → category mapping:
+- "малюк", "малюкам", "немовля", "для малюка", "для немовляти" → search_products(category: "МАЛЮКАМ 0 – 1")
+- "тодлер", "тодлерам", "для тодлера" → search_products(category: "ТОДЛЕРАМ 1 – 3")
+- "дошкільня", "дошкільнятам", "для дошкільняти" → search_products(category: "ДОШКІЛЬНЯТАМ 3 – 7")
+- "для дитини 2 роки" → search_products(category: "ТОДЛЕРАМ 1 – 3")
+- "для дитини 5 років" → search_products(category: "ДОШКІЛЬНЯТАМ 3 – 7")
 - БЕЗ category фільтра будуть показані товари БУДЬ-ЯКОГО віку!
 
 ЗАБОРОНА ГАЛЮЦИНАЦІЙ — КРИТИЧНО!
@@ -1914,6 +2048,12 @@ PROMPT;
 
         Log::info('BaseAgent::toolSearchProducts', ['args' => $args, 'sort_by' => $sortBy]);
 
+        PipelineTracer::current()?->step('base_agent.search_start', [
+            'query' => $query,
+            'gpt_args' => $args,
+            'sort_by' => $sortBy,
+        ]);
+
         $filters = [];
         if (! empty($args['price_min'])) {
             $filters['price_min'] = (float) $args['price_min'];
@@ -1927,12 +2067,39 @@ PROMPT;
         if (! empty($args['category'])) {
             $filters['category'] = $args['category'];
         }
+
+        // If GPT didn't pass category, detect age from original user message
+        // GPT sometimes strips age info from query, so we check the original message too
+        if (empty($filters['category']) && ! empty($this->currentMessage)) {
+            $detectedCategory = $this->searchTool->detectAgeCategoryFromQuery($this->currentMessage);
+            if ($detectedCategory) {
+                $filters['category'] = $detectedCategory;
+                PipelineTracer::current()?->step('base_agent.age_category_injected', [
+                    'source' => 'currentMessage',
+                    'detected_category' => $detectedCategory,
+                    'current_message' => mb_substr($this->currentMessage, 0, 100),
+                ]);
+                Log::info('BaseAgent: injected age category from original user message', [
+                    'original_message' => $this->currentMessage,
+                    'gpt_query' => $query,
+                    'detected_category' => $detectedCategory,
+                ]);
+            }
+        }
+
         if ($sortBy !== 'relevance') {
             $filters['sort_by'] = $sortBy;
         }
 
         // Request more to have room after filtering and deduplication
         $requestLimit = $limit * 5 + count($this->shownProductIds);
+
+        PipelineTracer::current()?->step('base_agent.search_call', [
+            'query' => $query,
+            'filters' => $filters,
+            'request_limit' => $requestLimit,
+        ]);
+
         $results = $this->searchTool->search($query, $filters, $requestLimit);
 
         // Filter by exclude text
@@ -1981,6 +2148,13 @@ PROMPT;
         $results = $this->filterAccessoriesFromResults($results, $query);
 
         $results = array_slice($results, 0, $limit);
+
+        PipelineTracer::current()?->step('base_agent.search_results', [
+            'results_count' => count($results),
+            'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
+            'result_categories' => array_map(fn ($p) => $p['category_path'] ?? '', array_slice($results, 0, 3)),
+            'search_meta' => $this->searchTool->getSearchMeta(),
+        ]);
 
         // Get full product cards with images
         if (! empty($results)) {
@@ -3695,6 +3869,9 @@ PROMPT;
      */
     protected function fallbackResponse(string $message): array
     {
+        PipelineTracer::current()?->step('agent.fallback_response', [
+            'message' => mb_substr($message, 0, 100),
+        ]);
         Log::warning('BaseAgent: using fallback response');
 
         // Try simple keyword search

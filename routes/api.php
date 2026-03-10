@@ -73,10 +73,12 @@ Route::get('/widget/ai-context', [WidgetController::class, 'getAiContext']);
 Route::put('/widget/ai-context', [WidgetController::class, 'updateAiContext']);
 
 // Статус замовлення по order_id
-Route::post('/order-status', [OrderStatusController::class, 'show']);
+Route::post('/order-status', [OrderStatusController::class, 'show'])
+    ->middleware(['widget.cors', 'tenant']);
 
 // Пошук замовлень за гнучкими критеріями
-Route::post('/orders/search', [OrderSearchController::class, 'search']);
+Route::post('/orders/search', [OrderSearchController::class, 'search'])
+    ->middleware(['widget.cors', 'tenant']);
 
 // Дебаг продуктів
 Route::get('/debug/products', [DebugProductsController::class, 'index']);
@@ -128,6 +130,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/horoshop-api-call', [\App\Http\Controllers\Api\DiagnosticController::class, 'horoshopApiCall']);
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);
     Route::get('/chat-history/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatHistory']);
+    Route::get('/pipeline-trace/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'pipelineTrace']);
     Route::post('/sync-faq', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncFaq']);
     Route::get('/widget-settings', [\App\Http\Controllers\Api\DiagnosticController::class, 'widgetSettings']);
     Route::post('/sync-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncOrders']);
@@ -162,6 +165,8 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/test-queue', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueue']);
     Route::get('/test-queue-result', [\App\Http\Controllers\Api\DiagnosticController::class, 'testQueueResult']);
     Route::post('/fix-null-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixNullTenants']);
+    Route::post('/backfill-order-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'backfillOrderTenants']);
+    Route::post('/purge-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'purgeOrders']);
     Route::post('/update-product-color', [\App\Http\Controllers\Api\DiagnosticController::class, 'updateProductColor']);
     Route::get('/test-color-picker', [\App\Http\Controllers\Api\DiagnosticController::class, 'testColorPicker']);
     Route::get('/color-palette', [\App\Http\Controllers\Api\DiagnosticController::class, 'colorPalette']);

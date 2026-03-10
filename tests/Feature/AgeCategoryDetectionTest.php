@@ -61,10 +61,10 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertNull($result);
     }
 
-    public function test_no_detection_for_school_age(): void
+    public function test_detects_school_age(): void
     {
         $result = $this->method->invoke($this->tool, 'для дитини 10 років');
-        $this->assertNull($result);
+        $this->assertEquals('школярам', $result);
     }
 
     public function test_detects_malyuk_keyword(): void

@@ -2026,8 +2026,7 @@ class MeiliProductSearchTool
         } elseif ($age < 7) {
             $category = 'дошкільнятам';
         } else {
-            // School-age: no specific filter, let search return all
-            return null;
+            $category = 'школярам';
         }
 
         Log::info('MeiliProductSearchTool: detected age category from query', [

@@ -176,12 +176,13 @@ class MeiliProductSearchTool
                 'category' => $categoryFilter,
             ]);
 
-            // Add category as Meili-level CONTAINS filter
-            // Without this, in a toy store "іграшки" matches ALL products,
-            // Meili returns ~75 random products and post-filtering leaves almost nothing
+            // When category is detected, boost Meili results by including category keyword in query
+            // and increase limit to ensure enough products survive post-filtering.
+            // CONTAINS filter is NOT supported by deployed Meili version.
+            $categoryQueryBoost = null;
             if ($categoryFilter) {
-                $catEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
-                $filterParts[] = "category_path CONTAINS '{$catEscaped}'";
+                $categoryQueryBoost = mb_strtoupper(trim($categoryFilter));
+                $meiliLimit = max($meiliLimit, 200);
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
@@ -265,10 +266,64 @@ class MeiliProductSearchTool
                 'filter' => $filterString,
                 'limit' => $meiliLimit,
                 'category_filter' => $categoryFilter,
+                'category_query_boost' => $categoryQueryBoost,
             ]);
 
-            $result = $index->search($enhancedQuery, $searchParams);
-            $hits = $result->getHits();
+            // When category is detected, do a two-step search:
+            // 1. First search with category keyword added to query (ranks category products higher)
+            // 2. If not enough results, search with just category as query (finds all products in category)
+            if ($categoryQueryBoost) {
+                // Step 1: Original query + category keyword (e.g., "іграшки ДОШКІЛЬНЯТАМ")
+                $boostedQuery = $enhancedQuery.' '.$categoryQueryBoost;
+                $result = $index->search($boostedQuery, $searchParams);
+                $hits = $result->getHits();
+
+                Log::info('MeiliProductSearchTool: category-boosted search', [
+                    'boosted_query' => $boostedQuery,
+                    'results' => count($hits),
+                ]);
+
+                // Post-filter to keep only matching category
+                if (count($hits) > 0) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
+                }
+
+                // Step 2: If not enough results, search with JUST category keyword
+                if (count($hits) < 3) {
+                    $catOnlyResult = $index->search($categoryQueryBoost, $searchParams);
+                    $catOnlyHits = $catOnlyResult->getHits();
+
+                    // Post-filter
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    }));
+
+                    // Merge unique results
+                    $existingIds = array_column($hits, 'id');
+                    foreach ($catOnlyHits as $hit) {
+                        if (! in_array($hit['id'], $existingIds)) {
+                            $hits[] = $hit;
+                            $existingIds[] = $hit['id'];
+                        }
+                    }
+
+                    Log::info('MeiliProductSearchTool: category-only fallback search', [
+                        'category_query' => $categoryQueryBoost,
+                        'results_after_merge' => count($hits),
+                    ]);
+                }
+            } else {
+                $result = $index->search($enhancedQuery, $searchParams);
+                $hits = $result->getHits();
+            }
 
             PipelineTracer::current()?->step('meili.search_result', [
                 'results_count' => count($hits),

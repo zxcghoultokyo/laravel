@@ -1806,7 +1806,7 @@ PROMPT;
                         'type' => 'object',
                         'properties' => [
                             'query' => ['type' => 'string', 'description' => 'Пошуковий запит'],
-                            'category' => ['type' => 'string', 'description' => 'Категорія товару для фільтрації (наприклад: "малюкам (0-1)", "тодлерам (1-3)", "дошкільнятам (3-6)")'],
+                            'category' => ['type' => 'string', 'description' => 'Вікова категорія: малюкам, тодлерам, дошкільнятам, школярам. Передавай тільки назву без цифр.'],
                             'product_type' => ['type' => 'string', 'description' => 'Тип товару для фільтрації'],
                             'brand' => ['type' => 'string', 'description' => 'Бренд товару'],
                             'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум)'],

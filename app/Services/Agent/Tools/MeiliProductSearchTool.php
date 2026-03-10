@@ -155,7 +155,6 @@ class MeiliProductSearchTool
             }
 
             // Category filter: filter by category_path (e.g., age groups for toy stores)
-            // Uses post-filtering since category_path values may have trailing spaces or slight variations
             $categoryFilter = $filters['category'] ?? null;
 
             // Normalize GPT-passed category to keyword only (strip numbers, parentheses, ranges)
@@ -167,6 +166,14 @@ class MeiliProductSearchTool
             // Auto-detect age from query and map to category if no explicit category given
             if (! $categoryFilter) {
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
+            }
+
+            // Add category as Meili-level CONTAINS filter (not just post-filter)
+            // In a toy store, "іграшки" matches ALL products, so without Meili filter
+            // we get random 75 products and post-filtering leaves almost nothing
+            if ($categoryFilter) {
+                $catEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                $filterParts[] = "category_path CONTAINS '{$catEscaped}'";
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)

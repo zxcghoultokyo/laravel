@@ -289,13 +289,18 @@ class MeiliProductSearchTool
             // 2. If not enough results, search with just category as query (finds all products in category)
             if ($categoryQueryBoost) {
                 // Step 1: Original query + category keyword (e.g., "іграшки ДОШКІЛЬНЯТАМ")
+                // For boundary ages, also include adjacent upper category keyword
                 $boostedQuery = $enhancedQuery.' '.$categoryQueryBoost;
+                if ($adjacentUpperCat) {
+                    $boostedQuery .= ' '.mb_strtoupper(trim($adjacentUpperCat));
+                }
                 $result = $index->search($boostedQuery, $searchParams);
                 $hits = $result->getHits();
 
                 Log::info('MeiliProductSearchTool: category-boosted search', [
                     'boosted_query' => $boostedQuery,
                     'results' => count($hits),
+                    'adjacent_upper' => $adjacentUpperCat,
                 ]);
 
                 // Post-filter to keep only matching category (include adjacent upper for boundary ages)
@@ -316,8 +321,13 @@ class MeiliProductSearchTool
                 }
 
                 // Step 2: If not enough results, search with JUST category keyword
+                // For boundary ages, also search with adjacent upper category
                 if (count($hits) < 3) {
-                    $catOnlyResult = $index->search($categoryQueryBoost, $searchParams);
+                    $catSearchQuery = $categoryQueryBoost;
+                    if ($adjacentUpperCat) {
+                        $catSearchQuery .= ' '.mb_strtoupper(trim($adjacentUpperCat));
+                    }
+                    $catOnlyResult = $index->search($catSearchQuery, $searchParams);
                     $catOnlyHits = $catOnlyResult->getHits();
 
                     // Post-filter
@@ -345,7 +355,7 @@ class MeiliProductSearchTool
                     }
 
                     Log::info('MeiliProductSearchTool: category-only fallback search', [
-                        'category_query' => $categoryQueryBoost,
+                        'category_query' => $catSearchQuery,
                         'results_after_merge' => count($hits),
                     ]);
                 }

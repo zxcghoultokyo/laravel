@@ -176,12 +176,12 @@ class MeiliProductSearchTool
                 'category' => $categoryFilter,
             ]);
 
-            // Category filtering: handled via post-filtering in PHP (str_contains),
-            // NOT via Meili filter — deployed Meili version doesn't support CONTAINS operator.
-            // Post-filter at line ~355 and safety net at line ~550 ensure correct categories.
-            // We increase Meili limit when category is active to get enough diverse results.
+            // Add category as Meili-level CONTAINS filter
+            // Without this, in a toy store "іграшки" matches ALL products,
+            // Meili returns ~75 random products and post-filtering leaves almost nothing
             if ($categoryFilter) {
-                $meiliLimit = max($meiliLimit, $limit * 5);
+                $catEscaped = str_replace("'", "\\'", mb_strtolower(trim($categoryFilter)));
+                $filterParts[] = "category_path CONTAINS '{$catEscaped}'";
             }
 
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)

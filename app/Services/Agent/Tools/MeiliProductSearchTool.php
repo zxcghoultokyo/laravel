@@ -1042,7 +1042,7 @@ class MeiliProductSearchTool
 
     /**
      * Fallback color synonyms for when DB table is empty.
-     * Critical colors for Ukrainian tactical store.
+     * Covers both tactical and general retail colors.
      */
     private function getFallbackColorSynonyms(string $color): array
     {
@@ -1090,6 +1090,49 @@ class MeiliProductSearchTool
             'сірий' => ['grey', 'gray', 'сіра', 'сіре', 'серый', 'wolf grey'],
             'grey' => ['сірий', 'gray', 'сіра', 'серый'],
             'gray' => ['сірий', 'grey', 'сіра', 'серый'],
+
+            // Pink
+            'рожевий' => ['pink', 'рожева', 'рожеве', 'розовый', 'ніжно рожевий'],
+            'pink' => ['рожевий', 'рожева', 'рожеве', 'розовый'],
+            'рожева' => ['рожевий', 'pink', 'рожеве', 'розовый'],
+
+            // Red
+            'червоний' => ['red', 'червона', 'червоне', 'красный'],
+            'red' => ['червоний', 'червона', 'красный'],
+
+            // Blue
+            'синій' => ['blue', 'синя', 'синє', 'navy', 'блакитний'],
+            'blue' => ['синій', 'синя', 'navy'],
+            'блакитний' => ['light blue', 'блакитна', 'блакитне', 'синій'],
+
+            // White
+            'білий' => ['white', 'біла', 'біле', 'белый', 'snow'],
+            'white' => ['білий', 'біла', 'белый'],
+
+            // Green
+            'зелений' => ['green', 'зелена', 'зелене'],
+            'green' => ['зелений', 'зелена'],
+
+            // Brown
+            'коричневий' => ['brown', 'коричнева', 'коричневе'],
+            'brown' => ['коричневий', 'коричнева'],
+
+            // Beige
+            'бежевий' => ['beige', 'бежева', 'бежеве'],
+            'beige' => ['бежевий', 'бежева'],
+
+            // Orange
+            'оранжевий' => ['orange', 'оранжева', 'оранжеве', 'помаранчевий'],
+            'orange' => ['оранжевий', 'оранжева', 'помаранчевий'],
+
+            // Yellow
+            'жовтий' => ['yellow', 'жовта', 'жовте'],
+            'yellow' => ['жовтий', 'жовта'],
+
+            // Purple
+            'фіолетовий' => ['purple', 'фіолетова', 'фіолетове', 'violet'],
+            'purple' => ['фіолетовий', 'фіолетова'],
+            'бордовий' => ['maroon', 'burgundy', 'бордова', 'бордове'],
         ];
 
         // Direct match
@@ -1353,7 +1396,14 @@ class MeiliProductSearchTool
             });
         }
 
-        // Order by popularity & stock
+        // Order: title matches ranked higher than search_index-only matches, then by popularity
+        if (! empty($keywords)) {
+            $titleMatchCase = 'CASE WHEN '.implode(' OR ', array_map(
+                fn ($k) => "LOWER(title) LIKE '%".addslashes($k)."%'",
+                $keywords
+            )).' THEN 0 ELSE 1 END';
+            $builder->orderByRaw($titleMatchCase);
+        }
         $builder->orderBy('popularity', 'desc')
             ->orderBy('quantity', 'desc');
 

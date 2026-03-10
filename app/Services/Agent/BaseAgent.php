@@ -158,31 +158,16 @@ abstract class BaseAgent
     {
         $lower = mb_strtolower($serviceCategory);
 
-        // Load real store data from WidgetSettings
-        $tenantId = $this->searchTool->getCurrentTenantId();
-        $settings = Cache::remember('widget_settings_service:'.($tenantId ?? 'global'), 300, function () use ($tenantId) {
-            if ($tenantId) {
-                return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                    ->where('tenant_id', $tenantId)->first();
-            }
-
-            return WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)->first();
-        });
-
-        $tenantInfo = $this->getTenantInfo();
-        $shopName = $tenantInfo['name'];
-        $shopDomain = $tenantInfo['domain'];
-
-        // Build response from real data based on category
+        // Determine appropriate response based on service type
         $response = match (true) {
-            str_contains($lower, 'контакт') => $this->buildContactsResponse($settings, $shopName, $shopDomain),
-            str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => $this->buildDeliveryResponse($settings, $shopName, $shopDomain),
-            str_contains($lower, 'оплат') || str_contains($lower, 'payment') => $this->buildPaymentResponse($settings, $shopName, $shopDomain),
-            str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => $this->buildAboutResponse($settings, $shopName, $shopDomain),
-            str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => $this->buildReturnsResponse($settings, $shopName, $shopDomain),
+            str_contains($lower, 'контакт') => 'Контактну інформацію можна знайти на сторінці сайту. Якщо у Вас є питання — напишіть їх тут, я з радістю допоможу! Або зателефонуйте за номером, вказаним на сайті.',
+            str_contains($lower, 'доставк') || str_contains($lower, 'delivery') => 'Інформація про доставку є на відповідній сторінці сайту. Якщо коротко: ми доставляємо по всій Україні Новою Поштою. Чим можу допомогти з товарами?',
+            str_contains($lower, 'оплат') || str_contains($lower, 'payment') => 'Ми приймаємо оплату: картою онлайн, накладений платіж, безготівковий розрахунок для ФОП/юридичних осіб. Що саме Ви шукаєте?',
+            str_contains($lower, 'про нас') || str_contains($lower, 'про магазин') || str_contains($lower, 'про компан') || str_contains($lower, 'about') => 'Ми спеціалізуємось на тактичному спорядженні та військовому одязі. Якщо шукаєте конкретний товар — просто напишіть, і я підберу найкращі варіанти!',
+            str_contains($lower, 'гарант') || str_contains($lower, 'повернен') => 'Гарантія та умови повернення описані на сайті. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?',
             str_contains($lower, 'акці') || str_contains($lower, 'знижк') || str_contains($lower, 'розпродаж') => 'Актуальні акції та знижки відображаються на картках товарів. Що саме Вас цікавить? Можу підібрати товари зі знижкою у потрібній категорії.',
             str_contains($lower, 'faq') || str_contains($lower, 'питан') => 'Задайте своє питання тут — я відповім одразу! Можу допомогти з підбором товару, розмірами, наявністю.',
-            default => $this->buildAboutResponse($settings, $shopName, $shopDomain),
+            default => 'Це інформаційна сторінка сайту. Якщо шукаєте товари — напишіть що саме, і я підберу найкращі варіанти!',
         };
 
         Log::info('BaseAgent: handled service category query', [
@@ -203,90 +188,6 @@ abstract class BaseAgent
                 'service_category' => $serviceCategory,
             ],
         ];
-    }
-
-    /**
-     * Build "About" response from real WidgetSettings data.
-     */
-    private function buildAboutResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
-    {
-        $parts = [];
-
-        // About text (from Horoshop pages or custom)
-        $about = $settings->faq_about_text ?? $settings->store_about ?? '';
-        if ($about) {
-            $parts[] = $about;
-        }
-
-        // Add contacts summary
-        $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
-        if ($contacts) {
-            $parts[] = $contacts;
-        } elseif (! empty($settings->store_phone)) {
-            $parts[] = "📞 Телефон: {$settings->store_phone}";
-        }
-
-        if (! empty($parts)) {
-            return implode("\n\n", $parts)."\n\nЧим можу допомогти? 😊";
-        }
-
-        return "Ми — **{$shopName}**. Детальна інформація на сайті {$shopDomain}. Чим можу допомогти?";
-    }
-
-    /**
-     * Build contacts response from real WidgetSettings data.
-     */
-    private function buildContactsResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
-    {
-        $contacts = $settings->faq_contacts_text ?? $settings->store_address ?? '';
-        if ($contacts) {
-            return $contacts."\n\nЩось ще цікавить? 😊";
-        }
-
-        if (! empty($settings->store_phone)) {
-            return "📞 Телефон: {$settings->store_phone}\n\nДетальні контакти на сайті {$shopDomain}";
-        }
-
-        return "Контактну інформацію можна знайти на сайті {$shopDomain}. Якщо є питання — пишіть, допоможу!";
-    }
-
-    /**
-     * Build delivery response from real WidgetSettings data.
-     */
-    private function buildDeliveryResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
-    {
-        $delivery = $settings->faq_payment_delivery_text ?? '';
-        if ($delivery) {
-            return $delivery."\n\nЧим ще можу допомогти?";
-        }
-
-        return "Інформація про доставку доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
-    }
-
-    /**
-     * Build payment response from real WidgetSettings data.
-     */
-    private function buildPaymentResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
-    {
-        $payment = $settings->faq_payment_delivery_text ?? '';
-        if ($payment) {
-            return $payment."\n\nЧим ще можу допомогти?";
-        }
-
-        return "Інформація про способи оплати доступна на сайті {$shopDomain}. Якщо є конкретне питання — запитуйте!";
-    }
-
-    /**
-     * Build returns/warranty response from real WidgetSettings data.
-     */
-    private function buildReturnsResponse(?WidgetSettings $settings, string $shopName, string $shopDomain): string
-    {
-        $returns = $settings->faq_returns_text ?? '';
-        if ($returns) {
-            return $returns."\n\nЧим ще можу допомогти?";
-        }
-
-        return "Умови гарантії та повернення описані на сайті {$shopDomain}. Загалом — 14 днів на повернення, гарантія залежить від товару. Чим можу допомогти?";
     }
 
     // ============================================================
@@ -361,10 +262,8 @@ abstract class BaseAgent
 
                 if (! empty($products)) {
                     // Determine language for response
-                    $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
-                    $intro = $isEnglish
-                        ? "Here's what I found for you:"
-                        : 'Ось що я знайшов для вас:';
+                    $isEnglish = (bool) preg_match('/[a-zA-Z]{3,}/', $message);
+                    $intro = $this->generateContextualIntro($message, $products, $isEnglish);
 
                     return [
                         'message' => $intro,
@@ -566,27 +465,6 @@ abstract class BaseAgent
         // This allows "білизна жіноча", "куртка зимова" etc.
         $searchQuery = $message; // Default to full message
         if ($wordCount === 2) {
-            // Don't intercept queries with gender/demographic/season modifiers
-            // GPT has prompt rules to check results and respond honestly
-            // e.g. "жіноча термобілизна" → GPT will search and say "Жіночої немає, є універсальна"
-            $attributeModifiers = [
-                'жіноч', 'чоловіч', 'дитяч', 'підлітков',  // Ukrainian
-                'женск', 'мужск', 'детск', 'подростков',     // Russian
-                'women', 'men', 'kids', 'child',              // English
-                'зимов', 'літн', 'демісезон',                 // Season UA
-                'зимн', 'летн',                               // Season RU
-            ];
-            foreach ($attributeModifiers as $mod) {
-                if (mb_stripos($lower, $mod) !== false) {
-                    Log::info('BaseAgent::handleShortProductQuery - attribute modifier detected, deferring to GPT', [
-                        'message' => $message,
-                        'modifier' => $mod,
-                    ]);
-
-                    return null; // Let GPT handle attribute-specific queries
-                }
-            }
-
             $categories = [
                 'куртк' => 'куртки',
                 'берц' => 'берці',
@@ -625,9 +503,37 @@ abstract class BaseAgent
                 return null;
             }
 
-            // Use canonical category for search instead of full query
-            // This ensures "білизна жіноча" searches for "термобілизна"
-            $searchQuery = $foundCategory;
+            // Check if the non-category word is a color modifier
+            $colorStems = [
+                'рожев' => 'Рожевий', 'чорн' => 'Чорний', 'олив' => 'Олива',
+                'біл' => 'Білий', 'сір' => 'Сірий', 'зелен' => 'Зелений',
+                'синь' => 'Синій', 'синю' => 'Синій', 'синя' => 'Синій',
+                'коричнев' => 'Коричневий', 'койот' => 'Койот',
+                'мультикам' => 'Мультикам', 'піксель' => 'Піксель',
+                'хакі' => 'Хакі', 'бордов' => 'Бордовий',
+                'оранжев' => 'Оранжевий', 'жовт' => 'Жовтий',
+                'фіолетов' => 'Фіолетовий', 'бежев' => 'Бежевий',
+                'червон' => 'Червоний', 'блакитн' => 'Блакитний',
+            ];
+
+            $detectedColor = null;
+            foreach ($words as $word) {
+                foreach ($colorStems as $stem => $canonicalColor) {
+                    if (mb_stripos($word, $stem) !== false) {
+                        $detectedColor = $canonicalColor;
+                        break 2;
+                    }
+                }
+            }
+
+            if ($detectedColor) {
+                // Color + category: use full message for search (Meili handles "рожева футболка" well)
+                $searchQuery = $message;
+            } else {
+                // No color: use canonical category for search
+                // This ensures "білизна жіноча" searches for "термобілизна"
+                $searchQuery = $foundCategory;
+            }
         }
 
         // If it's a single noun-like query, try searching directly
@@ -645,9 +551,28 @@ abstract class BaseAgent
             'shown_ids_count' => count($this->shownProductIds),
         ]);
 
+        // Build filters (including color if detected)
+        $searchFilters = [];
+        if (! empty($detectedColor)) {
+            $searchFilters['color'] = $detectedColor;
+        }
+
         // Request more products to allow excluding shown ones
         $requestLimit = 3 + count($this->shownProductIds);
-        $products = $this->searchTool->search($searchQuery, [], $requestLimit);
+        $products = $this->searchTool->search($searchQuery, $searchFilters, $requestLimit);
+
+        // If color filter returned no results, retry without filter and post-filter instead
+        if (empty($products) && ! empty($detectedColor)) {
+            $products = $this->searchTool->search($searchQuery, [], $requestLimit);
+            if (! empty($products)) {
+                $colorLower = mb_strtolower($detectedColor);
+                $products = array_values(array_filter($products, function ($p) use ($colorLower) {
+                    $productColor = mb_strtolower(($p['color'] ?? '').' '.($p['title'] ?? ''));
+
+                    return str_contains($productColor, $colorLower);
+                }));
+            }
+        }
 
         Log::info('BaseAgent::handleShortProductQuery raw search results', [
             'message' => $message,
@@ -681,10 +606,8 @@ abstract class BaseAgent
             }
 
             // Determine language for response
-            $isEnglish = preg_match('/[a-zA-Z]{3,}/', $message);
-            $intro = $isEnglish
-                ? "Here's what I found:"
-                : 'Ось що я знайшов:';
+            $isEnglish = (bool) preg_match('/[a-zA-Z]{3,}/', $message);
+            $intro = $this->generateContextualIntro($message, $products, $isEnglish);
 
             Log::info('BaseAgent: short query direct search succeeded', [
                 'message' => $message,
@@ -995,6 +918,93 @@ abstract class BaseAgent
     }
 
     // ============================================================
+    // CONTEXTUAL INTRO GENERATOR
+    // ============================================================
+
+    /**
+     * Generate contextual intro based on user message instead of generic "Ось що я знайшов".
+     */
+    protected function generateContextualIntro(string $message, array $products = [], bool $isEnglish = false): string
+    {
+        $lowerMsg = mb_strtolower(trim($message));
+
+        // Follow-up patterns
+        if (preg_match('/^(а є |є )?дешевш/ui', $lowerMsg)) {
+            return $isEnglish ? 'Here are cheaper options:' : 'Ось дешевші варіанти:';
+        }
+        if (preg_match('/^(а є |є )?дорожч/ui', $lowerMsg)) {
+            return $isEnglish ? 'Here are premium options:' : 'Ось преміум варіанти:';
+        }
+        if (preg_match('/покажи ще|ще варіант|інші|more|ещё/ui', $lowerMsg)) {
+            return $isEnglish ? 'Here are more options:' : 'Ось ще варіанти:';
+        }
+        if (preg_match('/новинк|нов[іе] надходження|що нового/ui', $lowerMsg)) {
+            return $isEnglish ? 'Here are the latest arrivals:' : 'Ось новинки:';
+        }
+
+        // Category patterns — check BEFORE colors to avoid false positives
+        $categoryPatterns = [
+            'куртк' => 'куртки', 'берц' => 'берці', 'штан' => 'штани',
+            'футболк' => 'футболки', 'навушник' => 'навушники', 'шолом' => 'шоломи',
+            'плитонос' => 'плитоноски', 'рюкзак' => 'рюкзаки', 'підсум' => 'підсумки',
+            'термобіл' => 'термобілизна', 'білизн' => 'термобілизна',
+            'шевр' => 'шеврони', 'бронежилет' => 'бронежилети',
+            'тактич' => 'тактичне спорядження', 'черевик' => 'черевики',
+            'кросівк' => 'кросівки', 'сорочк' => 'сорочки', 'шапк' => 'шапки',
+            'рукавиц' => 'рукавиці', 'ніж' => 'ножі', 'ліхтар' => 'ліхтарі',
+            'окуляр' => 'окуляри', 'ремен' => 'ремені', 'носк' => 'шкарпетки',
+            'меблі' => 'меблі', 'монтессор' => 'Монтессорі іграшки',
+            'іграшк' => 'іграшки', 'конструктор' => 'конструктори',
+            'пазл' => 'пазли', 'книг' => 'книги', 'розвива' => 'розвивальні іграшки',
+        ];
+
+        foreach ($categoryPatterns as $pattern => $category) {
+            if (mb_stripos($lowerMsg, $pattern) !== false) {
+                return $isEnglish ? "Here are {$category}:" : "Ось {$category}:";
+            }
+        }
+
+        // Color filter
+        $colors = [
+            'олив' => 'оливі', 'чорн' => 'чорному', 'біл' => 'білому',
+            'мультикам' => 'мультикамі', 'піксель' => 'пікселі', 'коричнев' => 'коричневому',
+            'койот' => 'койоті', 'рожев' => 'рожевому', 'синь' => 'синьому', 'синя' => 'синьому',
+            'сір' => 'сірому', 'зелен' => 'зеленому', 'червон' => 'червоному',
+            'бежев' => 'бежевому', 'оранжев' => 'оранжевому', 'жовт' => 'жовтому',
+            'фіолетов' => 'фіолетовому', 'бордов' => 'бордовому', 'блакитн' => 'блакитному',
+        ];
+        foreach ($colors as $pattern => $colorName) {
+            if (mb_stripos($lowerMsg, $pattern) !== false) {
+                return $isEnglish ? "Here are options in {$pattern}:" : "Ось варіанти в {$colorName}:";
+            }
+        }
+
+        // Try to extract category from first product
+        if (! empty($products[0]['category_path'])) {
+            $parts = explode(' > ', $products[0]['category_path']);
+            $lastCategory = end($parts);
+            if ($lastCategory) {
+                return $isEnglish ? "Here are {$lastCategory}:" : "Ось {$lastCategory}:";
+            }
+        }
+
+        // Smart fallback: use the user message as context (capitalize first word)
+        $words = preg_split('/\s+/u', trim($message));
+        if (count($words) <= 3) {
+            $cleaned = mb_strtolower(trim($message));
+            $cleaned = preg_replace('/[?.!,]+$/u', '', $cleaned);
+            if (mb_strlen($cleaned) > 0 && mb_strlen($cleaned) <= 30) {
+                $first = mb_strtoupper(mb_substr($cleaned, 0, 1)).mb_substr($cleaned, 1);
+
+                return $isEnglish ? "Here are {$cleaned}:" : "Ось {$first}:";
+            }
+        }
+
+        // Ultimate fallback — still better than generic
+        return $isEnglish ? 'Here are the results:' : 'Ось товари:';
+    }
+
+    // ============================================================
     // SYSTEM PROMPT
     // ============================================================
 
@@ -1085,7 +1095,6 @@ abstract class BaseAgent
 - intro = контекст ("Ось куртки:"), НЕ "Ось що я знайшов"
 - Замовлення: "Натисніть картку → сайт → кошик. Тел: {$shopPhone}"
 - Мова = мова запиту
-- ⛔ НЕ ПИШИ URL/посилання в тексті! Картки з посиланнями додаються автоматично
 RULES;
     }
 
@@ -1262,11 +1271,6 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - Якщо питають про характеристики яких немає в каталозі — кажи "уточніть у менеджера"
 - Ти НЕ ЕКСПЕРТ — ти ПРОДАВЕЦЬ який знає ТІЛЬКИ свій каталог!
 
-⛔ ПОСИЛАННЯ — ЗАБОРОНЕНО!
-- НЕ пиши URL/посилання в тексті! НЕ пиши "Детальніше: https://..."
-- Посилання на товари додаються АВТОМАТИЧНО через картки
-- Якщо клієнт хоче подробиці — кажи "Натисніть на картку товару"
-
 📝 ПЕРСОНАЛІЗАЦІЯ ВІДПОВІДЕЙ — КРИТИЧНО!
 НЕ пиши generic "Ось що я знайшов" — ЗАВЖДИ вказуй КОНТЕКСТ запиту!
 
@@ -1345,11 +1349,15 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 
 🌡️ СЕЗОННІ ЗАПИТИ — КРИТИЧНО!
 Якщо питають "що беруть зимою/взимку/щимою", "що популярне влітку" — це НЕ запит на топ продажів!
-Це запит на СЕЗОННІ ТОВАРИ. ЗАВЖДИ викликай search_products з категоріями сезону:
+Це запит на СЕЗОННІ ТОВАРИ. ЗАВЖДИ викликай search_products з сезонним ключовим словом:
 
-- ЗИМА (грудень-лютий): search_products(query="куртка зимова OR термобілизна OR флісова OR шапка OR рукавички", sort_by="popularity")
-- ЛІТО (червень-серпень): search_products(query="футболка OR сорочка OR шорти", sort_by="popularity")
-- ВЕСНА/ОСІНЬ: search_products(query="софтшел OR куртка OR дощовик", sort_by="popularity")
+- ЗИМА (грудень-лютий): search_products(query="зимовий OR зима OR winter OR теплий", sort_by="popularity")
+- ЛІТО (червень-серпень): search_products(query="літній OR літо OR summer OR легкий", sort_by="popularity")
+- ВЕСНА (березень-травень): search_products(query="весняний OR весна OR spring", sort_by="popularity")
+- ОСІНЬ (вересень-листопад): search_products(query="осінній OR осінь OR autumn", sort_by="popularity")
+
+GPT повинен САМ визначити які товари з асортименту магазину підходять для сезону.
+НЕ хардкодь конкретні категорії — шукай за сезонними характеристиками.
 
 ВАЖЛИВО: НЕ кажи "вже показував" на сезонні питання! ЗАВЖДИ роби новий пошук!
 
@@ -1541,7 +1549,8 @@ RULES;
 
 ГОЛОВНЕ ПРАВИЛО: ЗАВЖДИ ШУКАЙ ЧЕРЕЗ search_products!
 Не кажи "цього немає" поки не перевіриш пошуком.
-Якщо перший пошук не дав результатів — спробуй синоніми через OR!
+
+⛔ ЗАБОРОНА ПИСАТИ ІМЕНА ФУНКЦІЙ ТЕКСТОМ!
 НІКОЛИ не пиши "search_products(...)" або "recommend_size(...)" як ТЕКСТ!
 Якщо хочеш шукати товари — ВИКЛИЧ функцію через tool_calls, НЕ пиши її назву!
 ❌ ПОГАНО: "Ось кілька варіантів: search_products("куртка")"
@@ -1797,12 +1806,12 @@ PROMPT;
                         'type' => 'object',
                         'properties' => [
                             'query' => ['type' => 'string', 'description' => 'Пошуковий запит'],
+                            'category' => ['type' => 'string', 'description' => 'Категорія товару для фільтрації (наприклад: "малюкам (0-1)", "тодлерам (1-3)", "дошкільнятам (3-6)")'],
                             'product_type' => ['type' => 'string', 'description' => 'Тип товару для фільтрації'],
                             'brand' => ['type' => 'string', 'description' => 'Бренд товару'],
                             'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум)'],
                             'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (для бюджетних)'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
-                            'category' => ['type' => 'string', 'description' => 'Категорія товару (category_path) для фільтрації, наприклад вікова група: "МАЛЮКАМ 0 – 1", "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7". Використовуй коли клієнт вказує вік дитини або конкретну категорію.'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово з назви'],
                             'exclude_shown' => ['type' => 'boolean', 'description' => 'true = виключити вже показані товари (для "покажи ще"). false = показати всі включаючи раніше показані'],
                             'limit' => ['type' => 'integer', 'description' => 'Кількість (максимум 3)'],
@@ -2092,16 +2101,14 @@ PROMPT;
                 }
             }
             if (! $foundInResults) {
-                // Return products WITH a message so GPT can show them and explain
-                // GPT will add text like "Жіночої немає, є універсальні варіанти:"
-                Log::info('Gender attribute not found in results, returning universal options', ['requested' => $requestedGender, 'query' => $query, 'results_count' => count($results)]);
+                // Return empty results with message so GPT knows to say "not found"
+                Log::info('Gender attribute not found in results', ['requested' => $requestedGender, 'query' => $query]);
 
                 return [
-                    'products' => $results,
-                    'count' => count($results),
+                    'products' => [],
+                    'count' => 0,
                     'query' => $query,
-                    'gender_not_found' => true,
-                    'message' => "'{$requestedGender}' варіанту немає. Ось універсальні варіанти — покажи їх і поясни що спеціального {$requestedGender} варіанту не знайдено, є лише уніформа/універсальні.",
+                    'message' => "На жаль, '{$requestedGender}' варіанту цього товару немає в асортименті. Є універсальні варіанти - запропонуй їх користувачу.",
                 ];
             }
         }
@@ -2218,10 +2225,6 @@ PROMPT;
                 if (! ($p['in_stock'] ?? false)) {
                     return false;
                 }
-                // Filter out packaging items (bags, wrapping) but keep certificates and gift sets
-                if (preg_match('/\b(пакет|пакунок|обгортк|упаковк|paper\s*bag)\b/iu', $title)) {
-                    return false;
-                }
 
                 return true;
             };
@@ -2267,7 +2270,7 @@ PROMPT;
                 if ($category) {
                     $results = $this->searchTool->search($category, [], $limit * 3);
                     $results = array_filter($results, $filterProduct);
-                    usort($results, fn ($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
+                    usort($results, fn ($a, $b) => (($b['popularity'] ?? 0) + (($b['orders_count'] ?? 0) * 10)) <=> (($a['popularity'] ?? 0) + (($a['orders_count'] ?? 0) * 10)));
                     $existingIds = array_column($products, 'id');
                     foreach ($results as $r) {
                         if (! in_array($r['id'], $existingIds)) {
@@ -2278,54 +2281,28 @@ PROMPT;
                         }
                     }
                 } else {
-                    // Try we_recommended first — products the store owner marked as recommended
-                    $recQuery = Product::where('in_stock', true)
-                        ->where('we_recommended', true)
-                        ->where('quantity', '>', 0);
-                    if ($tenantId) {
-                        $recQuery->where('tenant_id', $tenantId);
+                    // Get top categories dynamically from tenant's products
+                    $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
+
+                    // If no categories found, use generic fallback
+                    if (empty($popularQueries)) {
+                        $popularQueries = ['товар', 'новинка', 'акція'];
                     }
-                    $recommended = $recQuery->orderByDesc('popularity')->take($limit * 2)->get();
 
                     $existingIds = array_column($products, 'id');
-                    foreach ($recommended as $p) {
-                        $item = [
-                            'id' => $p->id, 'article' => $p->article, 'title' => $p->title,
-                            'price' => $p->price, 'in_stock' => $p->in_stock, 'size' => $p->size,
-                            'orders_count' => $p->orders_count ?? 0, 'popularity' => $p->popularity ?? 0,
-                        ];
-                        if ($filterProduct($item) && ! in_array($p->id, $existingIds)) {
-                            $products[] = $item;
-                            $existingIds[] = $p->id;
+                    foreach ($popularQueries as $q) {
+                        $results = $this->searchTool->search($q, [], 10);
+                        $results = array_filter($results, $filterProduct);
+                        if (! empty($results)) {
+                            usort($results, fn ($a, $b) => abs(($a['price'] ?? 0) - 3000) <=> abs(($b['price'] ?? 0) - 3000));
+                            $best = array_values($results)[0];
+                            if (! in_array($best['id'], $existingIds)) {
+                                $products[] = $best;
+                                $existingIds[] = $best['id'];
+                            }
                         }
                         if (count($products) >= $limit) {
                             break;
-                        }
-                    }
-
-                    // Still not enough? Use top categories with popularity-based sorting
-                    if (count($products) < $limit) {
-                        $popularQueries = $this->getTopCategoriesForTenant($tenantId, 5);
-
-                        if (empty($popularQueries)) {
-                            $popularQueries = ['товар', 'новинка', 'акція'];
-                        }
-
-                        foreach ($popularQueries as $q) {
-                            $results = $this->searchTool->search($q, [], 10);
-                            $results = array_filter($results, $filterProduct);
-                            if (! empty($results)) {
-                                // Sort by popularity score — NOT by price distance to hardcoded value
-                                usort($results, fn ($a, $b) => $this->popularityScore($b) <=> $this->popularityScore($a));
-                                $best = array_values($results)[0];
-                                if (! in_array($best['id'], $existingIds)) {
-                                    $products[] = $best;
-                                    $existingIds[] = $best['id'];
-                                }
-                            }
-                            if (count($products) >= $limit) {
-                                break;
-                            }
                         }
                     }
                 }
@@ -2411,22 +2388,6 @@ PROMPT;
     }
 
     /**
-     * Calculate a unified popularity score for product ranking.
-     * Uses: orders_count (strongest signal), popularity (Horoshop metric),
-     * we_recommended flag, and price_old (indicates discounted items).
-     */
-    protected function popularityScore(array $product): float
-    {
-        $ordersCount = (int) ($product['orders_count'] ?? 0);
-        $popularity = (int) ($product['popularity'] ?? 0);
-        $weRecommended = ! empty($product['we_recommended']);
-        $hasDiscount = ! empty($product['price_old']) && ($product['price_old'] > ($product['price'] ?? 0));
-
-        // Weighted score: orders are most valuable, then popularity, then store recommendations
-        return ($ordersCount * 100) + ($popularity * 1) + ($weRecommended ? 500 : 0) + ($hasDiscount ? 50 : 0);
-    }
-
-    /**
      * Tool: Get product details.
      */
     protected function toolGetProductDetails(array $args): array
@@ -2466,23 +2427,19 @@ PROMPT;
 
     /**
      * Tool: Get order status.
-     * Resolves tenant-specific Horoshop credentials when available.
      */
     protected function toolGetOrderStatus(array $args): array
     {
         $orderId = $args['order_id'] ?? null;
         $phone = $args['phone'] ?? null;
 
-        // Resolve the correct OrderSearchService for the current tenant
-        $orderService = $this->resolveOrderSearchService();
-
         // Check if order search is available
-        if (! $orderService->isAvailable()) {
-            return ['error' => 'Пошук замовлень тимчасово недоступний. Зверніться до менеджера магазину.'];
+        if (! $this->orderSearchService->isAvailable()) {
+            return ['error' => 'Пошук замовлень тимчасово недоступний.'];
         }
 
         try {
-            $result = $orderService->search([
+            $result = $this->orderSearchService->search([
                 'order_id' => $orderId,
                 'phone' => $phone,
                 'limit' => 5,
@@ -2499,97 +2456,6 @@ PROMPT;
             Log::error('toolGetOrderStatus error', ['error' => $e->getMessage()]);
 
             return ['error' => 'Не вдалося перевірити замовлення. Спробуйте пізніше.'];
-        }
-    }
-
-    /**
-     * Resolve OrderSearchService for the current tenant.
-     * Creates a tenant-specific service with proper Horoshop credentials
-     * instead of using the global singleton (which may point to wrong shop).
-     */
-    protected function resolveOrderSearchService(): OrderSearchService
-    {
-        $tenantId = $this->searchTool->getCurrentTenantId();
-
-        if (! $tenantId) {
-            return $this->orderSearchService;
-        }
-
-        // Cache per tenant to avoid re-creating on every call
-        static $tenantServices = [];
-        if (isset($tenantServices[$tenantId])) {
-            return $tenantServices[$tenantId];
-        }
-
-        try {
-            $tenant = \App\Models\Tenant::find($tenantId);
-            if (! $tenant || $tenant->platform !== \App\Models\Tenant::PLATFORM_HOROSHOP) {
-                Log::info('resolveOrderSearchService: tenant has no Horoshop platform', [
-                    'tenant_id' => $tenantId,
-                    'platform' => $tenant?->platform,
-                ]);
-
-                return $this->orderSearchService;
-            }
-
-            $credentials = $tenant->platform_credentials;
-            if (empty($credentials) || empty($credentials['domain'])) {
-                Log::warning('resolveOrderSearchService: tenant has no Horoshop credentials', [
-                    'tenant_id' => $tenantId,
-                ]);
-
-                return $this->orderSearchService;
-            }
-
-            // Extract credentials (handle both plain and nested formats)
-            $domain = is_array($credentials['domain'])
-                ? ($credentials['domain']['value'] ?? '')
-                : (string) $credentials['domain'];
-            $login = is_array($credentials['login'] ?? null)
-                ? ($credentials['login']['value'] ?? '')
-                : (string) ($credentials['login'] ?? '');
-            $password = is_array($credentials['password'] ?? null)
-                ? ($credentials['password']['value'] ?? '')
-                : (string) ($credentials['password'] ?? '');
-
-            if (empty($domain) || empty($login) || empty($password)) {
-                Log::warning('resolveOrderSearchService: incomplete credentials', [
-                    'tenant_id' => $tenantId,
-                    'has_domain' => ! empty($domain),
-                    'has_login' => ! empty($login),
-                    'has_password' => ! empty($password),
-                ]);
-
-                return $this->orderSearchService;
-            }
-
-            // Create tenant-specific Horoshop client and services
-            $tenantClient = new \App\Services\Horoshop\HoroshopClient($domain, $login, $password);
-            $tenantOrderService = new \App\Services\Horoshop\OrderService($tenantClient);
-            $deliveryTrackingService = app(\App\Services\Horoshop\DeliveryTrackingService::class);
-
-            $tenantSearchService = new OrderSearchService(
-                $tenantClient,
-                $tenantOrderService,
-                $deliveryTrackingService
-            );
-
-            Log::info('resolveOrderSearchService: created tenant-specific service', [
-                'tenant_id' => $tenantId,
-                'domain' => $domain,
-            ]);
-
-            $tenantServices[$tenantId] = $tenantSearchService;
-
-            return $tenantSearchService;
-
-        } catch (\Throwable $e) {
-            Log::error('resolveOrderSearchService: failed to create tenant service', [
-                'tenant_id' => $tenantId,
-                'error' => $e->getMessage(),
-            ]);
-
-            return $this->orderSearchService;
         }
     }
 
@@ -2870,6 +2736,115 @@ PROMPT;
     // ============================================================
 
     /**
+     * Strip URLs, markdown links, and generic phrases from GPT text output.
+     */
+    protected function stripUrlsFromText(string $text): string
+    {
+        // Remove markdown links with known "action" anchors — drop entirely
+        $actionAnchors = ['Детальніше', 'Переглянути', 'Дивитись', 'Купити', 'Замовити', 'View', 'Buy', 'Order', 'See more'];
+        foreach ($actionAnchors as $anchor) {
+            $text = preg_replace('/\['.preg_quote($anchor, '/').'\]\(https?:\/\/[^\)]+\)/ui', '', $text);
+        }
+
+        // Markdown links with descriptive text — keep text, drop URL
+        $text = preg_replace('/\[([^\]]+)\]\(https?:\/\/[^\)]+\)/u', '$1', $text);
+
+        // Standalone bracket text without URL (e.g. [Переглянути])
+        $text = preg_replace('/\[('.implode('|', array_map(fn ($a) => preg_quote($a, '/'), $actionAnchors)).')\]/ui', '', $text);
+
+        // Bare URLs
+        $text = preg_replace('/https?:\/\/\S+/u', '', $text);
+
+        // Generic "Ось що я знайшов" phrases
+        $text = preg_replace('/Ось що я знайшов[^:.\n]*[:.!]?\s*/ui', '', $text);
+        $text = preg_replace("/Here'?s what I found[^:.\n]*[:.!]?\s*/ui", '', $text);
+
+        // Clean up extra whitespace
+        $text = preg_replace('/  +/', ' ', $text);
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
+
+        return trim($text);
+    }
+
+    /**
+     * Strip link/slug fields from product data before sending to GPT (prevents URL hallucination).
+     */
+    protected function stripLinksForGpt(array $data): array
+    {
+        $stripProduct = function (array $product): array {
+            unset($product['link'], $product['slug']);
+            if (! empty($product['size_variants'])) {
+                $product['size_variants'] = array_map(function (array $v): array {
+                    unset($v['link']);
+
+                    return $v;
+                }, $product['size_variants']);
+            }
+
+            return $product;
+        };
+
+        if (! empty($data['products']) && is_array($data['products'])) {
+            $data['products'] = array_map($stripProduct, $data['products']);
+        }
+
+        if (! empty($data['product']) && is_array($data['product'])) {
+            $data['product'] = $stripProduct($data['product']);
+        }
+
+        return $data;
+    }
+
+    /**
+     * Extract products mentioned by article in GPT plain-text response
+     * and look them up in the database.
+     *
+     * Handles patterns like: "арт. 107", "(арт. ABC-1)", "article: ABC-1"
+     *
+     * @return array{products: array}|null
+     */
+    protected function extractProductsFromTextResponse(string $text, ?int $tenantId): ?array
+    {
+        // Match article patterns: "арт. XXX", "(арт. XXX)", "article: XXX", "артикул XXX"
+        if (! preg_match_all('/(?:арт(?:икул)?[\.\s:]*|article[\s:]+)([a-zA-Z0-9\-_]+)/ui', $text, $matches)) {
+            return null;
+        }
+
+        $articles = array_unique($matches[1]);
+        if (empty($articles)) {
+            return null;
+        }
+
+        $query = Product::whereIn('article', $articles);
+        if ($tenantId) {
+            $query->where('tenant_id', $tenantId);
+        }
+        $dbProducts = $query->get();
+
+        if ($dbProducts->isEmpty()) {
+            return null;
+        }
+
+        $products = [];
+        foreach ($dbProducts as $product) {
+            $images = $this->extractProductImages($product);
+            $products[] = [
+                'id' => $product->id,
+                'article' => $product->article,
+                'title' => $product->title,
+                'price' => $product->price,
+                'price_old' => $product->price_old,
+                'in_stock' => $product->in_stock,
+                'category_path' => $product->category_path,
+                'brand' => $product->brand,
+                'images' => $images,
+            ];
+        }
+
+        return ['products' => $products];
+    }
+
+    /**
      * Extract images from product.
      */
     protected function extractProductImages(Product $product): array
@@ -2937,74 +2912,6 @@ PROMPT;
 
             return array_unique(array_merge([$productType], $synonyms));
         });
-    }
-
-    /**
-     * Strip URL/link fields from tool result before sending to GPT.
-     * GPT must NOT see product URLs — otherwise it generates [Детальніше](url) links.
-     * The link is preserved in $products array for the front-end.
-     */
-    protected function stripLinksForGpt(array $result): array
-    {
-        // Strip link from products array
-        if (! empty($result['products'])) {
-            $result['products'] = array_map(function ($p) {
-                unset($p['link'], $p['slug']);
-                // Also strip links from size_variants/color_variants
-                if (! empty($p['size_variants'])) {
-                    $p['size_variants'] = array_map(function ($v) {
-                        unset($v['link']);
-
-                        return $v;
-                    }, $p['size_variants']);
-                }
-
-                return $p;
-            }, $result['products']);
-        }
-
-        // Strip link from single product (get_product_details)
-        if (! empty($result['product'])) {
-            unset($result['product']['link'], $result['product']['slug']);
-            if (! empty($result['product']['size_variants'])) {
-                $result['product']['size_variants'] = array_map(function ($v) {
-                    unset($v['link']);
-
-                    return $v;
-                }, $result['product']['size_variants']);
-            }
-        }
-
-        return $result;
-    }
-
-    /**
-     * Strip markdown URLs from GPT text response (safety net).
-     * Converts [Детальніше](https://...) → removes entirely,
-     * and strips bare https:// URLs.
-     */
-    protected function stripUrlsFromText(string $text): string
-    {
-        // Remove markdown links like [Детальніше](https://bavkatoys.com/...)
-        $text = preg_replace('/\[(?:Детальніше|Переглянути|Дивитися|Подробиці|View|Details|More)\]\(https?:\/\/[^\)]+\)/ui', '', $text);
-
-        // Remove [Детальніше] WITHOUT URL (GPT sometimes generates just the bracket text)
-        $text = preg_replace('/\[(?:Детальніше|Переглянути|Дивитися|Подробиці|View|Details|More)\]/ui', '', $text);
-
-        // Remove other markdown links with URLs — keep the anchor text
-        $text = preg_replace('/\[([^\]]+)\]\(https?:\/\/[^\)]+\)/u', '$1', $text);
-
-        // Remove bare URLs
-        $text = preg_replace('/https?:\/\/\S+/u', '', $text);
-
-        // Remove "Ось що я знайшов" / "Here's what I found" patterns
-        $text = preg_replace('/Ось що я знайшов[:\.]?/ui', '', $text);
-        $text = preg_replace('/Here\'?s what I found[:\.]?/ui', '', $text);
-
-        // Clean up leftover whitespace
-        $text = preg_replace('/\n{3,}/', "\n\n", $text);
-
-        return trim($text);
     }
 
     /**
@@ -3115,13 +3022,9 @@ PROMPT;
     {
         $json = null;
 
-        // Extract JSON from response (non-greedy to avoid spanning multiple objects)
-        if (preg_match('/\{[\s\S]*?\}/u', $responseText, $matches)) {
+        // Extract JSON from response
+        if (preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
             $json = json_decode($matches[0], true);
-            // If non-greedy didn't capture full JSON, try greedy as fallback
-            if ($json === null && preg_match('/\{[\s\S]*\}/u', $responseText, $matches)) {
-                $json = json_decode($matches[0], true);
-            }
         }
 
         // Build products by article index
@@ -3164,7 +3067,7 @@ PROMPT;
             }
 
             return [
-                'intro' => $json['intro'] ?? 'Ось що я знайшов:',
+                'intro' => $json['intro'] ?? $this->generateContextualIntro($this->currentMessage ?? '', $allProducts),
                 'outro' => $json['outro'] ?? null,
                 'products' => ! empty($orderedProducts) ? $orderedProducts : array_slice($allProducts, 0, 5),
                 'messages' => $messages,
@@ -3196,59 +3099,11 @@ PROMPT;
         }
 
         return [
-            'intro' => $responseText ?: 'Ось що я знайшов:',
+            'intro' => $responseText ?: $this->generateContextualIntro($this->currentMessage ?? '', $allProducts),
             'outro' => null,
             'products' => array_slice($allProducts, 0, 5),
             'messages' => $messages,
         ];
-    }
-
-    /**
-     * Extract product cards from a plain-text GPT response that mentions articles.
-     *
-     * When GPT knows a product from conversation history it may respond with text
-     * like 'Монтессорі-набір "Планети" (арт. 107) ...' instead of calling search_products.
-     * This method finds those article references and returns real product cards.
-     *
-     * @return array{products: array, text: string}|null Null if no articles found
-     */
-    protected function extractProductsFromTextResponse(string $text, ?int $tenantId = null): ?array
-    {
-        // Match article patterns: "арт. 107", "(арт. abc-123)", "артикул: XYZ"
-        if (! preg_match_all('/(?:арт(?:икул)?\.?\s*)([a-zA-Z0-9_\-]+)/ui', $text, $matches)) {
-            return null;
-        }
-
-        $articles = array_unique($matches[1]);
-        if (empty($articles)) {
-            return null;
-        }
-
-        // Look up products by article in DB
-        $query = Product::query()->whereIn('article', $articles)->where('in_stock', true);
-        if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
-        }
-        $products = $query->get();
-
-        if ($products->isEmpty()) {
-            return null;
-        }
-
-        // Build product cards using ProductDetailsTool
-        $detailsTool = app(\App\Services\Agent\Tools\ProductDetailsTool::class);
-        $cards = $detailsTool->getCards($products->pluck('id')->all(), 5, $tenantId);
-
-        if (empty($cards)) {
-            return null;
-        }
-
-        Log::info('BaseAgent: extracted products from plain text response', [
-            'articles' => $articles,
-            'found_count' => count($cards),
-        ]);
-
-        return ['products' => $cards, 'text' => $text];
     }
 
     /**
@@ -3406,6 +3261,14 @@ PROMPT;
                 'зелен|green' => 'зелений',
                 'синій|синя|blue' => 'синій',
                 'атакс|a-tacs' => 'A-TACS',
+                'рожев|pink' => 'рожевий',
+                'червон|red' => 'червоний',
+                'оранжев|orange' => 'оранжевий',
+                'жовт|yellow' => 'жовтий',
+                'фіолетов|purple' => 'фіолетовий',
+                'бордов|maroon|burgundy' => 'бордовий',
+                'бежев|beige' => 'бежевий',
+                'блакитн' => 'блакитний',
             ];
             foreach ($colorPatterns as $pattern => $color) {
                 if (preg_match("/($pattern)/ui", $content)) {
@@ -3466,7 +3329,6 @@ PROMPT;
     /**
      * Load conversation history from DB.
      * Appends [Показані товари: ...] marker to assistant messages for context.
-     * Truncates total history to ~8000 chars to prevent context overflow.
      */
     protected function loadConversationHistory(?string $sessionId): array
     {
@@ -3475,21 +3337,17 @@ PROMPT;
         }
 
         try {
-            // Bypass TenantScope — session_id is unique, and tenant context
-            // may not match during cross-tenant lookups or middleware edge cases
-            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->where('session_id', $sessionId)->first();
+            $session = ChatSession::where('session_id', $sessionId)->first();
             if (! $session) {
                 return [];
             }
 
-            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->where('chat_session_id', $session->id)
+            $messages = ChatMessage::where('chat_session_id', $session->id)
                 ->orderBy('created_at', 'asc')
                 ->take(20)
                 ->get();
 
-            $history = $messages->map(function ($m) {
+            return $messages->map(function ($m) {
                 $content = $m->content;
 
                 // For assistant messages, append shown products marker from meta
@@ -3511,17 +3369,6 @@ PROMPT;
                     'content' => $content,
                 ];
             })->toArray();
-
-            // Truncate history from the oldest end to stay under ~8000 chars
-            $maxChars = 8000;
-            $totalChars = array_sum(array_map(fn ($m) => mb_strlen($m['content']), $history));
-
-            while ($totalChars > $maxChars && count($history) > 2) {
-                $removed = array_shift($history);
-                $totalChars -= mb_strlen($removed['content']);
-            }
-
-            return $history;
         } catch (\Throwable $e) {
             Log::warning('BaseAgent: failed to load history', ['error' => $e->getMessage()]);
 
@@ -3539,17 +3386,13 @@ PROMPT;
         }
 
         try {
-            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->where('session_id', $sessionId)->first();
+            $session = ChatSession::where('session_id', $sessionId)->first();
             if (! $session) {
                 return [];
             }
 
-            $messages = ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->where('chat_session_id', $session->id)
+            $messages = ChatMessage::where('chat_session_id', $session->id)
                 ->where('role', 'assistant')
-                ->orderBy('created_at', 'desc')
-                ->take(50)
                 ->get();
 
             $ids = [];
@@ -3668,27 +3511,24 @@ PROMPT;
         try {
             $tenantId = $this->searchTool->getCurrentTenantId();
 
-            // Bypass TenantScope to avoid duplicate sessions when tenant context differs
-            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->firstOrCreate(
-                    ['session_id' => $sessionId],
-                    [
-                        'tenant_id' => $tenantId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]
-                );
+            $session = ChatSession::firstOrCreate(
+                ['session_id' => $sessionId],
+                [
+                    'tenant_id' => $tenantId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
 
             // Update tenant_id if session exists but has null tenant_id
             if ($session->tenant_id === null && $tenantId !== null) {
                 $session->update(['tenant_id' => $tenantId]);
             }
 
-            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+            ChatMessage::create([
                 'chat_session_id' => $session->id,
                 'role' => 'user',
                 'content' => $message,
-                'tenant_id' => $tenantId,
             ]);
 
             // Update session: reopen if closed, update last_message_at
@@ -3713,8 +3553,7 @@ PROMPT;
         }
 
         try {
-            $session = ChatSession::withoutGlobalScope(\App\Scopes\TenantScope::class)
-                ->where('session_id', $sessionId)->first();
+            $session = ChatSession::where('session_id', $sessionId)->first();
             if (! $session) {
                 return;
             }
@@ -3729,11 +3568,10 @@ PROMPT;
             // Build detailed product info for follow-up questions
             $productDetails = $this->buildProductDetailsForStorage($products);
 
-            ChatMessage::withoutGlobalScope(\App\Scopes\TenantScope::class)->create([
+            ChatMessage::create([
                 'chat_session_id' => $session->id,
                 'role' => 'assistant',
                 'content' => $content,
-                'tenant_id' => $session->tenant_id,
                 'meta' => [
                     'intent' => $intent,
                     'product_ids' => array_column($products, 'id'),
@@ -3920,11 +3758,13 @@ PROMPT;
                 $results = $cards;
             }
 
+            $intro = $this->generateContextualIntro($this->currentMessage ?? '', $results);
+
             return [
-                'message' => 'Ось що я знайшов за вашим запитом:',
+                'message' => $intro,
                 'products' => $results,
                 'messages' => [
-                    ['type' => 'text', 'content' => 'Ось що я знайшов за вашим запитом:'],
+                    ['type' => 'text', 'content' => $intro],
                     ['type' => 'products', 'products' => $results],
                 ],
                 'meta' => ['intent' => 'product_search', 'agent' => 'fallback'],

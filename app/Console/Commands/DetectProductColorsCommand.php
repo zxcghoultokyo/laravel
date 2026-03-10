@@ -35,16 +35,16 @@ class DetectProductColorsCommand extends Command
     {
         $limit = (int) $this->option('limit');
         $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
-        $analyzeImages = !$this->option('skip-images');
+        $analyzeImages = ! $this->option('skip-images');
         $dryRun = $this->option('dry-run');
         $sync = $this->option('sync');
 
-        $this->info("🎨 Color Detection");
+        $this->info('🎨 Color Detection');
         $this->line("  Limit: {$limit}");
-        $this->line("  Tenant: " . ($tenantId ?? 'all'));
-        $this->line("  Analyze images: " . ($analyzeImages ? 'yes' : 'no'));
-        $this->line("  Dry run: " . ($dryRun ? 'yes' : 'no'));
-        $this->line("  Mode: " . ($sync ? 'synchronous' : 'queued'));
+        $this->line('  Tenant: '.($tenantId ?? 'all'));
+        $this->line('  Analyze images: '.($analyzeImages ? 'yes' : 'no'));
+        $this->line('  Dry run: '.($dryRun ? 'yes' : 'no'));
+        $this->line('  Mode: '.($sync ? 'synchronous' : 'queued'));
 
         if ($sync) {
             // Run synchronously - same logic as the job
@@ -53,7 +53,7 @@ class DetectProductColorsCommand extends Command
 
         // Dispatch job to queue
         DetectProductColorsJob::dispatch($limit, $tenantId, $analyzeImages, $dryRun);
-        $this->info("✅ Job dispatched to queue");
+        $this->info('✅ Job dispatched to queue');
 
         return self::SUCCESS;
     }
@@ -67,7 +67,7 @@ class DetectProductColorsCommand extends Command
 
         // Create sync log
         $syncLog = null;
-        if (!$dryRun) {
+        if (! $dryRun) {
             $syncLog = SyncLog::create([
                 'sync_type' => SyncLog::TYPE_COLOR_DETECTION,
                 'status' => SyncLog::STATUS_RUNNING,
@@ -123,37 +123,46 @@ class DetectProductColorsCommand extends Command
                     if (is_array($description)) {
                         $description = implode(' ', $description);
                     }
-                    if (empty($description) && !empty($raw['description'])) {
-                        $description = is_array($raw['description']) 
-                            ? implode(' ', $raw['description']) 
+                    if (empty($description) && ! empty($raw['description'])) {
+                        $description = is_array($raw['description'])
+                            ? implode(' ', $raw['description'])
                             : $raw['description'];
                     }
 
                     // Extract first image URL
                     $imageUrl = null;
                     if ($analyzeImages) {
-                        if (!empty($raw['pictures'][0]['url'])) {
+                        if (! empty($raw['pictures'][0]['url'])) {
                             $imageUrl = $raw['pictures'][0]['url'];
-                        } elseif (!empty($raw['images'][0]['url'])) {
+                        } elseif (! empty($raw['images'][0]['url'])) {
                             $imageUrl = $raw['images'][0]['url'];
-                        } elseif (!empty($images[0])) {
+                        } elseif (! empty($images[0])) {
                             $imageUrl = is_array($images[0]) ? ($images[0]['url'] ?? null) : $images[0];
-                        } elseif (!empty($raw['image'])) {
+                        } elseif (! empty($raw['image'])) {
                             $imageUrl = $raw['image'];
                         }
                     }
 
+                    // Extract attributes from raw data
+                    $attributes = null;
+                    if (! empty($raw['attrs']) && is_array($raw['attrs'])) {
+                        $attributes = $raw['attrs'];
+                    } elseif (! empty($raw['attributes']) && is_array($raw['attributes'])) {
+                        $attributes = $raw['attributes'];
+                    }
+
                     // Detect color
                     $detectedColor = $colorService->detectColor(
-                        $product->title ?? '',
+                        $product->color ?? null,
                         $description ?? '',
+                        $attributes,
                         $imageUrl
                     );
 
                     if ($detectedColor) {
                         $stats['detected']++;
 
-                        if (!$dryRun) {
+                        if (! $dryRun) {
                             DB::table('products')
                                 ->where('id', $product->id)
                                 ->update(['color' => $detectedColor, 'updated_at' => now()]);
@@ -215,6 +224,7 @@ class DetectProductColorsCommand extends Command
             }
 
             $this->error("❌ Error: {$e->getMessage()}");
+
             return self::FAILURE;
         }
     }

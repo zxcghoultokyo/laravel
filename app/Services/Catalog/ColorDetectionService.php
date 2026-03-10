@@ -3,13 +3,13 @@
 namespace App\Services\Catalog;
 
 use ColorThief\ColorThief;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Service for detecting product colors from images and descriptions
- * 
+ *
  * Priority:
  * 1. Color field (already set)
  * 2. Color from description/attributes text
@@ -31,20 +31,20 @@ class ColorDetectionService
         'foliage' => 'Сірий',
         'wolf grey' => 'Сірий',
         'wolf gray' => 'Сірий',
-        
+
         // Чорний
         'чорний' => 'Чорний',
         'чорна' => 'Чорний',
         'чорне' => 'Чорний',
         'black' => 'Чорний',
-        
+
         // Олива
         'олива' => 'Олива',
         'оливков' => 'Олива',
         'olive' => 'Олива',
         'od green' => 'Олива',
         'ranger green' => 'Олива',
-        
+
         // Койот
         'койот' => 'Койот',
         'coyote' => 'Койот',
@@ -52,25 +52,25 @@ class ColorDetectionService
         'tan' => 'Койот',
         'хакі' => 'Койот',
         'khaki' => 'Койот',
-        
+
         // Мультикам
         'мультикам' => 'Мультикам',
         'multicam' => 'Мультикам',
         'мульти' => 'Мультикам',
         'mc' => 'Мультикам',
         'мультікам' => 'Мультикам',
-        
+
         // Піксель
         'піксел' => 'Піксель',
         'pixel' => 'Піксель',
         'mm14' => 'Піксель',
         'ukrainian' => 'Піксель',
         'пікселі' => 'Піксель',
-        
+
         // Зелений
         'зелен' => 'Зелений',
         'green' => 'Зелений',
-        
+
         // Білий
         'білий' => 'Білий',
         'біла' => 'Білий',
@@ -78,37 +78,67 @@ class ColorDetectionService
         'white' => 'Білий',
         'snow' => 'Білий',
         'alpine' => 'Білий',
-        
+
         // Синій
         'синій' => 'Синій',
         'синя' => 'Синій',
         'синє' => 'Синій',
         'blue' => 'Синій',
         'navy' => 'Синій',
-        
+
         // Коричневий
         'коричнев' => 'Коричневий',
         'brown' => 'Коричневий',
-        
+
         // Пісочний
         'пісоч' => 'Пісочний',
         'sand' => 'Пісочний',
         'desert' => 'Пісочний',
         'dcu' => 'Пісочний',
         'desert sand' => 'Пісочний',
-        
+
         // Бежевий
         'бежев' => 'Бежевий',
         'beige' => 'Бежевий',
-        
+
         // Червоний
         'червон' => 'Червоний',
         'red' => 'Червоний',
-        
+
         // Жовтий
         'жовт' => 'Жовтий',
         'yellow' => 'Жовтий',
-        
+
+        // Рожевий
+        'рожев' => 'Рожевий',
+        'pink' => 'Рожевий',
+        'ніжно рожев' => 'Рожевий',
+
+        // Оранжевий
+        'оранжев' => 'Оранжевий',
+        'orange' => 'Оранжевий',
+        'помаранч' => 'Оранжевий',
+
+        // Фіолетовий
+        'фіолетов' => 'Фіолетовий',
+        'purple' => 'Фіолетовий',
+        'violet' => 'Фіолетовий',
+
+        // Бордовий
+        'бордов' => 'Бордовий',
+        'maroon' => 'Бордовий',
+        'burgundy' => 'Бордовий',
+
+        // Блакитний
+        'блакитн' => 'Блакитний',
+        'light blue' => 'Блакитний',
+
+        // М'ятний
+        'м\'ятн' => 'М\'ятний',
+        'mint' => 'М\'ятний',
+        'бірюзов' => 'М\'ятний',
+        'turquoise' => 'М\'ятний',
+
         // Камуфляж (загальний)
         'камуфляж' => 'Камуфляж',
         'camo' => 'Камуфляж',
@@ -136,6 +166,11 @@ class ColorDetectionService
         'Коричневий' => [[70, 40, 20], [180, 130, 100]],
         'Пісочний' => [[170, 150, 110], [250, 230, 190]],
         'Бежевий' => [[180, 160, 130], [240, 220, 190]],
+        'Рожевий' => [[180, 100, 120], [255, 180, 200]],
+        'Оранжевий' => [[200, 100, 10], [255, 180, 80]],
+        'Фіолетовий' => [[80, 10, 100], [180, 80, 220]],
+        'Червоний' => [[160, 10, 10], [255, 80, 80]],
+        'Жовтий' => [[200, 180, 10], [255, 255, 100]],
     ];
 
     /**
@@ -148,7 +183,7 @@ class ColorDetectionService
         ?string $imageUrl
     ): ?string {
         // 1. If color already set and valid, return it
-        if (!empty($currentColor) && $currentColor !== 'null') {
+        if (! empty($currentColor) && $currentColor !== 'null') {
             return $currentColor;
         }
 
@@ -159,7 +194,7 @@ class ColorDetectionService
         }
 
         // 3. Try to extract from attributes
-        if (!empty($attributes)) {
+        if (! empty($attributes)) {
             $attributesText = $this->flattenAttributes($attributes);
             $fromAttributes = $this->extractColorFromText($attributesText);
             if ($fromAttributes) {
@@ -188,11 +223,11 @@ class ColorDetectionService
         }
 
         $textLower = mb_strtolower($text);
-        
+
         // Sort keywords by length (longer first) to match "urban grey" before "grey"
         $sortedKeywords = $this->colorKeywords;
-        uksort($sortedKeywords, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
-        
+        uksort($sortedKeywords, fn ($a, $b) => mb_strlen($b) - mb_strlen($a));
+
         foreach ($sortedKeywords as $keyword => $colorName) {
             if (mb_strpos($textLower, $keyword) !== false) {
                 return $colorName;
@@ -208,7 +243,7 @@ class ColorDetectionService
     private function flattenAttributes(array $attributes): string
     {
         $parts = [];
-        
+
         foreach ($attributes as $key => $value) {
             if (is_string($value)) {
                 $parts[] = $value;
@@ -222,7 +257,7 @@ class ColorDetectionService
                 }
             }
         }
-        
+
         return implode(' ', $parts);
     }
 
@@ -232,15 +267,16 @@ class ColorDetectionService
     public function analyzeImage(string $imageUrl): ?string
     {
         // Cache results to avoid repeated API calls
-        $cacheKey = 'color_detection_' . md5($imageUrl);
-        
+        $cacheKey = 'color_detection_'.md5($imageUrl);
+
         return Cache::remember($cacheKey, 86400, function () use ($imageUrl) {
             try {
                 // Download image to temp file
                 $response = Http::timeout(15)->get($imageUrl);
-                
-                if (!$response->successful()) {
+
+                if (! $response->successful()) {
                     Log::warning('ColorDetection: Failed to download image', ['url' => $imageUrl]);
+
                     return null;
                 }
 
@@ -250,16 +286,16 @@ class ColorDetectionService
                 try {
                     // Use Color Thief with quality parameter (higher = faster but less accurate)
                     $dominantColor = ColorThief::getColor($tempFile, 10);
-                    
-                    if (!$dominantColor) {
+
+                    if (! $dominantColor) {
                         return null;
                     }
 
                     [$r, $g, $b] = $dominantColor;
-                    
+
                     // Match RGB to color name
                     $colorName = $this->matchRgbToColorName($r, $g, $b);
-                    
+
                     Log::debug('ColorDetection: Image analyzed', [
                         'url' => $imageUrl,
                         'rgb' => [$r, $g, $b],
@@ -275,6 +311,7 @@ class ColorDetectionService
                     'url' => $imageUrl,
                     'error' => $e->getMessage(),
                 ]);
+
                 return null;
             }
         });
@@ -302,17 +339,32 @@ class ColorDetectionService
 
         // Low saturation = grayscale
         if ($saturation < 0.15) {
-            if ($lightness < 60) return 'Чорний';
-            if ($lightness > 200) return 'Білий';
+            if ($lightness < 60) {
+                return 'Чорний';
+            }
+            if ($lightness > 200) {
+                return 'Білий';
+            }
+
             return 'Сірий';
         }
 
-        // Determine by hue
+        // Determine by hue using HSV-like logic
         if ($r > $g && $r > $b) {
             // Red dominant
+            if ($b > $g && $b > 100) {
+                return 'Рожевий'; // High R + high B = pink
+            }
+            if ($g > $b && $g > 150 && $r > 180) {
+                return 'Оранжевий'; // High R + high G = orange
+            }
             if ($g > $b && $g > 100) {
                 return 'Койот'; // Yellowish red = tan/coyote
             }
+            if ($r > 150 && $g < 80 && $b < 80) {
+                return 'Червоний'; // Pure red
+            }
+
             return 'Коричневий';
         }
 
@@ -321,10 +373,19 @@ class ColorDetectionService
             if ($r > 80 && $b < 80) {
                 return 'Олива'; // Olive green
             }
+            if ($b > 100 && $r < 100) {
+                return 'М\'ятний'; // Green + blue = teal/mint
+            }
+
             return 'Зелений';
         }
 
         if ($b > $r && $b > $g) {
+            // Blue dominant
+            if ($r > $g && $r > 100) {
+                return 'Фіолетовий'; // Blue + red = purple
+            }
+
             return 'Синій';
         }
 
@@ -343,8 +404,8 @@ class ColorDetectionService
     {
         try {
             $response = Http::timeout(15)->get($imageUrl);
-            
-            if (!$response->successful()) {
+
+            if (! $response->successful()) {
                 return ['error' => 'Failed to download image'];
             }
 
@@ -353,7 +414,7 @@ class ColorDetectionService
 
             try {
                 $palette = ColorThief::getPalette($tempFile, $count, 10);
-                
+
                 $result = [];
                 foreach ($palette as $color) {
                     [$r, $g, $b] = $color;
@@ -382,14 +443,14 @@ class ColorDetectionService
 
         foreach ($products as $product) {
             $raw = $product->raw ?? [];
-            
+
             // Get image URL
             $imageUrl = null;
-            if (!empty($raw['pictures'][0]['url'])) {
+            if (! empty($raw['pictures'][0]['url'])) {
                 $imageUrl = $raw['pictures'][0]['url'];
-            } elseif (!empty($raw['images'][0]['url'])) {
+            } elseif (! empty($raw['images'][0]['url'])) {
                 $imageUrl = $raw['images'][0]['url'];
-            } elseif (!empty($raw['image'])) {
+            } elseif (! empty($raw['image'])) {
                 $imageUrl = $raw['image'];
             }
 
@@ -418,7 +479,7 @@ class ColorDetectionService
      */
     private function determineSource(?string $currentColor, array $raw, ?string $detected): string
     {
-        if (!empty($currentColor) && $currentColor !== 'null') {
+        if (! empty($currentColor) && $currentColor !== 'null') {
             return 'field';
         }
 
@@ -428,7 +489,7 @@ class ColorDetectionService
         }
 
         $attributes = $raw['properties'] ?? $raw['attributes'] ?? [];
-        if (!empty($attributes) && $this->extractColorFromText($this->flattenAttributes($attributes))) {
+        if (! empty($attributes) && $this->extractColorFromText($this->flattenAttributes($attributes))) {
             return 'attributes';
         }
 

@@ -516,6 +516,44 @@ class MeiliProductSearchTool
                 Log::info('MeiliProductSearchTool: direct category keyword search result', [
                     'results' => count($hits),
                 ]);
+
+                // Adjacent category fallback: школярам → дошкільнятам, etc.
+                // Products marked "3+" also fit for 5, 7, 8 year olds
+                if (count($hits) < 3) {
+                    $adjacentCat = $this->getAdjacentLowerCategory($categoryFilter);
+                    if ($adjacentCat) {
+                        $adjBoost = mb_strtoupper(trim($adjacentCat));
+                        $adjResult = $index->search($enhancedQuery.' '.$adjBoost, $searchParams);
+                        $adjHits = $adjResult->getHits();
+
+                        $adjCatLower = mb_strtolower(trim($adjacentCat));
+                        $adjHits = array_values(array_filter($adjHits, function ($hit) use ($adjCatLower) {
+                            $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                            return str_contains($hitCat, $adjCatLower) || str_contains($adjCatLower, $hitCat);
+                        }));
+
+                        $existingIds = array_column($hits, 'id');
+                        foreach ($adjHits as $hit) {
+                            if (! in_array($hit['id'], $existingIds)) {
+                                $hits[] = $hit;
+                                $existingIds[] = $hit['id'];
+                            }
+                        }
+
+                        PipelineTracer::current()?->step('meili.adjacent_category_fallback', [
+                            'primary_category' => $categoryFilter,
+                            'adjacent_category' => $adjacentCat,
+                            'results_after_merge' => count($hits),
+                        ]);
+
+                        Log::info('MeiliProductSearchTool: adjacent category fallback (post-filter)', [
+                            'primary' => $categoryFilter,
+                            'adjacent' => $adjacentCat,
+                            'results' => count($hits),
+                        ]);
+                    }
+                }
             }
 
             Log::info('MeiliProductSearchTool: found', ['count' => count($hits)]);

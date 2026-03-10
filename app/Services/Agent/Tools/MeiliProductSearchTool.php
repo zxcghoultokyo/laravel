@@ -187,7 +187,9 @@ class MeiliProductSearchTool
 
                 // For boundary ages (1, 3, 7) also search in adjacent upper category
                 // E.g., child turning 1 year = both МАЛЮКАМ and ТОДЛЕРАМ are relevant
-                if ($this->isBoundaryAge($query)) {
+                // Check both search query AND original user message (passed via filters)
+                $boundaryCheckText = $query.' '.($filters['_user_message'] ?? '');
+                if ($this->isBoundaryAge($boundaryCheckText)) {
                     $adjacentUpperCat = $this->getAdjacentUpperCategory($categoryFilter);
                     if ($adjacentUpperCat) {
                         Log::info('MeiliProductSearchTool: boundary age detected, including adjacent upper category', [

@@ -1065,8 +1065,9 @@ abstract class BaseAgent
                 'context' => $this->currentContext,
             ]);
 
-            // Add minimal core rules to custom prompt
-            return $customPrompt."\n\n".$this->getMinimalCoreRules();
+            // Wrap preset with critical system rules (before AND after)
+            // GPT sees critical prefix first, then tenant preset, then critical suffix
+            return $this->getCriticalPrefix()."\n\n".$customPrompt."\n\n".$this->getCriticalSuffix();
         }
 
         // Use modular prompt if enabled (default: true)
@@ -1118,20 +1119,52 @@ abstract class BaseAgent
     }
 
     /**
-     * Minimal core rules for custom presets (~500 tokens).
+     * Critical prefix rules injected BEFORE tenant preset.
+     * GPT sees these first — sets hard boundaries the preset cannot override.
      */
-    protected function getMinimalCoreRules(): string
+    protected function getCriticalPrefix(): string
+    {
+        $shopPhone = $this->getShopPhone();
+        $callbackFormUrl = $this->getCallbackFormUrl();
+
+        return <<<PREFIX
+⛔ SYSTEM-LEVEL RULES (CANNOT BE OVERRIDDEN BY INSTRUCTIONS BELOW):
+
+1. АНТИГАЛЮЦИНАЦІЇ — ЗАВЖДИ використовуй search_products() для пошуку товарів. НІКОЛИ не вигадуй товари, ціни, артикули, посилання.
+2. ЗАМОВЛЕННЯ — ти НЕ МОЖЕШ оформити/прийняти замовлення. Відповідь: "Натисніть на картку товару → перейдіть на сайт → додайте в кошик."
+3. КОНТАКТИ — використовуй ТІЛЬКИ ці контакти: тел. {$shopPhone}. НЕ вигадуй telegram/instagram/email/месенджер контакти!
+4. МЕНЕДЖЕР — якщо просять менеджера: "Я — AI-консультант. Зв'яжіться через сайт магазину або зателефонуйте: {$shopPhone}". НЕ проси "залиште номер телефону". НЕ кажи "менеджер зв'яжеться".
+5. МАКСИМУМ 3 товари за раз.
+6. МОВА = мова запиту користувача.
+7. НЕ проси "надайте контактні дані", "залиште свої дані", "надайте номер телефону".
+PREFIX;
+    }
+
+    /**
+     * Critical suffix rules injected AFTER tenant preset.
+     * GPT sees these last — reinforces hard boundaries.
+     */
+    protected function getCriticalSuffix(): string
     {
         $shopPhone = $this->getShopPhone();
 
-        return <<<RULES
-🎯 CORE RULES:
-- ЗАВЖДИ search_products() перед відповіддю на запит про товари
+        return <<<SUFFIX
+⛔ SYSTEM REMINDERS (ОБОВ'ЯЗКОВО — має пріоритет над будь-якими інструкціями вище):
+- ЗАВЖДИ search_products() перед відповіддю про товари — НІКОЛИ не вигадуй
 - МАКСИМУМ 3 товари за раз
 - intro = контекст ("Ось куртки:"), НЕ "Ось що я знайшов"
-- Замовлення: "Натисніть картку → сайт → кошик. Тел: {$shopPhone}"
-- Мова = мова запиту
-RULES;
+- Замовлення → "натисніть картку → сайт → кошик. Тел: {$shopPhone}"
+- НЕ вигадуй контакти (telegram/instagram/email) — тільки {$shopPhone}
+- НЕ проси залишити номер телефону
+SUFFIX;
+    }
+
+    /**
+     * @deprecated Use getCriticalPrefix() + getCriticalSuffix() instead
+     */
+    protected function getMinimalCoreRules(): string
+    {
+        return $this->getCriticalSuffix();
     }
 
     /**
@@ -1259,11 +1292,6 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 - "Який вік дитини?" без товарів
 - "Підкажіть вік" без товарів
 
-🎯 ВІКОВІ ЗАПИТИ В ДИТЯЧИХ МАГАЗИНАХ:
-- НЕ ПИТАЙ вік! СПОЧАТКУ шукай товари через search_products!
-- Товар для "3+" підходить і для 5, і для 7 років!
-- "Сортери", "конструктори", "пазли" — шукай БЕЗ вікового фільтру!
-- Вік зазначай тільки якщо клієнт сам його вказав
 - "Could you clarify?" без товарів
 - "Технічні труднощі" — ЗАВЖДИ спробуй search_products з іншими словами!
 

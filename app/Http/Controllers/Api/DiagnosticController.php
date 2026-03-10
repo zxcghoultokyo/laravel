@@ -7497,4 +7497,67 @@ class DiagnosticController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * GET /api/diagnostic/tenant-settings
+     * Show prompt presets and widget settings for a tenant
+     */
+    public function tenantSettings(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = (int) $request->input('tenant_id', 0);
+        if (! $tenantId) {
+            return response()->json(['error' => 'tenant_id required'], 400);
+        }
+
+        $presets = \App\Models\PromptPreset::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->orderByDesc('priority')
+            ->get()
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'slug' => $p->slug,
+                'is_active' => $p->is_active,
+                'is_default' => $p->is_default,
+                'priority' => $p->priority,
+                'language' => $p->language,
+                'tone' => $p->tone,
+                'campaign' => $p->campaign,
+                'store_type' => $p->store_type,
+                'categories' => $p->categories,
+                'system_prompt_length' => mb_strlen($p->system_prompt ?? ''),
+                'system_prompt_preview' => mb_substr($p->system_prompt ?? '', 0, 500),
+                'created_at' => $p->created_at?->toDateTimeString(),
+                'updated_at' => $p->updated_at?->toDateTimeString(),
+            ]);
+
+        $ws = \App\Models\WidgetSettings::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
+            ->first();
+
+        return response()->json([
+            'tenant_id' => $tenantId,
+            'prompt_presets' => [
+                'count' => $presets->count(),
+                'items' => $presets,
+            ],
+            'widget_settings' => $ws ? [
+                'id' => $ws->id,
+                'shop_phone' => $ws->shop_phone,
+                'welcome_message' => $ws->welcome_message,
+                'theme_color' => $ws->theme_color,
+                'callback_form_url' => $ws->callback_form_url,
+                'faq_contacts_text' => $ws->faq_contacts_text,
+                'faq_payment_delivery_text' => mb_substr($ws->faq_payment_delivery_text ?? '', 0, 300),
+                'faq_returns_text' => mb_substr($ws->faq_returns_text ?? '', 0, 300),
+                'faq_about_text' => mb_substr($ws->faq_about_text ?? '', 0, 300),
+                'custom_system_prompt_length' => mb_strlen($ws->custom_system_prompt ?? ''),
+                'created_at' => $ws->created_at?->toDateTimeString(),
+            ] : null,
+        ]);
+    }
 }

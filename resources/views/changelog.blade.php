@@ -199,6 +199,41 @@
     <section class="timeline">
         <div class="container">
 
+            {{-- ===== v1.9.0 ===== --}}
+            <div class="version-block">
+                <div class="version-dot"></div>
+                <div class="version-header">
+                    <span class="version-tag">v1.9.0</span>
+                    <span class="version-date">10 березня 2026</span>
+                </div>
+                <ul class="change-list">
+                    <li>
+                        <span class="tag tag-fix">🐛 Фікс</span>
+                        <span>Чат більше не каже «передам спеціалісту» — замість цього одразу дає контакти менеджера (Telegram, Instagram)</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-fix">🐛 Фікс</span>
+                        <span>Пошук за кольором працює — «рожева футболка» тепер повертає рожеві товари першими, а не випадкові</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-improved">⬆ Покращено</span>
+                        <span>Контекстне інтро замість «Ось що я знайшов» — тепер «Ось шоломи:», «Ось футболки:», «Ось конструктори:» тощо</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-fix">🐛 Фікс</span>
+                        <span>Сезонні запити («що беруть взимку») тепер працюють для всіх магазинів, а не лише для військових</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-improved">⬆ Покращено</span>
+                        <span>Релевантність пошуку — товари з ключовим словом у назві показуються першими (спальник → спальна система, а не стропи)</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-improved">⬆ Покращено</span>
+                        <span>Розширено палітру кольорів з 6 до 18 — додано рожевий, бордовий, фіолетовий, оранжевий, блакитний та інші</span>
+                    </li>
+                </ul>
+            </div>
+
             {{-- ===== v1.8.0 ===== --}}
             <div class="version-block">
                 <div class="version-dot"></div>

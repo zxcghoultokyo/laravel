@@ -158,6 +158,12 @@ class MeiliProductSearchTool
             // Uses post-filtering since category_path values may have trailing spaces or slight variations
             $categoryFilter = $filters['category'] ?? null;
 
+            // Normalize GPT-passed category to keyword only (strip numbers, parentheses, ranges)
+            // GPT may pass "дошкільнятам (3-6)" but real category is "ДОШКІЛЬНЯТАМ 3 – 7"
+            if ($categoryFilter) {
+                $categoryFilter = $this->normalizeCategoryFilter($categoryFilter);
+            }
+
             // Auto-detect age from query and map to category if no explicit category given
             if (! $categoryFilter) {
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
@@ -1789,6 +1795,43 @@ class MeiliProductSearchTool
     }
 
     /**
+     * Normalize category filter from GPT to match actual category_path values.
+     * GPT may pass "дошкільнятам (3-6)" but real category is "ДОШКІЛЬНЯТАМ 3 – 7".
+     * Extracts just the keyword part for robust matching.
+     */
+    private function normalizeCategoryFilter(string $category): string
+    {
+        $lower = mb_strtolower(trim($category));
+
+        // Known age-group keywords → map to the keyword used in detectAgeCategoryFromQuery
+        $keywordMap = [
+            'малюкам' => 'малюкам',
+            'малюк' => 'малюкам',
+            'тодлерам' => 'тодлерам',
+            'тодлер' => 'тодлерам',
+            'дошкільнятам' => 'дошкільнятам',
+            'дошкільн' => 'дошкільнятам',
+            'дошколят' => 'дошкільнятам',
+            'школярам' => 'школярам',
+            'школяр' => 'школярам',
+        ];
+
+        foreach ($keywordMap as $pattern => $keyword) {
+            if (str_contains($lower, $pattern)) {
+                Log::info('MeiliProductSearchTool: normalized category filter', [
+                    'original' => $category,
+                    'normalized' => $keyword,
+                ]);
+
+                return $keyword;
+            }
+        }
+
+        // No known keyword found — return as-is (may be a non-age category)
+        return $category;
+    }
+
+    /**
      * Detect age-based category from query text.
      * Maps age mentions to known category patterns used in toy/kids stores.
      */
@@ -1826,11 +1869,11 @@ class MeiliProductSearchTool
 
         // Map age to category keywords (common patterns in toy stores)
         if ($age < 1) {
-            $category = 'малюкам 0';
+            $category = 'малюкам';
         } elseif ($age < 3) {
-            $category = 'тодлерам 1';
+            $category = 'тодлерам';
         } elseif ($age < 7) {
-            $category = 'дошкільнятам 3';
+            $category = 'дошкільнятам';
         } else {
             // School-age: no specific filter, let search return all
             return null;

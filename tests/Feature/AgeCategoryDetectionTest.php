@@ -95,4 +95,46 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertStringContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $searchModule);
         $this->assertStringContainsString('category', $searchModule);
     }
+
+    public function test_normalize_category_strips_gpt_format(): void
+    {
+        $normalizeMethod = new \ReflectionMethod(MeiliProductSearchTool::class, 'normalizeCategoryFilter');
+        $normalizeMethod->setAccessible(true);
+
+        // GPT may pass categories with numbers/parentheses that don't match actual data
+        $this->assertEquals('дошкільнятам', $normalizeMethod->invoke($this->tool, 'дошкільнятам (3-6)'));
+        $this->assertEquals('тодлерам', $normalizeMethod->invoke($this->tool, 'тодлерам (1-3)'));
+        $this->assertEquals('малюкам', $normalizeMethod->invoke($this->tool, 'малюкам (0-1)'));
+        $this->assertEquals('школярам', $normalizeMethod->invoke($this->tool, 'школярам'));
+    }
+
+    public function test_normalize_category_preserves_non_age_categories(): void
+    {
+        $normalizeMethod = new \ReflectionMethod(MeiliProductSearchTool::class, 'normalizeCategoryFilter');
+        $normalizeMethod->setAccessible(true);
+
+        // Non-age categories should pass through unchanged
+        $this->assertEquals('меблі та організація', $normalizeMethod->invoke($this->tool, 'меблі та організація'));
+    }
+
+    public function test_normalized_keyword_matches_real_category_path(): void
+    {
+        // Simulate the actual matching logic from MeiliProductSearchTool
+        $realCategoryPaths = [
+            'іграшки/малюкам 0 – 1',
+            'іграшки/тодлерам 1 – 3',
+            'іграшки/дошкільнятам 3 – 7',
+        ];
+
+        $normalizeMethod = new \ReflectionMethod(MeiliProductSearchTool::class, 'normalizeCategoryFilter');
+        $normalizeMethod->setAccessible(true);
+
+        // GPT passes "дошкільнятам (3-6)" → normalized to "дошкільнятам"
+        $normalized = $normalizeMethod->invoke($this->tool, 'дошкільнятам (3-6)');
+        $this->assertTrue(str_contains('іграшки/дошкільнятам 3 – 7', $normalized));
+
+        // GPT passes "тодлерам (1-3)" → normalized to "тодлерам"
+        $normalized = $normalizeMethod->invoke($this->tool, 'тодлерам (1-3)');
+        $this->assertTrue(str_contains('іграшки/тодлерам 1 – 3', $normalized));
+    }
 }

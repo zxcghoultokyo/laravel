@@ -170,6 +170,12 @@ class MeiliProductSearchTool
                 $categoryFilter = $this->detectAgeCategoryFromQuery($query);
             }
 
+            // Also try detecting age category from original user message
+            // (handleAgeQuery passes empty query but full message in _user_message)
+            if (! $categoryFilter && ! empty($filters['_user_message'])) {
+                $categoryFilter = $this->detectAgeCategoryFromQuery($filters['_user_message']);
+            }
+
             PipelineTracer::current()?->step('meili.category_resolved', [
                 'source_filter' => $filters['category'] ?? null,
                 'auto_detected' => $categoryFilter && empty($filters['category']),

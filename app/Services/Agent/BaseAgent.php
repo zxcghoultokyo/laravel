@@ -207,6 +207,13 @@ abstract class BaseAgent
         }
         $lower = mb_strtolower(trim($message));
 
+        // AGE/GIFT QUERY HANDLER — force search when user mentions age
+        // GPT often asks clarifying questions instead of searching for "подарунок на 1 рік"
+        $ageResult = $this->handleAgeQuery($lower, $message);
+        if ($ageResult) {
+            return $ageResult;
+        }
+
         // Patterns that imply product need without naming the product
         $implicitPatterns = [
             // Calling/communication → smartphone
@@ -437,6 +444,63 @@ abstract class BaseAgent
         }
 
         return null;
+    }
+
+    /**
+     * Handle queries mentioning specific age — bypass GPT and search directly.
+     * GPT often asks clarifying questions instead of searching for "подарунок на 1 рік".
+     */
+    protected function handleAgeQuery(string $lower, string $originalMessage): ?array
+    {
+        // Detect age in years: "1 рік", "3 роки", "7 років", "на 2 роки"
+        if (! preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
+            // Also check months: "6 місяців"
+            if (! preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower)) {
+                return null;
+            }
+        }
+
+        Log::info('BaseAgent: age query detected, bypassing GPT', [
+            'message' => $originalMessage,
+        ]);
+
+        // Pass the original message as _user_message so MeiliProductSearchTool
+        // can detect age category and apply age filter
+        $filters = [
+            '_user_message' => $originalMessage,
+        ];
+
+        $products = $this->searchTool->search('', $filters, 15);
+
+        if (empty($products)) {
+            return null; // Fall through to GPT
+        }
+
+        // Get full product cards with images
+        $ids = array_column($products, 'id');
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cards = $this->detailsTool->getCards($ids, 6, $tenantId);
+        if (! empty($cards)) {
+            $products = $cards;
+        }
+
+        $products = array_slice($products, 0, 6);
+
+        $intro = 'Ось що я знайшов для цього віку:';
+
+        return [
+            'message' => $intro,
+            'products' => $products,
+            'messages' => [
+                ['type' => 'text', 'content' => $intro],
+                ['type' => 'products', 'products' => $products],
+            ],
+            'meta' => [
+                'intent' => 'product_search',
+                'agent' => 'function_calling',
+                'source' => 'age_query_handler',
+            ],
+        ];
     }
 
     /**

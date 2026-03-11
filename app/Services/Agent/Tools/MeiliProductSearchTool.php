@@ -290,18 +290,13 @@ class MeiliProductSearchTool
             // 2. If not enough results, search with just category as query (finds all products in category)
             if ($categoryQueryBoost) {
                 // Step 1: Original query + category keyword (e.g., "іграшки ДОШКІЛЬНЯТАМ")
-                // For boundary ages, also include adjacent upper category keyword
                 $boostedQuery = $enhancedQuery.' '.$categoryQueryBoost;
-                if ($adjacentUpperCat) {
-                    $boostedQuery .= ' '.mb_strtoupper(trim($adjacentUpperCat));
-                }
                 $result = $index->search($boostedQuery, $searchParams);
                 $hits = $result->getHits();
 
                 Log::info('MeiliProductSearchTool: category-boosted search', [
                     'boosted_query' => $boostedQuery,
                     'results' => count($hits),
-                    'adjacent_upper' => $adjacentUpperCat,
                 ]);
 
                 // Post-filter to keep only matching category (include adjacent upper for boundary ages)
@@ -322,13 +317,8 @@ class MeiliProductSearchTool
                 }
 
                 // Step 2: If not enough results, search with JUST category keyword
-                // For boundary ages, also search with adjacent upper category
                 if (count($hits) < 3) {
-                    $catSearchQuery = $categoryQueryBoost;
-                    if ($adjacentUpperCat) {
-                        $catSearchQuery .= ' '.mb_strtoupper(trim($adjacentUpperCat));
-                    }
-                    $catOnlyResult = $index->search($catSearchQuery, $searchParams);
+                    $catOnlyResult = $index->search($categoryQueryBoost, $searchParams);
                     $catOnlyHits = $catOnlyResult->getHits();
 
                     // Post-filter
@@ -356,7 +346,7 @@ class MeiliProductSearchTool
                     }
 
                     Log::info('MeiliProductSearchTool: category-only fallback search', [
-                        'category_query' => $catSearchQuery,
+                        'category_query' => $categoryQueryBoost,
                         'results_after_merge' => count($hits),
                     ]);
                 }
@@ -390,6 +380,37 @@ class MeiliProductSearchTool
                             'results_after_merge' => count($hits),
                         ]);
                     }
+                }
+
+                // Step 4: For boundary ages, also search adjacent UPPER category
+                // E.g., "1 рік" = МАЛЮКАМ boundary → also search ТОДЛЕРАМ in Meili
+                // The post-filter allows тодлерам products, but Meili text search for "МАЛЮКАМ"
+                // never returns тодлерам products — we need a separate Meili query
+                if ($adjacentUpperCat) {
+                    $adjUpperBoost = mb_strtoupper(trim($adjacentUpperCat));
+                    $adjUpperResult = $index->search($enhancedQuery.' '.$adjUpperBoost, $searchParams);
+                    $adjUpperHits = $adjUpperResult->getHits();
+
+                    $adjUpperLower = mb_strtolower(trim($adjacentUpperCat));
+                    $adjUpperHits = array_values(array_filter($adjUpperHits, function ($hit) use ($adjUpperLower) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+
+                        return str_contains($hitCat, $adjUpperLower);
+                    }));
+
+                    $existingIds = array_column($hits, 'id');
+                    foreach ($adjUpperHits as $hit) {
+                        if (! in_array($hit['id'], $existingIds)) {
+                            $hits[] = $hit;
+                            $existingIds[] = $hit['id'];
+                        }
+                    }
+
+                    Log::info('MeiliProductSearchTool: boundary age adjacent upper category search', [
+                        'adjacent_upper' => $adjacentUpperCat,
+                        'adj_upper_found' => count($adjUpperHits),
+                        'results_after_merge' => count($hits),
+                    ]);
                 }
             } else {
                 $result = $index->search($enhancedQuery, $searchParams);
@@ -731,13 +752,22 @@ class MeiliProductSearchTool
             }
 
             // Final safety net: ensure category filter is respected after all retries
+            // For boundary ages, also allow adjacent upper category (e.g., тодлерам for малюкам)
             if ($categoryFilter && count($filtered) > 1) {
                 $beforeSafetyNet = count($filtered);
                 $catLower = mb_strtolower(trim($categoryFilter));
-                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower) {
+                $safetyAdjUpper = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
+                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower, $safetyAdjUpper) {
                     $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
 
-                    return str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat);
+                    if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
+                        return true;
+                    }
+                    if ($safetyAdjUpper && str_contains($hitCat, $safetyAdjUpper)) {
+                        return true;
+                    }
+
+                    return false;
                 }));
                 if (count($catFiltered) > 0) {
                     $filtered = $catFiltered;

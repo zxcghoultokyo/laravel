@@ -167,4 +167,81 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertFalse($this->tool->isBoundaryAge('для малюка'));
         $this->assertFalse($this->tool->isBoundaryAge('покажи сортери'));
     }
+
+    public function test_extract_age_months_from_query(): void
+    {
+        // Years
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('подарунок на 1 рік'));
+        $this->assertEquals(36, $this->tool->extractAgeMonthsFromQuery('іграшки для 3 роки'));
+        $this->assertEquals(84, $this->tool->extractAgeMonthsFromQuery('що купити на 7 років'));
+        $this->assertEquals(24, $this->tool->extractAgeMonthsFromQuery('для дитини 2 років'));
+
+        // Months
+        $this->assertEquals(6, $this->tool->extractAgeMonthsFromQuery('іграшки для 6 місяців'));
+        $this->assertEquals(8, $this->tool->extractAgeMonthsFromQuery('подарунок 8 міс'));
+
+        // No age
+        $this->assertNull($this->tool->extractAgeMonthsFromQuery('покажи сортери'));
+        $this->assertNull($this->tool->extractAgeMonthsFromQuery('іграшки'));
+    }
+
+    public function test_product_raw_extractor_age_text(): void
+    {
+        // Bavkatoys format: characteristics.dljaDtok.ua
+        $raw = [
+            'characteristics' => [
+                'dljaDtok' => [
+                    'ua' => 'З 14 місяців+',
+                    'en' => '14 months +',
+                ],
+            ],
+        ];
+        $this->assertEquals('З 14 місяців+', \App\Support\ProductRawExtractor::ageText($raw));
+
+        // Empty characteristics
+        $this->assertEquals('', \App\Support\ProductRawExtractor::ageText([]));
+
+        // Alternative key: vik
+        $raw2 = [
+            'characteristics' => [
+                'vik' => [
+                    'ua' => 'від 3 років',
+                ],
+            ],
+        ];
+        $this->assertEquals('від 3 років', \App\Support\ProductRawExtractor::ageText($raw2));
+    }
+
+    public function test_product_raw_extractor_parse_age_months(): void
+    {
+        // "З 14 місяців+" → min=14, max=null
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('З 14 місяців+');
+        $this->assertEquals(14, $result['min_months']);
+        $this->assertNull($result['max_months']);
+
+        // "від 3 місяців, орієнтовно до року" → min=3, max=12
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('від 3 місяців, орієнтовно до року');
+        $this->assertEquals(3, $result['min_months']);
+        $this->assertEquals(12, $result['max_months']);
+
+        // "5 місяців + (орієнтовно до 14 місяців)" → min=5, max=14
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('5 місяців + (орієнтовно до 14 місяців)');
+        $this->assertEquals(5, $result['min_months']);
+        $this->assertEquals(14, $result['max_months']);
+
+        // "від 2-ох років" → min=24, max=null
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('від 2-ох років');
+        $this->assertEquals(24, $result['min_months']);
+        $this->assertNull($result['max_months']);
+
+        // Empty → null/null
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('');
+        $this->assertNull($result['min_months']);
+        $this->assertNull($result['max_months']);
+
+        // "3 місяці+" → min=3, max=null
+        $result = \App\Support\ProductRawExtractor::parseAgeMonths('3 місяці+');
+        $this->assertEquals(3, $result['min_months']);
+        $this->assertNull($result['max_months']);
+    }
 }

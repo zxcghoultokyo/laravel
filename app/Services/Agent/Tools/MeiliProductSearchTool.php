@@ -203,6 +203,22 @@ class MeiliProductSearchTool
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
             // This is done at Meili level for efficiency - no need to fetch accessories just to filter them out
             $queryLower = mb_strtolower($query);
+
+            // Age filter: if user mentions a specific age, filter by age_min_months
+            // so only products appropriate for that age are returned.
+            // Products WITHOUT age data (NULL) should still pass — only exclude products
+            // that explicitly have age data outside the requested range.
+            $requestedAgeMonths = $this->extractAgeMonthsFromQuery($query.' '.($filters['_user_message'] ?? ''));
+            if ($requestedAgeMonths !== null) {
+                // Include: products with no age data OR products where min_months <= requested age
+                $filterParts[] = "(age_min_months IS NULL OR age_min_months <= {$requestedAgeMonths})";
+                // Include: products with no max, or max >= requested age
+                $filterParts[] = "(age_max_months IS NULL OR age_max_months >= {$requestedAgeMonths})";
+                Log::info('MeiliProductSearchTool: age filter applied', [
+                    'requested_age_months' => $requestedAgeMonths,
+                ]);
+            }
+
             $accessoryFilter = $this->buildAccessoryExclusionFilter($queryLower);
             if ($accessoryFilter) {
                 $filterParts[] = $accessoryFilter;
@@ -411,6 +427,48 @@ class MeiliProductSearchTool
                         'results_after_merge' => count($hits),
                     ]);
                 }
+
+                // Interleave primary and adjacent upper category products so both
+                // categories are represented in top results. Without this, dedupeByTitle
+                // truncates all adjacent products since they were appended at the end.
+                if ($adjacentUpperCat && count($hits) > 3) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $adjLower = mb_strtolower(trim($adjacentUpperCat));
+                    $primaryHits = [];
+                    $adjHits = [];
+
+                    foreach ($hits as $hit) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                        if (str_contains($hitCat, $adjLower)) {
+                            $adjHits[] = $hit;
+                        } else {
+                            $primaryHits[] = $hit;
+                        }
+                    }
+
+                    if (count($adjHits) > 0 && count($primaryHits) > 0) {
+                        $interleaved = [];
+                        $pi = 0;
+                        $ai = 0;
+                        while ($pi < count($primaryHits) || $ai < count($adjHits)) {
+                            // 2 from primary category
+                            for ($j = 0; $j < 2 && $pi < count($primaryHits); $j++) {
+                                $interleaved[] = $primaryHits[$pi++];
+                            }
+                            // 1 from adjacent upper category
+                            if ($ai < count($adjHits)) {
+                                $interleaved[] = $adjHits[$ai++];
+                            }
+                        }
+                        $hits = $interleaved;
+
+                        Log::info('MeiliProductSearchTool: interleaved boundary age categories', [
+                            'primary_count' => count($primaryHits),
+                            'adjacent_count' => count($adjHits),
+                            'total' => count($hits),
+                        ]);
+                    }
+                }
             } else {
                 $result = $index->search($enhancedQuery, $searchParams);
                 $hits = $result->getHits();
@@ -520,6 +578,7 @@ class MeiliProductSearchTool
 
                 PipelineTracer::current()?->step('meili.post_filter_category', [
                     'category' => $categoryFilter,
+                    'adjacent_upper' => $adjacentUpperCat,
                     'before' => $hitsBeforeCategory,
                     'after' => count($hits),
                 ]);
@@ -2214,6 +2273,29 @@ class MeiliProductSearchTool
             str_contains($catLower, 'дошкільн') => 'школярам',
             default => null,
         };
+    }
+
+    /**
+     * Extract requested age in months from query text.
+     * E.g., "подарунок на 1 рік" → 12, "для дитини 6 місяців" → 6
+     *
+     * @return int|null Age in months, or null if no age mentioned
+     */
+    public function extractAgeMonthsFromQuery(string $query): ?int
+    {
+        $lower = mb_strtolower($query);
+
+        // Match months: "6 місяців", "8 міс"
+        if (preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower, $m)) {
+            return (int) $m[1];
+        }
+
+        // Match years: "1 рік", "3 роки", "від 2 років", "на 5 років", "до 1 року"
+        if (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
+            return (int) $m[1] * 12;
+        }
+
+        return null;
     }
 
     /**

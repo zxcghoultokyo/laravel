@@ -262,6 +262,8 @@ class MeiliProductSearchTool
                     'ai_keywords',
                     'display_in_showcase',
                     'brand',
+                    'age_min_months',
+                    'age_max_months',
                 ],
             ];
 
@@ -419,6 +421,27 @@ class MeiliProductSearchTool
 
                         return str_contains($hitCat, $adjUpperLower);
                     }));
+
+                    // Age-based post-filter for adjacent upper category:
+                    // Products WITHOUT explicit age data should be checked against
+                    // the category age range. E.g., a "3+" product from ДОШКІЛЬНЯТАМ 3-7
+                    // with age_min_months=NULL should NOT appear for "1 рік" query.
+                    if ($requestedAgeMonths !== null) {
+                        $adjUpperHits = array_values(array_filter($adjUpperHits, function ($hit) use ($requestedAgeMonths) {
+                            $hasAgeData = isset($hit['age_min_months']) && $hit['age_min_months'] !== null;
+                            if ($hasAgeData) {
+                                // Product has explicit age data — Meili filter already handled it
+                                return true;
+                            }
+                            // No age data — use category_path age range as fallback
+                            $catMinMonths = $this->extractMinAgeFromCategoryPath($hit['category_path'] ?? '');
+                            if ($catMinMonths !== null && $requestedAgeMonths < $catMinMonths) {
+                                return false; // Category min age is above requested age
+                            }
+
+                            return true;
+                        }));
+                    }
 
                     $existingIds = array_column($hits, 'id');
                     foreach ($adjUpperHits as $hit) {
@@ -2320,6 +2343,23 @@ class MeiliProductSearchTool
         }
 
         return false;
+    }
+
+    /**
+     * Extract minimum age in months from category_path.
+     * E.g., "ІГРАШКИ/ДОШКІЛЬНЯТАМ 3 – 7" → 36 (3 years * 12)
+     *       "ІГРАШКИ/ТОДЛЕРАМ 1 – 3" → 12
+     *       "ІГРАШКИ/МАЛЮКАМ 0 – 1" → 0
+     */
+    public function extractMinAgeFromCategoryPath(string $categoryPath): ?int
+    {
+        // Match patterns like "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7", "МАЛЮКАМ 0 – 1 "
+        $path = trim($categoryPath);
+        if (preg_match('/(\d+)\s*[\x{2013}\-]\s*(\d+)\s*$/u', $path, $m)) {
+            return (int) $m[1] * 12;
+        }
+
+        return null;
     }
 }
 // Deploy trigger 1769760953

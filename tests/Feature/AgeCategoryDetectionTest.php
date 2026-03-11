@@ -244,4 +244,40 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertEquals(3, $result['min_months']);
         $this->assertNull($result['max_months']);
     }
+
+    public function test_extract_min_age_from_category_path(): void
+    {
+        // Standard bavkatoys categories
+        $this->assertEquals(0, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/МАЛЮКАМ 0 – 1'));
+        $this->assertEquals(0, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/МАЛЮКАМ 0 – 1 '));
+        $this->assertEquals(12, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ТОДЛЕРАМ 1 – 3'));
+        $this->assertEquals(36, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ДОШКІЛЬНЯТАМ 3 – 7'));
+        $this->assertEquals(84, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ШКОЛЯРАМ 7 – 14'));
+
+        // With dash instead of en-dash
+        $this->assertEquals(36, $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ДОШКІЛЬНЯТАМ 3-7'));
+
+        // No age range
+        $this->assertNull($this->tool->extractMinAgeFromCategoryPath('МЕБЛІ ТА ОРГАНІЗАЦІЯ'));
+        $this->assertNull($this->tool->extractMinAgeFromCategoryPath('НАВЧАЛЬНІ ПОСІБНИКИ'));
+        $this->assertNull($this->tool->extractMinAgeFromCategoryPath(''));
+    }
+
+    public function test_adjacent_upper_age_post_filter_blocks_old_products(): void
+    {
+        // Simulate: query "подарунок на 1 рік" (12 months)
+        // Product from ДОШКІЛЬНЯТАМ 3-7 with NULL age_min_months should be blocked
+        // because category min age (36) > requested age (12)
+        $catMinMonths = $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ДОШКІЛЬНЯТАМ 3 – 7');
+        $requestedAgeMonths = 12;
+
+        $this->assertNotNull($catMinMonths);
+        $this->assertTrue($requestedAgeMonths < $catMinMonths,
+            'Requested age 12mo should be less than category min 36mo');
+
+        // Product from ТОДЛЕРАМ 1-3 with NULL age should pass
+        $catMinMonths2 = $this->tool->extractMinAgeFromCategoryPath('ІГРАШКИ/ТОДЛЕРАМ 1 – 3');
+        $this->assertFalse($requestedAgeMonths < $catMinMonths2,
+            'Requested age 12mo should NOT be less than category min 12mo');
+    }
 }

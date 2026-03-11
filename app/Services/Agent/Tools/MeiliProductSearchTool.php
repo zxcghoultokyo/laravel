@@ -206,14 +206,15 @@ class MeiliProductSearchTool
             $queryLower = mb_strtolower($query);
 
             // Age filter: if user mentions a specific age, filter by age_min_months
-            // so only products appropriate for that age are returned
+            // so only products appropriate for that age are returned.
+            // Products WITHOUT age data (NULL) should still pass — only exclude products
+            // that explicitly have age data outside the requested range.
             $requestedAgeMonths = $this->extractAgeMonthsFromQuery($query.' '.($filters['_user_message'] ?? ''));
             if ($requestedAgeMonths !== null) {
-                // Product should be usable at this age: min_months <= requested age
-                $filterParts[] = "age_min_months <= {$requestedAgeMonths}";
-                // If product has a max age, it should encompass the requested age
-                // Use OR with null (products without max_months have no upper limit → "+")
-                $filterParts[] = "(age_max_months >= {$requestedAgeMonths} OR age_max_months IS NULL)";
+                // Include: products with no age data OR products where min_months <= requested age
+                $filterParts[] = "(age_min_months IS NULL OR age_min_months <= {$requestedAgeMonths})";
+                // Include: products with no max, or max >= requested age
+                $filterParts[] = "(age_max_months IS NULL OR age_max_months >= {$requestedAgeMonths})";
                 Log::info('MeiliProductSearchTool: age filter applied', [
                     'requested_age_months' => $requestedAgeMonths,
                 ]);

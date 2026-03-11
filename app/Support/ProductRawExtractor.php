@@ -229,6 +229,83 @@ class ProductRawExtractor
         return implode(' | ', $pairs);
     }
 
+    /**
+     * Extract age text from Horoshop characteristics.
+     * Looks for dljaDtok ("для дітей") field.
+     *
+     * @return string e.g. "З 14 місяців+", "від 2-ох років", "" if absent
+     */
+    public static function ageText(array $raw, string $lang = 'ua', array $parentRaw = []): string
+    {
+        $candidates = [
+            "characteristics.dljaDtok.{$lang}",
+            'characteristics.dljaDtok.ua',
+            'characteristics.dljaDtok.en',
+            "characteristics.dljaDtej.{$lang}",
+            'characteristics.dljaDtej.ua',
+            "characteristics.vik.{$lang}",
+            'characteristics.vik.ua',
+        ];
+
+        foreach ($candidates as $path) {
+            $val = Arr::get($raw, $path);
+            if (is_string($val) && trim($val) !== '') {
+                return trim($val);
+            }
+        }
+
+        if ($parentRaw) {
+            return self::ageText($parentRaw, $lang, []);
+        }
+
+        return '';
+    }
+
+    /**
+     * Parse age text into min/max months for numeric comparison.
+     *
+     * @return array{min_months: int|null, max_months: int|null}
+     */
+    public static function parseAgeMonths(string $ageText): array
+    {
+        if ($ageText === '') {
+            return ['min_months' => null, 'max_months' => null];
+        }
+
+        $lower = mb_strtolower($ageText);
+        $minMonths = null;
+        $maxMonths = null;
+
+        // Pattern: "X років/рік/рочків" → months (handles "2-ох років", "3-х років", etc.)
+        if (preg_match('/(\d+)[\s\-]*(?:\w{0,3}\s+)?(?:рок|рік|річ|років|рочк)/ui', $lower, $m)) {
+            $minMonths = (int) $m[1] * 12;
+        }
+
+        // Pattern: "X місяців/міс" → months
+        if (preg_match('/(\d+)\s*(?:місяц|міс)/ui', $lower, $m)) {
+            $months = (int) $m[1];
+            if ($minMonths === null || $months < $minMonths) {
+                $minMonths = $months;
+            }
+        }
+
+        // Pattern: "до X місяців/років" → max months
+        if (preg_match('/до\s*(\d+)\s*(?:місяц|міс)/ui', $lower, $m)) {
+            $maxMonths = (int) $m[1];
+        } elseif (preg_match('/до\s*(\d+)[\s\-]*(?:\w{0,3}\s+)?(?:рок|рік|річ|років)/ui', $lower, $m)) {
+            $maxMonths = (int) $m[1] * 12;
+        } elseif (preg_match('/до\s+року/ui', $lower)) {
+            $maxMonths = 12;
+        }
+
+        // Pattern: "орієнтовно до X місяців" → max
+        if (preg_match('/орієнтовно\s+до\s+(\d+)\s*(?:місяц|міс)/ui', $lower, $m)) {
+            $maxMonths = (int) $m[1];
+        }
+
+        return ['min_months' => $minMonths, 'max_months' => $maxMonths];
+    }
+
     private static function pickLang($val, string $lang): ?string
     {
         if (is_array($val)) {

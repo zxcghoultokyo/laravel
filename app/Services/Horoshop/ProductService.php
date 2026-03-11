@@ -7,8 +7,8 @@ use App\Models\Product;
 use App\Models\ProductAiIndex;
 use App\Models\ProductSynonym;
 use App\Models\ProductTag;
-use App\Services\Ai\AiRouter;
 use App\Scopes\TenantScope;
+use App\Services\Ai\AiRouter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -34,6 +34,7 @@ class ProductService
         if ($value === null) {
             return null;
         }
+
         return mb_strlen($value) > $maxLength ? mb_substr($value, 0, $maxLength) : $value;
     }
 
@@ -92,42 +93,41 @@ class ProductService
      * Синхронізація товарів для конкретного тенанта з його Horoshop.
      *
      * @param  Tenant  $tenant
-     * @param  int     $limit
-     * @return array   Stats about sync
+     * @return array Stats about sync
      */
     public function syncFromHoroshopForTenant(\App\Models\Tenant $tenant, int $limit = 200): array
     {
         $credentials = $tenant->platform_credentials;
-        
+
         if (empty($credentials) || empty($credentials['domain'])) {
             throw new \RuntimeException('Tenant has no Horoshop credentials');
         }
-        
+
         // Ensure credentials are strings
         $domain = is_array($credentials['domain']) ? ($credentials['domain']['value'] ?? '') : (string) $credentials['domain'];
         $login = is_array($credentials['login']) ? ($credentials['login']['value'] ?? '') : (string) $credentials['login'];
         $password = is_array($credentials['password']) ? ($credentials['password']['value'] ?? '') : (string) $credentials['password'];
-        
+
         Log::info('Creating tenant HoroshopClient', [
             'tenant_id' => $tenant->id,
             'domain' => $domain,
             'credentials_type' => gettype($credentials),
             'domain_type' => gettype($credentials['domain'] ?? null),
         ]);
-        
+
         // Create tenant-specific client
         $tenantClient = new HoroshopClient(
             $domain,
             $login,
             $password
         );
-        
+
         $offset = 0;
         $created = 0;
         $updated = 0;
         $total = 0;
         $skipped = 0;
-        
+
         // Get product limit for tenant (0 or null = unlimited)
         $productLimit = $tenant->products_limit;
         if (empty($productLimit) || $productLimit <= 0) {
@@ -136,7 +136,7 @@ class ProductService
         $currentProductCount = Product::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenant->id)
             ->count();
-        
+
         // Set running flag for cancel functionality
         $cacheKey = "sync_running_{$tenant->id}";
         \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addHour());
@@ -147,7 +147,7 @@ class ProductService
                 Log::info('Sync cancelled for tenant', ['tenant_id' => $tenant->id]);
                 break;
             }
-            
+
             // Check product limit (skip if unlimited)
             if ($productLimit !== PHP_INT_MAX && $currentProductCount + $created >= $productLimit) {
                 Log::warning('Horoshop sync: product limit reached', [
@@ -158,7 +158,7 @@ class ProductService
                 ]);
                 break;
             }
-            
+
             $payload = [
                 'expr' => [
                     'display_in_showcase' => 1,
@@ -204,9 +204,10 @@ class ProductService
                 // Check limit before creating new product (skip if unlimited)
                 if ($productLimit !== PHP_INT_MAX && $currentProductCount + $created >= $productLimit) {
                     $skipped++;
+
                     continue;
                 }
-                
+
                 $result = $this->upsertProductForTenant($tenant, $item);
                 if ($result === 'created') {
                     $created++;
@@ -218,7 +219,7 @@ class ProductService
 
             $offset += $limit;
         } while (true);
-        
+
         return [
             'total' => $total,
             'created' => $created,
@@ -237,7 +238,7 @@ class ProductService
     {
         $article = $item['article'] ?? null;
 
-        if (!$article) {
+        if (! $article) {
             return 'skipped';
         }
 
@@ -246,11 +247,11 @@ class ProductService
             ->where('tenant_id', $tenant->id)
             ->where('article', $article)
             ->first();
-        
-        $isNew = !$product;
-        
-        if (!$product) {
-            $product = new Product();
+
+        $isNew = ! $product;
+
+        if (! $product) {
+            $product = new Product;
             $product->tenant_id = $tenant->id;
         }
 
@@ -290,11 +291,11 @@ class ProductService
         ]);
 
         $product->search_index = $this->buildSearchIndex($item, $product);
-        
+
         // Force update timestamp even if no other changes
         $product->updated_at = now();
         $product->save();
-        
+
         return $isNew ? 'created' : 'updated';
     }
 
@@ -324,7 +325,7 @@ class ProductService
 
         // Set default tenant_id for legacy sync
         // Find first active tenant if creating new product without tenant
-        if (!$product->exists && !$product->tenant_id) {
+        if (! $product->exists && ! $product->tenant_id) {
             $defaultTenant = \App\Models\Tenant::where('status', 'active')->orderBy('id')->first();
             if ($defaultTenant) {
                 $product->tenant_id = $defaultTenant->id;
@@ -336,7 +337,7 @@ class ProductService
             ?? null;
 
         $title = $item['title']['ua'] ?? $item['title']['ru'] ?? null;
-        
+
         // Extract size from multiple sources
         $size = $this->extractSizeFromItem($item, $title);
 
@@ -371,10 +372,10 @@ class ProductService
         $product->search_index = $this->buildSearchIndex($item, $product);
 
         $product->save();
-        
+
         return $product;
     }
-    
+
     /**
      * Extract size from Horoshop item data.
      * Tries multiple sources: Rozmir (top-level), mod_title, select.size, characteristics, title parsing.
@@ -383,31 +384,31 @@ class ProductService
     {
         // 1. Try Rozmir at top level (Horoshop custom attribute - most common!)
         // Format: {"id": 29, "value": {"ua": "S/S"}}
-        if (!empty($item['Rozmir']['value'])) {
+        if (! empty($item['Rozmir']['value'])) {
             $rozmir = $item['Rozmir']['value'];
-            $size = is_array($rozmir) 
+            $size = is_array($rozmir)
                 ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
                 : $rozmir;
             if (is_string($size) && trim($size) !== '') {
                 return trim($size);
             }
         }
-        
+
         // 1b. Try rozmir with lowercase (some Horoshop stores use lowercase)
-        if (!empty($item['rozmir']['value'])) {
+        if (! empty($item['rozmir']['value'])) {
             $rozmir = $item['rozmir']['value'];
-            $size = is_array($rozmir) 
+            $size = is_array($rozmir)
                 ? ($rozmir['ua'] ?? $rozmir['ru'] ?? reset($rozmir))
                 : $rozmir;
             if (is_string($size) && trim($size) !== '') {
                 return trim($size);
             }
         }
-        
+
         // 2. Try mod_title (modification title) - but only if it's different from title
         // Some stores set mod_title = title when there's no actual modification
-        if (!empty($item['mod_title'])) {
-            $modTitle = is_array($item['mod_title']) 
+        if (! empty($item['mod_title'])) {
+            $modTitle = is_array($item['mod_title'])
                 ? ($item['mod_title']['ua'] ?? $item['mod_title']['ru'] ?? reset($item['mod_title']))
                 : $item['mod_title'];
             if (is_string($modTitle) && trim($modTitle) !== '') {
@@ -420,57 +421,57 @@ class ProductService
                 }
             }
         }
-        
+
         // 3. Try select.size
         $selectSize = Arr::get($item, 'select.size');
         if ($selectSize) {
-            $size = is_array($selectSize) 
+            $size = is_array($selectSize)
                 ? ($selectSize['ua'] ?? $selectSize['ru'] ?? reset($selectSize))
                 : $selectSize;
             if (is_string($size) && trim($size) !== '') {
                 return trim($size);
             }
         }
-        
+
         // 4. Try select.rozmir (Ukrainian)
         $selectRozmir = Arr::get($item, 'select.rozmir');
         if ($selectRozmir) {
-            $size = is_array($selectRozmir) 
+            $size = is_array($selectRozmir)
                 ? ($selectRozmir['ua'] ?? $selectRozmir['ru'] ?? reset($selectRozmir))
                 : $selectRozmir;
             if (is_string($size) && trim($size) !== '') {
                 return trim($size);
             }
         }
-        
+
         // 5. Try characteristics.size or characteristics.rozmir
         $charSize = Arr::get($item, 'characteristics.size.value')
             ?? Arr::get($item, 'characteristics.size')
             ?? Arr::get($item, 'characteristics.rozmir.value')
             ?? Arr::get($item, 'characteristics.rozmir');
         if ($charSize) {
-            $size = is_array($charSize) 
+            $size = is_array($charSize)
                 ? ($charSize['ua'] ?? $charSize['ru'] ?? reset($charSize))
                 : $charSize;
             if (is_string($size) && trim($size) !== '') {
                 return trim((string) $size);
             }
         }
-        
+
         // 6. Try params.size
         $paramSize = Arr::get($item, 'params.size');
         if ($paramSize && is_string($paramSize)) {
             return trim($paramSize);
         }
-        
+
         // 7. Parse from title as last resort
         if ($title) {
             return $this->parseSizeFromTitle($title);
         }
-        
+
         return null;
     }
-    
+
     /**
      * Extract color from Horoshop item data.
      * Tries multiple sources: Kolir (custom attribute), color (standard).
@@ -479,31 +480,31 @@ class ProductService
     {
         // 1. Try Kolir at top level (Horoshop custom attribute - most specific!)
         // Format: {"id": 9, "value": {"ua": "Мультикам"}}
-        if (!empty($item['Kolir']['value'])) {
+        if (! empty($item['Kolir']['value'])) {
             $kolir = $item['Kolir']['value'];
-            $color = is_array($kolir) 
+            $color = is_array($kolir)
                 ? ($kolir['ua'] ?? $kolir['ru'] ?? reset($kolir))
                 : $kolir;
             if (is_string($color) && trim($color) !== '') {
                 return trim($color);
             }
         }
-        
+
         // 2. Try standard color field
         // Format: {"id": 33, "value": {"ua": "Хаки"}}
-        if (!empty($item['color']['value'])) {
+        if (! empty($item['color']['value'])) {
             $colorData = $item['color']['value'];
-            $color = is_array($colorData) 
+            $color = is_array($colorData)
                 ? ($colorData['ua'] ?? $colorData['ru'] ?? reset($colorData))
                 : $colorData;
             if (is_string($color) && trim($color) !== '') {
                 return trim($color);
             }
         }
-        
+
         return null;
     }
-    
+
     /**
      * Parse size from product title.
      * Common patterns: "... Бежевий L", "... Multicam USA XL", "... US L-Long"
@@ -520,16 +521,17 @@ class ProductService
             // Numeric sizes (shoes): "43", "44.5"
             '/\s(\d{2}(?:\.\d)?)\s*$/',
         ];
-        
+
         foreach ($patterns as $pattern) {
             if (preg_match($pattern, $title, $matches)) {
-                if (isset($matches[2]) && !empty($matches[2])) {
-                    return strtoupper($matches[1]) . '/' . strtoupper($matches[2]);
+                if (isset($matches[2]) && ! empty($matches[2])) {
+                    return strtoupper($matches[1]).'/'.strtoupper($matches[2]);
                 }
+
                 return strtoupper($matches[1]);
             }
         }
-        
+
         return null;
     }
 
@@ -578,6 +580,7 @@ class ProductService
 
         // Якщо presence не дає чіткої відповіді — перевіряємо quantity
         $quantity = (int) ($item['quantity'] ?? 0);
+
         return $quantity > 0;
     }
 
@@ -648,6 +651,12 @@ class ProductService
             }
         }
 
+        // Explicitly include age text for better search matching
+        $ageText = \App\Support\ProductRawExtractor::ageText($item);
+        if ($ageText !== '') {
+            $parts[] = 'Вік: '.$ageText;
+        }
+
         $parts[] = (string) ($item['article'] ?? '');
         $parts[] = (string) ($item['parent_article'] ?? '');
 
@@ -664,7 +673,7 @@ class ProductService
         if (is_scalar($value) || $value === null) {
             return (string) $value;
         }
-        
+
         if (is_array($value)) {
             $flattened = [];
             array_walk_recursive($value, function ($item) use (&$flattened) {
@@ -672,9 +681,10 @@ class ProductService
                     $flattened[] = (string) $item;
                 }
             });
+
             return implode(' ', array_filter($flattened));
         }
-        
+
         return '';
     }
 
@@ -690,16 +700,16 @@ class ProductService
         $expandedTokens = $baseTokens;
 
         // 1) product_synonyms: synonym -> product_type (канонічний “токен”)
-        
+
         // Get tenant ID from context
         $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
-        
+
         // Includes both tenant-specific and global (tenant_id = NULL) synonyms
         $synonyms = ProductSynonym::query()
             ->whereIn('synonym', $baseTokens)
             ->where(function ($q) use ($tenantId) {
                 $q->where('tenant_id', $tenantId)
-                  ->orWhereNull('tenant_id');
+                    ->orWhereNull('tenant_id');
             })
             ->where(function ($q) use ($language) {
                 $q->whereNull('language')->orWhere('language', $language);
@@ -777,10 +787,10 @@ class ProductService
         // 2) Парсимо запит (синоніми, ціни, сигнали)
         /** @var \App\Services\Search\SearchQueryParser $parser */
         $parser = app(\App\Services\Search\SearchQueryParser::class);
-        
+
         // Get tenant ID from context
         $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
-        
+
         $parsed = $parser->parse($rawQuery, $language, null, $tenantId);
 
         if (($parsed['normalized'] ?? '') === '') {

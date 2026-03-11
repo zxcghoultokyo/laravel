@@ -204,6 +204,21 @@ class MeiliProductSearchTool
             // Filter out accessory types when searching for main products (helmets, plate carriers, etc.)
             // This is done at Meili level for efficiency - no need to fetch accessories just to filter them out
             $queryLower = mb_strtolower($query);
+
+            // Age filter: if user mentions a specific age, filter by age_min_months
+            // so only products appropriate for that age are returned
+            $requestedAgeMonths = $this->extractAgeMonthsFromQuery($query.' '.($filters['_user_message'] ?? ''));
+            if ($requestedAgeMonths !== null) {
+                // Product should be usable at this age: min_months <= requested age
+                $filterParts[] = "age_min_months <= {$requestedAgeMonths}";
+                // If product has a max age, it should encompass the requested age
+                // Use OR with null (products without max_months have no upper limit → "+")
+                $filterParts[] = "(age_max_months >= {$requestedAgeMonths} OR age_max_months IS NULL)";
+                Log::info('MeiliProductSearchTool: age filter applied', [
+                    'requested_age_months' => $requestedAgeMonths,
+                ]);
+            }
+
             $accessoryFilter = $this->buildAccessoryExclusionFilter($queryLower);
             if ($accessoryFilter) {
                 $filterParts[] = $accessoryFilter;
@@ -2215,6 +2230,29 @@ class MeiliProductSearchTool
             str_contains($catLower, 'дошкільн') => 'школярам',
             default => null,
         };
+    }
+
+    /**
+     * Extract requested age in months from query text.
+     * E.g., "подарунок на 1 рік" → 12, "для дитини 6 місяців" → 6
+     *
+     * @return int|null Age in months, or null if no age mentioned
+     */
+    public function extractAgeMonthsFromQuery(string $query): ?int
+    {
+        $lower = mb_strtolower($query);
+
+        // Match months: "6 місяців", "8 міс"
+        if (preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower, $m)) {
+            return (int) $m[1];
+        }
+
+        // Match years: "1 рік", "3 роки", "від 2 років", "на 5 років", "до 1 року"
+        if (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
+            return (int) $m[1] * 12;
+        }
+
+        return null;
     }
 
     /**

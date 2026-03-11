@@ -428,6 +428,48 @@ class MeiliProductSearchTool
                         'results_after_merge' => count($hits),
                     ]);
                 }
+
+                // Interleave primary and adjacent upper category products so both
+                // categories are represented in top results. Without this, dedupeByTitle
+                // truncates all adjacent products since they were appended at the end.
+                if ($adjacentUpperCat && count($hits) > 3) {
+                    $catLower = mb_strtolower(trim($categoryFilter));
+                    $adjLower = mb_strtolower(trim($adjacentUpperCat));
+                    $primaryHits = [];
+                    $adjHits = [];
+
+                    foreach ($hits as $hit) {
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                        if (str_contains($hitCat, $adjLower)) {
+                            $adjHits[] = $hit;
+                        } else {
+                            $primaryHits[] = $hit;
+                        }
+                    }
+
+                    if (count($adjHits) > 0 && count($primaryHits) > 0) {
+                        $interleaved = [];
+                        $pi = 0;
+                        $ai = 0;
+                        while ($pi < count($primaryHits) || $ai < count($adjHits)) {
+                            // 2 from primary category
+                            for ($j = 0; $j < 2 && $pi < count($primaryHits); $j++) {
+                                $interleaved[] = $primaryHits[$pi++];
+                            }
+                            // 1 from adjacent upper category
+                            if ($ai < count($adjHits)) {
+                                $interleaved[] = $adjHits[$ai++];
+                            }
+                        }
+                        $hits = $interleaved;
+
+                        Log::info('MeiliProductSearchTool: interleaved boundary age categories', [
+                            'primary_count' => count($primaryHits),
+                            'adjacent_count' => count($adjHits),
+                            'total' => count($hits),
+                        ]);
+                    }
+                }
             } else {
                 $result = $index->search($enhancedQuery, $searchParams);
                 $hits = $result->getHits();
@@ -537,6 +579,7 @@ class MeiliProductSearchTool
 
                 PipelineTracer::current()?->step('meili.post_filter_category', [
                     'category' => $categoryFilter,
+                    'adjacent_upper' => $adjacentUpperCat,
                     'before' => $hitsBeforeCategory,
                     'after' => count($hits),
                 ]);

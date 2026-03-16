@@ -34,6 +34,7 @@ Livewire компонент `<livewire:onboarding-progress />` показує:
 | `brands_sync` | Синхронізація брендів | 5% | Витягування з товарів |
 | `ai_enrichment` | AI збагачення | 40% | Ключові слова, сленг, категоризація |
 | `meili_indexing` | Індексація пошуку | 20% | Meilisearch |
+| `prompt_generation` | Генерація промпта | 5% | Персональний системний промпт |
 
 ## 📋 Повний Чекліст Онбордингу
 
@@ -101,6 +102,7 @@ curl -X POST "https://aintento.laravel.cloud/api/chat" \
 | `/api/diagnostic/reindex-meili?tenant_id=X` | POST | Meili індексація |
 | `/api/diagnostic/db-stats?tenant_id=X` | GET | Статистика |
 | `/api/diagnostic/ai-enrich-stats?tenant_id=X` | GET | Статус enrichment |
+| `/api/diagnostic/generate-prompt/{tenantId}` | POST | Генерація промпта (підтримує `?dry_run=1`) |
 
 ## ⚠️ Частi Помилки
 
@@ -158,6 +160,9 @@ class OnboardTenantJob implements ShouldQueue
         
         // 4. Reindex in Meili (delayed by 10 min)
         IndexProductsToMeiliJob::dispatch($this->tenantId)->delay(now()->addMinutes(10));
+        
+        // 5. Generate per-tenant system prompt
+        $this->generatePrompt(); // TenantPromptGenerator
     }
 }
 ```

@@ -82,13 +82,42 @@
 2. Викликати `parseStructuredResponse()` для пошуку товарів в БД по артикулу
 3. Повернути товари з images для відображення картки
 
-Код виправлення в `else` гілці (без tool_calls):
-```php
-$structured = $this->parseStructuredResponse($responseText, []);
-if (!empty($structured['products'])) {
-    // Повернути intro + products + outro
-}
+## 🧠 System Prompt Architecture (Per-Tenant)
+
+Кожен тенант має **персональний системний промпт**. Детально: [PROMPT_GENERATION_ARCHITECTURE.md](PROMPT_GENERATION_ARCHITECTURE.md)
+
+### Стек промпта (в порядку пріоритету)
+
 ```
+getCriticalPrefix()          ← антигалюцинація, ліміт 3 товари
+  │
+  ├── PromptPresetService    ← per-tenant layered presets
+  │     ├── BASE (is_default=true) — кастомний АБО авто-згенерований
+  │     └── OVERLAYS (priority DESC) — FAQ скрипти, категорійні, кампанійні
+  │
+  └── FALLBACK: PromptModulesService  ← якщо немає presets
+        ├── getCoreModule()          ← правила пошуку, формат
+        ├── getSearchModule($hasAge) ← синоніми, retry, вік дитини
+        └── getFollowUpModule()      ← exclude_shown, негативний фідбек
+  │
+getCriticalSuffix()          ← телефон, обмеження
+```
+
+### Ключові сервіси
+
+| Сервіс | Файл | Роль |
+|--------|------|------|
+| `TenantPromptGenerator` | `app/Services/Ai/TenantPromptGenerator.php` | Авто-генерація промпта з каталогу |
+| `PromptModulesService` | `app/Services/Ai/PromptModulesService.php` | Модульний фундамент (core/search/follow-up) |
+| `PromptPresetService` | `app/Services/Ai/PromptPresetService.php` | Завантаження та стакання presets |
+| `BaseAgent.getSystemPrompt()` | `app/Services/Agent/BaseAgent.php` | Orchestration |
+
+### Як `has_age_categories` впливає на промпт
+
+| Тип магазину | `has_age_categories` | Ефект |
+|-------------|---------------------|-------|
+| Дитячий (bavkatoys) | `true` | Вікова фільтрація, питання про вік |
+| Тактичний (Contractor) | `false` | `⛔ НЕ питай про вік дитини!` |
 
 ## Legacy: AgentOrchestrator (deprecated)
 

@@ -120,7 +120,9 @@ SessionResolver::resolveSessionId($chatSessionId);  // int → string
 
 **Supporting Services**:
 - `ChatService`: orchestrates chat/session and formatting. [app/Services/Chat/ChatService.php](app/Services/Chat/ChatService.php)
-- `PromptPresetService`: custom prompts by context (language, campaign, category). [app/Services/Ai/PromptPresetService.php](app/Services/Ai/PromptPresetService.php)
+- `PromptPresetService`: per-tenant layered presets (base + overlays). [app/Services/Ai/PromptPresetService.php](app/Services/Ai/PromptPresetService.php)
+- `PromptModulesService`: modular prompt foundation (core/search/follow-up). [app/Services/Ai/PromptModulesService.php](app/Services/Ai/PromptModulesService.php)
+- `TenantPromptGenerator`: auto-generates prompt from catalog. [app/Services/Ai/TenantPromptGenerator.php](app/Services/Ai/TenantPromptGenerator.php)
 - `ToneService`: tone settings (official/spartan/friendly). [app/Services/Ai/ToneService.php](app/Services/Ai/ToneService.php)
 - `MeiliProductSearchTool`: Meilisearch with Eloquent fallback. [app/Services/Agent/Tools/MeiliProductSearchTool.php](app/Services/Agent/Tools/MeiliProductSearchTool.php)
 - `ProductDetailsTool`: full product cards with images. [app/Services/Agent/Tools/ProductDetailsTool.php](app/Services/Agent/Tools/ProductDetailsTool.php)
@@ -186,6 +188,7 @@ When a new tenant registers and connects their Horoshop store, `OnboardTenantJob
 3. `brands_sync` (5%) — Extract and save brands
 4. `ai_enrichment` (40%) — AI analysis of all products (keywords, slang, categories)
 5. `meili_indexing` (20%) — Index products in Meilisearch
+6. `prompt_generation` (5%) — Generate per-tenant system prompt via TenantPromptGenerator
 
 **Progress Tracking:**
 - Model: [app/Models/TenantOnboardingProgress.php](app/Models/TenantOnboardingProgress.php)
@@ -337,20 +340,48 @@ Images extracted via `extractProductImages(Product $product)` method (in both ag
 
 ## Prompt Presets
 
-Custom system prompts with variables support. Managed via `/admin/prompts`.
+Per-tenant system prompts with layering support. Managed via `/admin/prompts`.
+
+**Architecture:** [docs/PROMPT_GENERATION_ARCHITECTURE.md](docs/PROMPT_GENERATION_ARCHITECTURE.md)
 
 Files:
 - Model: [app/Models/PromptPreset.php](app/Models/PromptPreset.php)
 - Service: [app/Services/Ai/PromptPresetService.php](app/Services/Ai/PromptPresetService.php)
+- Generator: [app/Services/Ai/TenantPromptGenerator.php](app/Services/Ai/TenantPromptGenerator.php)
+- Modules: [app/Services/Ai/PromptModulesService.php](app/Services/Ai/PromptModulesService.php)
 - Livewire: [app/Livewire/Admin/PromptPresetsManager.php](app/Livewire/Admin/PromptPresetsManager.php)
 
-Matching context:
+**Prompt Stack (per-tenant):**
+1. `getCriticalPrefix()` — security rules (anti-hallucination, max 3 products)
+2. **BASE preset** (`is_default=true`) — custom or auto-generated
+3. **Overlays** (`is_default=false`, sorted by `priority` DESC) — FAQ scripts, category-specific, campaigns
+4. `getCriticalSuffix()` — phone, constraints
+5. **Fallback** (if no presets): `PromptModulesService` shared modules
+
+**TenantPromptGenerator:**
+- `analyzeTenant()` — collects categories, brands, prices, detects `has_age_categories`
+- `buildPrompt()` — reuses `PromptModulesService` modules + adds store profile
+- `saveAsPreset()` — SAFE: won't overwrite custom presets (saves as inactive backup)
+- Auto-runs in `OnboardTenantJob` step 7
+
+**PromptModulesService (battle-tested foundation):**
+- `getCoreModule()` — search_products(), max 3, format, no links
+- `getSearchModule(bool $hasAge)` — OR synonyms, retry, seasonality, age filtering
+- `getFollowUpModule()` — exclude_shown, negative feedback
+
+Matching context (for overlays):
 - `language` - uk, en, ru
 - `tone` - official, spartan, friendly
 - `campaign` - UTM campaign match
 - `categories` - product categories
 
 Variables use `{{variable_name}}` syntax, replaced at runtime.
+
+**Diagnostic:**
+```bash
+# Generate prompt for tenant (supports ?dry_run=1)
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=diagnostic_secret_key_2025"
+```
 
 Meili Documents (example)
 - Built in [app/Jobs/IndexProductsToMeiliJob.php](app/Jobs/IndexProductsToMeiliJob.php); settings set `filterableAttributes` and `searchableAttributes` idempotently.

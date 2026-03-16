@@ -1,475 +1,247 @@
 # 🧠 Prompt Generation Architecture
 
-## Поточний стан: Як стакаються компоненти
+> Оновлено: 2026-03-16
+
+## Огляд
+
+Кожен тенант отримує **персональний системний промпт**, що генерується автоматично при онбордингу на основі каталогу магазину. Промпт будується поверх **PromptModulesService** — перевіреного модульного фундаменту з правилами пошуку, форматування та follow-up.
+
+## Архітектура: Як стакаються промпти
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                            SYSTEM PROMPT STACK                                   │
+│                         SYSTEM PROMPT STACK (per-tenant)                         │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
-│  1. PROMPT PRESET (найвищий пріоритет, якщо матчить контекст)                   │
-│     └── Повністю замінює дефолтний промпт                                       │
-│     └── Підтримує змінні {{variable}}                                           │
-│     └── Матчиться по: language, tone, campaign, categories                      │
+│  getCriticalPrefix()  — антигалюцинація, ліміт 3 товари, формат                 │
 │                                                                                  │
-│  ↓ АБО (якщо немає матчу)                                                        │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │ LAYER 1: BASE PRESET (is_default=true для тенанта)                       │  │
+│  │   Варіант A: Кастомний (створений адміном, slug != auto-generated-*)     │  │
+│  │   Варіант B: Авто-згенерований (TenantPromptGenerator)                   │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
-│  2. DEFAULT SYSTEM PROMPT (вбудований в агент)                                  │
-│     ├── {{faq_info}} ← WidgetSettings (FAQ texts)                               │
-│     ├── {{tone_section}} ← ToneService                                          │
-│     │   ├── Tone prompt (official/spartan/friendly)                             │
-│     │   └── Brand rules (до 5 правил)                                           │
-│     └── {{price_context}} ← PriceStatsService                                   │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │ LAYER 2: OVERLAYS (is_default=false, sort by priority DESC)              │  │
+│  │   • Скрипти частих питань (priority=95)                                  │  │
+│  │   • Категорійні (Меблі → priority=90, Топ → priority=70)                │  │
+│  │   • Кампанійні (UTM match)                                               │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
 │                                                                                  │
-├─────────────────────────────────────────────────────────────────────────────────┤
+│  getCriticalSuffix()  — телефон, обмеження                                      │
 │                                                                                  │
-│  GREETINGS (окремо від system prompt!)                                          │
-│     └── Перше повідомлення при відкритті чату                                   │
-│     └── НЕ впливає на system prompt                                             │
-│     └── Матчиться по: UTM, категорія, device, мова, час доби                    │
-│     └── Quick actions (кнопки)                                                  │
+│  ↓ АБО (якщо немає жодного preset для тенанта)                                  │
+│                                                                                  │
+│  FALLBACK: PromptModulesService (shared модульний промпт)                       │
 │                                                                                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Проблема поточної архітектури
+## Ключові сервіси
 
-1. **Prompt Presets** — ручне створення, не враховують дані магазину
-2. **Tone** — тільки стиль (official/spartan/friendly), не контент
-3. **Greetings** — окремі від промпту, тільки перше повідомлення
-4. **FAQ Info** — завантажується з WidgetSettings, але статичний текст
-5. **Немає онбоардингу** — не збираємо дані про магазин для генерації
+### 1. TenantPromptGenerator
 
-## Запропонована архітектура: Auto-Generated Prompts
+**Файл:** `app/Services/Ai/TenantPromptGenerator.php`
 
-### Концепція
+Аналізує каталог тенанта і генерує персональний промпт.
+
+**Як працює:**
+1. `analyzeTenant()` — збирає категорії, бренди, ціни, визначає `has_age_categories`
+2. `buildPrompt()` — збирає промпт з модулів PromptModulesService + додає профіль магазину
+3. `saveAsPreset()` — зберігає як `PromptPreset` (з безпечною логікою)
+
+**Структура згенерованого промпта:**
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           ONBOARDING FLOW                                        │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  1. Користувач підключає магазин (Horoshop/Shopify)                             │
-│     └── Отримуємо: products, categories, FAQ pages                              │
-│                                                                                  │
-│  2. PromptGeneratorService аналізує дані:                                       │
-│     ├── Категорії товарів → store_type (tactical, fashion, electronics...)     │
-│     ├── Бренди → brand_list                                                     │
-│     ├── Цінові діапазони → price_segments                                       │
-│     ├── FAQ/Policies → knowledge_base                                           │
-│     └── Кількість товарів → catalog_size                                        │
-│                                                                                  │
-│  3. Генеруємо базовий PromptPreset для магазину                                 │
-│     └── Через GPT або шаблон на основі store_type                               │
-│                                                                                  │
-│  4. Користувач може:                                                            │
-│     └── Редагувати промпт в /admin/prompts                                      │
-│     └── Додавати умови (категорії, кампанії)                                    │
-│     └── Тестувати в preview                                                     │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+📋 ПРОФІЛЬ МАГАЗИНУ:                    ← buildStoreProfile()
+- Категорії, бренди, кількість товарів
+- Приклади пошуку для цього магазину
+
+Ти — AI-консультант магазину "..."
+
+🎯 ГОЛОВНІ ПРАВИЛА:                     ← PromptModulesService::getCoreModule()
+- ЗАВЖДИ шукай через search_products()
+- МАКСИМУМ 3 товари
+- ПОСИЛАННЯ ЗАБОРОНЕНО
+- Формат intro, замовлення
+
+🔍 ПОШУК ТОВАРІВ:                       ← PromptModulesService::getSearchModule($hasAge)
+- Синоніми через OR
+- Retry якщо не знайшов
+- Сезонність
+- ⛔ НЕ питай про вік (якщо !hasAge)  ← КРИТИЧНО для тактичних магазинів
+- ВІКОВА ФІЛЬТРАЦІЯ (якщо hasAge)    ← для дитячих магазинів
+
+🔄 FOLLOW-UP:                           ← PromptModulesService::getFollowUpModule()
+- "покажи ще" → exclude_shown
+- "дешевше/дорожче" → фільтр ціни
+- Негативний фідбек → не повторюй
 ```
 
-### Дані для генерації промпту
+### 2. PromptModulesService
 
-| Джерело | Дані | Вплив на промпт |
-|---------|------|-----------------|
-| **Products** | Категорії, бренди, ціни | Тип магазину, експертиза, цінові поради |
-| **Categories** | Ієрархія категорій | Що продаємо, як структурувати відповіді |
-| **FAQ Pages** | Доставка, оплата, повернення | Знання про магазин |
-| **Brand info** | Назва, опис, контакти | Персоналізація, контакти |
-| **Sales data** | Популярні товари | Рекомендації |
-| **Analytics** | Часті питання | Оптимізація відповідей |
+**Файл:** `app/Services/Ai/PromptModulesService.php`
 
-### Нова структура StoreContext
+Модульний фундамент промпта. Перевірені правила, що використовуються як TenantPromptGenerator-ом, так і напряму в BaseAgent як fallback.
+
+**Модулі:**
+| Метод | Що містить |
+|-------|-----------|
+| `getCoreModule()` | Головні правила: search_products(), максимум 3, формат intro, заборона посилань, замовлення |
+| `getSearchModule(bool $hasAge)` | OR-синоніми, retry, сезонність, вікова фільтрація АБО заборона питати вік |
+| `getFollowUpModule()` | Follow-up, негативний фідбек, питання про показаний товар |
+
+### 3. PromptPresetService
+
+**Файл:** `app/Services/Ai/PromptPresetService.php`
+
+Завантажує та стакає промпти для тенанта.
+
+**Ключові методи:**
+| Метод | Опис |
+|-------|------|
+| `getSystemPromptForContext($tenantId, $context)` | Повертає final промпт (base + overlays merged) |
+| `findLayersForContext($tenantId, $context)` | Розділяє на `['base' => ?preset, 'overlays' => [...]]` |
+| `matchesOverlay($preset, $context)` | Overlay без фільтрів = матчить ЗАВЖДИ |
+
+**Кешування:** 5 хв TTL per tenant, ключ `prompt_presets_active:{tenant_id}`
+
+### 4. BaseAgent.getSystemPrompt()
+
+**Файл:** `app/Services/Agent/BaseAgent.php`
+
+Orchestration — збирає фінальний промпт:
 
 ```php
-// app/Models/StoreContext.php
-class StoreContext extends Model
+public function getSystemPrompt(): string
 {
-    protected $fillable = [
-        'widget_settings_id',
-        
-        // Auto-detected
-        'store_type',           // tactical, fashion, electronics, general
-        'primary_categories',   // JSON: ["Плитоноски", "Шоломи", "Взуття"]
-        'brands',               // JSON: ["Crye", "Ops-Core", "FirstSpear"]
-        'price_segments',       // JSON: {budget: 2000, mid: 5000, premium: 15000}
-        'catalog_size',         // small (<100), medium (<1000), large (>1000)
-        
-        // From FAQ/Policies
-        'delivery_info',        // Parsed from FAQ
-        'payment_info',
-        'return_policy',
-        'warranty_info',
-        'working_hours',
-        
-        // For prompt
-        'expertise_areas',      // JSON: ["бронезахист", "тактичне спорядження"]
-        'common_questions',     // JSON: most asked questions
-        'product_tips',         // JSON: ["плити мають відповідати розміру плитоноски"]
-        
-        // Generated
-        'generated_prompt',     // Auto-generated system prompt
-        'prompt_version',       // For updates
-        'last_analyzed_at',
-    ];
+    $prefix = $this->getCriticalPrefix();   // Антигалюцинація
+    $suffix = $this->getCriticalSuffix();   // Телефон, обмеження
+
+    // 1. Спробувати PromptPresetService (per-tenant layered)
+    $presetPrompt = $this->promptPresetService->getSystemPromptForContext(...);
+    if ($presetPrompt) {
+        return $prefix . $presetPrompt . $suffix;
+    }
+
+    // 2. Fallback: PromptModulesService (shared)
+    $modules = app(PromptModulesService::class);
+    return $prefix
+        . $modules->getCoreModule()
+        . $modules->getSearchModule($hasAge)
+        . $modules->getFollowUpModule()
+        . $suffix;
 }
 ```
 
-### PromptGeneratorService
+## Безпека saveAsPreset()
 
-```php
-// app/Services/Ai/PromptGeneratorService.php
-class PromptGeneratorService
-{
-    /**
-     * Analyze store and generate optimal prompt.
-     */
-    public function generateForStore(int $widgetSettingsId): PromptPreset
-    {
-        // 1. Collect data
-        $context = $this->collectStoreContext($widgetSettingsId);
-        
-        // 2. Detect store type
-        $storeType = $this->detectStoreType($context['categories']);
-        
-        // 3. Generate prompt based on type
-        $prompt = $this->generatePrompt($storeType, $context);
-        
-        // 4. Create PromptPreset
-        return PromptPreset::create([
-            'name' => "Auto: {$context['store_name']}",
-            'slug' => 'auto-' . $widgetSettingsId,
-            'system_prompt' => $prompt,
-            'variables' => $this->extractVariables($context),
-            'is_default' => true,
-            'is_active' => true,
-        ]);
-    }
-    
-    private function collectStoreContext(int $id): array
-    {
-        $settings = WidgetSettings::find($id);
-        
-        return [
-            'store_name' => $settings->store_name ?? $settings->bot_name,
-            'categories' => Product::distinct('category_path')->pluck('category_path'),
-            'brands' => Product::distinct('brand')->whereNotNull('brand')->pluck('brand'),
-            'price_range' => [
-                'min' => Product::min('price'),
-                'max' => Product::max('price'),
-                'avg' => Product::avg('price'),
-            ],
-            'product_count' => Product::count(),
-            'faq' => [
-                'delivery' => $settings->faq_payment_delivery_text,
-                'returns' => $settings->faq_returns_text,
-                'contacts' => $settings->faq_contacts_text,
-                'about' => $settings->faq_about_text,
-            ],
-        ];
-    }
-    
-    private function detectStoreType(Collection $categories): string
-    {
-        // Keyword matching для визначення типу магазину
-        $keywords = [
-            'tactical' => ['плитоноска', 'шолом', 'тактичн', 'броня', 'military'],
-            'fashion' => ['одяг', 'взуття', 'куртка', 'штани', 'футболка'],
-            'electronics' => ['електроніка', 'гаджет', 'телефон', 'ноутбук'],
-            'sports' => ['спорт', 'фітнес', 'тренування', 'велосипед'],
-        ];
-        
-        // ... matching logic
-    }
-}
-```
-
-### Prompt Templates по типу магазину
-
-```php
-// database/seeders/PromptTemplatesSeeder.php
-
-// TACTICAL STORE
-$tacticalTemplate = <<<PROMPT
-Ти — AI-експерт магазину "{{shop_name}}" з тактичного та військового спорядження.
-
-ТВОЯ ЕКСПЕРТИЗА:
-- Плитоноски та бронежилети (сумісність плит і носіїв)
-- Шоломи та захист голови (NIJ стандарти)
-- Тактичне взуття та одяг
-- Підсумки та РПС системи
-
-АСОРТИМЕНТ:
-{{categories_list}}
-
-БРЕНДИ:
-{{brands_list}}
-
-ЦІНОВІ СЕГМЕНТИ:
-- Бюджетний: до {{budget_max}} грн
-- Середній: {{budget_max}}-{{mid_max}} грн  
-- Преміум: від {{mid_max}} грн
-
-{{faq_section}}
-
-{{tone_section}}
-PROMPT;
-
-// FASHION STORE
-$fashionTemplate = <<<PROMPT
-Ти — AI-консультант магазину одягу "{{shop_name}}".
-
-ТВОЯ ЕКСПЕРТИЗА:
-- Підбір розмірів (таблиці розмірів, поради)
-- Сезонні колекції
-- Комплектування образів
-
-КАТЕГОРІЇ:
-{{categories_list}}
-
-БРЕНДИ:
-{{brands_list}}
-
-{{faq_section}}
-
-{{tone_section}}
-PROMPT;
-```
-
-## Як все стакається (нова архітектура)
+`TenantPromptGenerator::saveAsPreset()` має захист від перезапису кастомних промптів:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                     ПОВНИЙ СТЕК ПЕРСОНАЛІЗАЦІЇ                                   │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ LAYER 1: GREETING (перше повідомлення)                                  │    │
-│  │ ├── Показується при відкритті чату                                      │    │
-│  │ ├── Quick Actions (кнопки)                                              │    │
-│  │ ├── Матч по: UTM, URL, device, час, мова                                │    │
-│  │ └── НЕ впливає на AI логіку                                             │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ LAYER 2: SYSTEM PROMPT (як AI думає)                                    │    │
-│  │ ├── Генерується автоматично при онбоардингу                             │    │
-│  │ ├── Включає: store context, expertise, FAQ, policies                    │    │
-│  │ ├── Можна редагувати в /admin/prompts                                   │    │
-│  │ └── Змінні: {{shop_name}}, {{categories}}, {{faq}}, {{tone}}            │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ LAYER 3: TONE (стиль відповідей)                                        │    │
-│  │ ├── Вбудовується в system prompt як {{tone_section}}                    │    │
-│  │ ├── Три режими: official, spartan, friendly                             │    │
-│  │ └── Brand rules (до 5 правил)                                           │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ LAYER 4: DYNAMIC CONTEXT (runtime)                                      │    │
-│  │ ├── Історія чату [Показані товари: ...]                                 │    │
-│  │ ├── [КОНТЕКСТ РОЗМОВИ: плитоноски, розмір M]                            │    │
-│  │ └── Session data (shown_ids, filters)                                   │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │ LAYER 5: TOOLS RESULTS (інструменти)                                    │    │
-│  │ ├── search_products() → товари з Meili/DB                               │    │
-│  │ ├── get_product_details() → повна картка                                │    │
-│  │ └── get_order_status() → статус замовлення                              │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+saveAsPreset($tenantId, $tenant, $prompt)
+  │
+  ├── Чи є кастомний is_default=true preset? (slug != "auto-generated-*")
+  │     YES → зберігає авто як INACTIVE backup (is_default=false, is_active=false)
+  │     NO  → шукає існуючий auto-generated, оновлює або створює новий як default
+  │
+  └── PromptPreset boot() hook: тільки ОДИН is_default=true на тенант
 ```
 
-## Flow: Від онбоардингу до відповіді
+**Приклад T20 (bavkatoys):**
+- Має кастомний BASE preset (ID=11, "БАЗОВИЙ пресет", 7595 chars)
+- `generate(20)` → зберігає авто як inactive backup, НЕ чіпає кастомний
+
+**Приклад T2 (Contractor):**
+- Не мав presets
+- `generate(2)` → створив auto-generated-2 як default (3788 chars)
+
+## Автогенерація при Онбордингу
+
+`OnboardTenantJob` запускає генерацію промпта як **крок 7** після Meili індексації:
 
 ```
-1. ONBOARDING
-   └── Користувач підключає магазин
-       └── Sync products, categories, FAQ
-           └── PromptGeneratorService.generateForStore()
-               └── Створюється PromptPreset (is_default=true)
-
-2. USER OPENS CHAT
-   └── Widget loads greeting
-       └── GreetingService.getForContext({utm, url, device})
-           └── Показує перше повідомлення + quick actions
-
-3. USER SENDS MESSAGE
-   └── StreamingFunctionCallingAgent.stream()
-       └── getSystemPrompt()
-           ├── PromptPresetService.getSystemPromptForContext()
-           │   └── Знаходить preset по language/tone/campaign/category
-           │   └── Рендерить з variables: {{shop_name}}, {{faq}}, {{tone}}
-           │
-           └── АБО getDefaultSystemPrompt() якщо немає матчу
-               └── Використовує ToneService + loadFaqInfo()
-
-4. GPT RESPONDS
-   └── З урахуванням system prompt + history + tool results
+horoshop_sync (25%) → categories_rebuild (10%) → brands_sync (5%)
+  → ai_enrichment (40%) → meili_indexing (20%) → prompt_generation (5%)
 ```
 
-## TODO: Implementation Plan
+**Чому після Meili?** Для генерації потрібні: категорії, бренди, ціни — дані з попередніх кроків.
 
-### Phase 1: StoreContext Model ✅ DONE
-- [x] Міграція для `store_contexts` таблиці
-- [x] Model з relationships до WidgetSettings
-- [x] Service для збору контексту з products/categories
+## Diagnostic API
 
-### Phase 2: PromptGeneratorService ✅ DONE
-- [x] Detect store type по категоріях
-- [x] Template-based generation
-- [x] 5 templates: tactical, fashion, electronics, sports, general
-- [x] Variables system with FAQ integration
-- [x] Integration with PromptPresetService
+```bash
+# Dry run (превью без збереження)
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=diagnostic_secret_key_2025&dry_run=1"
 
-### Phase 3: Jobs & API ✅ DONE
-- [x] AnalyzeStoreContextJob for async processing
-- [x] Admin API endpoints (POST /api/admin/store-context/*)
-- [x] Test script (test-prompt-generation.php)
+# Генерація зі збереженням
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=diagnostic_secret_key_2025"
 
-### Phase 4: Onboarding Integration ⏳ TODO
-- [ ] UI wizard для онбоардингу
-- [ ] Auto-generate prompt на sync
-- [ ] Preview та редагування
+# Перегляд presets тенанта
+curl "https://aintento.laravel.cloud/api/diagnostic/prompt-presets?key=diagnostic_secret_key_2025&tenant_id=2"
+```
 
-### Phase 5: Analytics-Driven Optimization ⏳ TODO
-- [ ] Збір common questions
-- [ ] Аналіз низьких conversion rates
-- [ ] Suggestions для покращення промпту
-
-## Приклад: Тактичний магазин
-
-**Вхідні дані:**
+**Відповідь:**
 ```json
 {
-  "categories": ["Плитоноски", "Шоломи", "Берці", "Підсумки"],
-  "brands": ["Crye Precision", "Ops-Core", "FirstSpear", "EastGear"],
-  "products_count": 847,
-  "price_range": {"min": 150, "max": 45000, "avg": 4500},
-  "faq": {
-    "delivery": "Нова Пошта, 1-3 дні. Безкоштовно від 2000 грн.",
-    "returns": "14 днів обмін/повернення"
+  "preset_id": 17,
+  "prompt_length": 3788,
+  "analysis": {
+    "store_name": "Contractor",
+    "total_products": 1257,
+    "in_stock_count": 728,
+    "has_age_categories": false,
+    "brands": {"АТАКА": 45, "HOFFMANN": 30, ...},
+    "top_level_categories": {"Шеврони та патчі": 150, ...}
   }
 }
 ```
 
-**Згенерований промпт:**
-```
-Ти — AI-експерт магазину "Contractor" з тактичного спорядження.
+## Prompt Presets Table
 
-ЕКСПЕРТИЗА:
-- Плитоноски та бронежилети
-- Шоломи та захист голови  
-- Тактичне взуття (берці)
-- Підсумки та РПС системи
-
-БРЕНДИ В АСОРТИМЕНТІ:
-Crye Precision, Ops-Core, FirstSpear, EastGear
-
-ЦІНОВІ СЕГМЕНТИ (847 товарів):
-- Бюджетний: до 1500 грн
-- Середній: 1500-5000 грн
-- Преміум: від 5000 грн (до 45000 грн)
-
-ДОСТАВКА:
-Нова Пошта, 1-3 дні. Безкоштовно від 2000 грн.
-
-ПОВЕРНЕННЯ:
-14 днів обмін/повернення
-
-СТИЛЬ: Офіційний
-- Звертайся на "Ви"
-- Професійний тон
+```sql
+prompt_presets
+├── id (PK)
+├── tenant_id (nullable, indexed)
+├── name
+├── slug (unique) -- "auto-generated-{tenant_id}" для авто
+├── system_prompt (text)
+├── is_default (bool) -- тільки 1 per tenant
+├── is_active (bool)
+├── priority (int) -- для overlays ordering
+├── categories (JSON) -- overlay filter
+├── language, tone, campaign -- overlay filters
+├── variables (JSON)
+└── timestamps
 ```
 
-## Usage Examples
+## Приклад: Продакшн стан промптів
 
-### CLI: Analyze and Generate
+### T2 (Contractor / tactical store)
+| ID | Slug | Default | Active | Priority | Chars |
+|----|------|---------|--------|----------|-------|
+| 17 | auto-generated-2 | ✅ | ✅ | 0 | 3788 |
 
-```bash
-# Analyze store and create StoreContext
-php artisan tinker --execute="
-\$generator = app(\App\Services\Ai\PromptGeneratorService::class);
-\$context = \$generator->analyzeStore(null);
-echo 'Store type: ' . \$context->store_type;
-"
+### T20 (bavkatoys / children's store)
+| ID | Slug | Default | Active | Priority | Chars | Опис |
+|----|------|---------|--------|----------|-------|------|
+| 11 | bazovii-preset | ✅ | ✅ | 50 | 7595 | Кастомний BASE "Гуся" |
+| 14 | bavka-top-prodaziv | ❌ | ✅ | 70 | 1510 | Overlay: Топ продажів |
+| 15 | bavka-razom-vigidnise | ❌ | ✅ | 75 | 3821 | Overlay: Комплекти |
+| 12 | bavka-mebli | ❌ | ✅ | 90 | 1417 | Overlay: Меблі |
+| 13 | skripti-castix-pitan | ❌ | ✅ | 95 | 4818 | Overlay: FAQ скрипти |
+| 16 | auto-gusia | ❌ | ❌ | 10 | 1653 | Старий авто (inactive) |
 
-# Generate prompt from context
-php artisan tinker --execute="
-\$generator = app(\App\Services\Ai\PromptGeneratorService::class);
-\$context = \App\Models\StoreContext::latest()->first();
-\$prompt = \$generator->generatePrompt(\$context);
-echo \$prompt;
-"
+## Файли
 
-# Or use test script
-php test-prompt-generation.php
-```
+| Файл | Опис |
+|------|------|
+| `app/Services/Ai/TenantPromptGenerator.php` | Генерація промпта з каталогу |
+| `app/Services/Ai/PromptModulesService.php` | Модульний фундамент промпта |
+| `app/Services/Ai/PromptPresetService.php` | Завантаження та стакання presets |
+| `app/Services/Agent/BaseAgent.php` | Orchestration getSystemPrompt() |
+| `app/Models/PromptPreset.php` | Модель з boot() hook (1 default per tenant) |
+| `app/Jobs/OnboardTenantJob.php` | Крок 7: generatePrompt() |
+| `app/Console/Commands/GenerateTenantPrompt.php` | CLI: `php artisan tenant:generate-prompt {id}` |
+| `tests/Feature/TenantPromptGeneratorTest.php` | 10 тестів |
 
-### API: Admin Endpoints
-
-```bash
-# Analyze store (async)
-curl -X POST "http://localhost:8000/api/admin/store-context/analyze?async=true" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-
-# Get current context
-curl "http://localhost:8000/api/admin/store-context" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-
-# Generate prompt
-curl -X POST "http://localhost:8000/api/admin/store-context/generate-prompt" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
-
-# Create PromptPreset from context
-curl -X POST "http://localhost:8000/api/admin/store-context/create-preset" \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Auto Prompt"}'
-```
-
-### Dispatch Job
-
-```php
-use App\Jobs\AnalyzeStoreContextJob;
-
-// Analyze and generate prompt
-AnalyzeStoreContextJob::dispatch(
-    widgetSettingsId: 1,
-    generatePrompt: true
-);
-```
-
-## Implementation Notes
-
-### Files Created
-
-- `database/migrations/2026_01_15_183523_create_store_contexts_table.php` - DB schema
-- `app/Models/StoreContext.php` - Model with helpers
-- `app/Services/Ai/PromptGeneratorService.php` - Core service (541 lines)
-- `app/Jobs/AnalyzeStoreContextJob.php` - Async job
-- `app/Http/Controllers/Api/Admin/StoreContextController.php` - API controller
-- `test-prompt-generation.php` - Test script
-
-### Integration Points
-
-- `PromptPresetService::getBestPromptForContext()` - tries manual preset first, then auto-generated
-- `PromptPresetService::getAutoGeneratedPrompt()` - loads from StoreContext
-- `WidgetSettings::storeContext()` - relationship
-- Routes: `api/admin/store-context/*` (token protected)
-
-### Store Type Detection
-
-Keywords matched against categories (case-insensitive):
-- **Tactical**: плитоноска, шолом, тактичн, броня, military, берц, підсумок, molle
-- **Fashion**: одяг, взуття, куртка, футболка, джинс, кросівк
-- **Electronics**: електроніка, гаджет, телефон, ноутбук, навушник
-- **Sports**: спорт, фітнес, тренування, велосипед, gym
-
-Minimum 3 keyword matches required, otherwise defaults to `general`.
-
+*Last updated: 2026-03-16*

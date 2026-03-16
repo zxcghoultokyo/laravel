@@ -54,7 +54,7 @@ CORE;
     /**
      * Search behavior module - for product queries (~400 tokens).
      */
-    public function getSearchModule(): string
+    public function getSearchModule(bool $hasAgeCategories = false): string
     {
         $currentMonth = (int) date('n');
         $seasonNote = '';
@@ -69,7 +69,7 @@ CORE;
             $seasonNote = '🍂 Зараз осінь — різдвяні товари можуть бути актуальні ближче до грудня.';
         }
 
-        return <<<SEARCH
+        $searchModule = <<<SEARCH
 
 🔍 ПОШУК ТОВАРІВ:
 - Імпліцитні запити ("захист голови") → search_products("шолом OR каска OR helmet")
@@ -91,7 +91,16 @@ CORE;
 - НЕ рекомендуй пакувальні матеріали (пакети, подарункові пакети, обгортки) як основні товари
 - Сертифікати та подарункові набори — ОК, їх можна рекомендувати
 
-� ВІКОВА ФІЛЬТРАЦІЯ (КРИТИЧНО для дитячих магазинів!):
+📅 СЕЗОННІСТЬ:
+{$seasonNote}
+
+SEARCH;
+
+        // Add age filtering section ONLY for children's stores with age categories
+        if ($hasAgeCategories) {
+            $searchModule .= <<<'AGE'
+
+👶 ВІКОВА ФІЛЬТРАЦІЯ (КРИТИЧНО!):
 Якщо клієнт вказує ВІК дитини — ЗАВЖДИ використай параметр category у search_products!
 Спочатку виклич get_categories() щоб побачити доступні категорії, потім обери відповідну.
 Вікові категорії (приклади): "МАЛЮКАМ 0 – 1", "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7"
@@ -100,11 +109,10 @@ CORE;
 - "для тодлера" / "1-2 роки" → category="ТОДЛЕРАМ 1 – 3"
 - "для дошкільняти" / "4-5 років" → category="ДОШКІЛЬНЯТАМ 3 – 7"
 БЕЗ фільтра category — пошук поверне товари БУДЬ-ЯКОГО віку, що НЕПРАВИЛЬНО!
+AGE;
+        }
 
-�📅 СЕЗОННІСТЬ:
-{$seasonNote}
-
-SEARCH;
+        return $searchModule;
     }
 
     /**
@@ -272,7 +280,9 @@ LEVEL;
             $modules[] = $this->getChitchatModule();
         } else {
             // Product-related query - add search module
-            $modules[] = $this->getSearchModule();
+            // Pass age categories flag to conditionally include age filtering instructions
+            $hasAgeCategories = $storeInfo['has_age_categories'] ?? false;
+            $modules[] = $this->getSearchModule($hasAgeCategories);
         }
 
         // FAQ detection

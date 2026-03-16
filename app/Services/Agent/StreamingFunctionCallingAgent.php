@@ -142,6 +142,11 @@ class StreamingFunctionCallingAgent extends BaseAgent
                 'products_found' => count($implicitResult['products'] ?? []),
             ]);
 
+            // Save context for follow-ups ("дорожче", "дешевше") to preserve age/category
+            if (! empty($implicitResult['products'])) {
+                $this->saveLastProductContext($sessionId, $normalizedMessage, $implicitResult['meta']['source'] ?? 'implicit');
+            }
+
             // Stream the intro text
             if (! empty($implicitResult['message'])) {
                 yield ['type' => 'text', 'data' => ['text' => $implicitResult['message']]];
@@ -316,6 +321,25 @@ CONTEXT;
             // Extract last category from conversation context for follow-up queries
             $lastCategory = $this->extractLastCategoryFromMessages($messages);
 
+            // Fallback: if no category from message history, check saved product context
+            // This handles follow-ups after age queries (T20) or other non-tactical tenants
+            $lastContextMessage = null;
+            if (! $lastCategory && $sessionId) {
+                $lastCtx = $this->loadLastProductContext($sessionId);
+                if ($lastCtx) {
+                    $lastContextMessage = $lastCtx['original_message'];
+                    $detectedCat = $this->searchTool->detectAgeCategoryFromQuery($lastContextMessage);
+                    if ($detectedCat) {
+                        $lastCategory = $detectedCat;
+                        Log::info('StreamingAgent: restored category from saved product context', [
+                            'saved_message' => $lastContextMessage,
+                            'detected_category' => $detectedCat,
+                            'source' => $lastCtx['source'] ?? 'unknown',
+                        ]);
+                    }
+                }
+            }
+
             // Track if search_products found anything - to prevent irrelevant fallback
             $searchFoundProducts = false;
             $searchWasCalled = false;
@@ -327,6 +351,12 @@ CONTEXT;
                 // CRITICAL: Inject category context for follow-up queries like "дешевше", "ще", "аналоги"
                 if ($functionName === 'search_products' && $lastCategory) {
                     $args = $this->injectCategoryContext($args, $normalizedMessage, $lastCategory);
+                }
+
+                // Pass saved context message for age/boundary detection in MeiliProductSearchTool
+                // Only for follow-up queries — prevents age filter leaking into unrelated queries
+                if ($functionName === 'search_products' && $lastContextMessage && $this->isFollowUpMessage($normalizedMessage)) {
+                    $args['_context_message'] = $lastContextMessage;
                 }
 
                 // Inject age-based category from original user message if GPT didn't pass one

@@ -129,6 +129,55 @@ abstract class BaseAgent
     }
 
     // ============================================================
+    // LAST PRODUCT CONTEXT (for follow-up queries)
+    // ============================================================
+
+    /**
+     * Save the last product context (query, source) so follow-up queries
+     * ("дорожче", "дешевше") can preserve age/category context.
+     */
+    protected function saveLastProductContext(?string $sessionId, string $originalMessage, string $source): void
+    {
+        if (! $sessionId) {
+            return;
+        }
+
+        Cache::put("last_product_ctx_{$sessionId}", [
+            'original_message' => $originalMessage,
+            'source' => $source,
+        ], now()->addHours(6));
+    }
+
+    /**
+     * Load the last product context for follow-up handling.
+     */
+    protected function loadLastProductContext(?string $sessionId): ?array
+    {
+        if (! $sessionId) {
+            return null;
+        }
+
+        return Cache::get("last_product_ctx_{$sessionId}");
+    }
+
+    /**
+     * Check if the message is a follow-up query (дорожче, дешевше, ще, інші, etc.)
+     */
+    protected function isFollowUpMessage(string $message): bool
+    {
+        $lower = mb_strtolower($message);
+        $patterns = ['дешевше', 'дешевший', 'дорожче', 'дорожчий', 'ще ', 'інші', 'інш', 'аналог', 'подібн', 'такий же', 'такі ж', 'більше варіант', 'ще варіант'];
+
+        foreach ($patterns as $pattern) {
+            if (mb_stripos($lower, $pattern) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // ============================================================
     // SERVICE CATEGORY HANDLER
     // ============================================================
 
@@ -449,9 +498,15 @@ abstract class BaseAgent
     /**
      * Handle queries mentioning specific age — bypass GPT and search directly.
      * GPT often asks clarifying questions instead of searching for "подарунок на 1 рік".
+     * Only active for tenants with age-based categories (children's stores).
      */
     protected function handleAgeQuery(string $lower, string $originalMessage): ?array
     {
+        // Only apply age handling for stores with age categories
+        if (! $this->hasAgeCategories()) {
+            return null;
+        }
+
         // Detect age in years: "1 рік", "3 роки", "7 років", "на 2 роки"
         if (! preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
             // Also check months: "6 місяців"
@@ -1160,6 +1215,7 @@ abstract class BaseAgent
             'phone' => $this->getShopPhone(),
             'faq' => $this->loadFaqInfo(),
             'tone_section' => $this->toneService->getFullPromptSection(),
+            'has_age_categories' => $this->hasAgeCategories(),
         ];
 
         $context = [
@@ -1834,6 +1890,30 @@ PROMPT;
     }
 
     /**
+     * Check if tenant has products with age-based categories (children's store).
+     * Cached per tenant for 1 hour.
+     */
+    protected function hasAgeCategories(): bool
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        if (! $tenantId) {
+            return false;
+        }
+
+        return Cache::remember("tenant_{$tenantId}_has_age_cats", 3600, function () use ($tenantId) {
+            return Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('tenant_id', $tenantId)
+                ->where(function ($q) {
+                    $q->where('category_path', 'LIKE', '%МАЛЮКАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ТОДЛЕРАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ДОШКІЛЬНЯТАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ШКОЛЯРАМ%');
+                })
+                ->exists();
+        });
+    }
+
+    /**
      * Get shop phone from settings.
      */
     protected function getShopPhone(): string
@@ -2134,7 +2214,8 @@ PROMPT;
 
         // If GPT didn't pass category, detect age from original user message
         // GPT sometimes strips age info from query, so we check the original message too
-        if (empty($filters['category']) && ! empty($this->currentMessage)) {
+        // Only for stores with age categories (children's stores)
+        if (empty($filters['category']) && ! empty($this->currentMessage) && $this->hasAgeCategories()) {
             $detectedCategory = $this->searchTool->detectAgeCategoryFromQuery($this->currentMessage);
             if ($detectedCategory) {
                 $filters['category'] = $detectedCategory;
@@ -2159,6 +2240,17 @@ PROMPT;
         // (GPT often strips age info from the query parameter)
         if (! empty($this->currentMessage)) {
             $filters['_user_message'] = $this->currentMessage;
+        }
+
+        // For follow-up queries ("дорожче", "дешевше"), override _user_message with
+        // the saved context message that contains the original age/category info.
+        // This ensures MeiliProductSearchTool re-applies age filters correctly.
+        if (! empty($args['_context_message'])) {
+            $filters['_user_message'] = $args['_context_message'];
+            Log::info('BaseAgent: using saved context message for age detection', [
+                'context_message' => $args['_context_message'],
+                'current_message' => $this->currentMessage,
+            ]);
         }
 
         // Request more to have room after filtering and deduplication

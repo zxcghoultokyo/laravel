@@ -156,7 +156,6 @@ class MeiliProductSearchTool
             }
 
             // Category filter: filter by category_path (e.g., age groups for toy stores)
-            // Uses post-filtering since category_path values may have trailing spaces or slight variations
             $categoryFilter = $filters['category'] ?? null;
 
             // Normalize GPT-passed category to keyword only (strip numbers, parentheses, ranges)
@@ -1251,38 +1250,29 @@ class MeiliProductSearchTool
         $queryLower = mb_strtolower(trim($query));
         $queryWords = preg_split('/\s+/', $queryLower);
 
-        // Only filter for single-word product type queries
-        // Multi-word queries (like "чорна плитоноска") need different handling
+        // Only filter for 1-2 word queries (product type searches)
         if (count($queryWords) > 2) {
             return $hits;
         }
 
-        // Define product-type specific terms that should be in title/category
-        // If query contains these terms, the product title/category should also contain them
-        $productTypeTerms = [
-            'термобілизна' => ['термобілизна', 'термобілизни', 'термо', 'level 1', 'level 2', 'ecwcs'],
-            'навушники' => ['навушники', 'навушників', 'гарнітура', 'peltor', 'комтак', 'comtac', 'earmor', 'sordin'],
-            'рукавички' => ['рукавички', 'рукавиць', 'перчатки', 'gloves'],
-            'шкарпетки' => ['шкарпетки', 'шкарпеток', 'socks'],
-            'шолом' => ['шолом', 'каска', 'helmet', 'fast', 'mich'],
-            'плитоноска' => ['плитоноска', 'плитоносці', 'plate carrier', 'бронежилет', 'жилет'],
-            'турнікет' => ['турнікет', 'джгут', 'cat', 'sof', 'tq'],
-            'рюкзак' => ['рюкзак', 'рюкзака', 'backpack', 'сумка'],
-        ];
-
-        // Check if query contains any product type term
-        $relevantTerms = null;
-        foreach ($productTypeTerms as $term => $variants) {
-            foreach ($variants as $variant) {
-                if (str_contains($queryLower, $variant)) {
-                    $relevantTerms = $variants;
-                    break 2;
-                }
+        // Universal approach: extract word stems (first 4 chars) from query
+        // and check if they appear in product title or category_path.
+        // Works for ANY niche without hardcoded mappings.
+        // "спальник" → "спал" → matches "Спальна система" ✓, not "Стропи" ✗
+        // "куртки" → "курт" → matches "куртка soft shell" ✓, not "Карабін" ✗
+        // "машинка" → "маши" → matches "Дерев'яна машинка" ✓ (BavkaToys)
+        $stems = [];
+        foreach ($queryWords as $word) {
+            $wordLen = mb_strlen($word);
+            if ($wordLen < 4) {
+                continue;
             }
+            // Use first 4 chars as stem — covers Ukrainian morphology
+            $stems[] = mb_substr($word, 0, 4);
         }
 
-        // If query doesn't match any product type, don't filter
-        if (! $relevantTerms) {
+        // No meaningful stems → skip filtering (e.g. "так", "ще")
+        if (empty($stems)) {
             return $hits;
         }
 
@@ -1292,32 +1282,28 @@ class MeiliProductSearchTool
         foreach ($hits as $hit) {
             $title = mb_strtolower($hit['title'] ?? '');
             $category = mb_strtolower($hit['category_path'] ?? '');
-            $aiKeywords = mb_strtolower($hit['ai_keywords'] ?? '');
-            $aiSlang = mb_strtolower($hit['ai_slang'] ?? '');
+            $searchField = $title.' '.$category;
 
-            // Check if any relevant term appears in title, category, or AI fields
-            $foundInRelevantField = false;
-            foreach ($relevantTerms as $term) {
-                if (str_contains($title, $term) ||
-                    str_contains($category, $term) ||
-                    str_contains($aiKeywords, $term) ||
-                    str_contains($aiSlang, $term)) {
-                    $foundInRelevantField = true;
+            $foundMatch = false;
+            foreach ($stems as $stem) {
+                if (mb_strpos($searchField, $stem) !== false) {
+                    $foundMatch = true;
                     break;
                 }
             }
 
-            if ($foundInRelevantField) {
+            if ($foundMatch) {
                 $filtered[] = $hit;
             } else {
                 $removed[] = $hit['title'] ?? 'unknown';
             }
         }
 
-        // If we filtered out everything, return original results
+        // Safety net: if filter removes everything, return originals
         if (empty($filtered)) {
-            Log::info('MeiliProductSearchTool: filterByTitleRelevance would remove all results, keeping originals', [
+            Log::info('MeiliProductSearchTool: filterByTitleRelevance would remove all, keeping originals', [
                 'query' => $query,
+                'stems' => $stems,
                 'hits_count' => count($hits),
             ]);
 
@@ -1325,10 +1311,11 @@ class MeiliProductSearchTool
         }
 
         if (! empty($removed)) {
-            Log::info('MeiliProductSearchTool: filterByTitleRelevance removed products', [
+            Log::info('MeiliProductSearchTool: filterByTitleRelevance removed irrelevant products', [
                 'query' => $query,
+                'stems' => $stems,
                 'removed_count' => count($removed),
-                'removed_titles' => array_slice($removed, 0, 3),
+                'removed_titles' => array_slice($removed, 0, 5),
                 'kept_count' => count($filtered),
             ]);
         }

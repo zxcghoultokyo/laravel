@@ -90,10 +90,15 @@ class AgeCategoryDetectionTest extends TestCase
     public function test_prompt_contains_age_filtering_rules(): void
     {
         $service = app(\App\Services\Ai\PromptModulesService::class);
-        $searchModule = $service->getSearchModule();
 
-        $this->assertStringContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $searchModule);
-        $this->assertStringContainsString('category', $searchModule);
+        // Age section only appears when hasAgeCategories = true
+        $withAge = $service->getSearchModule(true);
+        $this->assertStringContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $withAge);
+        $this->assertStringContainsString('category', $withAge);
+
+        // Without age categories, age section is absent
+        $withoutAge = $service->getSearchModule(false);
+        $this->assertStringNotContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $withoutAge);
     }
 
     public function test_normalize_category_strips_gpt_format(): void

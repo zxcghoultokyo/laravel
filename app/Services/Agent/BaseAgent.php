@@ -2027,6 +2027,10 @@ PROMPT;
      */
     protected function getTools(): array
     {
+        $categoryDesc = $this->hasAgeCategories()
+            ? 'Вікова категорія: малюкам, тодлерам, дошкільнятам, школярам. Передавай тільки назву без цифр.'
+            : 'Категорія товару для фільтрації';
+
         return [
             [
                 'type' => 'function',
@@ -2037,7 +2041,7 @@ PROMPT;
                         'type' => 'object',
                         'properties' => [
                             'query' => ['type' => 'string', 'description' => 'Пошуковий запит'],
-                            'category' => ['type' => 'string', 'description' => 'Вікова категорія: малюкам, тодлерам, дошкільнятам, школярам. Передавай тільки назву без цифр.'],
+                            'category' => ['type' => 'string', 'description' => $categoryDesc],
                             'product_type' => ['type' => 'string', 'description' => 'Тип товару для фільтрації'],
                             'brand' => ['type' => 'string', 'description' => 'Бренд товару'],
                             'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум)'],

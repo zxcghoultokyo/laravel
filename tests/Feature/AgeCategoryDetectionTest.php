@@ -96,9 +96,10 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertStringContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $withAge);
         $this->assertStringContainsString('category', $withAge);
 
-        // Without age categories, age section is absent
+        // Without age categories, age section is absent but anti-age instruction present
         $withoutAge = $service->getSearchModule(false);
         $this->assertStringNotContainsString('ВІКОВА ФІЛЬТРАЦІЯ', $withoutAge);
+        $this->assertStringContainsString('НЕ питай про вік дитини', $withoutAge);
     }
 
     public function test_normalize_category_strips_gpt_format(): void

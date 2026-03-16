@@ -126,226 +126,115 @@ class TenantPromptGenerator
 
     /**
      * Build tenant-specific system prompt from analysis data.
+     *
+     * Uses the battle-tested PromptModulesService as foundation,
+     * and prepends a store profile section with tenant-specific context.
+     * This way all the refined rules from PromptModulesService are preserved.
      */
     public function buildPrompt(array $analysis): string
     {
         $storeName = $analysis['store_name'];
+        $hasAgeCategories = $analysis['has_age_categories'];
+        $modules = app(PromptModulesService::class);
+
         $sections = [];
 
-        // 1. Identity
-        $sections[] = "Ти — AI-консультант магазину \"{$storeName}\".";
+        // 1. Store profile (tenant-specific context GPT needs)
+        $sections[] = $this->buildStoreProfile($analysis);
 
-        // 2. Store description based on categories
-        $storeDesc = $this->describeStore($analysis);
-        if ($storeDesc) {
-            $sections[] = $storeDesc;
-        }
+        // 2. Core rules from PromptModulesService (battle-tested)
+        $sections[] = $modules->getCoreModule('{{shop_phone}}', $storeName);
 
-        // 3. Core behavior rules
-        $sections[] = $this->getCoreRules();
+        // 3. Search module from PromptModulesService (with age awareness)
+        $sections[] = $modules->getSearchModule($hasAgeCategories);
 
-        // 4. Search instructions with store-specific examples
-        $sections[] = $this->getSearchInstructions($analysis);
+        // 4. Follow-up module (always useful as base prompt)
+        $sections[] = $modules->getFollowUpModule();
 
-        // 5. Age filtering (only for children's stores)
-        if ($analysis['has_age_categories']) {
-            $sections[] = $this->getAgeFilteringSection();
-        }
-
-        // 6. Seasonality
-        $sections[] = $this->getSeasonalitySection();
-
-        // 7. Follow-up instructions
-        $sections[] = $this->getFollowUpSection();
-
-        return implode("\n\n", array_filter($sections));
+        return implode("\n", array_filter($sections));
     }
 
     /**
-     * Generate store description from product data.
+     * Build store profile section from product data.
+     * This is the ONLY tenant-specific part; rest comes from PromptModulesService.
      */
-    private function describeStore(array $analysis): string
+    private function buildStoreProfile(array $analysis): string
     {
         $topCats = array_keys($analysis['top_level_categories']);
         $topBrands = array_keys($analysis['brands']);
 
         $catList = implode(', ', array_slice($topCats, 0, 5));
 
-        $desc = "📋 ПРОФІЛЬ МАГАЗИНУ:\n";
-        $desc .= "- Категорії: {$catList}\n";
+        $profile = "📋 ПРОФІЛЬ МАГАЗИНУ:\n";
+        $profile .= "- Категорії: {$catList}\n";
 
         if (! empty($topBrands)) {
             $brandList = implode(', ', array_slice($topBrands, 0, 7));
-            $desc .= "- Бренди: {$brandList}\n";
+            $profile .= "- Бренди: {$brandList}\n";
         }
 
         if ($analysis['price_min'] > 0 && $analysis['price_max'] > 0) {
-            $desc .= "- Ціни: від {$analysis['price_min']} до {$analysis['price_max']} грн (середня: {$analysis['price_avg']} грн)\n";
+            $profile .= "- Ціни: від {$analysis['price_min']} до {$analysis['price_max']} грн (середня: {$analysis['price_avg']} грн)\n";
         }
 
-        $desc .= "- Товарів в наявності: {$analysis['in_stock_count']}";
+        $profile .= "- Товарів в наявності: {$analysis['in_stock_count']}\n";
 
-        return $desc;
-    }
-
-    /**
-     * Core behavior rules (universal for all stores).
-     */
-    private function getCoreRules(): string
-    {
-        return <<<'RULES'
-🎯 ГОЛОВНІ ПРАВИЛА:
-1. ЗАВЖДИ шукай через search_products() перед відповіддю на запит про товари
-2. НІКОЛИ не вигадуй — відповідай ТІЛЬКИ з результатів пошуку
-3. Показуй МАКСИМУМ 3 товари за раз
-4. Мова відповіді = мова запиту (англ→англ, укр→укр)
-
-📝 ФОРМАТ intro:
-- Пиши КОНТЕКСТ запиту: "Ось куртки:" / "Ось дешевші варіанти:"
-- ❌ ЗАБОРОНЕНО: "Ось що я знайшов" / "Here's what I found"
-
-⛔ ПОСИЛАННЯ — ЗАБОРОНЕНО!
-- НЕ генеруй URL/посилання на товари в тексті!
-- Посилання додаються АВТОМАТИЧНО через картки
-- "Натисніть на картку товару" — якщо просять подробиці
-
-⛔ НЕ УТОЧНЮЙ без потреби!
-- Якщо запит зрозумілий — ОДРАЗУ шукай через search_products()
-- НЕ питай "який саме розмір/колір/бюджет" якщо клієнт не просив
-- НЕ питай про вік, стать, або інші деталі без явного запиту
-RULES;
-    }
-
-    /**
-     * Search instructions with store-specific examples.
-     */
-    private function getSearchInstructions(array $analysis): string
-    {
-        $examples = $this->generateSearchExamples($analysis);
-
-        $section = <<<'SEARCH'
-🔍 ПОШУК ТОВАРІВ:
-- Імпліцитні запити → search_products() з синонімами через OR
-- Бренд/модель → шукай ЗА БРЕНДОМ
-- Автовиправлення помилок
-SEARCH;
-
-        $section .= "\n\n🔄 ЯКЩО ПОШУК НЕ ДАВ РЕЗУЛЬТАТІВ:\n";
-        foreach ($examples as $ex) {
-            $section .= "- {$ex}\n";
-        }
-        $section .= '- НЕ КАЖИ "такого немає" після ОДНОГО невдалого пошуку! Спробуй 2-3 варіанти!';
-
-        return $section;
-    }
-
-    /**
-     * Generate search retry examples based on actual store categories.
-     */
-    private function generateSearchExamples(array $analysis): array
-    {
-        $topCats = array_keys($analysis['top_level_categories']);
-        $sampleTitles = $analysis['sample_titles'] ?? [];
-        $examples = [];
-
-        // Pick real category names for examples
+        // Store-specific search hints from real category names
         if (count($topCats) >= 2) {
+            $profile .= "\n🔎 ПРИКЛАДИ ПОШУКУ ДЛЯ ЦЬОГО МАГАЗИНУ:\n";
             $cat1 = mb_strtolower($topCats[0]);
-            $cat2 = mb_strtolower($topCats[1] ?? $topCats[0]);
-            $examples[] = "Синоніми/ширший запит: \"{$cat1}\" → search_products(\"{$cat1} OR ...\")";
+            $cat2 = mb_strtolower($topCats[1]);
+            $profile .= "- search_products(\"{$cat1}\") — товари з \"{$topCats[0]}\"\n";
+            $profile .= "- search_products(\"{$cat2}\") — товари з \"{$topCats[1]}\"\n";
         }
 
-        // Extract a real product keyword from sample titles
-        if (! empty($sampleTitles)) {
-            $title = $sampleTitles[0];
-            $words = explode(' ', $title);
-            $keyword = $words[0] ?? 'товар';
-            $examples[] = "Спробуй ключове слово з назви: search_products(\"{$keyword}\")";
-        }
-
-        $examples[] = 'Розбий складний запит на простіші слова';
-
-        return $examples;
+        return $profile;
     }
 
     /**
-     * Age filtering section for children's stores.
-     */
-    private function getAgeFilteringSection(): string
-    {
-        return <<<'AGE'
-👶 ВІКОВА ФІЛЬТРАЦІЯ (КРИТИЧНО!):
-Якщо клієнт вказує ВІК дитини — ЗАВЖДИ використай параметр category у search_products!
-Спочатку виклич get_categories() щоб побачити доступні категорії.
-Вікові категорії: "МАЛЮКАМ 0 – 1", "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7", "ШКОЛЯРАМ 7+"
-- "для дитини 3 роки" → category="ДОШКІЛЬНЯТАМ 3 – 7"
-- "для малюка" / "для немовляти" → category="МАЛЮКАМ 0 – 1"
-- "для тодлера" / "1-2 роки" → category="ТОДЛЕРАМ 1 – 3"
-БЕЗ фільтра category — пошук поверне товари БУДЬ-ЯКОГО віку, що НЕПРАВИЛЬНО!
-AGE;
-    }
-
-    /**
-     * Seasonality section with current month awareness.
-     */
-    private function getSeasonalitySection(): string
-    {
-        $month = (int) date('n');
-
-        if ($month >= 1 && $month <= 2 || $month >= 11) {
-            $note = '🎄 Зараз зимовий сезон — різдвяні/новорічні товари актуальні.';
-        } elseif ($month >= 3 && $month <= 5) {
-            $note = '🌱 Зараз весна — зимові товари НЕ актуальні без запиту.';
-        } elseif ($month >= 6 && $month <= 8) {
-            $note = '☀️ Зараз літо — зимові товари НЕ актуальні без запиту.';
-        } else {
-            $note = '🍂 Зараз осінь.';
-        }
-
-        return "📅 СЕЗОННІСТЬ:\n{$note}";
-    }
-
-    /**
-     * Follow-up conversation instructions.
-     */
-    private function getFollowUpSection(): string
-    {
-        return <<<'FOLLOWUP'
-🔄 FOLLOW-UP:
-- "покажи ще" / "ще" → search_products з exclude_shown=true
-- "дешевше" → додай price_max / sort_by=price_asc
-- "дорожче" → додай price_min / sort_by=price_desc
-- "іншого кольору" → search_products з color=...
-FOLLOWUP;
-    }
-
-    /**
-     * Save generated prompt as is_default preset for tenant.
+     * Save generated prompt as preset for tenant.
+     *
+     * If tenant already has a custom is_default=true preset (manually crafted),
+     * save the auto-generated one as inactive backup — do NOT overwrite.
      */
     private function saveAsPreset(int $tenantId, Tenant $tenant, string $prompt): PromptPreset
     {
-        // Deactivate existing default preset
-        PromptPreset::where('tenant_id', $tenantId)
+        $existingDefault = PromptPreset::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->where('tenant_id', $tenantId)
             ->where('is_default', true)
-            ->update(['is_default' => false]);
+            ->where('is_active', true)
+            ->where('slug', '!=', "auto-generated-{$tenantId}")
+            ->first();
 
-        // Create or update the generated preset
-        $preset = PromptPreset::updateOrCreate(
-            [
+        $hasCustomDefault = $existingDefault !== null;
+
+        // Create or update the auto-generated preset
+        $preset = PromptPreset::withoutGlobalScope(\App\Scopes\TenantScope::class)
+            ->updateOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'slug' => "auto-generated-{$tenantId}",
+                ],
+                [
+                    'name' => "Автопромпт: {$tenant->name}",
+                    'description' => 'Автоматично згенерований промпт на основі каталогу магазину',
+                    'system_prompt' => $prompt,
+                    'is_default' => ! $hasCustomDefault,
+                    'is_active' => ! $hasCustomDefault,
+                    'priority' => 0,
+                    'variables' => [],
+                    'categories' => [],
+                ]
+            );
+
+        if ($hasCustomDefault) {
+            Log::info('TenantPromptGenerator: custom default exists, saved as inactive backup', [
                 'tenant_id' => $tenantId,
-                'slug' => "auto-generated-{$tenantId}",
-            ],
-            [
-                'name' => "Автопромпт: {$tenant->name}",
-                'description' => 'Автоматично згенерований промпт на основі каталогу магазину',
-                'system_prompt' => $prompt,
-                'is_default' => true,
-                'is_active' => true,
-                'priority' => 0,
-                'variables' => [],
-                'categories' => [],
-            ]
-        );
+                'existing_default_id' => $existingDefault->id,
+                'existing_default_name' => $existingDefault->name,
+                'backup_preset_id' => $preset->id,
+            ]);
+        }
 
         // Clear prompt preset cache
         app(PromptPresetService::class)->clearCache($tenantId);

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Track onboarding progress for tenants
- * 
+ *
  * @property int $id
  * @property int $tenant_id
  * @property string $status pending|in_progress|completed|failed
@@ -99,6 +99,15 @@ class TenantOnboardingProgress extends Model
                 'settings' => 'Налаштування пошуку',
             ],
         ],
+        'prompt_generation' => [
+            'name' => 'Генерація промпту',
+            'weight' => 5,
+            'substeps' => [
+                'analyzing' => 'Аналіз каталогу',
+                'generating' => 'Генерація промпту',
+                'saving' => 'Збереження пресету',
+            ],
+        ],
     ];
 
     public function tenant(): BelongsTo
@@ -137,6 +146,7 @@ class TenantOnboardingProgress extends Model
                 'stats' => [], // Step-specific stats like products_count, etc.
             ];
         }
+
         return $steps;
     }
 
@@ -154,6 +164,7 @@ class TenantOnboardingProgress extends Model
             'current_step_detail' => null,
             'error_message' => null,
         ]);
+
         return $this;
     }
 
@@ -168,23 +179,23 @@ class TenantOnboardingProgress extends Model
         array $stats = []
     ): self {
         $steps = $this->steps ?? self::initializeSteps();
-        
-        if (!isset($steps[$step])) {
+
+        if (! isset($steps[$step])) {
             return $this;
         }
 
         $steps[$step]['status'] = $status;
         $steps[$step]['percent'] = min(100, max(0, $percent));
         $steps[$step]['detail'] = $detail;
-        
-        if (!empty($stats)) {
+
+        if (! empty($stats)) {
             $steps[$step]['stats'] = array_merge($steps[$step]['stats'] ?? [], $stats);
         }
 
-        if ($status === 'in_progress' && !$steps[$step]['started_at']) {
+        if ($status === 'in_progress' && ! $steps[$step]['started_at']) {
             $steps[$step]['started_at'] = now()->toIso8601String();
         }
-        
+
         if ($status === 'completed') {
             $steps[$step]['completed_at'] = now()->toIso8601String();
             $steps[$step]['percent'] = 100;
@@ -196,7 +207,7 @@ class TenantOnboardingProgress extends Model
         // Get current step name for display
         $currentStepName = self::STEPS[$step]['name'] ?? $step;
         $currentDetail = $detail;
-        
+
         if ($status === 'in_progress' && isset(self::STEPS[$step]['substeps'])) {
             // Try to find substep detail
             foreach (self::STEPS[$step]['substeps'] as $substepKey => $substepName) {
@@ -228,7 +239,7 @@ class TenantOnboardingProgress extends Model
         foreach (self::STEPS as $key => $stepDef) {
             $weight = $stepDef['weight'];
             $totalWeight += $weight;
-            
+
             if (isset($steps[$key])) {
                 $stepPercent = $steps[$key]['percent'] ?? 0;
                 $completedWeight += ($weight * $stepPercent / 100);
@@ -250,6 +261,7 @@ class TenantOnboardingProgress extends Model
             'current_step' => 'Завершено',
             'current_step_detail' => 'Онбординг успішно завершено!',
         ]);
+
         return $this;
     }
 
@@ -261,8 +273,9 @@ class TenantOnboardingProgress extends Model
         $this->update([
             'status' => 'failed',
             'error_message' => $error,
-            'current_step_detail' => 'Помилка: ' . $error,
+            'current_step_detail' => 'Помилка: '.$error,
         ]);
+
         return $this;
     }
 
@@ -271,7 +284,7 @@ class TenantOnboardingProgress extends Model
      */
     public function getStatusLabelAttribute(): string
     {
-        return match($this->status) {
+        return match ($this->status) {
             'pending' => 'Очікує запуску',
             'in_progress' => 'В процесі',
             'completed' => 'Завершено',
@@ -293,6 +306,7 @@ class TenantOnboardingProgress extends Model
             'current_step_detail' => $this->current_step_detail,
             'steps' => collect($this->steps ?? [])->map(function ($step, $key) {
                 $stepDef = self::STEPS[$key] ?? [];
+
                 return [
                     'key' => $key,
                     'name' => $stepDef['name'] ?? $key,

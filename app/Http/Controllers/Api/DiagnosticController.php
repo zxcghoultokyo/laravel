@@ -7560,4 +7560,38 @@ class DiagnosticController extends Controller
             ] : null,
         ]);
     }
+
+    /**
+     * POST /api/diagnostic/generate-prompt/{tenantId}
+     * Generate default prompt preset for a tenant.
+     * ?dry_run=1 to preview without saving.
+     */
+    public function generatePrompt(Request $request, int $tenantId): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $dryRun = (bool) $request->query('dry_run', false);
+            $generator = app(\App\Services\Ai\TenantPromptGenerator::class);
+            $result = $generator->generate($tenantId, $dryRun);
+
+            return response()->json([
+                'success' => true,
+                'dry_run' => $dryRun,
+                'tenant_id' => $tenantId,
+                'preset_id' => $result['preset_id'],
+                'prompt_length' => $result['prompt_length'],
+                'analysis' => $result['analysis'],
+                'prompt_preview' => mb_substr($result['prompt'], 0, 1000),
+                'prompt_full' => $result['prompt'],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => mb_substr($e->getTraceAsString(), 0, 500),
+            ], 500);
+        }
+    }
 }

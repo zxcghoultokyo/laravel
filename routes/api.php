@@ -203,6 +203,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::post('/run-command', [\App\Http\Controllers\Api\DiagnosticController::class, 'runCommand']);
     Route::get('/synonyms-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'synonymsStats']);
     Route::get('/prompt-presets', [\App\Http\Controllers\Api\DiagnosticController::class, 'promptPresets']);
+    Route::post('/generate-prompt/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'generatePrompt']);
 
     // OpenAI health check
     Route::get('/openai-check', [\App\Http\Controllers\Api\DiagnosticController::class, 'openaiCheck']);

@@ -23,8 +23,8 @@
 ```
 app/Models/Tenant.php                    # Core tenant model
 app/Scopes/TenantScope.php               # Global query scope
-app/Http/Middleware/SetTenantContext.php # Sets tenant from request
-app/Models/Concerns/BelongsToTenant.php  # Trait for scoped models
+app/Http/Middleware/ResolveTenantMiddleware.php # Sets tenant from request
+app/Models/Traits/BelongsToTenant.php    # Trait for scoped models
 ```
 
 **Підписки:**
@@ -175,7 +175,7 @@ app/Models/Concerns/BelongsToTenant.php  # Trait for scoped models
 ## Аудит поточного стану і слабкі місця
 - Часткове покриття `product_ai_index` → реранжування має fallback.
 - `category_aliases` — потрібне заповнення і регулярна перебудова з `CategoryIndexService`.
-- Відсутній scheduler: задачі не зареєстровані у [app/Console/Kernel.php](app/Console/Kernel.php).
+- Scheduler налаштовано в [routes/console.php](routes/console.php) (Laravel 12, не Kernel.php).
 - Секрети у середовищі — обов’язково зберігати поза репозиторієм, регулярно ротувати.
 
 ---
@@ -190,7 +190,7 @@ app/Models/Concerns/BelongsToTenant.php  # Trait for scoped models
 	- Пояснення у відповіді: чому показані саме ці товари, скільки в наявності, що відфільтровано.
 	- Більше прозорості для “0 результатів” з мікро‑підказками.
 - Інфраструктура:
-	- Додати `schedule:work` процес у Cloud, healthchecks для воркерів.
+	- Healthchecks для воркерів.
 	- Unit/Feature тести для stateful‑пошуку, guard‑фільтрів, fallback‑шляхів.
 
 ---

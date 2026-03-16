@@ -1,23 +1,28 @@
-# Deploy Checklist - Agent Orchestrator
+# Deploy Checklist — Multi-Tenant SaaS
 
 ## Pre-deploy перевірка
 
 ### 1. Код готовий ✅
-- [x] AgentOrchestrator + 4 tools
-- [x] ChatService інтеграція
-- [x] Admin debug panel
+- [x] FunctionCallingAgent + StreamingFunctionCallingAgent
+- [x] Per-tenant prompt presets (PromptPresetService + TenantPromptGenerator)
+- [x] Multi-tenant architecture (TenantScope, ResolveTenantMiddleware)
 - [x] Eloquent fallback для Meili
+- [x] short_query_handler (1-word bypass GPT)
+- [x] Age query handling (bavkatoys)
 - [x] Filter extraction (budget, color)
+- [x] OnboardTenantJob (7-step)
 
 ### 2. Env змінні (на Laravel Cloud)
-Перевір що є (повний список):
 ```bash
 # Обов'язкові
 APP_KEY=base64:...
 
 # OpenAI
 OPENAI_API_KEY=sk-proj-...
-OPENAI_MODEL=gpt-5.1
+OPENAI_MODEL=gpt-4o
+OPENAI_MODEL_CHAT=gpt-4o
+OPENAI_MODEL_ANALYZE=gpt-4o-mini
+OPENAI_MODEL_RERANK=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 
 # Meilisearch (ВАЖЛИВО: якщо MEILI_ENABLED=0, то Eloquent fallback)
@@ -26,7 +31,8 @@ MEILI_HOST=https://meilisearch-aimbot.fly.dev
 MEILI_MASTER_KEY=...
 MEILI_INDEX_PRODUCTS=products
 
-# Horoshop (тактична платформа)
+# Horoshop (per-tenant credentials зберігаються в widget_settings)
+# Legacy single-tenant:
 HOROSHOP_DOMAIN=https://contractor.kiev.ua
 HOROSHOP_API_LOGIN=owner
 HOROSHOP_API_PASSWORD=...
@@ -39,8 +45,12 @@ QUEUE_CONNECTION=database
 # Admin
 ADMIN_JOBS_TOKEN=...
 
-# Логування
+# Logging
 LOG_CHANNEL=stderr
+
+# Billing
+BILLING_DRIVER=wayforpay
+BILLING_CURRENCY=UAH
 ```
 
 ### 3. Команди для запуску на production
@@ -48,85 +58,67 @@ LOG_CHANNEL=stderr
 ```bash
 # 1. Deploy через git push
 git add -A
-git commit -m "feat: Agent Orchestrator з AI debug panel в адмінці"
-git push origin main
+git commit -m "feat: ..."
+git push origin main    # Laravel Cloud auto-deploys
 
-# Laravel Cloud автоматично задеплоїть
-
-# 2. Після деплою - через Laravel Cloud console або SSH:
-
-# Міграції (якщо були зміни БД)
+# 2. Після деплою (через Cloud console):
 php artisan migrate --force
-
-# Sync товарів з Horoshop (якщо потрібно)
-php artisan sync:horoshop-products
-
-# Setup Meilisearch (один раз)
-php artisan meili:setup-products
-
-# Індексація products в Meilisearch
+php artisan meili:setup-products    # one-time
 php artisan meili:reindex-products
-
-# Очистити кеш
 php artisan optimize
-
-# Restart queue workers
 php artisan queue:restart
 ```
 
 ### 4. Перевірка після деплою
 
-1. **Перевірити env** (через tinker):
+1. **Тест чату (T2):**
 ```bash
-php artisan tinker
-echo config('services.openai.key') ? 'OpenAI OK' : 'NO KEY';
-echo config('meilisearch.enabled') ? 'Meili OK' : 'DISABLED';
-exit
+curl -s "https://aintento.laravel.cloud/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"шоломи","session_id":"deploy-test","token":"zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+import sys,json;d=json.load(sys.stdin)
+print('source:', d.get('meta',{}).get('source','GPT'))
+print('products:', len(d.get('products',[])))
+"
 ```
 
-2. **Тест агента**:
+2. **Diagnostic DB stats:**
 ```bash
-php test-agent.php
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
 ```
 
-3. **Через widget** на contractor.kiev.ua:
-   - Відправити: "плити"
-   - Відправити: "яку каску взяти?"
-   - Перевірити в адмінці debug info
-
-4. **Перевірити адмінку**:
-   - Відкрити `/admin/chats`
-   - Вибрати останню сесію
-   - Перевірити що показується:
-     - ✅ AI Agent Flow блок
-     - ✅ Intent, ambiguous, filters
-     - ✅ Search Debug з timing
-     - ✅ Chosen IDs
+3. **Widget на сайті:**
+   - Перевірити SSE streaming працює
+   - Перевірити 1-слівні запити (bypass GPT)
+   - Перевірити multi-word запити (GPT)
 
 ### 5. Моніторинг
 
-Після деплою слідкувати за:
 - Швидкість відповідей (< 3 сек)
-- OpenAI витрати (CloudWatch/logs)
-- Помилки в `storage/logs/laravel.log`
-- Widget auto-open bug (перевірити чи ще є)
+- OpenAI витрати
+- Queue health (failed jobs)
+- `php artisan pail` — real-time logs
 
 ### 6. Rollback план
 
-Якщо щось не так:
 ```bash
-# Повернутись на legacy логіку
-# ChatService має fallback - просто закоментувати виклик AgentOrchestrator
+# Git revert
+git revert HEAD
+git push origin main
+
+# Або повернутись на попередній commit
+git reset --hard <commit>
+git push origin main --force  # ⚠️ тільки якщо критично
 ```
 
-## Deploy команда одним рядком
+## 🚀 Новий тенант
 
 ```bash
-git add -A && git commit -m "feat: Agent Orchestrator з AI debug panel" && git push origin main
+# OnboardTenantJob автоматично запускається при створенні тенанта
+# Або ручний запуск:
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/onboard-tenant?key=diagnostic_secret_key_2025&tenant_id=X"
 ```
 
-Після успішного деплою на Laravel Cloud:
-```bash
-# Через Cloud console
-php artisan migrate --force && php artisan app:index-products-to-meili && php artisan queue:restart
-```
+---
+
+*Last updated: March 2026*

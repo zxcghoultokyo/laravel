@@ -32,8 +32,9 @@ Livewire компонент `<livewire:onboarding-progress />` показує:
 | `horoshop_sync` | Синхронізація товарів | 25% | API Horoshop → БД |
 | `categories_rebuild` | Побудова категорій | 10% | Витягування з товарів |
 | `brands_sync` | Синхронізація брендів | 5% | Витягування з товарів |
-| `ai_enrichment` | AI збагачення | 40% | Ключові слова, сленг, категоризація |
-| `meili_indexing` | Індексація пошуку | 20% | Meilisearch |
+| `ai_enrichment` | AI збагачення | 30% | Ключові слова, сленг, категоризація |
+| `synonyms_generation` | Генерація синонімів | 10% | Синоніми для Meili |
+| `meili_indexing` | Індексація пошуку | 15% | Meilisearch |
 | `prompt_generation` | Генерація промпта | 5% | Персональний системний промпт |
 
 ## 📋 Повний Чекліст Онбордингу
@@ -126,16 +127,19 @@ curl -X POST "https://aintento.laravel.cloud/api/diagnostic/rebuild-categories?k
 
 ## 📅 Scheduled Tasks (Автоматичні)
 
+Всі задачі налаштовані в `routes/console.php`:
+
 | Час | Task | Опис |
 |-----|------|------|
 | 03:00 | `sync-all-tenants` | Horoshop sync для всіх активних тенантів |
-| 03:30 | `brands:sync` | Sync брендів |
-| 04:00 | `ai-enrichment-all-tenants` | AI enrichment |
+| 03:30 | `brands:sync --async` | Sync брендів |
+| 04:00 | `ai-enrichment-all-tenants` | AI enrichment для всіх тенантів |
+| Кожні 30 хв | `ai-enrichment-health-check` | Auto-restart якщо coverage < 95% |
 | 05:00 | `meili-reindex-all` | Meilisearch reindex |
 | 05:30 | `colors:detect` | Детекція кольорів |
 | 06:00 | `products:update-orders-count` | Оновлення статистики |
-| **Неділя 02:00** | `categories:rebuild` | Rebuild категорій |
 | 08:00, 20:00 | `orders:sync` | Sync замовлень |
+| **Неділя 02:00** | `categories:rebuild` | Rebuild категорій |
 
 ## 🛠️ Автоматизація Онбордингу (IMPLEMENTED ✅)
 
@@ -150,18 +154,24 @@ class OnboardTenantJob implements ShouldQueue
     public function handle()
     {
         // 1. Sync products from Horoshop (if configured)
-        SyncHoroshopProductsJob::dispatchSync($this->tenantId);
+        $this->syncProducts();
         
         // 2. Rebuild categories
-        app(CategoryIndexService::class)->rebuildForTenant($this->tenantId);
+        $this->rebuildCategories();
         
-        // 3. Start AI enrichment (async)
-        AnalyzeProductsWithAiJob::dispatch(100, 0, false, $this->tenantId);
+        // 3. Sync brands
+        $this->syncBrands();
         
-        // 4. Reindex in Meili (delayed by 10 min)
-        IndexProductsToMeiliJob::dispatch($this->tenantId)->delay(now()->addMinutes(10));
+        // 4. AI enrichment (keywords, slang, categories)
+        $this->runAiEnrichment();
         
-        // 5. Generate per-tenant system prompt
+        // 5. Generate synonyms for Meili
+        $this->generateSynonyms();
+        
+        // 6. Reindex in Meilisearch
+        $this->reindexMeili();
+        
+        // 7. Generate per-tenant system prompt
         $this->generatePrompt(); // TenantPromptGenerator
     }
 }
@@ -254,4 +264,4 @@ class OnboardTenantJob implements ShouldQueue
 
 ---
 
-*Last updated: 2026-01-23*
+*Last updated: March 2026*

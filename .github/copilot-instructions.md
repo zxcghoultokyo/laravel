@@ -32,8 +32,8 @@ This is a **multi-tenant SaaS** where each tenant (customer) has their own:
 **Key files:**
 - `app/Models/Tenant.php` — Core tenant model with subscription logic
 - `app/Scopes/TenantScope.php` — Global scope for automatic tenant filtering
-- `app/Http/Middleware/SetTenantContext.php` — Sets tenant from auth or API key
-- `app/Models/Concerns/BelongsToTenant.php` — Trait for tenant-scoped models
+- `app/Http/Middleware/ResolveTenantMiddleware.php` — Sets tenant from auth or API key
+- `app/Models/Traits/BelongsToTenant.php` — Trait for tenant-scoped models
 
 **Subscription Logic (Tenant.php):**
 ```php
@@ -186,9 +186,10 @@ When a new tenant registers and connects their Horoshop store, `OnboardTenantJob
 1. `horoshop_sync` (25%) — Sync products from Horoshop API
 2. `categories_rebuild` (10%) — Build category tree from products
 3. `brands_sync` (5%) — Extract and save brands
-4. `ai_enrichment` (40%) — AI analysis of all products (keywords, slang, categories)
-5. `meili_indexing` (20%) — Index products in Meilisearch
-6. `prompt_generation` (5%) — Generate per-tenant system prompt via TenantPromptGenerator
+4. `ai_enrichment` (30%) — AI analysis of all products (keywords, slang, categories)
+5. `synonyms_generation` (10%) — Generate synonyms for Meilisearch
+6. `meili_indexing` (15%) — Index products in Meilisearch
+7. `prompt_generation` (5%) — Generate per-tenant system prompt via TenantPromptGenerator
 
 **Progress Tracking:**
 - Model: [app/Models/TenantOnboardingProgress.php](app/Models/TenantOnboardingProgress.php)
@@ -214,7 +215,7 @@ $progress->fail($errorMessage);                  // Mark as failed
 - ~1 hour for 500 products (with rate limiting)
 
 Config & Env
-- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt-4.1-mini for chat, gpt-4o-mini for enrichment). See [config/services.php](config/services.php).
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL` (default gpt-4o for chat, gpt-4o-mini for enrichment). See [config/services.php](config/services.php).
 - Meili: `MEILI_ENABLED`, `MEILI_HOST`, `MEILI_MASTER_KEY`, index name in [config/meilisearch.php](config/meilisearch.php).
 - Horoshop: `HOROSHOP_DOMAIN`, `HOROSHOP_API_LOGIN`, `HOROSHOP_API_PASSWORD`.
 

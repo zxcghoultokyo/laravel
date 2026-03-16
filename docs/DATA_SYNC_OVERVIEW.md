@@ -7,12 +7,12 @@
 | Джерело | Призначення | Частота | Статус |
 |---------|-------------|---------|--------|
 | Horoshop API | `products` | Daily 03:00 | ✅ Scheduled |
-| Horoshop API | `orders` | Daily 03:30 | ✅ Scheduled |
+| Horoshop API | `orders` | 2x/day (08:00, 20:00) | ✅ Scheduled |
 | OpenAI | `product_ai_index` | Daily 04:00 | ✅ Scheduled |
 | `products` + AI | Meilisearch | Daily 05:00 | ✅ Scheduled |
 | `order_items` | `products.orders_count` | Daily 06:00 | ✅ Scheduled |
 | `products` | `categories` | Weekly (Sun 02:00) | ✅ Scheduled |
-| OpenAI | `embeddings` | Weekly (Sun 02:30) | ✅ Scheduled |
+| Products | `colors:detect` | Daily 05:30 | ✅ Scheduled |
 | Config | Synonyms/Slang | Static | ✅ Config |
 
 ---
@@ -63,10 +63,10 @@ php artisan products:incremental-sync
 php artisan horoshop:sync --limit=100 --dry-run
 ```
 
-### Поточний Schedule:
+### Schedule:
 ```php
-// routes/console.php
-Schedule::command('horoshop:sync-products')->daily()->at('03:00');
+// routes/console.php — sync для ВСІХ активних тенантів (paid OR trial)
+Schedule (03:00) → SyncHoroshopProductsJob::dispatch($tenant->id) для кожного tenant
 ```
 
 ---
@@ -104,18 +104,23 @@ php artisan orders:sync --status=delivered
 checkout_success event → FetchHoroshopOrdersJob (delay 30s)
 ```
 
-### ⚠️ Потрібно:
-- [ ] Додати scheduled sync щодня/щогодини
+### Schedule:
+```php
+// routes/console.php
+Schedule::command('orders:sync --all-tenants --days=3 --update-counts')
+    ->twiceDaily(8, 20) // 08:00 та 20:00
+```
+✅ Scheduled sync двічі на день
 
 ---
 
 ## 3️⃣ AI Enrichment → Товари
 
 ### Основні файли:
-- **Job:** `app/Jobs/EnrichProductWithAiJob.php`
-- **Batch Job:** `app/Jobs/EnrichProductGroupJob.php`
-- **Service:** `app/Services/Ai/ProductEnrichmentService.php`
-- **Command:** `app/Console/Commands/BuildAiIndexCommand.php`
+- **Job:** `app/Jobs/AnalyzeProductsWithAiJob.php`
+- **Service:** `app/Services/Ai/ProductIndexBuilder.php`
+- **Command:** `app/Console/Commands/BuildProductAiIndex.php` (`products:build-ai-index`)
+- **Command:** `app/Console/Commands/AnalyzeProductsCommand.php` (`products:analyze`)
 
 ### Що генерується:
 ```
@@ -142,9 +147,15 @@ php artisan products:build-ai-index --limit=100
 php artisan products:build-ai-index --force
 ```
 
-### ⚠️ Потрібно:
-- [ ] Автоматично запускати після sync нових товарів
-- [ ] Scheduled для нових товарів (daily)
+### Schedule:
+```php
+// routes/console.php
+Schedule (04:00) → AI enrichment для всіх активних тенантів
+Schedule (30 хв) → Health check: auto-restart якщо coverage < 95%
+```
+
+✅ Автозапуск після sync нових товарів — реалізовано в `SyncHoroshopProductsJob`
+✅ Scheduled для нових товарів — щоденно о 04:00
 
 ---
 
@@ -188,9 +199,14 @@ php artisan meili:reindex-products-sync
 php artisan meili:setup-products
 ```
 
-### ⚠️ Потрібно:
-- [ ] Автоматично запускати після AI enrichment
-- [ ] Scheduled для консистентності (daily after sync)
+### Schedule:
+```php
+// routes/console.php
+Schedule (05:00) → Повна переіндексація всіх тенантів
+```
+
+✅ Автозапуск після AI enrichment — щоденно о 05:00
+✅ Після Horoshop sync — `SyncHoroshopProductsJob` автоматично dispatch IndexProductsToMeiliJob
 
 ---
 

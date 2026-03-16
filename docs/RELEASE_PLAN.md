@@ -10,7 +10,7 @@
 |-----------|--------|-------|
 | Tenant Model | ✅ | `app/Models/Tenant.php` |
 | BelongsToTenant trait | ✅ | `app/Models/Traits/BelongsToTenant.php` |
-| TenantScope | ✅ | `app/Models/Scopes/TenantScope.php` |
+| TenantScope | ✅ | `app/Scopes/TenantScope.php` |
 | Tenant Middleware | ✅ | `app/Http/Middleware/ResolveTenantMiddleware.php` |
 | Limit Middleware | ✅ | `app/Http/Middleware/CheckTenantLimitsMiddleware.php` |
 | Widget per Tenant | ✅ | `app/Http/Controllers/Api/TenantWidgetController.php` |
@@ -92,7 +92,7 @@
 | **Shopify** | App | ⭐ High | 🔲 Planned |
 | **WooCommerce** | Plugin | ⭐ High | 🔲 Planned |
 | **Prom.ua** | API | Medium | 🔲 Planned |
-| **Rozetka** | Marketplace | Medium | 🔲 Planned |
+| **Rozetka** | Marketplace | Medium | ✅ Done (5 models, 4 services, admin UI) |
 | **OpenCart** | Module | Medium | 🔲 Planned |
 | **PrestaShop** | Module | Low | 🔲 Planned |
 | **Tilda** | Widget only | Low | ✅ Works |
@@ -101,7 +101,7 @@
 ### 3.5 TODO (Next)
 - [ ] Shopify app integration
 - [ ] WooCommerce plugin
-- [ ] Custom AI prompts in admin (UI)
+- [x] Custom AI prompts in admin (PromptPresetsManager Livewire)
 - [ ] A/B test dashboard
 - [ ] SLA tracking
 
@@ -214,4 +214,4 @@ CHECKBOX_LICENSE_KEY=xxx
 https://aintento.laravel.cloud/
 ---
 
-*Last updated: January 15, 2026*
+*Last updated: March 2026*

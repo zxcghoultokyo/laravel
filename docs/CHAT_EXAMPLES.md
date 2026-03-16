@@ -1,285 +1,240 @@
 # Приклади роботи AI Chat Agent
 
-## 🎯 Ідеальні сценарії використання
+> **Актуально для:** FunctionCallingAgent + StreamingFunctionCallingAgent (OpenAI function calling)
+> **Дата оновлення:** Березень 2026
 
-### Сценарій 1: Простий пошук товару
+## ⚡ Два режими відповіді
+
+| Режим | Коли | Агент | Час відповіді |
+|-------|------|-------|---------------|
+| `short_query_handler` | 1 слово (без дієслова) | Bypass GPT | ~200ms |
+| `GPT function calling` | 2+ слова або складні запити | FunctionCallingAgent / StreamingFunctionCallingAgent | ~1-3s |
+
+---
+
+## 🎯 Сценарій 1: Короткий запит (1 слово)
 
 **Користувач пише:**
-> плити
+> шоломи
 
-**Бот відповідає:**
+**Відповідь:**
+```json
+{
+  "type": "products",
+  "products": [{"title": "...", "price": ..., "images": [...]}],
+  "meta": { "source": "short_query_handler" }
+}
 ```
-Ось, що маємо по категорії «бронеплити» 👇
 
-[10 карток товарів з фото]
-
-Бажаєш SAPI чи ESAPI? Або підказати по бюджету?
+**Під капотом:**
+```
+short_query_handler:
+├─ Meili search "шоломи" → candidates
+├─ filterByTitleRelevance() → stem-based фільтр
+├─ Limit: max 3 products
+└─ Return з images (без GPT!)
 ```
 
-**Що відбувається під капотом (в адмінці):**
+**Інші приклади:**
+- `плитоноски` → 3 товари
+- `берці` → 3 товари
+- `підсумки` → 3 товари
+- `бронепластини` → 3 товари
+
+---
+
+## 🎯 Сценарій 2: Пошук з контекстом
+
+**Користувач пише:**
+> покажи тактичні штани
+
+**Відповідь:**
+```json
+{
+  "type": "products",
+  "text": "Ось тактичні штани, які є в наявності:",
+  "products": [{"title": "...", "price": ..., "images": [...]}],
+  "meta": { "source": "GPT" }
+}
 ```
-AI Agent Flow:
-├─ Intent: product_search
-├─ Ambiguous: Yes (не вказав тип плит)
-├─ Filters: {} (немає)
-├─ Обрані артикули: ART-001, ART-002, ART-003...
-└─ Search Debug:
-   ├─ search: 45ms → 40 кандидатів
-   ├─ dedupe: 2ms → 28 унікальних
-   ├─ accessory_filter: 3ms → 28 (без аксесуарів)
-   ├─ ai_rerank: 520ms → 10 найрелевантніших ⭐
-   └─ get_details: 12ms → 10 карток
+
+**Під капотом:**
+```
+StreamingFunctionCallingAgent:
+├─ System prompt (per-tenant via PromptPresetService)
+├─ OpenAI function calling
+│   └─ tool_call: search_products(query: "тактичні штани")
+│       └─ MeiliProductSearchTool → фільтрація → max 3
+├─ GPT generates intro text
+└─ SSE streaming → widget
 ```
 
 ---
 
-### Сценарій 2: Запит з фільтрами
+## 🎯 Сценарій 3: Запит з фільтрами
 
 **Користувач пише:**
 > плитоноска зелена до 5000 грн
 
-**Бот відповідає:**
-```
-Ось підібрані товари 👇
-
-[8 карток зелених плитоносок до 5000 грн]
-
-Всі варіанти в наявності та в твоєму бюджеті. Потрібна допомога з розміром?
-```
-
 **Під капотом:**
 ```
-AI Agent Flow:
-├─ Intent: product_search
-├─ Ambiguous: No (все зрозуміло)
-├─ Filters: {budget_max: 5000, color: "green"}
-├─ Refined query: "плитоноска тактична зелена олива"
-├─ Обрані артикули: PC-045-GRN, PC-112-OLV...
-└─ Search Debug:
-   ├─ search: 38ms → 25 кандидатів (з фільтрами)
-   ├─ ai_rerank: 480ms → відібрав за ціною/якістю ⭐
-   └─ Products shown: 8
+GPT → search_products(query: "плитоноска зелена", filters: {budget_max: 5000})
+├─ MeiliProductSearchTool:
+│   ├─ Meili search з фільтром price <= 5000
+│   ├─ color filter "зелена" → green/olive/олива
+│   └─ filterByTitleRelevance() → max 3
+└─ GPT intro: "Ось плитоноски до 5000 ₴:"
 ```
+
+**GPT автоматично витягує фільтри:**
+- `"до 5000"` → `budget_max: 5000`
+- `"зелена"` → `color: green`
+- `"від 3000 до 8000"` → `budget_min: 3000, budget_max: 8000`
 
 ---
 
-### Сценарій 3: Запит на пораду
+## 🎯 Сценарій 4: GPT відповідає з історії (без tool_calls)
+
+**Контекст:** Користувач вже бачив товари, запитує уточнення
 
 **Користувач пише:**
-> яку каску взяти?
+> розкажи про перший
 
-**Бот відповідає:**
-```
-Ось топ-3 варіанти, які раджу:
-
-[3 картки касок]
-
-🥇 **Ops-Core FAST** (12 500 грн)
-   ✅ Найпопулярніша, відмінний баланс ціна/якість
-   ✅ Підходить під більшість кріплень NVG
-   ⚠️ Трохи важча за bump варіанти
-
-🥈 **Team Wendy EXFIL** (15 800 грн)
-   ✅ Преміум якість, максимальний комфорт
-   ✅ Краща вентиляція в спеку
-   ⚠️ Дорожча
-
-🥉 **Emerson Bump** (3 200 грн)
-   ✅ Бюджетний варіант для тренувань
-   ✅ Легка, зручна
-   ⚠️ Не балістична (тільки від ударів)
-
-Балістичний захист потрібен чи для тренувань?
+**GPT знає товар з історії і відповідає JSON:**
+```json
+{"intro": "Ось підсумок:", "products": [{"article": "ab3-775", "comment": "Тактичний..."}]}
 ```
 
 **Під капотом:**
 ```
-AI Agent Flow:
-├─ Intent: product_search
-├─ Ambiguous: Yes (не вказав тип: балістична чи bump)
-├─ AI Calls: 4 (classification + normalization + rerank + explain) ⭐
-├─ Explain Top 3: Yes (виявлено запит на пораду)
-└─ Search Debug:
-   ├─ ai_rerank: 550ms → обрав топ-3 для пояснення
-   └─ Reasoning: врахував популярність + відгуки + ціна/якість
+GPT response (NO tool_calls):
+├─ parseStructuredResponse($responseText)
+│   ├─ Lookup products by article in DB
+│   └─ Return з images для карток
+├─ Extract intro/outro text
+└─ Return products + text
 ```
+
+> **ВАЖЛИВО:** Обидва агенти обробляють цей випадок в `else` гілці (коли немає tool_calls).
 
 ---
 
-### Сценарій 4: Статус замовлення
+## 🎯 Сценарій 5: Follow-up "дорожче/дешевше"
 
 **Користувач пише:**
-> статус замовлення 12345
-
-**Бот відповідає:**
-```
-📦 Замовлення #12345
-
-Статус: В обробці
-Дата: 15.12.2025
-Сума: 8 450 грн
-
-Товари:
-• Плитоноска Warrior DCS (1 шт)
-• Плити SAPI Level IV (2 шт)
-
-Очікувана відправка: 19.12.2025
-Трек-номер з'явиться після відправки.
-```
+> а дешевше є?
 
 **Під капотом:**
 ```
-AI Agent Flow:
-├─ Intent: order_status
-├─ Ambiguous: No
-├─ Order ID: 12345 (extracted by AI)
-└─ Search Debug: N/A (не product search)
+GPT → search_products(query: "плитоноска", filters: {budget_max: <lower>})
+├─ exclude_shown: [shown_ids from history]
+├─ Нові товари (не ті що вже показав)
+└─ Інтро: "Ось бюджетніші варіанти:"
 ```
 
 ---
 
-### Сценарій 5: FAQ
+## 🎯 Сценарій 6: Статус замовлення
 
 **Користувач пише:**
-> що таке SAPI?
-
-**Бот відповідає:**
-```
-SAPI (Small Arms Protective Insert) — це стандарт балістичних плит, розроблений для захисту від вогнепальної зброї.
-
-Основні типи:
-• SAPI (базовий) - захист Level III
-• ESAPI (Enhanced) - захист Level IV, витримує 7.62×51mm AP
-
-Різниця в товщині та вазі. ESAPI товщі (2-3 см) але надійніші.
-
-Показати плити SAPI чи ESAPI?
-```
+> статус замовлення 0680001122
 
 **Під капотом:**
 ```
-AI Agent Flow:
-├─ Intent: faq
-├─ Ambiguous: No
-└─ Knowledge base: використано готову відповідь
+GPT → get_order_status(phone: "0680001122")
+├─ OrderSearchService → DB lookup
+└─ Return order details
 ```
 
 ---
 
-### Сценарій 6: Smalltalk
+## 🎯 Сценарій 7: Привітання / Smalltalk
 
 **Користувач пише:**
 > привіт
 
-**Бот відповідає:**
+**GPT відповідає** (з per-tenant промпта):
 ```
-Привіт! 👋 Допоможу підібрати тактичне спорядження.
+Привіт! Я AI-консультант магазину. Допоможу підібрати товар.
+Що шукаєш?
+```
 
-Що шукаєш? Можу порадити:
-• Бронежилети та плитоноски
-• Балістичні шоломи
-• Плити (SAPI/ESAPI)
-• Аптечки IFAK
-```
+---
+
+## 🎯 Сценарій 8: Дитячий магазин — вікова фільтрація (bavkatoys)
+
+**Користувач пише:**
+> іграшки для дитини 3 років
 
 **Під капотом:**
 ```
-AI Agent Flow:
-├─ Intent: smalltalk
-├─ Ambiguous: No
-└─ Products shown: 0 (не product-related)
+GPT → search_products(query: "іграшки 3+")
+├─ handleAgeQuery() → вікова фільтрація
+├─ filterByTitleRelevance() + вік 3+
+└─ Max 3 products для дітей 3+
+```
+
+**Тактичний магазин (T2):** GPT **ніколи** не питає про вік дитини (заборонено в промпті).
+
+---
+
+## 📊 Ключові правила
+
+### 1. Максимум 3 товари
+GPT prompt: **показуй 1-3 товари**, не більше.
+
+### 2. Per-tenant промпти
+Кожен тенант має свій системний промпт через `PromptPresetService`:
+- **T2 (attack.kiev.ua):** тактичне спорядження, без питань про вік
+- **T20 (bavkatoys):** дитячі іграшки, вікова фільтрація
+
+### 3. Два шляхи пошуку
+```
+search_products tool:
+├─ Meilisearch (primary) → MeiliProductSearchTool
+└─ Eloquent fallback (якщо Meili disabled) → LIKE queries
+```
+
+### 4. Товари ЗАВЖДИ першими
+Навіть якщо запит неоднозначний — спочатку показуємо товари, потім питаємо уточнення.
+
+---
+
+## 📊 Типовий timing (production)
+
+Короткий запит (1 слово):
+```
+Total: ~200ms
+└─ Meili search + filter: 200ms
+```
+
+Звичайний запит (GPT):
+```
+Total: ~1.5-3s (streaming)
+├─ OpenAI function call: ~800ms
+├─ Meili search: ~50ms
+├─ DB product details: ~20ms
+└─ GPT response generation: ~700ms (streamed)
 ```
 
 ---
 
-## 🔥 Ключові особливості
+## 🧪 Тестування через API
 
-### 1. Товари ЗАВЖДИ першими
-Навіть якщо запит неоднозначний - спочатку показуємо товари, потім питаємо уточнення.
-
-**❌ ПОГАНО:**
-```
-User: плити
-Bot: Які плити тебе цікавлять? SAPI чи ESAPI?
-     [пусто - немає товарів]
-```
-
-**✅ ДОБРЕ:**
-```
-User: плити
-Bot: Ось, що маємо по категорії «бронеплити» 👇
-     [10 карток товарів]
-     
-     Бажаєш SAPI чи ESAPI?
-```
-
-### 2. AI Re-ranking працює
-Товари відсортовані не просто по популярності, а по релевантності до запиту.
-
-**Приклад:**
-```
-User: легка плитоноска для літа
-
-AI re-rank врахує:
-✅ Вага < 2 кг
-✅ Наявність сітки (вентиляція)
-✅ Світлі кольори (coyote, sand)
-❌ Відкине важкі зимові варіанти
-```
-
-### 3. Фільтри автоматично
-```
-"до 5000" → budget_max: 5000
-"зелена" → color: green
-"від 3000 до 8000" → budget_min: 3000, budget_max: 8000
-```
-
-### 4. Артикули в адмінці
-Замість `chosen_ids: [123, 456, 789]`
-Показує: `ART-001, PC-045-GRN, HELM-32` (зручно для аналітики)
-
----
-
-## 📊 Timing в production
-
-Типовий запит "плити":
-```
-Total: ~1.8 сек
-
-├─ AI classification: 300ms
-├─ AI normalization: 250ms
-├─ Meili search: 45ms
-├─ Dedupe: 2ms
-├─ Accessory filter: 3ms
-├─ AI re-rank: 520ms ⭐ (найдовше, але найцінніше)
-├─ Get details: 12ms
-└─ Widget render: ~100ms
-```
-
-Запит з поясненням "яку каску взяти?":
-```
-Total: ~2.3 сек
-
-+ AI explain top 3: 500ms ⭐
+```bash
+# Тест будь-якого запиту (T2 attack.kiev.ua)
+curl -s "https://aintento.laravel.cloud/api/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "шоломи", "session_id": "test_'$(date +%s)'", "token": "zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+print('source:', d.get('meta',{}).get('source','GPT'))
+print('type:', d.get('type'))
+print('products:', len(d.get('products',[])))
+print('text:', d.get('text','')[:150])
+"
 ```
 
 ---
 
-## 🎯 KPI для оцінки якості
-
-### Точність (Precision)
-- Запит "плити SAPI" → перші 5 товарів = SAPI плити (не ESAPI, не аксесуари)
-- **Target: 90%+**
-
-### Релевантність
-- Запит "легка каска" → топ-3 товари вагою < 1.5 кг
-- **Target: 85%+**
-
-### Швидкість
-- 80% запитів < 2 сек
-- 95% запитів < 3 сек
-- **Target: 2 сек median**
-
-### Конверсія
-- % користувачів які додали товар в кошик після чату
-- **Target: 15%+** (vs 5% без чату)
+*Last updated: March 2026*

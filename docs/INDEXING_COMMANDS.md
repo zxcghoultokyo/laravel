@@ -6,85 +6,104 @@
 ```bash
 php artisan meili:setup-products
 ```
-Встановлює settings для індексу (searchable attributes, filters, etc.)
+Встановлює settings для індексу (searchable attributes, filterable, sortable, ranking, synonyms).
 
-### 2. Індексація всіх товарів
+### 2. Індексація всіх товарів (async)
 ```bash
 php artisan meili:reindex-products
 ```
+Dispatch `IndexProductsToMeiliJob` — async через queue (chunk=500).
 
 Опції:
 ```bash
-# З chunk size (дефолт: 500 товарів на job)
+# З custom chunk size
 php artisan meili:reindex-products --chunk=1000
 ```
 
-### 3. Sync products from Horoshop
+### 3. Індексація всіх товарів (sync)
 ```bash
-php artisan sync:horoshop-products
+php artisan meili:reindex-products-sync
+```
+Синхронна індексація для тестів або дрібних каталогів (limit=100 за замовчуванням).
+
+### 4. Sync products from Horoshop
+```bash
+php artisan horoshop:sync
 ```
 Синхронізує товари з Хорошопу в локальну БД, потім треба зробити reindex.
 
-## 📋 Повний flow для першого деплою:
+## 📋 Повний flow для нового тенанта:
 
 ```bash
-# 1. Sync з Horoshop
-php artisan sync:horoshop-products
+# 1. Sync з Horoshop (per-tenant)
+php artisan horoshop:sync --tenant={id}
 
-# 2. Setup Meilisearch
+# 2. Rebuild категорій
+php artisan categories:rebuild --tenant={id}
+
+# 3. AI Enrichment
+php artisan products:build-ai-index --tenant={id}
+
+# 4. Setup Meilisearch (один раз, якщо новий індекс)
 php artisan meili:setup-products
 
-# 3. Index всі products
+# 5. Reindex в Meilisearch
 php artisan meili:reindex-products
 
-# 4. Restart queue
-php artisan queue:restart
-
-# 5. Optimize
-php artisan optimize
+# 6. Генерація промпта
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=diagnostic_secret_key_2025"
 ```
 
 ## 🔍 Перевірка після індексації:
 
 ```bash
-php artisan tinker
-$meili = app(\App\Services\Search\MeiliClient::class);
-$index = $meili->productsIndex();
-$stats = $index->stats();
-echo "Documents: " . $stats['numberOfDocuments'] . PHP_EOL;
-exit
+# Через diagnostic API
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+
+# Через tinker
+php artisan tinker --execute="
+\$meili = app(\App\Services\Search\MeiliClient::class);
+\$index = \$meili->productsIndex();
+\$stats = \$index->stats();
+echo 'Documents: ' . \$stats['numberOfDocuments'] . PHP_EOL;
+"
 ```
 
-## 4. Перевірка індексу
-```bash
-php artisan tinker
-```
+## 🔄 Якщо потрібно повністю перестворити індекс:
 
-```php
-$meili = app(\App\Services\Search\MeiliClient::class);
-$index = $meili->productsIndex();
-$stats = $index->stats();
-echo "Documents: " . $stats['numberOfDocuments'] . PHP_EOL;
-```
-
-## 5. Якщо потрібно видалити та переіндексувати
 ```bash
 # Видалити індекс
 php artisan tinker --execute="app(\App\Services\Search\MeiliClient::class)->client()->deleteIndex('products');"
 
 # Створити новий та заповнити
-php artisan app:index-products-to-meili
+php artisan meili:setup-products
+php artisan meili:reindex-products
 ```
 
-## Production deployment
+## 🚀 Production deployment
 
 ```bash
 # 1. Deploy code
 git push origin main
 
-# 2. На production через SSH або Laravel Cloud console:
+# 2. На production через Laravel Cloud console:
 php artisan migrate --force
-php artisan app:index-products-to-meili
+php artisan meili:reindex-products
 php artisan queue:restart
 php artisan optimize
 ```
+
+## ⏰ Автоматичний Schedule
+
+Indexing запускається автоматично через `routes/console.php`:
+
+| Час | Task | Опис |
+|-----|------|------|
+| 03:00 | `sync-all-tenants` | Horoshop sync для всіх активних тенантів |
+| 04:00 | `ai-enrichment-all-tenants` | AI enrichment нових товарів |
+| 05:00 | `meili-reindex-all` | Meilisearch повна переіндексація |
+| 30 хв | `ai-enrichment-health-check` | Auto-restart якщо coverage < 95% |
+
+---
+
+*Last updated: March 2026*

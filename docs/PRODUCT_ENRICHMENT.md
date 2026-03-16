@@ -71,13 +71,13 @@ php artisan products:build-ai-index --timeout=600 --resume
 php artisan products:build-ai-index --stats
 ```
 
-### Meilisearch реіндексація
+### Meiliсearch реіндексація
 ```bash
-# Синхронна реіндексація
-php artisan meili:reindex-sync
-
 # Через Job (асинхронно)
-php artisan meili:reindex-job
+php artisan meili:reindex-products
+
+# Синхронна реіндексація
+php artisan meili:reindex-products-sync
 ```
 
 ## 📦 Моделі та таблиці
@@ -309,7 +309,7 @@ curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=..." | jq '.ai_
 
 ## 🛠️ TODO / Roadmap
 
-1. [x] **Автоматичний enrichment** після sync нових товарів — додано в Kernel.php (щоденно о 04:00)
+1. [x] **Автоматичний enrichment** після sync нових товарів — scheduler в `routes/console.php` (щоденно о 04:00 + health check кожні 30 хв)
 2. [x] **Slang dictionary** — ручний словник сленгу `config/slang_dictionary.php` + SlangDictionaryService
 3. [x] **Embeddings** — EmbeddingService + SemanticSearchService (semantic search fallback)
 4. [x] **Quality scoring** — EnrichmentQualityService з score 0-100 та grade A-F

@@ -90,7 +90,7 @@ class TenantScope implements Scope
 
 ### 3. BelongsToTenant Trait
 ```php
-// app/Models/Concerns/BelongsToTenant.php
+// app/Models/Traits/BelongsToTenant.php
 
 trait BelongsToTenant
 {
@@ -112,11 +112,11 @@ trait BelongsToTenant
 }
 ```
 
-### 4. SetTenantContext Middleware
+### 4. ResolveTenantMiddleware
 ```php
-// app/Http/Middleware/SetTenantContext.php
+// app/Http/Middleware/ResolveTenantMiddleware.php
 
-class SetTenantContext
+class ResolveTenantMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
@@ -267,6 +267,8 @@ $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
 
 2. Use `BelongsToTenant` trait:
 ```php
+use App\Models\Traits\BelongsToTenant;
+
 class YourModel extends Model
 {
     use BelongsToTenant;
@@ -284,13 +286,14 @@ class YourModel extends Model
 app/
 ├── Models/
 │   ├── Tenant.php              # Core tenant model
-│   └── Concerns/
+│   └── Traits/
 │       └── BelongsToTenant.php # Trait for tenant-scoped models
 ├── Scopes/
 │   └── TenantScope.php         # Global query scope
 ├── Http/
 │   └── Middleware/
-│       └── SetTenantContext.php # Request middleware
+│       ├── ResolveTenantMiddleware.php    # Request middleware
+│       └── CheckTenantLimitsMiddleware.php # Usage limits check
 └── Providers/
     └── AppServiceProvider.php  # Binds tenant to container
 ```

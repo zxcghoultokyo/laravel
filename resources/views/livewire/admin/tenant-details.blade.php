@@ -389,6 +389,83 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Chat Sessions Drilldown -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                    <h4 class="font-semibold text-lg mb-4">💬 Останні чати за період ({{ count($analyticsSessions) }})</h4>
+                    
+                    @if($analyticsSessions->isEmpty())
+                        <div class="text-center py-6 text-gray-400">
+                            <span class="text-3xl">💬</span>
+                            <p class="mt-2">Немає чатів за обраний період</p>
+                        </div>
+                    @else
+                        <div class="space-y-2">
+                            @foreach($analyticsSessions as $session)
+                                @php
+                                    $isExpanded = in_array($session->id, $expandedSessions);
+                                    $preview = $session->last_user_query ? Str::limit($session->last_user_query, 80) : '—';
+                                @endphp
+                                <div class="border border-gray-200 rounded-lg overflow-hidden">
+                                    <!-- Session Header (clickable) -->
+                                    <button wire:click="toggleSession({{ $session->id }})" 
+                                            class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition text-left">
+                                        <div class="flex items-center gap-3 min-w-0">
+                                            <svg class="w-4 h-4 text-gray-500 shrink-0 transition-transform {{ $isExpanded ? 'rotate-90' : '' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                            <div class="min-w-0">
+                                                <span class="text-sm font-medium text-gray-700 block truncate">{{ $preview }}</span>
+                                                <span class="text-xs text-gray-400">{{ $session->created_at->format('d.m H:i') }} · {{ $session->messages_count }} повід.</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-2 shrink-0 ml-3">
+                                            @if($session->last_intent)
+                                                <span class="px-2 py-0.5 text-xs rounded-full bg-blue-50 text-blue-600">{{ $session->last_intent }}</span>
+                                            @endif
+                                            <span class="px-2 py-0.5 text-xs rounded-full {{ $session->status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
+                                                {{ $session->status === 'open' ? 'Відкритий' : 'Закритий' }}
+                                            </span>
+                                        </div>
+                                    </button>
+
+                                    <!-- Expanded Messages -->
+                                    @if($isExpanded)
+                                        <div class="px-4 py-3 bg-white border-t border-gray-100 max-h-96 overflow-y-auto space-y-2">
+                                            @forelse($session->messages->sortBy('created_at') as $msg)
+                                                <div class="flex {{ $msg->role === 'user' ? 'justify-end' : 'justify-start' }}">
+                                                    <div class="max-w-[85%] px-3 py-2 rounded-lg text-sm 
+                                                        {{ $msg->role === 'user' ? 'bg-blue-500 text-white' : ($msg->role === 'system' ? 'bg-yellow-50 text-yellow-800 border border-yellow-200' : 'bg-gray-100 text-gray-800') }}">
+                                                        @if($msg->role === 'system')
+                                                            <span class="text-xs font-medium">system:</span>
+                                                        @endif
+                                                        <div class="whitespace-pre-wrap break-words">{{ Str::limit($msg->content, 500) }}</div>
+                                                        @if($msg->meta && !empty($msg->meta['products_shown']))
+                                                            <div class="mt-1 pt-1 border-t {{ $msg->role === 'user' ? 'border-blue-400' : 'border-gray-200' }}">
+                                                                <span class="text-xs opacity-70">📦 Показано {{ count($msg->meta['products_shown']) }} товарів</span>
+                                                            </div>
+                                                        @endif
+                                                        <div class="text-xs mt-1 {{ $msg->role === 'user' ? 'text-blue-200' : 'text-gray-400' }}">
+                                                            {{ $msg->created_at->format('H:i:s') }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            @empty
+                                                <p class="text-sm text-gray-400 text-center py-2">Немає повідомлень</p>
+                                            @endforelse
+                                            <div class="pt-2 text-center">
+                                                <a href="{{ route('admin.chats.show', $session->id) }}" 
+                                                   class="text-xs text-blue-600 hover:text-blue-800 hover:underline">
+                                                    Відкрити повний чат →
+                                                </a>
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
             </div>
 
         @elseif($activeTab === 'sync')

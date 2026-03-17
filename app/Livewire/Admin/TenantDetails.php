@@ -42,6 +42,8 @@ class TenantDetails extends Component
 
     public array $usageChartData = [];
 
+    public array $expandedSessions = [];
+
     protected $queryString = ['activeTab', 'chatSearch', 'chatStatus'];
 
     public function mount(Tenant $tenant)
@@ -264,6 +266,43 @@ class TenantDetails extends Component
         }
 
         $this->usageChartData = $chartData;
+    }
+
+    /**
+     * Toggle expanded state for a chat session in analytics drilldowns.
+     */
+    public function toggleSession(int $sessionId): void
+    {
+        if (in_array($sessionId, $this->expandedSessions)) {
+            $this->expandedSessions = array_values(array_diff($this->expandedSessions, [$sessionId]));
+        } else {
+            $this->expandedSessions[] = $sessionId;
+        }
+    }
+
+    /**
+     * Get recent chat sessions for the analytics tab drilldown.
+     */
+    public function getAnalyticsSessionsProperty()
+    {
+        $startDate = now()->subDays($this->analyticsDays)->startOfDay();
+
+        $query = ChatSession::withoutGlobalScope(TenantScope::class)
+            ->where('tenant_id', $this->tenant->id)
+            ->where('created_at', '>=', $startDate)
+            ->withCount('messages');
+
+        // Eager load messages only for expanded sessions
+        if (! empty($this->expandedSessions)) {
+            $query->with(['messages' => function ($q) {
+                $q->whereIn('chat_session_id', $this->expandedSessions)
+                    ->orderBy('created_at', 'asc');
+            }]);
+        }
+
+        return $query->orderBy('updated_at', 'desc')
+            ->take(50)
+            ->get();
     }
 
     /**
@@ -515,6 +554,7 @@ class TenantDetails extends Component
             'syncLogs' => $this->syncLogs,
             'recentSessions' => $this->recentSessions,
             'chatSessions' => $this->chatSessions,
+            'analyticsSessions' => $this->analyticsSessions,
             'funnelData' => $this->funnelData,
             'usageChartData' => $this->usageChartData,
         ])->layout('admin.layout');

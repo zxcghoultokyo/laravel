@@ -2,18 +2,18 @@
 
 namespace App\Livewire\Admin;
 
-use App\Models\Tenant;
-use App\Models\Product;
-use App\Models\ChatSession;
-use App\Models\ChatMessage;
-use App\Models\SyncLog;
 use App\Jobs\SyncHoroshopProductsJob;
+use App\Models\ChatMessage;
+use App\Models\ChatSession;
+use App\Models\Product;
+use App\Models\SyncLog;
+use App\Models\Tenant;
+use App\Scopes\TenantScope;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
-use App\Scopes\TenantScope;
 use Livewire\WithPagination;
 
 /**
@@ -24,15 +24,22 @@ class TenantDetails extends Component
     use WithPagination;
 
     public Tenant $tenant;
+
     public string $activeTab = 'overview';
+
     public string $syncLogFilter = '';
+
     public string $chatSearch = '';
+
     public string $chatStatus = '';
+
     public int $chatPerPage = 20;
-    
+
     // Analytics
     public int $analyticsDays = 30;
+
     public array $funnelData = [];
+
     public array $usageChartData = [];
 
     protected $queryString = ['activeTab', 'chatSearch', 'chatStatus'];
@@ -69,7 +76,7 @@ class TenantDetails extends Component
         $tenant = $this->tenant;
         $startDate = now()->subDays($this->analyticsDays)->startOfDay();
         $tenantId = $tenant->id;
-        
+
         // Get ALL merchant identifiers for fallback filtering (old records)
         $slug = $tenant->slug;
         $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenantId)
@@ -77,31 +84,48 @@ class TenantDetails extends Component
             ->filter()
             ->toArray();
         $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
-        
+
         // Check if tenant_id column exists
         $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
-        
-        // Pre-calculate checkout_success from orders table (more reliable)
+
+        // Pre-calculate checkout_success: only count orders from sessions
+        // that had chat-attributed add_to_cart events (ensures checkout <= add_to_cart in funnel)
         $checkoutCountFromOrders = 0;
         if (Schema::hasTable('orders')) {
             try {
-                $tenantSessionIds = DB::table('chat_sessions')
-                    ->where('tenant_id', $tenantId)
-                    ->pluck('session_id')
-                    ->toArray();
-                
-                if (!empty($tenantSessionIds)) {
+                // Get sessions with chat-attributed add_to_cart events
+                $cartQuery = DB::table('chat_events')
+                    ->where('event_type', 'add_to_cart')
+                    ->where('created_at', '>=', $startDate);
+
+                if ($hasTenantIdColumn) {
+                    $cartQuery->where(function ($q) use ($tenantId, $merchantIds) {
+                        $q->where('tenant_id', $tenantId);
+                        if (! empty($merchantIds)) {
+                            $q->orWhere(function ($q2) use ($merchantIds) {
+                                $q2->whereNull('tenant_id')
+                                    ->whereIn('merchant_id', $merchantIds);
+                            });
+                        }
+                    });
+                } else {
+                    $cartQuery->whereIn('merchant_id', $merchantIds);
+                }
+
+                $cartSessionIds = $cartQuery->distinct()->pluck('session_id')->toArray();
+
+                if (! empty($cartSessionIds)) {
                     $checkoutCountFromOrders = DB::table('orders')
                         ->where('created_at', '>=', $startDate)
                         ->where('had_chat', true)
-                        ->whereIn('session_id', $tenantSessionIds)
+                        ->whereIn('session_id', $cartSessionIds)
                         ->count();
                 }
             } catch (\Throwable $e) {
                 // Ignore - will fall back to chat_events
             }
         }
-        
+
         // Define funnel stages
         $stages = [
             'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Унікальні сесії на сайті'],
@@ -109,12 +133,12 @@ class TenantDetails extends Component
             'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
             'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
             'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар в кошик'],
-            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Замовлення з товарами з кошика чату'],
         ];
-        
+
         $funnel = [];
         $prevCount = 0;
-        
+
         foreach ($stages as $eventType => $stage) {
             try {
                 // For checkout_success, prefer orders table count
@@ -124,33 +148,33 @@ class TenantDetails extends Component
                     $query = DB::table('chat_events')
                         ->where('event_type', $eventType)
                         ->where('created_at', '>=', $startDate);
-                    
+
                     // Filter by tenant_id (new records) OR merchant_id (old records)
                     if ($hasTenantIdColumn) {
-                        $query->where(function($q) use ($tenantId, $merchantIds) {
+                        $query->where(function ($q) use ($tenantId, $merchantIds) {
                             $q->where('tenant_id', $tenantId);
-                            if (!empty($merchantIds)) {
-                                $q->orWhere(function($q2) use ($merchantIds) {
+                            if (! empty($merchantIds)) {
+                                $q->orWhere(function ($q2) use ($merchantIds) {
                                     $q2->whereNull('tenant_id')
-                                       ->whereIn('merchant_id', $merchantIds);
+                                        ->whereIn('merchant_id', $merchantIds);
                                 });
                             }
                         });
                     } else {
                         $query->whereIn('merchant_id', $merchantIds);
                     }
-                    
+
                     // For add_to_cart: only count chat-attributed
                     if ($eventType === 'add_to_cart') {
-                        $query->where(function($q) {
+                        $query->where(function ($q) {
                             $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
+                                ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
                         });
                         $count = $query->count();
                     } else {
                         $count = $query->distinct('session_id')->count('session_id');
                     }
-                    
+
                     // For checkout_success, also check orders if chat_events is 0
                     if ($eventType === 'checkout_success') {
                         $count = max($count, $checkoutCountFromOrders);
@@ -160,14 +184,14 @@ class TenantDetails extends Component
                 Log::error('TenantDetails loadFunnelData error', [
                     'tenant_id' => $tenantId,
                     'stage' => $eventType,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
                 $count = 0;
             }
-            
+
             $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
             $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
-            
+
             $funnel[] = [
                 'stage' => $eventType,
                 'label' => $stage['label'],
@@ -177,14 +201,14 @@ class TenantDetails extends Component
                 'rate' => $rate,
                 'dropoff' => $dropoff,
             ];
-            
+
             $prevCount = $count ?: $prevCount;
         }
-        
+
         $firstStage = $funnel[0]['count'] ?? 0;
         $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
         $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
-        
+
         $this->funnelData = [
             'stages' => $funnel,
             'overall_rate' => $overallRate,
@@ -198,7 +222,7 @@ class TenantDetails extends Component
     {
         $tenantId = $this->tenant->id;
         $startDate = now()->subDays($this->analyticsDays)->startOfDay();
-        
+
         // Get daily message counts (bypass TenantScope)
         $dailyMessages = ChatMessage::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenantId)
@@ -207,7 +231,7 @@ class TenantDetails extends Component
             ->groupBy('date')
             ->pluck('count', 'date')
             ->toArray();
-        
+
         // Get daily session counts (bypass TenantScope)
         $dailySessions = ChatSession::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenantId)
@@ -216,7 +240,7 @@ class TenantDetails extends Component
             ->groupBy('date')
             ->pluck('count', 'date')
             ->toArray();
-        
+
         // Get daily AI responses (assistant messages only, bypass TenantScope)
         $dailyAiResponses = ChatMessage::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $tenantId)
@@ -226,7 +250,7 @@ class TenantDetails extends Component
             ->groupBy('date')
             ->pluck('count', 'date')
             ->toArray();
-        
+
         // Build chart data for each day
         $chartData = [];
         for ($i = $this->analyticsDays - 1; $i >= 0; $i--) {
@@ -238,7 +262,7 @@ class TenantDetails extends Component
                 'ai_responses' => $dailyAiResponses[$date] ?? 0,
             ];
         }
-        
+
         $this->usageChartData = $chartData;
     }
 
@@ -249,7 +273,7 @@ class TenantDetails extends Component
     public function getStatsProperty(): array
     {
         $tenant = $this->tenant;
-        
+
         return [
             'products_count' => Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->count(),
             'products_in_stock' => Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
@@ -292,16 +316,19 @@ class TenantDetails extends Component
     {
         if ($this->tenant->platform !== 'horoshop') {
             session()->flash('error', 'Синхронізація доступна тільки для Horoshop');
+
             return;
         }
 
         if (empty($this->tenant->platform_credentials)) {
             session()->flash('error', 'API credentials не налаштовані');
+
             return;
         }
 
         if ($this->isSyncRunning()) {
             session()->flash('warning', 'Синхронізація вже запущена');
+
             return;
         }
 
@@ -322,11 +349,13 @@ class TenantDetails extends Component
     {
         if ($this->tenant->platform !== 'horoshop') {
             session()->flash('error', 'Синхронізація доступна тільки для Horoshop');
+
             return;
         }
 
         if (empty($this->tenant->platform_credentials)) {
             session()->flash('error', 'API credentials не налаштовані');
+
             return;
         }
 
@@ -336,12 +365,12 @@ class TenantDetails extends Component
         try {
             // Run sync immediately (blocking)
             SyncHoroshopProductsJob::dispatchSync($this->tenant->id);
-            
+
             $this->tenant->refresh();
             session()->flash('success', 'Синхронізацію завершено!');
         } catch (\Throwable $e) {
             Cache::forget("sync_running_{$this->tenant->id}");
-            session()->flash('error', 'Помилка: ' . $e->getMessage());
+            session()->flash('error', 'Помилка: '.$e->getMessage());
             Log::error('Sync failed for tenant', [
                 'tenant_id' => $this->tenant->id,
                 'error' => $e->getMessage(),
@@ -365,7 +394,7 @@ class TenantDetails extends Component
     {
         $count = Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $this->tenant->id)->count();
         Product::withoutGlobalScope(TenantScope::class)->where('tenant_id', $this->tenant->id)->delete();
-        
+
         session()->flash('success', "Видалено {$count} товарів");
     }
 
@@ -376,6 +405,7 @@ class TenantDetails extends Component
     {
         if (empty($this->tenant->platform_credentials)) {
             session()->flash('error', 'API credentials не налаштовані');
+
             return;
         }
 
@@ -393,9 +423,9 @@ class TenantDetails extends Component
             ]);
 
             $productsCount = count($response['products'] ?? []);
-            session()->flash('success', "Підключення успішне! Знайдено товарів в API: " . ($response['total'] ?? $productsCount));
+            session()->flash('success', 'Підключення успішне! Знайдено товарів в API: '.($response['total'] ?? $productsCount));
         } catch (\Throwable $e) {
-            session()->flash('error', 'Помилка підключення: ' . $e->getMessage());
+            session()->flash('error', 'Помилка підключення: '.$e->getMessage());
         }
     }
 
@@ -406,7 +436,7 @@ class TenantDetails extends Component
     {
         return ChatSession::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $this->tenant->id)
-            ->with(['messages' => fn($q) => $q->orderBy('created_at', 'desc')->take(1)])
+            ->with(['messages' => fn ($q) => $q->orderBy('created_at', 'desc')->take(1)])
             ->orderBy('created_at', 'desc')
             ->take(10)
             ->get();
@@ -425,9 +455,9 @@ class TenantDetails extends Component
         if ($this->chatSearch) {
             $query->where(function ($q) {
                 $q->where('session_id', 'like', "%{$this->chatSearch}%")
-                  ->orWhereHas('messages', function ($mq) {
-                      $mq->where('content', 'like', "%{$this->chatSearch}%");
-                  });
+                    ->orWhereHas('messages', function ($mq) {
+                        $mq->where('content', 'like', "%{$this->chatSearch}%");
+                    });
             });
         }
 
@@ -446,8 +476,10 @@ class TenantDetails extends Component
     public function getChatEventsCount(int $sessionId): int
     {
         $session = ChatSession::find($sessionId);
-        if (!$session) return 0;
-        
+        if (! $session) {
+            return 0;
+        }
+
         return \Illuminate\Support\Facades\DB::table('chat_events')
             ->where('session_id', $session->session_id)
             ->count();

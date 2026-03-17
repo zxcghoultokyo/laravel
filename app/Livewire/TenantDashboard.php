@@ -7,48 +7,64 @@ use App\Models\ChatSession;
 use App\Models\Product;
 use App\Models\Tenant;
 use App\Scopes\TenantScope;
-use Livewire\Component;
-use Livewire\WithPagination;
-use Livewire\Attributes\On;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Livewire\WithPagination;
 
 class TenantDashboard extends Component
 {
     use WithPagination;
 
     public string $activeTab = 'overview';
+
     public array $stats = [];
+
     public array $chartData = [];
+
     public array $funnelData = [];
 
     // Chat filters
     public string $chatSearch = '';
+
     public string $chatStatus = '';
-    
+
     // Selected chat for inline view
     public ?string $selectedChatId = null;
-    
+
     // Settings form
     public string $settingsName = '';
+
     public string $settingsDomain = '';
+
     public string $settingsPlatform = '';
+
     public bool $editingSettings = false;
-    
+
     // Conversions tab data
     public int $conversionsDays = 7;
+
     public int $funnelDays = 14;
+
     public string $conversionsActiveTab = 'funnel';
+
     // REMOVED: $conversionsData - use $funnelData instead (one source of truth)
     public array $cartEvents = [];
+
     public array $chatAttributedConversions = [];
+
     public array $checkoutOrders = [];
+
     public ?array $selectedConversionSession = null;
+
     public ?string $selectedConversionSessionId = null;
+
     public ?int $selectedCheckoutId = null;
+
     public array $selectedCheckoutProducts = [];
-    
+
     protected $queryString = ['activeTab', 'selectedChatId'];
 
     public function mount()
@@ -56,13 +72,13 @@ class TenantDashboard extends Component
         $this->loadStats();
         $this->loadChartData();
         $this->loadFunnelData();
-        
+
         // Load conversions data if on conversions tab
         if ($this->activeTab === 'conversions') {
             $this->loadConversionsData();
         }
     }
-    
+
     /**
      * Called on every request - ensures data is always loaded
      */
@@ -73,13 +89,13 @@ class TenantDashboard extends Component
             $this->loadChartData();
             $this->loadFunnelData();
         }
-        
+
         // Ensure conversions data on conversions tab
         if ($this->activeTab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
     }
-    
+
     /**
      * Called after Livewire hydration (navigation, tab switch, etc.)
      */
@@ -90,15 +106,15 @@ class TenantDashboard extends Component
             $this->loadChartData();
             $this->loadFunnelData();
         }
-        
+
         // Ensure conversions data on conversions tab
         if ($this->activeTab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
     }
-    
+
     // ==== CONVERSIONS TAB METHODS ====
-    
+
     public function setConversionsTab(string $tab)
     {
         $this->conversionsActiveTab = $tab;
@@ -109,43 +125,43 @@ class TenantDashboard extends Component
         $this->selectedCheckoutId = null;
         $this->selectedCheckoutProducts = [];
     }
-    
+
     public function updatedConversionsDays()
     {
         // Reload funnel with conversions filter period
         $this->loadFunnelData($this->conversionsDays);
         $this->loadConversionsData();
     }
-    
+
     public function loadConversionsData()
     {
         $tenant = $this->tenant;
         $startDate = now()->subDays($this->conversionsDays)->startOfDay();
-        
+
         // Reload funnel with conversions filter period
         $this->loadFunnelData($this->conversionsDays);
         // Load cart events and orders
         $this->loadCartEventsForTenant($startDate);
         $this->loadCheckoutOrdersForTenant($startDate);
     }
-    
+
     // REMOVED loadConversionsFunnel - use loadFunnelData() instead (single source of truth)
-    
+
     private function loadCartEventsForTenant($startDate)
     {
         $tenantId = $this->tenant->id;
-        
+
         $query = DB::table('chat_events')
             ->where('created_at', '>=', $startDate)
             ->where('event_type', 'add_to_cart')
             ->where('tenant_id', $tenantId);
-        
+
         $events = $query->orderByDesc('created_at')->get();
-        
+
         // Get product data
         $articles = $events->pluck('product_article')->unique()->filter()->toArray();
         $productDataByArticle = [];
-        if (!empty($articles)) {
+        if (! empty($articles)) {
             $products = DB::table('products')
                 ->whereIn('article', $articles)
                 ->where('tenant_id', $tenantId)
@@ -159,28 +175,28 @@ class TenantDashboard extends Component
                 ];
             }
         }
-        
+
         $this->cartEvents = $events->map(function ($event) use ($productDataByArticle) {
             $meta = json_decode($event->metadata ?? '{}', true);
-            
+
             $metaTitle = $meta['product_title'] ?? null;
-            
+
             // Filter out bogus titles extracted from button text (e.g. "Купити", "Buy", "В кошик")
             $bogusPatterns = ['купити', 'buy', 'в кошик', 'додати', 'add to cart', 'замовити', 'order'];
             if ($metaTitle && in_array(mb_strtolower(trim($metaTitle)), $bogusPatterns)) {
                 $metaTitle = null;
             }
-            
+
             $url = null;
             $dbTitle = null;
             if ($event->product_article && isset($productDataByArticle[$event->product_article])) {
                 $dbTitle = $productDataByArticle[$event->product_article]['title'];
                 $url = $productDataByArticle[$event->product_article]['url'];
             }
-            
+
             // Prefer DB title (always accurate) over metadata title (may be button text)
             $title = $dbTitle ?: $metaTitle;
-            
+
             return [
                 'id' => $event->id,
                 'session_id' => $event->session_id,
@@ -194,42 +210,44 @@ class TenantDashboard extends Component
                 'created_at' => $event->created_at,
             ];
         })->toArray();
-        
-        $this->chatAttributedConversions = array_filter($this->cartEvents, fn($c) => $c['had_chat'] || $c['from_chat']);
+
+        $this->chatAttributedConversions = array_filter($this->cartEvents, fn ($c) => $c['had_chat'] || $c['from_chat']);
     }
-    
+
     private function loadCheckoutOrdersForTenant($startDate)
     {
-        if (!Schema::hasTable('orders')) {
+        if (! Schema::hasTable('orders')) {
             $this->checkoutOrders = [];
+
             return;
         }
-        
+
         $tenantId = $this->tenant->id;
-        
+
         // Get tenant's session_ids from chat_sessions for filtering
         $tenantSessionIds = DB::table('chat_sessions')
             ->where('tenant_id', $tenantId)
             ->pluck('session_id')
             ->toArray();
-        
+
         if (empty($tenantSessionIds)) {
             $this->checkoutOrders = [];
+
             return;
         }
-        
+
         // Filter orders by session_id belonging to this tenant
         $query = DB::table('orders')
             ->where('created_at', '>=', $startDate)
             ->where('had_chat', true)
             ->whereIn('session_id', $tenantSessionIds);
-        
+
         $orders = $query->orderByDesc('ordered_at')->get();
-        
+
         $this->checkoutOrders = $orders->map(function ($order) {
             $raw = json_decode($order->raw ?? '{}', true);
             $products = $raw['products'] ?? [];
-            
+
             $statusLabels = [
                 'new' => 'Новий',
                 'processing' => 'В обробці',
@@ -238,7 +256,7 @@ class TenantDashboard extends Component
                 'delivering' => 'Доставляється',
                 'cancelled' => 'Скасовано',
             ];
-            
+
             return [
                 'id' => $order->id,
                 'source' => 'horoshop',
@@ -259,25 +277,25 @@ class TenantDashboard extends Component
                 'delivery_price' => $order->delivery_price,
                 'delivery_comment' => $order->delivery_comment,
                 'payment_type' => $order->payment_type_title,
-                'payed' => (bool)($order->payed ?? false),
+                'payed' => (bool) ($order->payed ?? false),
                 'has_products' => count($products) > 0,
             ];
         })->sortByDesc('created_at')->values()->toArray();
     }
-    
+
     public function viewConversionSession($sessionId)
     {
         $this->selectedConversionSessionId = $sessionId;
         $tenant = $this->tenant;
         $slug = $tenant->slug;
         $apiToken = $tenant->widgetSettings?->api_token;
-        
+
         // Get session info
         $session = DB::table('chat_sessions')
             ->where('session_id', $sessionId)
             ->where('tenant_id', $tenant->id)
             ->first();
-        
+
         // Get messages
         $messages = [];
         if ($session) {
@@ -291,11 +309,12 @@ class TenantDashboard extends Component
                         $parsed = json_decode($content, true);
                         if ($parsed && isset($parsed['intro'])) {
                             $content = $parsed['intro'];
-                            if (!empty($parsed['products'])) {
-                                $content .= ' [' . count($parsed['products']) . ' товарів показано]';
+                            if (! empty($parsed['products'])) {
+                                $content .= ' ['.count($parsed['products']).' товарів показано]';
                             }
                         }
                     }
+
                     return [
                         'role' => $msg->role,
                         'content' => $content,
@@ -304,13 +323,13 @@ class TenantDashboard extends Component
                 })
                 ->toArray();
         }
-        
+
         // Products shown
         $productsShownQuery = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'product_shown')
             ->whereNotNull('product_id')
-            ->where(function($q) use ($slug, $apiToken) {
+            ->where(function ($q) use ($slug, $apiToken) {
                 $q->where('merchant_id', $slug);
                 if ($apiToken) {
                     $q->orWhere('merchant_id', $apiToken);
@@ -321,13 +340,13 @@ class TenantDashboard extends Component
             ->distinct()
             ->get()
             ->toArray();
-        
+
         // Products clicked
         $productsClickedQuery = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'product_click')
             ->whereNotNull('product_id')
-            ->where(function($q) use ($slug, $apiToken) {
+            ->where(function ($q) use ($slug, $apiToken) {
                 $q->where('merchant_id', $slug);
                 if ($apiToken) {
                     $q->orWhere('merchant_id', $apiToken);
@@ -337,12 +356,12 @@ class TenantDashboard extends Component
             ->select('product_id', 'product_article', 'product_price')
             ->get()
             ->toArray();
-        
+
         // Add to cart
         $addedToCartQuery = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->where('event_type', 'add_to_cart')
-            ->where(function($q) use ($slug, $apiToken) {
+            ->where(function ($q) use ($slug, $apiToken) {
                 $q->where('merchant_id', $slug);
                 if ($apiToken) {
                     $q->orWhere('merchant_id', $apiToken);
@@ -352,12 +371,12 @@ class TenantDashboard extends Component
             ->select('product_id', 'product_article', 'product_price', 'created_at', 'metadata')
             ->get()
             ->toArray();
-        
+
         // Checkout events
         $rawCheckoutsQuery = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->whereIn('event_type', ['checkout_submit', 'checkout_success'])
-            ->where(function($q) use ($slug, $apiToken) {
+            ->where(function ($q) use ($slug, $apiToken) {
                 $q->where('merchant_id', $slug);
                 if ($apiToken) {
                     $q->orWhere('merchant_id', $apiToken);
@@ -367,18 +386,18 @@ class TenantDashboard extends Component
             ->select('event_type', 'product_price', 'created_at', 'metadata')
             ->orderBy('created_at')
             ->get();
-        
+
         // Deduplicate checkouts
         $checkouts = [];
         $lastCheckoutTime = null;
         foreach ($rawCheckouts as $e) {
             $meta = json_decode($e->metadata ?? '{}', true);
             $currentTime = strtotime($e->created_at);
-            
+
             if ($lastCheckoutTime && ($currentTime - $lastCheckoutTime) < 300) {
                 continue;
             }
-            
+
             $lastCheckoutTime = $currentTime;
             $checkouts[] = [
                 'event_type' => $e->event_type,
@@ -394,19 +413,19 @@ class TenantDashboard extends Component
             ];
         }
         $checkouts = array_reverse($checkouts);
-        
+
         // UTM data
         $firstEvent = DB::table('chat_events')
             ->where('session_id', $sessionId)
             ->whereNotNull('utm_source')
-            ->where(function($q) use ($slug, $apiToken) {
+            ->where(function ($q) use ($slug, $apiToken) {
                 $q->where('merchant_id', $slug);
                 if ($apiToken) {
                     $q->orWhere('merchant_id', $apiToken);
                 }
             })
             ->first();
-        
+
         $utmData = null;
         if ($firstEvent) {
             $utmData = [
@@ -416,7 +435,7 @@ class TenantDashboard extends Component
                 'referrer' => $firstEvent->referrer,
             ];
         }
-        
+
         // Get product titles
         $productArticles = collect($productsShown)
             ->merge($productsClicked)
@@ -425,9 +444,9 @@ class TenantDashboard extends Component
             ->unique()
             ->filter()
             ->toArray();
-        
+
         $productDataByArticle = [];
-        if (!empty($productArticles)) {
+        if (! empty($productArticles)) {
             $products = DB::table('products')
                 ->whereIn('article', $productArticles)
                 ->where('tenant_id', $tenant->id)
@@ -441,7 +460,7 @@ class TenantDashboard extends Component
                 ];
             }
         }
-        
+
         $productIds = collect($productsShown)
             ->merge($productsClicked)
             ->merge($addedToCart)
@@ -449,40 +468,40 @@ class TenantDashboard extends Component
             ->unique()
             ->filter()
             ->toArray();
-        
+
         $productTitlesById = [];
-        if (!empty($productIds)) {
+        if (! empty($productIds)) {
             $productTitlesById = DB::table('products')
                 ->whereIn('id', $productIds)
                 ->where('tenant_id', $tenant->id)
                 ->pluck('title', 'id')
                 ->toArray();
         }
-        
+
         $getProductData = function ($item) use ($productDataByArticle, $productTitlesById) {
             $title = null;
             $url = null;
-            
+
             if (isset($item->metadata)) {
                 $meta = json_decode($item->metadata, true);
-                if (!empty($meta['product_title'])) {
+                if (! empty($meta['product_title'])) {
                     $title = $meta['product_title'];
                 }
             }
-            if (!empty($item->product_article) && isset($productDataByArticle[$item->product_article])) {
+            if (! empty($item->product_article) && isset($productDataByArticle[$item->product_article])) {
                 $title = $title ?: $productDataByArticle[$item->product_article]['title'];
                 $url = $productDataByArticle[$item->product_article]['url'];
             }
-            if (!$title && !empty($item->product_id) && isset($productTitlesById[$item->product_id])) {
+            if (! $title && ! empty($item->product_id) && isset($productTitlesById[$item->product_id])) {
                 $title = $productTitlesById[$item->product_id];
             }
-            
+
             return [
                 'title' => $title ?: 'Unknown',
                 'url' => $url,
             ];
         };
-        
+
         $this->selectedConversionSession = [
             'session_id' => $sessionId,
             'created_at' => $session->created_at ?? null,
@@ -491,63 +510,66 @@ class TenantDashboard extends Component
             'checkouts' => $checkouts,
             'products_shown' => array_map(function ($p) use ($getProductData) {
                 $data = $getProductData($p);
+
                 return [
-                    ...(array)$p,
+                    ...(array) $p,
                     'title' => $data['title'],
                     'url' => $data['url'],
                 ];
             }, $productsShown),
             'products_clicked' => array_map(function ($p) use ($getProductData) {
                 $data = $getProductData($p);
+
                 return [
-                    ...(array)$p,
+                    ...(array) $p,
                     'title' => $data['title'],
                     'url' => $data['url'],
                 ];
             }, $productsClicked),
             'added_to_cart' => array_map(function ($p) use ($getProductData) {
                 $data = $getProductData($p);
+
                 return [
-                    ...(array)$p,
+                    ...(array) $p,
                     'title' => $data['title'],
                     'url' => $data['url'],
                 ];
             }, $addedToCart),
         ];
     }
-    
+
     public function closeConversionSession()
     {
         $this->selectedConversionSession = null;
         $this->selectedConversionSessionId = null;
     }
-    
+
     public function loadConversionCheckoutProducts(int $orderId)
     {
         $this->selectedCheckoutId = $orderId;
         $this->selectedCheckoutProducts = [];
-        
+
         $order = DB::table('orders')->where('id', $orderId)->first();
         if ($order && $order->raw) {
             $raw = json_decode($order->raw, true);
             $products = $raw['products'] ?? [];
             $shopDomain = config('services.horoshop.domain', '');
-            
-            $this->selectedCheckoutProducts = collect($products)->map(function($p) use ($shopDomain) {
+
+            $this->selectedCheckoutProducts = collect($products)->map(function ($p) use ($shopDomain) {
                 $article = $p['article'] ?? '';
                 $url = null;
-                
-                if (!empty($p['url'])) {
+
+                if (! empty($p['url'])) {
                     $url = $p['url'];
-                } elseif (!empty($p['href'])) {
+                } elseif (! empty($p['href'])) {
                     $url = $p['href'];
                 } elseif ($article && $shopDomain) {
                     $dbProduct = Product::where('article', $article)->where('tenant_id', $this->tenant->id)->first();
-                    if ($dbProduct && !empty($dbProduct->raw['url'])) {
+                    if ($dbProduct && ! empty($dbProduct->raw['url'])) {
                         $url = $dbProduct->raw['url'];
                     }
                 }
-                
+
                 return [
                     'title' => $p['title'] ?? $p['name'] ?? 'Товар',
                     'article' => $article,
@@ -558,7 +580,7 @@ class TenantDashboard extends Component
             })->toArray();
         }
     }
-    
+
     public function closeConversionCheckoutProducts()
     {
         $this->selectedCheckoutId = null;
@@ -582,7 +604,7 @@ class TenantDashboard extends Component
             'messages_used' => $tenant->messages_used,
             'messages_limit' => $tenant->messages_limit,
             'usage_percentage' => $tenant->getUsagePercentage(),
-            
+
             // Sessions
             'total_sessions' => ChatSession::withoutGlobalScope(TenantScope::class)
                 ->where('tenant_id', $tenant->id)->count(),
@@ -590,20 +612,20 @@ class TenantDashboard extends Component
                 ->where('tenant_id', $tenant->id)
                 ->where('created_at', '>=', $startDate)
                 ->count(),
-            
+
             // Messages
             'total_messages' => ChatMessage::where('tenant_id', $tenant->id)->count(),
             'messages_30d' => ChatMessage::where('tenant_id', $tenant->id)
                 ->where('created_at', '>=', $startDate)
                 ->count(),
-            
+
             // Products - use direct DB query to avoid scope issues
             'products_count' => DB::table('products')->where('tenant_id', $tenant->id)->count(),
             'products_in_stock' => DB::table('products')->where('tenant_id', $tenant->id)->where('in_stock', true)->count(),
-            
+
             // Categories - count from categories table
             'categories_count' => DB::table('categories')->where('tenant_id', $tenant->id)->count(),
-            
+
             // Plan
             'plan' => $tenant->plan,
             'plan_label' => $tenant->getPlanLabel(),
@@ -613,17 +635,17 @@ class TenantDashboard extends Component
             'is_trial_expired' => $tenant->isTrialExpired(),
             'has_active_subscription' => $tenant->hasActiveSubscription(),
             'is_subscription_expired' => $tenant->plan_expires_at && $tenant->plan_expires_at->isPast(),
-            'days_left' => $tenant->trial_ends_at 
-                ? max(0, (int) floor(now()->diffInDays($tenant->trial_ends_at, false))) 
+            'days_left' => $tenant->trial_ends_at
+                ? max(0, (int) floor(now()->diffInDays($tenant->trial_ends_at, false)))
                 : null,
-            'subscription_days_left' => $tenant->plan_expires_at 
-                ? max(0, (int) floor(now()->diffInDays($tenant->plan_expires_at, false))) 
+            'subscription_days_left' => $tenant->plan_expires_at
+                ? max(0, (int) floor(now()->diffInDays($tenant->plan_expires_at, false)))
                 : null,
-            
+
             // Widget status
             'widget_status' => $tenant->canUseWidget(),
             'widget_active' => $tenant->canUseWidget()['allowed'],
-            
+
             // Last sync
             'last_sync_at' => $tenant->last_sync_at,
         ];
@@ -632,7 +654,7 @@ class TenantDashboard extends Component
     public function loadChartData()
     {
         $tenant = $this->tenant;
-        
+
         $dailyMessages = ChatMessage::where('tenant_id', $tenant->id)
             ->where('role', 'user')
             ->where('created_at', '>=', now()->subDays(14))
@@ -657,7 +679,7 @@ class TenantDashboard extends Component
         $this->funnelDays = $days ?? 14;
         $startDate = now()->subDays($this->funnelDays)->startOfDay();
         $tenantId = $tenant->id;
-        
+
         // Get ALL merchant identifiers for fallback filtering (old records)
         $slug = $tenant->slug;
         $apiTokens = \App\Models\WidgetSettings::where('tenant_id', $tenantId)
@@ -665,31 +687,48 @@ class TenantDashboard extends Component
             ->filter()
             ->toArray();
         $merchantIds = array_unique(array_filter(array_merge([$slug], $apiTokens)));
-        
+
         // Check if tenant_id column exists
         $hasTenantIdColumn = Schema::hasColumn('chat_events', 'tenant_id');
-        
-        // Pre-calculate checkout_success from orders table (more reliable than chat_events)
+
+        // Pre-calculate checkout_success: only count orders from sessions
+        // that had chat-attributed add_to_cart events (ensures checkout <= add_to_cart in funnel)
         $checkoutCountFromOrders = 0;
         if (Schema::hasTable('orders')) {
             try {
-                $tenantSessionIds = DB::table('chat_sessions')
-                    ->where('tenant_id', $tenantId)
-                    ->pluck('session_id')
-                    ->toArray();
-                
-                if (!empty($tenantSessionIds)) {
+                // Get sessions with chat-attributed add_to_cart events
+                $cartQuery = DB::table('chat_events')
+                    ->where('event_type', 'add_to_cart')
+                    ->where('created_at', '>=', $startDate);
+
+                if ($hasTenantIdColumn) {
+                    $cartQuery->where(function ($q) use ($tenantId, $merchantIds) {
+                        $q->where('tenant_id', $tenantId);
+                        if (! empty($merchantIds)) {
+                            $q->orWhere(function ($q2) use ($merchantIds) {
+                                $q2->whereNull('tenant_id')
+                                    ->whereIn('merchant_id', $merchantIds);
+                            });
+                        }
+                    });
+                } else {
+                    $cartQuery->whereIn('merchant_id', $merchantIds);
+                }
+
+                $cartSessionIds = $cartQuery->distinct()->pluck('session_id')->toArray();
+
+                if (! empty($cartSessionIds)) {
                     $checkoutCountFromOrders = DB::table('orders')
                         ->where('created_at', '>=', $startDate)
                         ->where('had_chat', true)
-                        ->whereIn('session_id', $tenantSessionIds)
+                        ->whereIn('session_id', $cartSessionIds)
                         ->count();
                 }
             } catch (\Throwable $e) {
                 // Ignore - will fall back to chat_events
             }
         }
-        
+
         // Define funnel stages
         $stages = [
             'page_view' => ['label' => 'Відвідувачі', 'icon' => '👁️', 'hint' => 'Унікальні сесії на сайті'],
@@ -697,12 +736,12 @@ class TenantDashboard extends Component
             'message' => ['label' => 'Написали', 'icon' => '✍️', 'hint' => 'Надіслали повідомлення'],
             'product_click' => ['label' => 'Клік на товар', 'icon' => '👆', 'hint' => 'Клікнули на картку товару'],
             'add_to_cart' => ['label' => 'До кошика', 'icon' => '🛒', 'hint' => 'Додали товар в кошик (з чату)'],
-            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Оформили замовлення'],
+            'checkout_success' => ['label' => 'Замовлення', 'icon' => '✅', 'hint' => 'Замовлення з товарами з кошика чату'],
         ];
-        
+
         $funnel = [];
         $prevCount = 0;
-        
+
         foreach ($stages as $eventType => $stage) {
             try {
                 // For checkout_success, use ONLY orders table count
@@ -714,15 +753,15 @@ class TenantDashboard extends Component
                     $query = DB::table('chat_events')
                         ->where('event_type', $eventType)
                         ->where('created_at', '>=', $startDate);
-                    
+
                     // Filter by tenant_id (new records) OR merchant_id (old records)
                     if ($hasTenantIdColumn) {
-                        $query->where(function($q) use ($tenantId, $merchantIds) {
+                        $query->where(function ($q) use ($tenantId, $merchantIds) {
                             $q->where('tenant_id', $tenantId);
-                            if (!empty($merchantIds)) {
-                                $q->orWhere(function($q2) use ($merchantIds) {
+                            if (! empty($merchantIds)) {
+                                $q->orWhere(function ($q2) use ($merchantIds) {
                                     $q2->whereNull('tenant_id')
-                                       ->whereIn('merchant_id', $merchantIds);
+                                        ->whereIn('merchant_id', $merchantIds);
                                 });
                             }
                         });
@@ -730,15 +769,15 @@ class TenantDashboard extends Component
                         // Fallback: only merchant_id
                         $query->whereIn('merchant_id', $merchantIds);
                     }
-                    
+
                     // For add_to_cart: only count chat-attributed (had_chat or from_chat)
                     if ($eventType === 'add_to_cart') {
-                        $query->where(function($q) {
+                        $query->where(function ($q) {
                             $q->whereRaw("JSON_EXTRACT(metadata, '$.had_chat_conversation') = true")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
+                                ->orWhereRaw("JSON_EXTRACT(metadata, '$.product_from_chat') = true");
                         });
                     }
-                    
+
                     // For add_to_cart: count items (not distinct sessions) to match cart tab
                     if ($eventType === 'add_to_cart') {
                         $count = $query->count();
@@ -749,14 +788,14 @@ class TenantDashboard extends Component
             } catch (\Throwable $e) {
                 \Log::error('TenantDashboard loadFunnelData error', [
                     'stage' => $eventType,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
                 $count = 0;
             }
-            
+
             $rate = $prevCount > 0 ? round(($count / $prevCount) * 100, 1) : 0;
             $dropoff = $prevCount > 0 ? round((($prevCount - $count) / $prevCount) * 100, 1) : 0;
-            
+
             $funnel[] = [
                 'stage' => $eventType,
                 'label' => $stage['label'],
@@ -766,14 +805,14 @@ class TenantDashboard extends Component
                 'rate' => $rate,
                 'dropoff' => $dropoff,
             ];
-            
+
             $prevCount = $count ?: $prevCount;
         }
-        
+
         $firstStage = $funnel[0]['count'] ?? 0;
         $lastStage = $funnel[count($funnel) - 1]['count'] ?? 0;
         $overallRate = $firstStage > 0 ? round(($lastStage / $firstStage) * 100, 2) : 0;
-        
+
         $this->funnelData = [
             'stages' => $funnel,
             'overall_rate' => $overallRate,
@@ -788,36 +827,37 @@ class TenantDashboard extends Component
             'triggers' => 'proactive_triggers',
             'analytics' => 'advanced_analytics',
         ];
-        
+
         if (isset($featureMap[$tab])) {
             $tenant = Auth::user()->tenant;
-            if ($tenant && !$tenant->hasFeature($featureMap[$tab])) {
+            if ($tenant && ! $tenant->hasFeature($featureMap[$tab])) {
                 // Don't switch to restricted tab - show upgrade message
                 $this->dispatch('show-upgrade-modal', feature: $featureMap[$tab]);
+
                 return;
             }
         }
-        
+
         $this->activeTab = $tab;
         $this->selectedChatId = null; // Reset selected chat when changing tabs
         $this->resetPage();
-        
+
         // Load conversions data when switching to conversions tab
         if ($tab === 'conversions' && empty($this->chatAttributedConversions)) {
             $this->loadConversionsData();
         }
-        
+
         // Reload funnel with 14 days when going back to overview
         if ($tab === 'overview' && $this->funnelDays !== 14) {
             $this->loadFunnelData(14);
         }
     }
-    
+
     public function selectChat(string $sessionId)
     {
         $this->selectedChatId = $sessionId;
     }
-    
+
     /**
      * Handle openChat event from embedded Analytics component
      */
@@ -827,7 +867,7 @@ class TenantDashboard extends Component
         $this->activeTab = 'chats';
         $this->selectChat($sessionId);
     }
-    
+
     public function closeChat()
     {
         $this->selectedChatId = null;
@@ -872,7 +912,7 @@ class TenantDashboard extends Component
         $this->tenant->update([
             'api_token' => \Illuminate\Support\Str::random(32),
         ]);
-        
+
         session()->flash('token-regenerated', 'API токен оновлено');
     }
 
@@ -881,16 +921,15 @@ class TenantDashboard extends Component
         $query = ChatSession::withoutGlobalScope(TenantScope::class)
             ->where('tenant_id', $this->tenant->id)
             ->withCount('messages')
-            ->with(['messages' => fn($q) => $q->latest()->limit(1)])
+            ->with(['messages' => fn ($q) => $q->latest()->limit(1)])
             ->orderByDesc('last_message_at')  // Sort by last message date
             ->orderByDesc('updated_at');      // Fallback for sessions without last_message_at
 
         if ($this->chatSearch) {
-            $query->where(function($q) {
+            $query->where(function ($q) {
                 $q->where('session_id', 'like', "%{$this->chatSearch}%")
-                  ->orWhereHas('messages', fn($mq) => 
-                      $mq->where('content', 'like', "%{$this->chatSearch}%")
-                  );
+                    ->orWhereHas('messages', fn ($mq) => $mq->where('content', 'like', "%{$this->chatSearch}%")
+                    );
             });
         }
 

@@ -184,19 +184,22 @@ class QueryPreprocessorService
             ]);
         }
 
-        // 2. Check for FAQ match
-        $faqResult = $this->faqService->match($queryLower);
-        if ($faqResult) {
-            Log::info('QueryPreprocessor: FAQ intercepted', [
-                'query' => $query,
-                'question' => $faqResult['question_stub'] ?? null,
-            ]);
+        // 2. Check for FAQ match — skip if tenant has custom prompt presets
+        //    (presets contain tenant-specific FAQ answers that GPT handles better)
+        if (! $this->tenantHasActivePresets()) {
+            $faqResult = $this->faqService->match($queryLower);
+            if ($faqResult) {
+                Log::info('QueryPreprocessor: FAQ intercepted', [
+                    'query' => $query,
+                    'question' => $faqResult['question_stub'] ?? null,
+                ]);
 
-            return array_merge($result, [
-                'intercepted' => true,
-                'response' => $faqResult['answer'],
-                'response_type' => 'faq',
-            ]);
+                return array_merge($result, [
+                    'intercepted' => true,
+                    'response' => $faqResult['answer'],
+                    'response_type' => 'faq',
+                ]);
+            }
         }
 
         // 3. Check for comparison questions with direct answer
@@ -377,5 +380,27 @@ class QueryPreprocessorService
         }
 
         return null;
+    }
+
+    /**
+     * Check if current tenant has active prompt presets.
+     *
+     * When a tenant has presets, FAQ answers are baked into the prompt
+     * and GPT gives tenant-specific answers (not generic hardcoded ones).
+     */
+    private function tenantHasActivePresets(): bool
+    {
+        try {
+            $tenantId = app(\App\Services\Tenant\TenantContext::class)->getTenantId();
+            if (! $tenantId) {
+                return false;
+            }
+
+            $presets = app(\App\Services\Ai\PromptPresetService::class)->getActivePresets($tenantId);
+
+            return ! empty($presets);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }

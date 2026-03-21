@@ -2212,7 +2212,11 @@ PROMPT;
         if (! empty($args['brand'])) {
             $filters['brand'] = $args['brand'];
         }
-        if (! empty($args['category'])) {
+        // Only pass GPT-supplied category for age-based stores (children's).
+        // For non-age stores, GPT often picks wrong categories for abstract queries
+        // ("на весну" → "Футболки", "на вологу погоду" → "Level 7") which breaks search.
+        // Meilisearch handles relevance fine without category filter.
+        if (! empty($args['category']) && $this->hasAgeCategories()) {
             $filters['category'] = $args['category'];
         }
 

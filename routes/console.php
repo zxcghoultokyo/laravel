@@ -21,11 +21,11 @@ Artisan::command('inspire', function () {
 Schedule::call(function () {
     // Get all tenants that can use the service (active subscription OR on trial)
     $tenants = \App\Models\Tenant::canUseService()->get();
-    
+
     foreach ($tenants as $tenant) {
         \App\Jobs\SyncHoroshopProductsJob::dispatch($tenant->id);
     }
-    
+
     \Illuminate\Support\Facades\Log::info('Scheduled Horoshop sync for active tenants', [
         'tenants_count' => $tenants->count(),
         'tenant_ids' => $tenants->pluck('id')->toArray(),
@@ -57,9 +57,9 @@ Schedule::command('orders:sync --all-tenants --days=3 --update-counts')
 Schedule::call(function () {
     // Get all tenants that can use the service AND have products
     $tenants = \App\Models\Tenant::canUseService()
-        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->whereHas('products', fn ($q) => $q->where('in_stock', true))
         ->get();
-    
+
     foreach ($tenants as $tenant) {
         // Count products without AI index for this tenant
         $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
@@ -69,13 +69,13 @@ Schedule::call(function () {
                 $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
             })
             ->count();
-        
+
         if ($productsWithoutAi > 0) {
             \Illuminate\Support\Facades\Log::info('Scheduled AI enrichment for tenant', [
                 'tenant_id' => $tenant->id,
                 'products_without_ai' => $productsWithoutAi,
             ]);
-            
+
             \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
                 batchSize: min(100, $productsWithoutAi),
                 offset: 0,
@@ -96,9 +96,9 @@ Schedule::call(function () {
 // This ensures enrichment completes even if worker restarts
 Schedule::call(function () {
     $tenants = \App\Models\Tenant::canUseService()
-        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->whereHas('products', fn ($q) => $q->where('in_stock', true))
         ->get();
-    
+
     foreach ($tenants as $tenant) {
         // Count products without AI index for this tenant
         $productsWithoutAi = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
@@ -108,22 +108,22 @@ Schedule::call(function () {
                 $q->select('product_id')->from('product_ai_index')->whereNotNull('keywords');
             })
             ->count();
-        
+
         // Only dispatch if there are unenriched products AND coverage < 95%
         $totalProducts = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
             ->where('tenant_id', $tenant->id)
             ->where('in_stock', true)
             ->count();
-        
+
         $coverage = $totalProducts > 0 ? (($totalProducts - $productsWithoutAi) / $totalProducts) * 100 : 100;
-        
+
         if ($productsWithoutAi > 0 && $coverage < 95) {
             \Illuminate\Support\Facades\Log::info('AI enrichment health check: dispatching batch', [
                 'tenant_id' => $tenant->id,
                 'products_without_ai' => $productsWithoutAi,
                 'coverage_percent' => round($coverage, 1),
             ]);
-            
+
             // Dispatch small batch to continue enrichment
             \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
                 batchSize: min(50, $productsWithoutAi),
@@ -145,7 +145,7 @@ Schedule::call(function () {
 Schedule::call(function () {
     // Full reindex for all tenants (no tenant filter = all)
     \App\Jobs\IndexProductsToMeiliJob::dispatch(null)->onQueue('default');
-    
+
     \Illuminate\Support\Facades\Log::info('Scheduled Meilisearch full reindex started');
 })
     ->dailyAt('05:00')
@@ -181,8 +181,8 @@ Schedule::command('categories:rebuild')
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/sync-categories.log'));
 
-// Generate embeddings for semantic search (expensive, weekly)
-Schedule::command('products:generate-embeddings --limit=100')
+// Generate embeddings for semantic search per tenant (weekly)
+Schedule::command('products:generate-embeddings --all-tenants')
     ->weeklyOn(0, '02:30') // Sunday at 02:30
     ->runInBackground()
     ->withoutOverlapping()
@@ -195,9 +195,9 @@ Schedule::command('products:generate-embeddings --limit=100')
 // This auto-generates synonyms for new categories or new tenants
 Schedule::call(function () {
     $tenants = \App\Models\Tenant::canUseService()
-        ->whereHas('products', fn($q) => $q->where('in_stock', true))
+        ->whereHas('products', fn ($q) => $q->where('in_stock', true))
         ->get();
-    
+
     foreach ($tenants as $tenant) {
         // Get unique category count for tenant
         $categoryCount = \App\Models\Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
@@ -206,10 +206,10 @@ Schedule::call(function () {
             ->where('category_path', '!=', '')
             ->distinct('category_path')
             ->count('category_path');
-        
+
         // Get synonym count for tenant
         $synonymCount = \App\Models\ProductSynonym::where('tenant_id', $tenant->id)->count();
-        
+
         // If categories exist but no/few synonyms, generate them
         // Threshold: at least 5 synonyms per category expected
         if ($categoryCount > 0 && $synonymCount < ($categoryCount * 3)) {
@@ -218,14 +218,14 @@ Schedule::call(function () {
                 'category_count' => $categoryCount,
                 'current_synonyms' => $synonymCount,
             ]);
-            
+
             \Illuminate\Support\Facades\Artisan::call('synonyms:products', [
                 '--tenant' => $tenant->id,
                 '--force' => false,
             ]);
         }
     }
-    
+
     \Illuminate\Support\Facades\Log::info('Weekly synonyms check completed', [
         'tenants_checked' => $tenants->count(),
     ]);
@@ -259,4 +259,3 @@ Schedule::command('chat:close-inactive --timeout=1440')
     ->runInBackground()
     ->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/chat-sessions.log'));
-

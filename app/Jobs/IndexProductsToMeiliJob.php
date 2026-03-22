@@ -152,6 +152,7 @@ class IndexProductsToMeiliJob implements ShouldBeUnique, ShouldQueue
                         'size',
                         'ai_materials',      // Materials
                         'ai_standards',      // Protection standards
+                        'ai_seasons',        // Seasonal relevance (весна, літо, дощ, etc.)
                         'age_text',          // Age from characteristics (e.g. "З 14 місяців+")
                     ],
                     // Синоніми для покращення пошуку (базові + з ProductSynonym таблиці)
@@ -257,6 +258,7 @@ class IndexProductsToMeiliJob implements ShouldBeUnique, ShouldQueue
                         'ai_search_queries' => $this->flattenArrayField($p->aiIndex->raw_ai_json['search_queries'] ?? []),
                         'ai_materials' => $this->flattenArrayField($p->aiIndex->materials ?? []),
                         'ai_standards' => $this->flattenArrayField($p->aiIndex->standards ?? []),
+                        'ai_seasons' => $this->flattenArrayField($p->aiIndex->raw_ai_json['seasons'] ?? []),
 
                         // Age from characteristics (e.g. "З 14 місяців+")
                         'age_text' => $ageText,

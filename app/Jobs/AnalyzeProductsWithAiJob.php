@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * AI-аналіз товарів для покращення пошуку.
- * 
+ *
  * Генерує:
  * - keywords: ключові слова українською та англійською
  * - slang: сленгові назви, скорочення, жаргон
@@ -32,16 +32,17 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 600; // 10 minutes for batch with rate limiting delays
+
     public int $tries = 3;
 
     /**
      * Constructor with optional tenant_id filter for tenant-specific enrichment.
-     * 
-     * @param int $batchSize Products per batch
-     * @param int $offset Skip first N products
-     * @param bool $forceReanalyze Re-analyze even if already has keywords
-     * @param int|null $tenantId If set, only analyze products for this tenant
-     * @param bool $singleBatchOnly If true, don't auto-dispatch next batch (used by OnboardTenantJob)
+     *
+     * @param  int  $batchSize  Products per batch
+     * @param  int  $offset  Skip first N products
+     * @param  bool  $forceReanalyze  Re-analyze even if already has keywords
+     * @param  int|null  $tenantId  If set, only analyze products for this tenant
+     * @param  bool  $singleBatchOnly  If true, don't auto-dispatch next batch (used by OnboardTenantJob)
      */
     public function __construct(
         public int $batchSize = 10,
@@ -57,15 +58,15 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     public function handle(): void
     {
         // Build log message with tenant info if specified
-        $logMsg = $this->tenantId 
+        $logMsg = $this->tenantId
             ? "AI enrichment batch={$this->batchSize} tenant=#{$this->tenantId}"
             : "AI enrichment batch={$this->batchSize}";
-        
+
         // Only log SyncLog for first batch (offset = 0)
-        $syncLog = $this->offset === 0 
+        $syncLog = $this->offset === 0
             ? SyncLog::start(SyncLog::TYPE_AI_ENRICHMENT, $logMsg)
             : null;
-        
+
         try {
             $this->processAnalysis($syncLog);
         } catch (\Throwable $e) {
@@ -80,12 +81,13 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     {
         $config = config('services.openai', []);
         $apiKey = $config['key'] ?? null;
-        
-        if (!$apiKey) {
+
+        if (! $apiKey) {
             Log::error('AnalyzeProductsWithAiJob: OpenAI API key not configured');
             if ($syncLog) {
                 $syncLog->fail('OpenAI API key not configured');
             }
+
             return;
         }
 
@@ -94,14 +96,14 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             ->where('in_stock', true)
             ->whereNotNull('title')
             ->orderBy('id');
-        
+
         // Filter by tenant if specified
         if ($this->tenantId !== null) {
             $query->where('tenant_id', $this->tenantId);
         }
 
         // Skip already analyzed unless force
-        if (!$this->forceReanalyze) {
+        if (! $this->forceReanalyze) {
             $query->whereNotIn('id', function ($q) {
                 $q->select('product_id')
                     ->from('product_ai_index')
@@ -118,11 +120,12 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             if ($syncLog) {
                 $syncLog->complete(['message' => 'No more products to analyze']);
             }
-            
+
             // Mark AI enrichment as completed in onboarding progress
             if ($this->tenantId !== null) {
                 $this->markAiEnrichmentCompleted();
             }
+
             return;
         }
 
@@ -137,7 +140,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             try {
                 $this->analyzeProduct($product, $apiKey, $config);
                 $analyzed++;
-                
+
                 // Rate limit protection: delay between API calls (skip for last product)
                 if ($index < $products->count() - 1) {
                     usleep(300000); // 300ms delay = ~3 requests/sec
@@ -148,7 +151,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
                     'product_id' => $product->id,
                     'error' => $e->getMessage(),
                 ]);
-                
+
                 // On rate limit, wait longer
                 if (str_contains($e->getMessage(), 'rate_limit') || str_contains($e->getMessage(), '429')) {
                     sleep(5);
@@ -172,12 +175,12 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         }
 
         // Dispatch next batch if more products exist (unless singleBatchOnly mode)
-        if ($products->count() === $this->batchSize && !$this->singleBatchOnly) {
+        if ($products->count() === $this->batchSize && ! $this->singleBatchOnly) {
             Log::info('AnalyzeProductsWithAiJob: dispatching next batch', [
                 'tenant_id' => $this->tenantId,
                 'processed_this_batch' => $analyzed,
             ]);
-            
+
             // Always use offset 0 — whereNotIn(product_ai_index) dynamically
             // excludes already-processed products, so incrementing offset
             // would skip products as the result set shrinks.
@@ -197,8 +200,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     private function updateOnboardingProgress(int $batchAnalyzed): void
     {
         $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
-        
-        if (!$progress) {
+
+        if (! $progress) {
             return;
         }
 
@@ -223,12 +226,12 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         })->whereNotNull('keywords')->count();
 
         // Calculate progress
-        $percent = $totalProducts > 0 
+        $percent = $totalProducts > 0
             ? min(95, (int) round($enrichedCount / $totalProducts * 100))
             : 0;
 
         $detail = "AI аналіз: {$enrichedCount} з {$totalProducts} товарів";
-        
+
         // Update progress
         $progress->updateStep('ai_enrichment', 'in_progress', $percent, $detail, [
             'total' => $totalProducts,
@@ -251,8 +254,8 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     private function markAiEnrichmentCompleted(): void
     {
         $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
-        
-        if (!$progress) {
+
+        if (! $progress) {
             return;
         }
 
@@ -269,7 +272,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         })->whereNotNull('keywords')->count();
 
         $detail = "AI аналіз завершено: {$enrichedCount} товарів оброблено";
-        
+
         $progress->updateStep('ai_enrichment', 'completed', 100, $detail, [
             'total' => $totalProducts,
             'enriched' => $enrichedCount,
@@ -294,15 +297,15 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     private function triggerMeiliIndexing(): void
     {
         $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
-        
-        if (!$progress) {
+
+        if (! $progress) {
             return;
         }
 
         // Check if meili step hasn't started yet or is still pending
         $steps = $progress->steps ?? [];
         $meiliStep = $steps['meili_indexing'] ?? null;
-        
+
         if ($meiliStep && in_array($meiliStep['status'], ['completed', 'in_progress'])) {
             // Meili already running or completed
             return;
@@ -324,7 +327,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
     private function analyzeProduct(Product $product, string $apiKey, array $config): void
     {
         $raw = is_array($product->raw) ? $product->raw : json_decode($product->raw ?? '{}', true);
-        
+
         $title = $product->title ?? '';
         $description = $this->extractDescription($raw);
         $category = $product->category_path ?? '';
@@ -335,7 +338,7 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         // Use gpt-4o-mini for batch enrichment - best cost/limits balance
         // Note: gpt-5-nano has severe rate limits and parameter restrictions
         $model = 'gpt-4o-mini';
-        
+
         // Build request body with max_tokens for gpt-4o-mini
         $requestBody = [
             'model' => $model,
@@ -346,26 +349,28 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             'temperature' => 0.3,
             'max_tokens' => 800,
         ];
-        
+
         $response = Http::timeout(30)
             ->withToken($apiKey)
-            ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/') . '/chat/completions', $requestBody);
+            ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/').'/chat/completions', $requestBody);
 
         $data = $response->json();
         $content = $data['choices'][0]['message']['content'] ?? null;
 
-        if (!$content) {
+        if (! $content) {
             Log::warning('AnalyzeProductsWithAiJob: empty AI response', ['product_id' => $product->id]);
+
             return;
         }
 
         // Parse JSON from response
         $json = $this->parseJsonFromResponse($content);
-        if (!$json) {
+        if (! $json) {
             Log::warning('AnalyzeProductsWithAiJob: failed to parse AI JSON', [
                 'product_id' => $product->id,
                 'content' => mb_substr($content, 0, 500),
             ]);
+
             return;
         }
 
@@ -397,10 +402,10 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
         // Pre-detect accessory keywords to give GPT a strong hint
         $titleLower = mb_strtolower($title);
         $isLikelyAccessory = preg_match('/кріплення|адаптер|mount|adapter|подушк|pad|накладк|кавер|чохол|cover|планка|rail|рейка|тримач|holder|противаг|панел|velcro/ui', $titleLower);
-        $accessoryHint = $isLikelyAccessory 
-            ? "\n\n🚨 УВАГА! Назва містить слово-аксесуар! product_type НЕ МОЖЕ бути 'helmet' або 'plate_carrier'!\n" 
+        $accessoryHint = $isLikelyAccessory
+            ? "\n\n🚨 УВАГА! Назва містить слово-аксесуар! product_type НЕ МОЖЕ бути 'helmet' або 'plate_carrier'!\n"
             : '';
-        
+
         return <<<PROMPT
 Проаналізуй цей товар та згенеруй JSON для пошукового індексу.
 {$accessoryHint}
@@ -460,18 +465,27 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
 3. "keywords": масив 10-20 ключових слів УКРАЇНСЬКОЮ та АНГЛІЙСЬКОЮ для пошуку.
    Включи: назву, бренд, тип, призначення, характеристики, синоніми.
+   ОБОВ'ЯЗКОВО додай сезонні слова які підходять товару: весна, літо, осінь, зима, демісезонний, всесезонний.
+   Додай погодні слова якщо релевантно: дощ, спека, мороз, вітер, волога, тепла погода, холодна погода.
 
 4. "slang": масив 5-10 сленгових назв УКРАЇНСЬКОЮ як шукають реальні люди.
 
 5. "synonyms": масив синонімів назви товару (варіанти написання, переклади)
 
 6. "search_queries": масив 5-10 ТИПОВИХ ПОШУКОВИХ ЗАПИТІВ українською
+   ОБОВ'ЯЗКОВО включи 2-3 сезонних запити відповідно до товару.
+   Приклади: "одяг на весну", "взуття на літо", "що взяти на зиму", "на дощову погоду", "на спеку"
 
 7. "materials": масив матеріалів якщо є (glass, aluminum, cordura, nylon, leather, etc)
 
 8. "standards": масив стандартів якщо є (IP68, NIJ III, MIL-STD, etc)
 
 9. "usage": масив призначення (everyday, work, military, outdoor, etc)
+
+10. "seasons": масив сезонів УКРАЇНСЬКОЮ коли товар актуальний + погодні умови.
+    Сезони: "весна", "літо", "осінь", "зима", "всесезонний", "демісезонний"
+    Погода: "дощ", "волога", "спека", "мороз", "холод", "вітер", "тепла погода"
+    Приклади: зимова куртка → ["зима", "осінь", "холод", "мороз"], футболка → ["весна", "літо", "спека", "тепла погода"], шолом → ["всесезонний"]
 
 КРИТИЧНО ВАЖЛИВО:
 - product_type та ai_category ОБОВ'ЯЗКОВІ - НІКОЛИ не повертай null!
@@ -490,22 +504,23 @@ PROMPT;
         if (is_array($desc)) {
             $desc = $desc['uk'] ?? $desc['ua'] ?? reset($desc) ?: '';
         }
-        return mb_substr(strip_tags((string)$desc), 0, 1000);
+
+        return mb_substr(strip_tags((string) $desc), 0, 1000);
     }
 
     private function extractCharacteristics(array $raw): string
     {
         $chars = $raw['characteristics'] ?? $raw['attrs'] ?? [];
-        if (!is_array($chars)) {
+        if (! is_array($chars)) {
             return '';
         }
-        
+
         $lines = [];
         foreach ($chars as $key => $value) {
             if (is_array($value)) {
                 // Handle nested structures like {"id": 1, "value": {"ua": "Text"}}
                 if (isset($value['value'])) {
-                    $value = is_array($value['value']) 
+                    $value = is_array($value['value'])
                         ? ($value['value']['ua'] ?? $value['value']['uk'] ?? reset($value['value']) ?: '')
                         : $value['value'];
                 } else {
@@ -517,6 +532,7 @@ PROMPT;
                 $lines[] = "{$key}: {$value}";
             }
         }
+
         return implode('; ', array_slice($lines, 0, 20));
     }
 

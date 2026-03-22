@@ -15,32 +15,39 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Job для batch генерації embeddings для товарів.
- * 
+ *
  * Генерує embeddings тільки для товарів які мають AI індекс
- * але не мають embedding.
+ * але не мають embedding. Підтримує per-tenant генерацію.
  */
 class GenerateProductEmbeddingsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 600; // 10 minutes
+
     public int $tries = 2;
 
     protected int $batchSize;
+
     protected int $limit;
+
+    protected ?int $tenantId;
 
     public function __construct(
         int $batchSize = 50,
-        int $limit = 0 // 0 = all
+        int $limit = 0, // 0 = all
+        ?int $tenantId = null
     ) {
         $this->batchSize = $batchSize;
         $this->limit = $limit;
+        $this->tenantId = $tenantId;
     }
 
     public function handle(EmbeddingService $embeddingService): void
     {
-        if (!$embeddingService->isAvailable()) {
+        if (! $embeddingService->isAvailable()) {
             Log::warning('[EmbeddingsJob] Embedding service not available (no API key)');
+
             return;
         }
 
@@ -48,6 +55,7 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
         Log::info('[EmbeddingsJob] Starting batch embedding generation', [
             'batch_size' => $this->batchSize,
             'limit' => $this->limit,
+            'tenant_id' => $this->tenantId,
         ]);
 
         // Create SyncLog entry
@@ -55,16 +63,26 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
             'sync_type' => SyncLog::TYPE_EMBEDDINGS,
             'status' => SyncLog::STATUS_RUNNING,
             'started_at' => now(),
+            'tenant_id' => $this->tenantId,
             'meta' => [
                 'batch_size' => $this->batchSize,
                 'limit' => $this->limit,
+                'tenant_id' => $this->tenantId,
             ],
         ]);
 
         // Get products with AI index but no embedding
         $query = ProductAiIndex::whereNull('embedding')
-            ->orWhere('embedding', '[]')
-            ->orderBy('id');
+            ->orWhere('embedding', '[]');
+
+        // Filter by tenant if specified
+        if ($this->tenantId) {
+            $query = ProductAiIndex::where(function ($q) {
+                $q->whereNull('embedding')->orWhere('embedding', '[]');
+            })->whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('tenant_id', $this->tenantId));
+        }
+
+        $query->orderBy('id');
 
         if ($this->limit > 0) {
             $query->limit($this->limit);
@@ -83,8 +101,9 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
 
             foreach ($aiIndexes as $i => $aiIndex) {
                 $product = $aiIndex->product;
-                if (!$product) {
+                if (! $product) {
                     $failed++;
+
                     continue;
                 }
 
@@ -97,7 +116,7 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
                     'description' => $this->extractDescription($product),
                 ]);
 
-                if (!empty($text)) {
+                if (! empty($text)) {
                     $texts[] = $text;
                     $indexMap[count($texts) - 1] = $aiIndex;
                 }
@@ -113,7 +132,9 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
             // Save embeddings
             foreach ($embeddings as $i => $embedding) {
                 $aiIndex = $indexMap[$i] ?? null;
-                if (!$aiIndex) continue;
+                if (! $aiIndex) {
+                    continue;
+                }
 
                 $processed++;
 
@@ -126,7 +147,7 @@ class GenerateProductEmbeddingsJob implements ShouldQueue
                 }
             }
 
-            Log::info("[EmbeddingsJob] Batch processed", [
+            Log::info('[EmbeddingsJob] Batch processed', [
                 'processed' => $processed,
                 'success' => $success,
                 'failed' => $failed,

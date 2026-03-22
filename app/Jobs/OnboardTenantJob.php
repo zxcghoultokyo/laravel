@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\ProductAiIndex;
 use App\Models\Tenant;
 use App\Models\TenantOnboardingProgress;
 use App\Services\Catalog\CategoryIndexService;
@@ -79,6 +80,9 @@ class OnboardTenantJob implements ShouldQueue
 
             // 7. Generate default prompt for this tenant
             $this->generatePrompt();
+
+            // 8. Generate embeddings for semantic search
+            $this->generateEmbeddings();
 
             // Mark onboarding as completed
             $this->progress->complete();
@@ -505,6 +509,43 @@ class OnboardTenantJob implements ShouldQueue
                 'Індексація пропущена (Meilisearch недоступний)',
                 ['error' => $e->getMessage()]
             );
+        }
+    }
+
+    /**
+     * Generate embeddings for semantic search
+     */
+    protected function generateEmbeddings(): void
+    {
+        $aiIndexCount = ProductAiIndex::whereHas('product', fn ($q) => $q->withoutGlobalScopes()->where('tenant_id', $this->tenantId))
+            ->where(function ($q) {
+                $q->whereNull('embedding')->orWhere('embedding', '[]');
+            })
+            ->count();
+
+        if ($aiIndexCount === 0) {
+            Log::info('OnboardTenantJob: No products need embeddings', ['tenant_id' => $this->tenantId]);
+
+            return;
+        }
+
+        Log::info('OnboardTenantJob: Generating embeddings', [
+            'tenant_id' => $this->tenantId,
+            'products_count' => $aiIndexCount,
+        ]);
+
+        try {
+            GenerateProductEmbeddingsJob::dispatchSync(50, 0, $this->tenantId);
+
+            Log::info('OnboardTenantJob: Embeddings generated', [
+                'tenant_id' => $this->tenantId,
+                'count' => $aiIndexCount,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('OnboardTenantJob: Embedding generation failed (non-critical)', [
+                'tenant_id' => $this->tenantId,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

@@ -2303,6 +2303,19 @@ class DiagnosticController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
+        try {
+            return $this->doCleanupTenants($request);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'file' => $e->getFile().':'.$e->getLine(),
+                'trace' => collect(explode("\n", $e->getTraceAsString()))->take(10)->toArray(),
+            ], 500);
+        }
+    }
+
+    private function doCleanupTenants(Request $request): JsonResponse
+    {
         $keepIds = array_map('intval', array_filter(explode(',', $request->input('keep', ''))));
         if (empty($keepIds)) {
             return response()->json(['error' => 'Specify keep=2,20 with tenant IDs to preserve'], 400);

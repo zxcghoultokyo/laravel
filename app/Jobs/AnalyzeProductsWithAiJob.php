@@ -176,19 +176,25 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 
         // Dispatch next batch if more products exist (unless singleBatchOnly mode)
         if ($products->count() === $this->batchSize && ! $this->singleBatchOnly) {
+            // When forceReanalyze is true, whereNotIn is NOT used, so offset must
+            // increment to avoid re-processing the same batch in an infinite loop.
+            // When forceReanalyze is false, whereNotIn dynamically excludes
+            // already-processed products, so offset stays 0.
+            $nextOffset = $this->forceReanalyze
+                ? $this->offset + $this->batchSize
+                : 0;
+
             Log::info('AnalyzeProductsWithAiJob: dispatching next batch', [
                 'tenant_id' => $this->tenantId,
                 'processed_this_batch' => $analyzed,
+                'next_offset' => $nextOffset,
             ]);
 
-            // Always use offset 0 — whereNotIn(product_ai_index) dynamically
-            // excludes already-processed products, so incrementing offset
-            // would skip products as the result set shrinks.
             self::dispatch(
                 batchSize: $this->batchSize,
-                offset: 0,
+                offset: $nextOffset,
                 forceReanalyze: $this->forceReanalyze,
-                tenantId: $this->tenantId  // CRITICAL: pass tenant_id to next batch
+                tenantId: $this->tenantId
             )->onQueue('meili')->delay(now()->addSeconds(2));
         }
     }

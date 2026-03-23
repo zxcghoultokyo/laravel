@@ -1102,7 +1102,8 @@ class DiagnosticController extends Controller
             ]);
         }
 
-        // Dispatch jobs per tenant
+        // Dispatch jobs per tenant — all batches upfront with staggered delays
+        // to avoid relying on chained dispatch (which can break on container restart)
         $tenants = $tenantId
             ? [\App\Models\Tenant::find($tenantId)]
             : \App\Models\Tenant::where('status', 'active')->get();
@@ -1118,14 +1119,21 @@ class DiagnosticController extends Controller
                 continue;
             }
 
-            \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
-                batchSize: min($batchSize, $tenantCount),
-                offset: 0,
-                forceReanalyze: $force,
-                tenantId: $tenant->id
-            )->onQueue('default');
+            $totalBatches = (int) ceil($tenantCount / $batchSize);
+            for ($i = 0; $i < $totalBatches; $i++) {
+                \App\Jobs\AnalyzeProductsWithAiJob::dispatch(
+                    batchSize: $batchSize,
+                    offset: $i * $batchSize,
+                    forceReanalyze: $force,
+                    tenantId: $tenant->id,
+                    singleBatchOnly: true
+                )->onQueue('meili')->delay(now()->addSeconds($i * 30));
+            }
 
-            $dispatched[$tenant->id] = $tenantCount;
+            $dispatched[$tenant->id] = [
+                'products' => $tenantCount,
+                'batches' => $totalBatches,
+            ];
         }
 
         return response()->json([

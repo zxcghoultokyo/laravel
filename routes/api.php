@@ -183,6 +183,7 @@ Route::prefix('diagnostic')->group(function () {
     Route::get('/trigger-stats/{tenantId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'triggerStats']);
     Route::post('/seed-test-data', [\App\Http\Controllers\Api\DiagnosticController::class, 'seedTestData']);
     Route::post('/fix-messages-tenant', [\App\Http\Controllers\Api\DiagnosticController::class, 'fixMessagesTenant']);
+    Route::post('/cleanup-tenants', [\App\Http\Controllers\Api\DiagnosticController::class, 'cleanupTenants']);
 
     // Order investigation
     Route::get('/order/{orderId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'findOrder']);

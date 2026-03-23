@@ -2294,6 +2294,152 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * POST /api/diagnostic/cleanup-tenants
+     * Delete all tenants except specified ones (keep=2,20)
+     */
+    public function cleanupTenants(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $keepIds = array_map('intval', array_filter(explode(',', $request->input('keep', ''))));
+        if (empty($keepIds)) {
+            return response()->json(['error' => 'Specify keep=2,20 with tenant IDs to preserve'], 400);
+        }
+
+        $dryRun = $request->boolean('dry_run', true);
+
+        $allTenants = DB::table('tenants')->select('id', 'name', 'domain')->get();
+        $toDelete = $allTenants->filter(fn ($t) => ! in_array($t->id, $keepIds));
+        $toKeep = $allTenants->filter(fn ($t) => in_array($t->id, $keepIds));
+        $deleteIds = $toDelete->pluck('id')->toArray();
+
+        if (empty($deleteIds)) {
+            return response()->json(['message' => 'No tenants to delete']);
+        }
+
+        $collectStats = function (array $ids) {
+            $productIds = fn () => DB::table('products')->whereIn('tenant_id', $ids)->select('id');
+            $chatSessionIds = fn () => DB::table('chat_sessions')->whereIn('tenant_id', $ids)->select('id');
+            $orderIds = fn () => DB::table('orders')->whereIn('tenant_id', $ids)->select('id');
+            $categoryIds = fn () => DB::table('categories')->whereIn('tenant_id', $ids)->select('id');
+            $ruleIds = fn () => DB::table('proactive_trigger_rules')->whereIn('tenant_id', $ids)->select('id');
+
+            return [
+                'chat_messages' => DB::table('chat_messages')->whereIn('chat_session_id', $chatSessionIds())->count(),
+                'chat_sessions' => DB::table('chat_sessions')->whereIn('tenant_id', $ids)->count(),
+                'chat_events' => DB::table('chat_events')->whereIn('tenant_id', $ids)->count(),
+                'chat_conversions' => DB::table('chat_conversions')->whereIn('merchant_id', $ids)->count(),
+                'chat_session_outcomes' => DB::table('chat_session_outcomes')->whereIn('merchant_id', $ids)->count(),
+                'chat_daily_stats' => DB::table('chat_daily_stats')->whereIn('merchant_id', $ids)->count(),
+                'proactive_trigger_events' => DB::table('proactive_trigger_events')->whereIn('rule_id', $ruleIds())->count(),
+                'proactive_trigger_rules' => DB::table('proactive_trigger_rules')->whereIn('tenant_id', $ids)->count(),
+                'order_items' => DB::table('order_items')->whereIn('order_id', $orderIds())->count(),
+                'orders' => DB::table('orders')->whereIn('tenant_id', $ids)->count(),
+                'product_ai_index' => DB::table('product_ai_index')->whereIn('product_id', $productIds())->count(),
+                'product_cross_sells' => DB::table('product_cross_sells')->whereIn('product_id', $productIds())->count(),
+                'products' => DB::table('products')->whereIn('tenant_id', $ids)->count(),
+                'horoshop_products' => DB::table('horoshop_products')->whereIn('tenant_id', $ids)->count(),
+                'rozetka_products' => DB::table('rozetka_products')->whereIn('tenant_id', $ids)->count(),
+                'rozetka_category_mappings' => DB::table('rozetka_category_mappings')->whereIn('tenant_id', $ids)->count(),
+                'category_aliases' => DB::table('category_aliases')->whereIn('category_id', $categoryIds())->count(),
+                'categories' => DB::table('categories')->whereIn('tenant_id', $ids)->count(),
+                'brands' => DB::table('brands')->whereIn('tenant_id', $ids)->count(),
+                'product_synonyms' => DB::table('product_synonyms')->whereIn('tenant_id', $ids)->count(),
+                'prompt_presets' => DB::table('prompt_presets')->whereIn('tenant_id', $ids)->count(),
+                'widget_settings' => DB::table('widget_settings')->whereIn('tenant_id', $ids)->count(),
+                'store_contexts' => DB::table('store_contexts')->whereIn('tenant_id', $ids)->count(),
+                'greetings' => DB::table('greetings')->whereIn('tenant_id', $ids)->count(),
+                'canned_responses' => DB::table('canned_responses')->whereIn('tenant_id', $ids)->count(),
+                'payments' => DB::table('payments')->whereIn('tenant_id', $ids)->count(),
+                'subscriptions' => DB::table('subscriptions')->whereIn('tenant_id', $ids)->count(),
+                'sync_logs' => DB::table('sync_logs')->whereIn('tenant_id', $ids)->count(),
+                'tenant_onboarding_progress' => DB::table('tenant_onboarding_progress')->whereIn('tenant_id', $ids)->count(),
+                'users' => DB::table('users')->whereIn('tenant_id', $ids)->count(),
+                'tenants' => DB::table('tenants')->whereIn('id', $ids)->count(),
+            ];
+        };
+
+        $deleteStats = $collectStats($deleteIds);
+        $keepStats = $collectStats($keepIds);
+
+        if ($dryRun) {
+            return response()->json([
+                'dry_run' => true,
+                'tenants_to_keep' => $toKeep->values(),
+                'tenants_to_delete' => $toDelete->values(),
+                'will_delete' => $deleteStats,
+                'will_keep' => $keepStats,
+                'total_rows_to_delete' => array_sum($deleteStats),
+            ]);
+        }
+
+        // Actually delete
+        DB::transaction(function () use ($deleteIds) {
+            $productIds = DB::table('products')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+            $chatSessionIds = DB::table('chat_sessions')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+            $orderIds = DB::table('orders')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+            $categoryIds = DB::table('categories')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+            $ruleIds = DB::table('proactive_trigger_rules')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+            $rozetkaProductIds = DB::table('rozetka_products')->whereIn('tenant_id', $deleteIds)->pluck('id')->toArray();
+
+            $deleteChunked = function (string $table, string $col, array $ids) {
+                $c = 0;
+                foreach (array_chunk($ids, 500) as $chunk) {
+                    $c += DB::table($table)->whereIn($col, $chunk)->delete();
+                }
+
+                return $c;
+            };
+
+            $deleteChunked('chat_messages', 'chat_session_id', $chatSessionIds);
+            DB::table('chat_sessions')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('chat_events')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('chat_conversions')->whereIn('merchant_id', $deleteIds)->delete();
+            DB::table('chat_session_outcomes')->whereIn('merchant_id', $deleteIds)->delete();
+            DB::table('chat_daily_stats')->whereIn('merchant_id', $deleteIds)->delete();
+            $deleteChunked('proactive_trigger_events', 'rule_id', $ruleIds);
+            DB::table('proactive_trigger_rules')->whereIn('tenant_id', $deleteIds)->delete();
+            $deleteChunked('order_items', 'order_id', $orderIds);
+            DB::table('orders')->whereIn('tenant_id', $deleteIds)->delete();
+            $deleteChunked('product_ai_index', 'product_id', $productIds);
+            $deleteChunked('product_cross_sells', 'product_id', $productIds);
+            $deleteChunked('product_product_tag', 'product_id', $productIds);
+            DB::table('products')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('horoshop_products')->whereIn('tenant_id', $deleteIds)->delete();
+            $deleteChunked('rozetka_product_attribute_values', 'rozetka_product_id', $rozetkaProductIds);
+            DB::table('rozetka_products')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('rozetka_category_mappings')->whereIn('tenant_id', $deleteIds)->delete();
+            $deleteChunked('category_aliases', 'category_id', $categoryIds);
+            DB::table('categories')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('brands')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('product_synonyms')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('prompt_presets')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('widget_settings')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('store_contexts')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('greetings')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('canned_responses')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('payments')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('subscriptions')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('sync_logs')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('tenant_onboarding_progress')->whereIn('tenant_id', $deleteIds)->delete();
+            DB::table('users')->whereIn('tenant_id', $deleteIds)->update(['tenant_id' => null]);
+            DB::table('tenants')->whereIn('id', $deleteIds)->delete();
+        });
+
+        $afterKeepStats = $collectStats($keepIds);
+
+        return response()->json([
+            'dry_run' => false,
+            'deleted_tenants' => $toDelete->pluck('name', 'id'),
+            'kept_tenants' => $toKeep->pluck('name', 'id'),
+            'kept_data_after' => $afterKeepStats,
+            'message' => '🗑️ All non-kept tenants and their data deleted.',
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/reset-tenant/{tenantId}
      * Reset tenant data for re-onboarding (keeps tenant, user, widget_settings)
      */

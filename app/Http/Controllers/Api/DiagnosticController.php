@@ -2337,37 +2337,43 @@ class DiagnosticController extends Controller
             $chatSessionIds = fn () => DB::table('chat_sessions')->whereIn('tenant_id', $ids)->select('id');
             $orderIds = fn () => DB::table('orders')->whereIn('tenant_id', $ids)->select('id');
             $categoryIds = fn () => DB::table('categories')->whereIn('tenant_id', $ids)->select('id');
-            $ruleIds = fn () => DB::table('proactive_trigger_rules')->whereIn('tenant_id', $ids)->select('id');
+
+            $safe = function (callable $fn) {
+                try {
+                    return $fn();
+                } catch (\Throwable) {
+                    return 0;
+                }
+            };
 
             return [
-                'chat_messages' => DB::table('chat_messages')->whereIn('chat_session_id', $chatSessionIds())->count(),
-                'chat_sessions' => DB::table('chat_sessions')->whereIn('tenant_id', $ids)->count(),
-                'chat_events' => DB::table('chat_events')->whereIn('tenant_id', $ids)->count(),
-                'chat_conversions' => DB::table('chat_conversions')->whereIn('merchant_id', $ids)->count(),
-                'chat_session_outcomes' => DB::table('chat_session_outcomes')->whereIn('merchant_id', $ids)->count(),
-                'chat_daily_stats' => DB::table('chat_daily_stats')->whereIn('merchant_id', $ids)->count(),
-                'proactive_trigger_events' => DB::table('proactive_trigger_events')->whereIn('rule_id', $ruleIds())->count(),
-                'proactive_trigger_rules' => DB::table('proactive_trigger_rules')->whereIn('tenant_id', $ids)->count(),
-                'order_items' => DB::table('order_items')->whereIn('order_id', $orderIds())->count(),
-                'orders' => DB::table('orders')->whereIn('tenant_id', $ids)->count(),
-                'product_ai_index' => DB::table('product_ai_index')->whereIn('product_id', $productIds())->count(),
-                'product_cross_sells' => DB::table('product_cross_sells')->whereIn('product_id', $productIds())->count(),
-                'products' => DB::table('products')->whereIn('tenant_id', $ids)->count(),
-                'horoshop_products' => DB::table('horoshop_products')->whereIn('tenant_id', $ids)->count(),
-                'rozetka_products' => DB::table('rozetka_products')->whereIn('tenant_id', $ids)->count(),
-                'rozetka_category_mappings' => DB::table('rozetka_category_mappings')->whereIn('tenant_id', $ids)->count(),
-                'category_aliases' => DB::table('category_aliases')->whereIn('category_id', $categoryIds())->count(),
-                'categories' => DB::table('categories')->whereIn('tenant_id', $ids)->count(),
-                'brands' => DB::table('brands')->whereIn('tenant_id', $ids)->count(),
-                'product_synonyms' => DB::table('product_synonyms')->whereIn('tenant_id', $ids)->count(),
-                'prompt_presets' => DB::table('prompt_presets')->whereIn('tenant_id', $ids)->count(),
-                'widget_settings' => DB::table('widget_settings')->whereIn('tenant_id', $ids)->count(),
-                'store_contexts' => DB::table('store_contexts')->whereIn('tenant_id', $ids)->count(),
-                'greetings' => DB::table('greetings')->whereIn('tenant_id', $ids)->count(),
-                'canned_responses' => DB::table('canned_responses')->whereIn('tenant_id', $ids)->count(),
-                'payments' => DB::table('payments')->whereIn('tenant_id', $ids)->count(),
-                'subscriptions' => DB::table('subscriptions')->whereIn('tenant_id', $ids)->count(),
-                'sync_logs' => DB::table('sync_logs')->whereIn('tenant_id', $ids)->count(),
+                'chat_messages' => $safe(fn () => DB::table('chat_messages')->whereIn('chat_session_id', $chatSessionIds())->count()),
+                'chat_sessions' => $safe(fn () => DB::table('chat_sessions')->whereIn('tenant_id', $ids)->count()),
+                'chat_events' => $safe(fn () => DB::table('chat_events')->whereIn('tenant_id', $ids)->count()),
+                'proactive_trigger_rules' => $safe(fn () => DB::table('proactive_trigger_rules')->whereIn('tenant_id', $ids)->count()),
+                'order_items' => $safe(fn () => DB::table('order_items')->whereIn('order_id', $orderIds())->count()),
+                'orders' => $safe(fn () => DB::table('orders')->whereIn('tenant_id', $ids)->count()),
+                'product_ai_index' => $safe(fn () => DB::table('product_ai_index')->whereIn('product_id', $productIds())->count()),
+                'product_cross_sells' => $safe(fn () => DB::table('product_cross_sells')->whereIn('product_id', $productIds())->count()),
+                'products' => $safe(fn () => DB::table('products')->whereIn('tenant_id', $ids)->count()),
+                'horoshop_products' => $safe(fn () => DB::table('horoshop_products')->whereIn('tenant_id', $ids)->count()),
+                'rozetka_products' => $safe(fn () => DB::table('rozetka_products')->whereIn('tenant_id', $ids)->count()),
+                'rozetka_category_mappings' => $safe(fn () => DB::table('rozetka_category_mappings')->whereIn('tenant_id', $ids)->count()),
+                'category_aliases' => $safe(fn () => DB::table('category_aliases')->whereIn('category_id', $categoryIds())->count()),
+                'categories' => $safe(fn () => DB::table('categories')->whereIn('tenant_id', $ids)->count()),
+                'brands' => $safe(fn () => DB::table('brands')->whereIn('tenant_id', $ids)->count()),
+                'product_synonyms' => $safe(fn () => DB::table('product_synonyms')->whereIn('tenant_id', $ids)->count()),
+                'prompt_presets' => $safe(fn () => DB::table('prompt_presets')->whereIn('tenant_id', $ids)->count()),
+                'widget_settings' => $safe(fn () => DB::table('widget_settings')->whereIn('tenant_id', $ids)->count()),
+                'store_contexts' => $safe(fn () => DB::table('store_contexts')->whereIn('tenant_id', $ids)->count()),
+                'greetings' => $safe(fn () => DB::table('greetings')->whereIn('tenant_id', $ids)->count()),
+                'canned_responses' => $safe(fn () => DB::table('canned_responses')->whereIn('tenant_id', $ids)->count()),
+                'payments' => $safe(fn () => DB::table('payments')->whereIn('tenant_id', $ids)->count()),
+                'subscriptions' => $safe(fn () => DB::table('subscriptions')->whereIn('tenant_id', $ids)->count()),
+                'sync_logs' => $safe(fn () => DB::table('sync_logs')->whereIn('tenant_id', $ids)->count()),
+                'tenant_onboarding_progress' => $safe(fn () => DB::table('tenant_onboarding_progress')->whereIn('tenant_id', $ids)->count()),
+                'users' => $safe(fn () => DB::table('users')->whereIn('tenant_id', $ids)->count()),
+                'tenants' => $safe(fn () => DB::table('tenants')->whereIn('id', $ids)->count()),
                 'tenant_onboarding_progress' => DB::table('tenant_onboarding_progress')->whereIn('tenant_id', $ids)->count(),
                 'users' => DB::table('users')->whereIn('tenant_id', $ids)->count(),
                 'tenants' => DB::table('tenants')->whereIn('id', $ids)->count(),
@@ -2409,9 +2415,6 @@ class DiagnosticController extends Controller
             $deleteChunked('chat_messages', 'chat_session_id', $chatSessionIds);
             DB::table('chat_sessions')->whereIn('tenant_id', $deleteIds)->delete();
             DB::table('chat_events')->whereIn('tenant_id', $deleteIds)->delete();
-            DB::table('chat_conversions')->whereIn('merchant_id', $deleteIds)->delete();
-            DB::table('chat_session_outcomes')->whereIn('merchant_id', $deleteIds)->delete();
-            DB::table('chat_daily_stats')->whereIn('merchant_id', $deleteIds)->delete();
             $deleteChunked('proactive_trigger_events', 'rule_id', $ruleIds);
             DB::table('proactive_trigger_rules')->whereIn('tenant_id', $deleteIds)->delete();
             $deleteChunked('order_items', 'order_id', $orderIds);

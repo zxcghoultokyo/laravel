@@ -1550,12 +1550,15 @@ CORRECT RESPONSE: search_products() → show products → "Here are some options
 
 🌡️ СЕЗОННІ ЗАПИТИ — КРИТИЧНО!
 Якщо питають "що беруть зимою/взимку/щимою", "що популярне влітку" — це НЕ запит на топ продажів!
-Це запит на СЕЗОННІ ТОВАРИ. ЗАВЖДИ викликай search_products з сезонним ключовим словом:
+Це запит на СЕЗОННІ ТОВАРИ. ЗАВЖДИ використовуй параметр season + пошук:
 
-- ЗИМА (грудень-лютий): search_products(query="зимовий OR зима OR winter OR теплий", sort_by="popularity")
-- ЛІТО (червень-серпень): search_products(query="літній OR літо OR summer OR легкий", sort_by="popularity")
-- ВЕСНА (березень-травень): search_products(query="весняний OR весна OR spring", sort_by="popularity")
-- ОСІНЬ (вересень-листопад): search_products(query="осінній OR осінь OR autumn", sort_by="popularity")
+- ЗИМА (грудень-лютий): search_products(query="одяг", season="winter", sort_by="popularity")
+- ЛІТО (червень-серпень): search_products(query="одяг", season="summer", sort_by="popularity")
+- ВЕСНА (березень-травень): search_products(query="одяг куртка", season="spring", sort_by="popularity")
+- ОСІНЬ (вересень-листопад): search_products(query="куртка одяг", season="autumn", sort_by="popularity")
+
+Параметр season автоматично підсилює пошук сезонними товарами (softshell, термо, демісезонний ітд).
+НЕ потрібно вручну додавати сезонні слова в query - season зробить це автоматично.
 
 GPT повинен САМ визначити які товари з асортименту магазину підходять для сезону.
 НЕ хардкодь конкретні категорії — шукай за сезонними характеристиками.
@@ -2057,6 +2060,11 @@ PROMPT;
                                 'enum' => ['relevance', 'popularity', 'price_asc', 'price_desc', 'newest'],
                                 'description' => 'Сортування: "popularity" для "хіти/топ", "newest" для "новинки/що нового/нові надходження"',
                             ],
+                            'season' => [
+                                'type' => 'string',
+                                'enum' => ['winter', 'spring', 'summer', 'autumn'],
+                                'description' => 'Сезон для фільтрації. Використовуй коли запит явно про пору року: "на зиму"→winter, "на весну"→spring, "на літо"→summer, "на осінь"→autumn',
+                            ],
                         ],
                         'required' => ['query'],
                     ],
@@ -2244,6 +2252,11 @@ PROMPT;
 
         if ($sortBy !== 'relevance') {
             $filters['sort_by'] = $sortBy;
+        }
+
+        // Pass season filter for seasonal queries
+        if (! empty($args['season'])) {
+            $filters['season'] = $args['season'];
         }
 
         // Pass original user message so MeiliProductSearchTool can detect boundary ages

@@ -111,6 +111,17 @@ class MeiliProductSearchTool
             $brandInfo = $this->brandDetection->detectBrand($normalizedQuery);
             $enhancedQuery = $this->expandQuerySynonyms($brandInfo['enhanced_query'] ?? $normalizedQuery);
 
+            // Seasonal query expansion: boost search with seasonal product terms
+            $seasonalBoost = $this->buildSeasonalQueryBoost($enhancedQuery, $filters['season'] ?? null);
+            if ($seasonalBoost) {
+                $enhancedQuery = $seasonalBoost['query'];
+                Log::info('MeiliProductSearchTool: seasonal boost applied', [
+                    'season' => $seasonalBoost['season'],
+                    'original' => $query,
+                    'boosted' => $enhancedQuery,
+                ]);
+            }
+
             Log::debug('MeiliProductSearchTool: brand normalization', [
                 'original' => $query,
                 'normalized' => $normalizedQuery,
@@ -259,6 +270,7 @@ class MeiliProductSearchTool
                     'orders_count',
                     'ai_product_type',
                     'ai_keywords',
+                    'ai_seasons',
                     'display_in_showcase',
                     'brand',
                     'age_min_months',
@@ -786,6 +798,11 @@ class MeiliProductSearchTool
             }
 
             // Deduplicate by title to show different models (not just size/color variants)
+            // First, boost products matching the requested season to the top
+            if ($seasonalBoost && count($filtered) > 0) {
+                $filtered = $this->boostSeasonalProducts($filtered, $seasonalBoost['season']);
+            }
+
             $filtered = $this->dedupeByTitle($filtered, $limit);
 
             // If keyword search returned few results, try semantic search fallback
@@ -1855,6 +1872,128 @@ class MeiliProductSearchTool
         ]);
 
         return $simplified;
+    }
+
+    /**
+     * Build seasonal query boost: expand query with product terms relevant to the season.
+     * Also detects season from query text if no explicit season parameter.
+     *
+     * @return array{season: string, query: string}|null
+     */
+    private function buildSeasonalQueryBoost(string $query, ?string $explicitSeason = null): ?array
+    {
+        $queryLower = mb_strtolower($query);
+
+        // Detect season from query if not explicitly provided
+        $season = $explicitSeason;
+        if (! $season) {
+            $seasonDetection = [
+                'winter' => ['зимов', 'зиму', 'зимою', 'взимку', 'мороз', 'холод', 'winter'],
+                'spring' => ['весн', 'весною', 'навесні', 'spring'],
+                'summer' => ['літн', 'літо', 'спек', 'жарк', 'summer'],
+                'autumn' => ['осінн', 'осені', 'осінь', 'восени', 'дощ', 'autumn'],
+            ];
+
+            foreach ($seasonDetection as $s => $keywords) {
+                foreach ($keywords as $kw) {
+                    if (mb_strpos($queryLower, $kw) !== false) {
+                        $season = $s;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if (! $season) {
+            return null;
+        }
+
+        // Map season to product-relevant search terms
+        // These terms help Meilisearch find season-appropriate products
+        // by matching against ai_seasons, ai_keywords, title, description
+        $seasonBoostTerms = [
+            'winter' => 'зимовий теплий утеплений термо',
+            'spring' => 'демісезонний softshell софтшел весняний легкий',
+            'summer' => 'літній легкий дихаючий вентиляція',
+            'autumn' => 'демісезонний softshell водонепроникний вітрозахисний',
+        ];
+
+        $boostTerms = $seasonBoostTerms[$season] ?? '';
+        if (! $boostTerms) {
+            return null;
+        }
+
+        // Clean seasonal words from original query to avoid Meilisearch AND-matching problems
+        // (e.g., "що порадиш на весну" - "весну" is noise, products don't have "весну" in title)
+        $noiseWords = [
+            'що', 'порадиш', 'порадь', 'підійде', 'підкажи', 'покажи', 'одягнути',
+            'одяг', 'є', 'тепле', 'тепло', 'коли', 'дуже', 'на', 'в', 'для',
+        ];
+        $cleanedParts = [];
+        foreach (preg_split('/\s+/', $query) as $word) {
+            $wordLower = mb_strtolower($word);
+            if (in_array($wordLower, $noiseWords)) {
+                continue;
+            }
+            $cleanedParts[] = $word;
+        }
+
+        // Build final query: cleaned original + boost terms
+        $cleanedQuery = implode(' ', $cleanedParts);
+        $finalQuery = trim($cleanedQuery.' '.$boostTerms);
+
+        return [
+            'season' => $season,
+            'query' => $finalQuery,
+        ];
+    }
+
+    /**
+     * Boost products that have matching ai_seasons to the top of results.
+     * Products with matching season appear first, others appear after.
+     */
+    private function boostSeasonalProducts(array $hits, string $season): array
+    {
+        $seasonTerms = [
+            'winter' => ['зима', 'зимовий', 'холод', 'мороз', 'winter'],
+            'spring' => ['весна', 'весняний', 'демісезонний', 'spring'],
+            'summer' => ['літо', 'літній', 'спека', 'summer', 'тепла погода'],
+            'autumn' => ['осінь', 'осінній', 'демісезонний', 'autumn', 'дощ'],
+        ];
+
+        $terms = $seasonTerms[$season] ?? [];
+        if (empty($terms)) {
+            return $hits;
+        }
+
+        $matching = [];
+        $nonMatching = [];
+
+        foreach ($hits as $hit) {
+            $aiSeasons = mb_strtolower($hit['ai_seasons'] ?? '');
+            $matched = false;
+
+            foreach ($terms as $term) {
+                if (mb_strpos($aiSeasons, $term) !== false) {
+                    $matched = true;
+                    break;
+                }
+            }
+
+            if ($matched) {
+                $matching[] = $hit;
+            } else {
+                $nonMatching[] = $hit;
+            }
+        }
+
+        Log::info('MeiliProductSearchTool: seasonal boost ranking', [
+            'season' => $season,
+            'matching' => count($matching),
+            'non_matching' => count($nonMatching),
+        ]);
+
+        return array_merge($matching, $nonMatching);
     }
 
     /**

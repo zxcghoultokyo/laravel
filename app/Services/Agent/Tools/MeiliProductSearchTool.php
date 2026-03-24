@@ -115,10 +115,14 @@ class MeiliProductSearchTool
             $seasonalBoost = $this->buildSeasonalQueryBoost($enhancedQuery, $filters['season'] ?? null);
             if ($seasonalBoost) {
                 $enhancedQuery = $seasonalBoost['query'];
+                // Increase fetch limit for seasonal queries — post-ranking needs more candidates
+                $meiliLimit = max($meiliLimit, 30);
                 Log::info('MeiliProductSearchTool: seasonal boost applied', [
                     'season' => $seasonalBoost['season'],
+                    'seasons' => $seasonalBoost['seasons'] ?? [$seasonalBoost['season']],
                     'original' => $query,
                     'boosted' => $enhancedQuery,
+                    'meili_limit' => $meiliLimit,
                 ]);
             }
 
@@ -1882,11 +1886,14 @@ class MeiliProductSearchTool
      */
     private function buildSeasonalQueryBoost(string $query, ?string $explicitSeason = null): ?array
     {
-        $queryLower = mb_strtolower($query);
+        // Split hyphens before detection so "весну-осінь" → "весну осінь" (both detected)
+        $queryLower = mb_strtolower(str_replace('-', ' ', $query));
 
-        // Detect season from query if not explicitly provided
-        $season = $explicitSeason;
-        if (! $season) {
+        // Detect season(s) from query — supports multi-season ("весну-осінь")
+        $detectedSeasons = [];
+        if ($explicitSeason) {
+            $detectedSeasons[] = $explicitSeason;
+        } else {
             $seasonDetection = [
                 'winter' => ['зимов', 'зиму', 'зимою', 'взимку', 'мороз', 'холод', 'winter'],
                 'spring' => ['весн', 'весною', 'навесні', 'spring'],
@@ -1897,20 +1904,18 @@ class MeiliProductSearchTool
             foreach ($seasonDetection as $s => $keywords) {
                 foreach ($keywords as $kw) {
                     if (mb_strpos($queryLower, $kw) !== false) {
-                        $season = $s;
-                        break 2;
+                        $detectedSeasons[] = $s;
+                        break; // found this season, check next
                     }
                 }
             }
         }
 
-        if (! $season) {
+        if (empty($detectedSeasons)) {
             return null;
         }
 
         // Map season to product-relevant search terms
-        // These terms help Meilisearch find season-appropriate products
-        // by matching against ai_seasons, ai_keywords, title, description
         $seasonBoostTerms = [
             'winter' => 'зимовий теплий утеплений термо',
             'spring' => 'демісезонний softshell софтшел весняний легкий',
@@ -1918,19 +1923,40 @@ class MeiliProductSearchTool
             'autumn' => 'демісезонний softshell водонепроникний вітрозахисний',
         ];
 
-        $boostTerms = $seasonBoostTerms[$season] ?? '';
+        // Merge boost terms from all detected seasons (deduped)
+        $allBoostParts = [];
+        foreach ($detectedSeasons as $s) {
+            $terms = $seasonBoostTerms[$s] ?? '';
+            if ($terms) {
+                foreach (explode(' ', $terms) as $t) {
+                    $allBoostParts[$t] = true;
+                }
+            }
+        }
+        $boostTerms = implode(' ', array_keys($allBoostParts));
+
         if (! $boostTerms) {
             return null;
         }
 
-        // Clean seasonal words from original query to avoid Meilisearch AND-matching problems
-        // (e.g., "що порадиш на весну" - "весну" is noise, products don't have "весну" in title)
+        // Clean noise + seasonal words from original query
+        // Seasonal context is already handled by boost terms — raw words like "весну"
+        // just create noise (no product has "весну" in title)
         $noiseWords = [
             'що', 'порадиш', 'порадь', 'підійде', 'підкажи', 'покажи', 'одягнути',
             'одяг', 'є', 'тепле', 'тепло', 'коли', 'дуже', 'на', 'в', 'для',
+            // Seasonal words — handled by boost terms, noise in Meili query
+            'весну', 'весна', 'весною', 'навесні', 'весняний',
+            'зиму', 'зима', 'зимою', 'взимку', 'зимовий',
+            'літо', 'літом', 'літній',
+            'осінь', 'осені', 'восени', 'осінній',
+            'морозу', 'мороз', 'спеку', 'спека', 'холоду', 'холод',
+            'дощову', 'дощовий', 'дощ', 'погоду', 'погода', 'погоді',
         ];
         $cleanedParts = [];
-        foreach (preg_split('/\s+/', $query) as $word) {
+        // Also split on hyphens for cleaning ("весну-осінь" → ["весну", "осінь"])
+        $queryForCleaning = str_replace('-', ' ', $query);
+        foreach (preg_split('/\s+/', $queryForCleaning) as $word) {
             $wordLower = mb_strtolower($word);
             if (in_array($wordLower, $noiseWords)) {
                 continue;
@@ -1942,8 +1968,20 @@ class MeiliProductSearchTool
         $cleanedQuery = implode(' ', $cleanedParts);
         $finalQuery = trim($cleanedQuery.' '.$boostTerms);
 
+        // Primary season for post-ranking (first detected, or "demiseasonal" for spring+autumn)
+        $primarySeason = $detectedSeasons[0];
+        if (count($detectedSeasons) > 1) {
+            // If both spring and autumn detected, treat as demiseasonal
+            $hasSpring = in_array('spring', $detectedSeasons);
+            $hasAutumn = in_array('autumn', $detectedSeasons);
+            if ($hasSpring && $hasAutumn) {
+                $primarySeason = 'demiseasonal';
+            }
+        }
+
         return [
-            'season' => $season,
+            'season' => $primarySeason,
+            'seasons' => $detectedSeasons,
             'query' => $finalQuery,
         ];
     }
@@ -1958,6 +1996,7 @@ class MeiliProductSearchTool
             'winter' => ['зима', 'зимовий', 'холод', 'мороз', 'winter'],
             'spring' => ['весна', 'весняний', 'демісезонний', 'spring'],
             'summer' => ['літо', 'літній', 'спека', 'summer', 'тепла погода'],
+            'demiseasonal' => ['демісезонний', 'весна', 'осінь', 'spring', 'autumn'],
             'autumn' => ['осінь', 'осінній', 'демісезонний', 'autumn', 'дощ'],
         ];
 

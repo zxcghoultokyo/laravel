@@ -183,12 +183,12 @@
                 {{-- Q9: NPS --}}
                 <div class="bg-white rounded-2xl shadow-sm p-6">
                     <h3 class="font-semibold text-gray-900 mb-4">9. Наскільки ймовірно, що ви порекомендуєте цей чат іншому магазину? <span class="text-red-500">*</span></h3>
-                    <div class="flex flex-wrap gap-2 justify-center">
+                    <div class="grid grid-cols-11 gap-1">
                         @for ($i = 0; $i <= 10; $i++)
                             <button
                                 type="button"
                                 wire:click="$set('nps_score', {{ $i }})"
-                                class="w-10 h-10 rounded-lg border-2 text-sm font-bold transition-colors
+                                class="aspect-square rounded-lg border-2 text-sm font-bold transition-colors
                                     {{ $nps_score === $i
                                         ? ($i <= 6 ? 'border-red-400 bg-red-50 text-red-700' : ($i <= 8 ? 'border-yellow-400 bg-yellow-50 text-yellow-700' : 'border-emerald-500 bg-emerald-50 text-emerald-700'))
                                         : 'border-gray-200 hover:border-gray-300 text-gray-600' }}"

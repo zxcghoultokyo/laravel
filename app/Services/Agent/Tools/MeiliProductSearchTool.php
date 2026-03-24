@@ -801,6 +801,21 @@ class MeiliProductSearchTool
                 }
             }
 
+            // WORD-BY-WORD RETRY: If still few results, try each significant word separately
+            // This handles narrow queries like "підставка для швабри" where the full phrase
+            // matches nothing, but individual words like "підставка" find relevant products
+            if (count($filtered) < 3 && ! empty($query) && ! $categoryFilter) {
+                $wordRetryResults = $this->retryWithIndividualWords($query, $index, $searchParams, $limit);
+                if (count($wordRetryResults) > count($filtered)) {
+                    Log::info('MeiliProductSearchTool: word-by-word retry found more results', [
+                        'original_results' => count($filtered),
+                        'word_retry_results' => count($wordRetryResults),
+                    ]);
+                    $this->searchMeta['retry_word_by_word'] = true;
+                    $filtered = $wordRetryResults;
+                }
+            }
+
             // Deduplicate by title to show different models (not just size/color variants)
             // First, boost products matching the requested season to the top
             if ($seasonalBoost && count($filtered) > 0) {
@@ -904,6 +919,21 @@ class MeiliProductSearchTool
 
             // Track search for A/B testing
             $this->trackSearchForAB($query, count($filtered));
+
+            // Randomize results for popularity-sorted queries to prevent showing same 3 products every time
+            // Only applies when sorted by popularity and we have more results than the limit
+            $isPopularityQuery = ! empty($filters['sort_by']) && $filters['sort_by'] === 'popularity';
+            $isGenericQuery = preg_match('/^(топ|популярн|new|нов|хіт|бестселер|рекоменд|що є)/ui', trim($query));
+            if (($isPopularityQuery || $isGenericQuery) && count($filtered) > $limit) {
+                // Take top N*2 results and pick random subset to add variety
+                $pool = array_slice($filtered, 0, min(count($filtered), $limit * 3));
+                shuffle($pool);
+                $filtered = array_slice($pool, 0, $limit);
+                Log::info('MeiliProductSearchTool: randomized popularity results', [
+                    'pool_size' => count($pool),
+                    'returned' => count($filtered),
+                ]);
+            }
 
             // FINAL LOG: Full diagnostic output
             Log::info('MeiliProductSearchTool::search FINAL RETURN', [
@@ -1271,10 +1301,9 @@ class MeiliProductSearchTool
         $queryLower = mb_strtolower(trim($query));
         $queryWords = preg_split('/\s+/', $queryLower);
 
-        // Only filter for 1-2 word queries (product type searches)
-        if (count($queryWords) > 2) {
-            return $hits;
-        }
+        // For longer queries (3+ words), use relaxed check: at least one significant word must match
+        // For short queries (1-2 words), use strict check: stem must match title/category
+        $isLongQuery = count($queryWords) > 2;
 
         // Universal approach: extract word stems (first 4 chars) from query
         // and check if they appear in product title or category_path.
@@ -1282,8 +1311,13 @@ class MeiliProductSearchTool
         // "спальник" → "спал" → matches "Спальна система" ✓, not "Стропи" ✗
         // "куртки" → "курт" → matches "куртка soft shell" ✓, not "Карабін" ✗
         // "машинка" → "маши" → matches "Дерев'яна машинка" ✓ (BavkaToys)
+        $stopWords = ['для', 'та', 'і', 'або', 'з', 'із', 'на', 'в', 'у', 'до', 'від',
+            'який', 'яка', 'яке', 'які', 'будь', 'ласка', 'мені', 'покажи', 'знайди'];
         $stems = [];
         foreach ($queryWords as $word) {
+            if (in_array($word, $stopWords)) {
+                continue;
+            }
             $wordLen = mb_strlen($word);
             if ($wordLen < 4) {
                 continue;
@@ -1305,13 +1339,16 @@ class MeiliProductSearchTool
             $category = mb_strtolower($hit['category_path'] ?? '');
             $searchField = $title.' '.$category;
 
-            $foundMatch = false;
+            $matchCount = 0;
             foreach ($stems as $stem) {
                 if (mb_strpos($searchField, $stem) !== false) {
-                    $foundMatch = true;
-                    break;
+                    $matchCount++;
                 }
             }
+
+            // For long queries: at least 1 significant stem must match
+            // For short queries: at least 1 stem must match (same as before)
+            $foundMatch = $matchCount > 0;
 
             if ($foundMatch) {
                 $filtered[] = $hit;
@@ -1876,6 +1913,63 @@ class MeiliProductSearchTool
         ]);
 
         return $simplified;
+    }
+
+    /**
+     * Retry search with individual significant words from the query.
+     * When multi-word queries return no results, individual words may find relevant products.
+     * E.g., "підставка для швабри" → try "підставка" alone.
+     */
+    private function retryWithIndividualWords(string $query, $index, array $searchParams, int $limit): array
+    {
+        $q = mb_strtolower(trim($query));
+        $stopWords = [
+            'для', 'та', 'і', 'або', 'з', 'із', 'на', 'в', 'у', 'до', 'від',
+            'купити', 'замовити', 'знайти', 'покажи', 'показати',
+            'хочу', 'потрібно', 'потрібен', 'потрібна',
+            'який', 'яка', 'яке', 'які', 'будь', 'ласка', 'мені',
+        ];
+
+        $words = preg_split('/\s+/', $q);
+        $significantWords = array_filter($words, fn ($w) => ! in_array($w, $stopWords) && mb_strlen($w) > 2);
+
+        if (count($significantWords) < 2) {
+            return []; // Already a single-word query, nothing to retry
+        }
+
+        $allHits = [];
+        $seenIds = [];
+
+        foreach ($significantWords as $word) {
+            $result = $index->search($word, $searchParams);
+            $hits = $result->getHits();
+
+            foreach ($hits as $hit) {
+                $id = $hit['id'] ?? null;
+                if ($id && ! isset($seenIds[$id])) {
+                    $seenIds[$id] = true;
+                    if (empty($hit['ai_product_type'])) {
+                        $hit['ai_product_type'] = '__unknown__';
+                    }
+                    $allHits[] = $hit;
+                }
+            }
+
+            if (count($allHits) >= $limit * 3) {
+                break; // Enough candidates
+            }
+        }
+
+        if (empty($allHits)) {
+            return [];
+        }
+
+        // Apply standard filtering
+        $filtered = $this->filterAccessories($allHits, $query);
+        $filtered = $this->filterByTitleRelevance($filtered, $query);
+        $filtered = $this->dedupeByTitle($filtered, $limit);
+
+        return $filtered;
     }
 
     /**

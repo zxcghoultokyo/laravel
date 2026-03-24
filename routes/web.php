@@ -66,28 +66,28 @@ Route::middleware(['auth'])->prefix('billing')->name('billing.')->group(function
 // Onboarding Wizard
 Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(function () {
     Route::get('/', [OnboardingController::class, 'index'])->name('index');
-    
+
     // Step 1: Platform selection
     Route::get('/platform', [OnboardingController::class, 'step1'])->name('step1');
     Route::post('/platform', [OnboardingController::class, 'saveStep1'])->name('step1.save');
-    
+
     // Step 2: Credentials
     Route::get('/credentials', [OnboardingController::class, 'step2'])->name('step2');
     Route::post('/credentials', [OnboardingController::class, 'saveStep2'])->name('step2.save');
-    
+
     // Step 3: Progress (sync runs via OnboardTenantJob, not blocking)
     Route::get('/sync', [OnboardingController::class, 'step3'])->name('step3');
     Route::post('/sync', [OnboardingController::class, 'saveStep3'])->name('step3.save');
     // NOTE: startSync and syncStatus routes removed - OnboardTenantJob handles async sync
-    
+
     // Step 4: Widget
     Route::get('/widget', [OnboardingController::class, 'step4'])->name('step4');
     Route::post('/widget', [OnboardingController::class, 'saveStep4'])->name('step4.save');
-    
+
     // Step 5: Embed
     Route::get('/embed', [OnboardingController::class, 'step5'])->name('step5');
     Route::post('/complete', [OnboardingController::class, 'complete'])->name('complete');
-    
+
     // Enrichment progress (AJAX endpoint)
     Route::get('/enrichment-progress', [OnboardingController::class, 'enrichmentProgress'])->name('enrichment.progress');
 });
@@ -95,5 +95,9 @@ Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(fu
 // Widget embed route (public, no auth required)
 Route::get('/widget/{slug}.js', [\App\Http\Controllers\Api\TenantWidgetController::class, 'serveWidget'])
     ->name('widget.serve');
+
+// Beta survey (public, no auth required)
+Route::get('/survey/{tenant:slug}', \App\Livewire\BetaSurvey::class)
+    ->name('survey');
 
 require __DIR__.'/auth.php';

@@ -61,4 +61,7 @@ Route::middleware(['auth', 'verified', 'super-admin'])->prefix('admin')->name('a
     // Tools
     Route::get('/test-products', \App\Livewire\Admin\TestProductsGenerator::class)->name('test-products');
     Route::get('/rozetka', \App\Livewire\Admin\RozetkaCategoryManager::class)->name('rozetka');
+
+    // Survey
+    Route::get('/survey-results', \App\Livewire\Admin\SurveyResults::class)->name('survey-results');
 });

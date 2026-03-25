@@ -2340,6 +2340,14 @@ PROMPT;
         // This is a safety net in case MeiliProductSearchTool filters don't work
         $results = $this->filterAccessoriesFromResults($results, $query);
 
+        // Add variety: shuffle top results before final slice so repeated queries return different products
+        if (count($results) > $limit) {
+            $poolSize = min(count($results), $limit * 3);
+            $pool = array_slice($results, 0, $poolSize);
+            shuffle($pool);
+            $results = array_merge($pool, array_slice($results, $poolSize));
+        }
+
         $results = array_slice($results, 0, $limit);
 
         PipelineTracer::current()?->step('base_agent.search_results', [

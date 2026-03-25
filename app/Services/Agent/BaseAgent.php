@@ -515,8 +515,14 @@ abstract class BaseAgent
             }
         }
 
+        // Extract product-related words from the query (strip age/filler phrases)
+        $productQuery = preg_replace('/\d{1,2}\s*(?:рок\w*|рік|річ\w*|р\.|місяц\w*|міс\w*)/ui', '', $originalMessage);
+        $productQuery = preg_replace('/\b(для|дитин\w*|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки)\b/ui', '', $productQuery);
+        $productQuery = preg_replace('/\s{2,}/u', ' ', trim($productQuery));
+
         Log::info('BaseAgent: age query detected, bypassing GPT', [
             'message' => $originalMessage,
+            'product_query' => $productQuery,
         ]);
 
         // Pass the original message as _user_message so MeiliProductSearchTool
@@ -525,10 +531,18 @@ abstract class BaseAgent
             '_user_message' => $originalMessage,
         ];
 
-        $products = $this->searchTool->search('', $filters, 15);
+        // Use extracted product words as search query (not empty string)
+        // This ensures "пазли для 5 років" searches for "пазли" with age filter
+        $products = $this->searchTool->search($productQuery, $filters, 15);
 
         if (empty($products)) {
-            return null; // Fall through to GPT
+            // If specific product query returned nothing, try broader search (age-only)
+            if ($productQuery !== '') {
+                $products = $this->searchTool->search('', $filters, 15);
+            }
+            if (empty($products)) {
+                return null; // Fall through to GPT
+            }
         }
 
         // Get full product cards with images
@@ -539,9 +553,18 @@ abstract class BaseAgent
             $products = $cards;
         }
 
+        // Add variety: shuffle top candidates before slicing
+        if (count($products) > 6) {
+            $pool = array_slice($products, 0, min(count($products), 12));
+            shuffle($pool);
+            $products = array_merge($pool, array_slice($products, count($pool)));
+        }
+
         $products = array_slice($products, 0, 6);
 
-        $intro = 'Ось що я знайшов для цього віку:';
+        $intro = $productQuery !== ''
+            ? "Ось що я знайшов за запитом «{$productQuery}» для цього віку:"
+            : 'Ось що я знайшов для цього віку:';
 
         return [
             'message' => $intro,

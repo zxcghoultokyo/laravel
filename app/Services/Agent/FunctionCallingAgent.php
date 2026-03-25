@@ -158,6 +158,29 @@ class FunctionCallingAgent extends BaseAgent
         $text = $response['choices'][0]['message']['content'] ?? '';
         $text = $this->stripUrlsFromText($text);
 
+        // SAFETY NET: If GPT asks "Для якого віку?" instead of searching, force search
+        $forceResult = $this->forceSearchOnAgeClarification($text, $normalizedMessage);
+        if ($forceResult) {
+            PipelineTracer::current()?->step('agent.force_search_on_age', [
+                'original_gpt_response' => mb_substr($text, 0, 100),
+                'products_count' => count($forceResult['products']),
+            ]);
+
+            return [
+                'message' => $forceResult['intro'],
+                'products' => $forceResult['products'],
+                'messages' => [
+                    ['type' => 'text', 'content' => $forceResult['intro']],
+                    ['type' => 'products', 'products' => $forceResult['products']],
+                ],
+                'meta' => [
+                    'intent' => 'product_search',
+                    'agent' => 'function_calling',
+                    'source' => 'force_search_on_age_clarification',
+                ],
+            ];
+        }
+
         // Check if GPT returned JSON (sometimes it does for follow-ups with products from history)
         if (preg_match('/^\s*\{/u', $text)) {
             $json = json_decode($text, true);

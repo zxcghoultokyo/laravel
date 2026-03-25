@@ -244,6 +244,73 @@ abstract class BaseAgent
     // ============================================================
 
     /**
+     * When GPT responds with age clarification instead of searching, force a direct search.
+     * Returns product results if original message looks searchable, null otherwise.
+     */
+    protected function forceSearchOnAgeClarification(string $gptResponse, string $originalMessage): ?array
+    {
+        // Only intercept age-clarification responses
+        $agePhrases = ['для якого віку', 'якого віку', 'вік дитини', 'скільки років', 'для кого шукаєте'];
+        $responseLower = mb_strtolower($gptResponse);
+        $isAgeClarification = false;
+        foreach ($agePhrases as $phrase) {
+            if (str_contains($responseLower, $phrase)) {
+                $isAgeClarification = true;
+                break;
+            }
+        }
+
+        if (! $isAgeClarification) {
+            return null;
+        }
+
+        // Strip filler words from original message to get search query
+        $searchQuery = preg_replace('/\b(покажи|мені|будь\s+ласка|хочу|потрібно|потрібен|потрібна|шукаю|є|маєте|можна|знайти|знайди|підібрати)\b/ui', '', $originalMessage);
+        $searchQuery = preg_replace('/\s{2,}/u', ' ', trim($searchQuery));
+
+        if (mb_strlen($searchQuery) < 2) {
+            return null;
+        }
+
+        Log::info('BaseAgent: force search on age clarification', [
+            'gpt_wanted_to_say' => mb_substr($gptResponse, 0, 100),
+            'original_message' => $originalMessage,
+            'search_query' => $searchQuery,
+        ]);
+
+        $products = $this->searchTool->search($searchQuery, [], 9);
+
+        if (empty($products)) {
+            return null; // Let GPT response through
+        }
+
+        // Shuffle for variety
+        if (count($products) > 3) {
+            $pool = array_slice($products, 0, min(count($products), 9));
+            shuffle($pool);
+            $products = $pool;
+        }
+        $products = array_slice($products, 0, 3);
+
+        // Get full product cards
+        $ids = array_column($products, 'id');
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+        if (! empty($cards)) {
+            $products = $cards;
+        }
+
+        if (empty($products)) {
+            return null;
+        }
+
+        return [
+            'products' => $products,
+            'intro' => "Ось що я знайшов за запитом «{$searchQuery}»:",
+        ];
+    }
+
+    /**
      * Detect implicit queries and search directly without GPT.
      * Returns array if handled, null if should continue to GPT.
      */

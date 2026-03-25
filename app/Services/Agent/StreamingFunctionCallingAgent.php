@@ -564,6 +564,40 @@ CONTEXT;
                 'response_preview' => mb_substr($content, 0, 100),
             ]);
 
+            // SAFETY NET: If GPT asks "Для якого віку?" instead of searching, force search
+            $forceResult = $this->forceSearchOnAgeClarification($responseText, $normalizedMessage);
+            if ($forceResult) {
+                PipelineTracer::current()?->step('agent.force_search_on_age', [
+                    'original_gpt_response' => mb_substr($responseText, 0, 100),
+                    'products_count' => count($forceResult['products']),
+                ]);
+
+                $introChunks = mb_str_split($forceResult['intro'], 3);
+                foreach ($introChunks as $chunk) {
+                    yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                    usleep(10000);
+                }
+
+                yield ['type' => 'products', 'data' => [
+                    'products' => $forceResult['products'],
+                    'count' => count($forceResult['products']),
+                ]];
+
+                $responseText = $forceResult['intro'];
+                $responseProducts = $forceResult['products'];
+                $responseIntent = 'product_search';
+
+                // Skip all other text processing — go straight to logging
+                $this->logAssistantMessage($sessionId, $responseText, $responseProducts, $responseIntent);
+
+                PipelineTracer::current()?->step('agent.response_parsed', [
+                    'products_count' => count($responseProducts),
+                    'source' => 'force_search_on_age_clarification',
+                ]);
+
+                return;
+            }
+
             // Check if response contains JSON with products
             $structured = $this->parseStructuredResponse($responseText, []);
 

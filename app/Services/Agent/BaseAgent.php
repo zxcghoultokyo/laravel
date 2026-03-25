@@ -533,17 +533,25 @@ abstract class BaseAgent
 
         // Use extracted product words as search query (not empty string)
         // This ensures "пазли для 5 років" searches for "пазли" with age filter
-        $products = $this->searchTool->search($productQuery, $filters, 15);
+        $products = $this->searchTool->search($productQuery, $filters, 30);
 
         if (empty($products)) {
             // If specific product query returned nothing, try broader search (age-only)
             if ($productQuery !== '') {
-                $products = $this->searchTool->search('', $filters, 15);
+                $products = $this->searchTool->search('', $filters, 30);
             }
             if (empty($products)) {
                 return null; // Fall through to GPT
             }
         }
+
+        // Add variety: shuffle BEFORE getCards so we pick different products each time
+        if (count($products) > 6) {
+            $pool = array_slice($products, 0, min(count($products), 18));
+            shuffle($pool);
+            $products = array_merge($pool, array_slice($products, count($pool)));
+        }
+        $products = array_slice($products, 0, 6);
 
         // Get full product cards with images
         $ids = array_column($products, 'id');
@@ -551,13 +559,6 @@ abstract class BaseAgent
         $cards = $this->detailsTool->getCards($ids, 6, $tenantId);
         if (! empty($cards)) {
             $products = $cards;
-        }
-
-        // Add variety: shuffle top candidates before slicing
-        if (count($products) > 6) {
-            $pool = array_slice($products, 0, min(count($products), 12));
-            shuffle($pool);
-            $products = array_merge($pool, array_slice($products, count($pool)));
         }
 
         $products = array_slice($products, 0, 6);

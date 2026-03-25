@@ -816,6 +816,27 @@ class MeiliProductSearchTool
                 }
             }
 
+            // EXACT TITLE FALLBACK: If Meili returned few/no results, try direct DB title search
+            // This catches cases where user types exact product name but Meili fuzzy matching fails
+            // e.g., "пазл сонячна система" or "набір юного хіміка"
+            if (count($filtered) < 3 && ! empty($query)) {
+                $exactMatches = $this->exactTitleFallback($query, $filters, $limit);
+                if (! empty($exactMatches)) {
+                    // Merge: prioritize exact matches, then Meili results
+                    $existingIds = array_column($filtered, 'id');
+                    $newExact = array_filter($exactMatches, fn ($m) => ! in_array($m['id'], $existingIds));
+                    if (! empty($newExact)) {
+                        $filtered = array_merge(array_values($newExact), $filtered);
+                        $this->searchMeta['exact_title_fallback'] = true;
+                        Log::info('MeiliProductSearchTool: exact title fallback found additional products', [
+                            'query' => $query,
+                            'new_exact_count' => count($newExact),
+                            'total_after_merge' => count($filtered),
+                        ]);
+                    }
+                }
+            }
+
             // Deduplicate by title to show different models (not just size/color variants)
             // First, boost products matching the requested season to the top
             if ($seasonalBoost && count($filtered) > 0) {
@@ -920,18 +941,30 @@ class MeiliProductSearchTool
             // Track search for A/B testing
             $this->trackSearchForAB($query, count($filtered));
 
-            // Randomize results for popularity-sorted queries to prevent showing same 3 products every time
-            // Only applies when sorted by popularity and we have more results than the limit
+            // Randomize results to prevent showing same 3 products every time
+            // For popularity/generic queries: strong randomization from top pool
+            // For all other queries: mild shuffle among top results for variety
             $isPopularityQuery = ! empty($filters['sort_by']) && $filters['sort_by'] === 'popularity';
             $isGenericQuery = preg_match('/^(топ|популярн|new|нов|хіт|бестселер|рекоменд|що є)/ui', trim($query));
             if (($isPopularityQuery || $isGenericQuery) && count($filtered) > $limit) {
-                // Take top N*2 results and pick random subset to add variety
+                // Strong randomization: take top N*3 and pick random subset
                 $pool = array_slice($filtered, 0, min(count($filtered), $limit * 3));
                 shuffle($pool);
                 $filtered = array_slice($pool, 0, $limit);
                 Log::info('MeiliProductSearchTool: randomized popularity results', [
                     'pool_size' => count($pool),
                     'returned' => count($filtered),
+                ]);
+            } elseif (count($filtered) > $limit) {
+                // Mild randomization: shuffle within top N*2 to add variety
+                // Keeps most relevant results but prevents always showing the same 3
+                $topPool = array_slice($filtered, 0, min(count($filtered), $limit * 2));
+                shuffle($topPool);
+                $rest = array_slice($filtered, count($topPool));
+                $filtered = array_merge($topPool, $rest);
+                Log::info('MeiliProductSearchTool: mild randomization applied', [
+                    'pool_size' => count($topPool),
+                    'total' => count($filtered),
                 ]);
             }
 
@@ -2610,6 +2643,101 @@ class MeiliProductSearchTool
      *       "ІГРАШКИ/ТОДЛЕРАМ 1 – 3" → 12
      *       "ІГРАШКИ/МАЛЮКАМ 0 – 1" → 0
      */
+    /**
+     * Fallback: search products by exact title/article match in DB.
+     * Used when Meili fuzzy search returns few/no results.
+     * Catches cases where user types exact product name.
+     */
+    private function exactTitleFallback(string $query, array $filters, int $limit): array
+    {
+        $tenantId = $filters['tenant_id'] ?? $this->getCurrentTenantId();
+        $builder = Product::query()->where('in_stock', true);
+
+        if ($tenantId) {
+            $builder->where('tenant_id', $tenantId);
+        }
+
+        $queryLower = mb_strtolower(trim($query));
+
+        // Strategy 1: Try exact-ish title match (full query as substring of title)
+        $builder->where(function ($q) use ($queryLower) {
+            $q->whereRaw('LOWER(title) LIKE ?', ['%'.$queryLower.'%'])
+                ->orWhereRaw('LOWER(article) LIKE ?', ['%'.$queryLower.'%']);
+        });
+
+        $products = $builder->orderBy('popularity', 'desc')
+            ->limit($limit * 3)
+            ->get();
+
+        if ($products->isEmpty()) {
+            // Strategy 2: Try with ALL significant words matching in title
+            // "набір юного хіміка" → title contains "набір" AND "хіміка"
+            $stopWords = ['для', 'та', 'і', 'або', 'з', 'із', 'на', 'в', 'у', 'до', 'від',
+                'що', 'як', 'це', 'чи', 'не', 'ще', 'вже', 'по', 'при'];
+            $words = array_filter(
+                preg_split('/\s+/', $queryLower),
+                fn ($w) => mb_strlen($w) > 2 && ! in_array($w, $stopWords)
+            );
+
+            if (count($words) >= 2) {
+                $builder2 = Product::query()->where('in_stock', true);
+                if ($tenantId) {
+                    $builder2->where('tenant_id', $tenantId);
+                }
+
+                $builder2->where(function ($q) use ($words) {
+                    foreach ($words as $word) {
+                        $q->where(function ($sub) use ($word) {
+                            $sub->whereRaw('LOWER(title) LIKE ?', ['%'.$word.'%'])
+                                ->orWhereRaw('LOWER(search_index) LIKE ?', ['%'.$word.'%']);
+                        });
+                    }
+                });
+
+                $products = $builder2->orderBy('popularity', 'desc')
+                    ->limit($limit * 3)
+                    ->get();
+            }
+        }
+
+        if ($products->isEmpty()) {
+            return [];
+        }
+
+        Log::info('MeiliProductSearchTool: exactTitleFallback found products', [
+            'query' => $query,
+            'count' => $products->count(),
+            'strategy' => $products->count() > 0 ? 'db_title_match' : 'none',
+        ]);
+
+        // Deduplicate by title
+        $seen = [];
+        $results = [];
+        foreach ($products as $product) {
+            $titleKey = md5(mb_strtolower($product->title));
+            if (isset($seen[$titleKey])) {
+                continue;
+            }
+            $seen[$titleKey] = true;
+            $results[] = [
+                'id' => $product->id,
+                'article' => $product->article,
+                'parent_article' => $product->parent_article,
+                'title' => $product->title,
+                'price' => $product->price,
+                'category_path' => $product->category_path,
+                'in_stock' => $product->in_stock,
+                'popularity' => $product->popularity ?? 0,
+                'ai_product_type' => $product->aiIndex?->ai_product_type ?? '__unknown__',
+            ];
+            if (count($results) >= $limit) {
+                break;
+            }
+        }
+
+        return $results;
+    }
+
     public function extractMinAgeFromCategoryPath(string $categoryPath): ?int
     {
         // Match patterns like "ТОДЛЕРАМ 1 – 3", "ДОШКІЛЬНЯТАМ 3 – 7", "МАЛЮКАМ 0 – 1 "

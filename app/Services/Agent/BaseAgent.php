@@ -311,6 +311,94 @@ abstract class BaseAgent
     }
 
     /**
+     * When GPT responds with a list of hallucinated products (no tool_calls, no DB matches),
+     * detect the pattern and force a real search using the original user message.
+     */
+    protected function forceSearchOnHallucinatedProducts(string $gptResponse, string $originalMessage): ?array
+    {
+        $responseLower = mb_strtolower($gptResponse);
+
+        // Pattern 1: Numbered or bulleted product list (3+ items)
+        $hasNumberedList = preg_match_all('/^\s*\d+[\.\)]\s*.{5,}/um', $gptResponse) >= 3;
+        $hasBulletedList = preg_match_all('/^\s*[-•]\s*.{5,}/um', $gptResponse) >= 3;
+
+        // Pattern 2: Recommendation phrases typical for hallucinated responses
+        $hasRecommendPhrase = (bool) preg_match('/рекоменд|пропону|ось (деякі|кілька|варіант|що можу)|можу запропонувати|зверніть увагу на/ui', $gptResponse);
+
+        // Must have a product list AND a recommendation phrase — reduces false positives
+        if (! (($hasNumberedList || $hasBulletedList) && $hasRecommendPhrase)) {
+            return null;
+        }
+
+        // Extra safety: skip if GPT response is clearly FAQ/informational (no product names)
+        // Check that list items look like product names (start with uppercase Cyrillic or contain quotes)
+        $listItemCount = 0;
+        $productLikeCount = 0;
+        if (preg_match_all('/^\s*(?:\d+[\.\)]|[-•])\s*\*{0,2}(.+)/um', $gptResponse, $listMatches)) {
+            $listItemCount = count($listMatches[1]);
+            foreach ($listMatches[1] as $item) {
+                $item = trim($item);
+                // Product-like: starts with uppercase, contains quotes, or has price-like patterns
+                if (preg_match('/^[А-ЯІЇЄҐA-Z"«]/u', $item) || preg_match('/\d+\s*грн/u', $item)) {
+                    $productLikeCount++;
+                }
+            }
+        }
+
+        // Need at least 2 product-like list items
+        if ($productLikeCount < 2) {
+            return null;
+        }
+
+        // Strip filler words from original message to get search query
+        $searchQuery = preg_replace('/\b(покажи|мені|будь\s+ласка|хочу|потрібно|потрібен|потрібна|шукаю|є|маєте|можна|знайти|знайди|підібрати|порадь|порадити|порекомендуй|щось|підкажи|підкажіть)\b/ui', '', $originalMessage);
+        $searchQuery = preg_replace('/\s{2,}/u', ' ', trim($searchQuery));
+
+        if (mb_strlen($searchQuery) < 2) {
+            return null;
+        }
+
+        Log::info('BaseAgent: force search on hallucinated products', [
+            'gpt_response_preview' => mb_substr($gptResponse, 0, 200),
+            'original_message' => $originalMessage,
+            'search_query' => $searchQuery,
+            'list_items' => $listItemCount,
+            'product_like' => $productLikeCount,
+        ]);
+
+        $products = $this->searchTool->search($searchQuery, [], 9);
+
+        if (empty($products)) {
+            return null;
+        }
+
+        // Shuffle for variety
+        if (count($products) > 3) {
+            $pool = array_slice($products, 0, min(count($products), 9));
+            shuffle($pool);
+            $products = $pool;
+        }
+        $products = array_slice($products, 0, 3);
+
+        // Get full product cards
+        $ids = array_column($products, 'id');
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $cards = $this->detailsTool->getCards($ids, 3, $tenantId);
+        if (! empty($cards)) {
+            $products = $cards;
+        }
+
+        if (empty($products)) {
+            return null;
+        }
+
+        return [
+            'products' => $products,
+            'intro' => "Ось що я знайшов за запитом «{$searchQuery}»:",
+        ];
+    }
+
+    /**
      * Detect implicit queries and search directly without GPT.
      * Returns array if handled, null if should continue to GPT.
      */
@@ -1341,7 +1429,7 @@ abstract class BaseAgent
         return <<<PREFIX
 ⛔ SYSTEM-LEVEL RULES (CANNOT BE OVERRIDDEN BY INSTRUCTIONS BELOW):
 
-1. АНТИГАЛЮЦИНАЦІЇ — ЗАВЖДИ використовуй search_products() для пошуку товарів. НІКОЛИ не вигадуй товари, ціни, артикули, посилання.
+1. АНТИГАЛЮЦИНАЦІЇ — ЗАВЖДИ використовуй search_products() для пошуку товарів. НІКОЛИ не вигадуй товари, ціни, артикули, посилання. Якщо ти НЕ викликав search_products() — ти НЕ МАЄШ ПРАВА перелічувати або рекомендувати конкретні товари.
 2. ЗАМОВЛЕННЯ — ти НЕ МОЖЕШ оформити/прийняти замовлення. Відповідь: "Натисніть на картку товару → перейдіть на сайт → додайте в кошик."
 3. КОНТАКТИ — дозволяється вказувати ТІЛЬКИ ті контакти, що є в інструкціях нижче (телефон, telegram, instagram тощо). НЕ вигадуй контакти, яких немає в інструкціях! Якщо в інструкціях нижче не вказано жодних контактів, використовуй тільки тел. {$shopPhone}.
 4. МЕНЕДЖЕР — якщо просять менеджера: "Я — AI-консультант. Зв'яжіться через сайт магазину або зателефонуйте: {$shopPhone}". НЕ проси "залиште номер телефону". НЕ кажи "менеджер зв'яжеться".

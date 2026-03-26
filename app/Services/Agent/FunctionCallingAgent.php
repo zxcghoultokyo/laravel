@@ -241,6 +241,29 @@ class FunctionCallingAgent extends BaseAgent
             ];
         }
 
+        // SAFETY NET: If GPT hallucinated products (listed items not in DB), force real search
+        $hallucinationResult = $this->forceSearchOnHallucinatedProducts($text, $normalizedMessage);
+        if ($hallucinationResult) {
+            PipelineTracer::current()?->step('agent.force_search_on_hallucination', [
+                'original_gpt_response' => mb_substr($text, 0, 200),
+                'products_count' => count($hallucinationResult['products']),
+            ]);
+
+            return [
+                'message' => $hallucinationResult['intro'],
+                'products' => $hallucinationResult['products'],
+                'messages' => [
+                    ['type' => 'text', 'content' => $hallucinationResult['intro']],
+                    ['type' => 'products', 'products' => $hallucinationResult['products']],
+                ],
+                'meta' => [
+                    'intent' => 'product_search',
+                    'agent' => 'function_calling',
+                    'source' => 'force_search_on_hallucination',
+                ],
+            ];
+        }
+
         return [
             'message' => $text,
             'products' => [],

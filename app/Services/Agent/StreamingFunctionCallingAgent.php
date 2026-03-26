@@ -645,11 +645,35 @@ CONTEXT;
                     $responseProducts = $extracted['products'];
                     $responseIntent = 'product_search';
                 } else {
-                    // Stream as plain text
-                    $textChunks = mb_str_split($responseText, 3);
-                    foreach ($textChunks as $chunk) {
-                        yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
-                        usleep(10000);
+                    // SAFETY NET: If GPT hallucinated products (listed items not in DB), force real search
+                    $hallucinationResult = $this->forceSearchOnHallucinatedProducts($responseText, $normalizedMessage);
+                    if ($hallucinationResult) {
+                        PipelineTracer::current()?->step('agent.force_search_on_hallucination', [
+                            'original_gpt_response' => mb_substr($responseText, 0, 200),
+                            'products_count' => count($hallucinationResult['products']),
+                        ]);
+
+                        $introChunks = mb_str_split($hallucinationResult['intro'], 3);
+                        foreach ($introChunks as $chunk) {
+                            yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                            usleep(10000);
+                        }
+
+                        yield ['type' => 'products', 'data' => [
+                            'products' => $hallucinationResult['products'],
+                            'count' => count($hallucinationResult['products']),
+                        ]];
+
+                        $responseText = $hallucinationResult['intro'];
+                        $responseProducts = $hallucinationResult['products'];
+                        $responseIntent = 'product_search';
+                    } else {
+                        // Stream as plain text
+                        $textChunks = mb_str_split($responseText, 3);
+                        foreach ($textChunks as $chunk) {
+                            yield ['type' => 'chunk', 'data' => ['text' => $chunk]];
+                            usleep(10000);
+                        }
                     }
                 }
             }

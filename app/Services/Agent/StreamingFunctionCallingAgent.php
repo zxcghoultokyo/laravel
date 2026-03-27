@@ -155,10 +155,15 @@ class StreamingFunctionCallingAgent extends BaseAgent
             // Stream products
             if (! empty($implicitResult['products'])) {
                 yield ['type' => 'products', 'data' => ['products' => $implicitResult['products']]];
-
-                // Log assistant response (use 'product_search' for proper history loading)
-                $this->logAssistantMessage($sessionId, $implicitResult['message'], $implicitResult['products'], 'product_search');
             }
+
+            // Log assistant response (always, even without products)
+            $this->logAssistantMessage(
+                $sessionId,
+                $implicitResult['message'] ?? '',
+                $implicitResult['products'] ?? [],
+                ! empty($implicitResult['products']) ? 'product_search' : 'general',
+            );
 
             // End stream
             yield ['type' => 'done', 'data' => []];
@@ -174,7 +179,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         if (empty($this->apiKey)) {
             PipelineTracer::current()?->step('agent.no_api_key', ['fallback' => true]);
             Log::warning('StreamingAgent: no API key, using fallback');
-            yield from $this->fallbackStream($normalizedMessage);
+            yield from $this->fallbackStream($normalizedMessage, $sessionId);
 
             return;
         }
@@ -297,7 +302,7 @@ CONTEXT;
 
         if (! $response) {
             PipelineTracer::current()?->step('agent.gpt_failed', ['fallback' => true]);
-            yield from $this->fallbackStream($normalizedMessage);
+            yield from $this->fallbackStream($normalizedMessage, $sessionId);
 
             return;
         }
@@ -842,7 +847,7 @@ CONTEXT;
     /**
      * Fallback stream when API is unavailable.
      */
-    private function fallbackStream(string $message): Generator
+    private function fallbackStream(string $message, ?string $sessionId = null): Generator
     {
         $fallback = $this->fallbackResponse($message);
 
@@ -855,7 +860,10 @@ CONTEXT;
             ]];
         }
 
-        yield ['type' => 'done', 'data' => ['session_id' => null]];
+        // Log assistant response to DB (was missing — caused bot responses not being saved)
+        $this->logAssistantMessage($sessionId, $fallback['message'], $fallback['products'] ?? [], 'fallback');
+
+        yield ['type' => 'done', 'data' => ['session_id' => $sessionId]];
     }
 
     /**

@@ -315,4 +315,60 @@ class StreamingFunctionCallingAgentTest extends TestCase
         $response->assertStatus(200);
         $this->assertEquals('text/event-stream; charset=utf-8', $response->headers->get('Content-Type'));
     }
+
+    // ───────────────────────────────────────────────
+    // Fallback done event includes session_id (was null before fix)
+    // ───────────────────────────────────────────────
+
+    public function test_fallback_on_empty_api_key_done_event_has_session_id(): void
+    {
+        config(['services.openai.key' => '']);
+
+        $agent = $this->makeAgent();
+        $sessionId = 'test_fallback_sid_'.time();
+
+        $events = $this->collectEvents($agent, 'покажи тактичні рюкзаки', $sessionId);
+
+        $doneEvent = collect($events)->firstWhere('type', 'done');
+        $this->assertNotNull($doneEvent);
+        $this->assertEquals($sessionId, $doneEvent['data']['session_id'] ?? null,
+            'Fallback done event should include session_id (was null before fix)');
+    }
+
+    public function test_fallback_on_gpt_failure_done_event_has_session_id(): void
+    {
+        Http::fake([
+            'api.openai.com/*' => Http::response([
+                'error' => [
+                    'message' => 'The server had an error',
+                    'type' => 'server_error',
+                    'code' => 'server_error',
+                ],
+            ], 500),
+        ]);
+
+        $agent = $this->makeAgent();
+        $sessionId = 'test_gpt_fail_sid_'.time();
+
+        $events = $this->collectEvents($agent, 'покажи штани для зимових місій', $sessionId);
+
+        $doneEvent = collect($events)->firstWhere('type', 'done');
+        $this->assertNotNull($doneEvent);
+        $this->assertEquals($sessionId, $doneEvent['data']['session_id'] ?? null,
+            'GPT failure fallback done event should include session_id');
+    }
+
+    public function test_fallback_done_event_includes_session_id(): void
+    {
+        config(['services.openai.key' => '']);
+
+        $agent = $this->makeAgent();
+        $sessionId = 'test_done_session_'.time();
+
+        $events = $this->collectEvents($agent, 'рюкзаки', $sessionId);
+
+        $doneEvent = collect($events)->firstWhere('type', 'done');
+        $this->assertNotNull($doneEvent);
+        $this->assertEquals($sessionId, $doneEvent['data']['session_id'] ?? null, 'Done event should include session_id');
+    }
 }

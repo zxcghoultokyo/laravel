@@ -184,6 +184,9 @@ class StreamingChatController extends Controller
                     'trace' => $e->getTraceAsString(),
                 ]);
 
+                // Save error as assistant message so chat history is not orphaned
+                $this->logErrorAsAssistantMessage($sessionId, $e);
+
                 $errorData = [
                     'text' => 'Сталася помилка. Спробуйте ще раз 🙏',
                     'session_id' => $sessionId,
@@ -304,6 +307,39 @@ class StreamingChatController extends Controller
             ]);
         } catch (\Throwable $e) {
             Log::error('StreamingChatController: failed to save user message', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Log error as assistant message to prevent orphaned user messages.
+     */
+    private function logErrorAsAssistantMessage(string $sessionId, \Throwable $exception): void
+    {
+        try {
+            $session = \App\Models\ChatSession::where('session_id', $sessionId)->first();
+            if (! $session) {
+                return;
+            }
+
+            \App\Models\ChatMessage::create([
+                'chat_session_id' => $session->id,
+                'role' => 'assistant',
+                'content' => 'Сталася помилка. Спробуйте ще раз 🙏',
+                'meta' => [
+                    'intent' => 'error',
+                    'error' => mb_substr($exception->getMessage(), 0, 500),
+                ],
+            ]);
+
+            $session->update([
+                'last_message_at' => now(),
+                'messages_count' => ($session->messages_count ?? 0) + 1,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('StreamingChatController: failed to log error as assistant message', [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
             ]);

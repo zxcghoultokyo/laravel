@@ -166,7 +166,8 @@ class MeiliProductSearchTool
 
             // Color filter: strictly by normalized field
             if (! empty($filters['color'])) {
-                $canonical = strtolower((string) $filters['color']);
+                $canonical = $this->colorService->normalizeColor($filters['color'])
+                    ?? strtolower((string) $filters['color']);
                 $filterParts[] = "color_norm = '{$canonical}'";
             }
 

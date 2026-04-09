@@ -2013,6 +2013,17 @@ class MeiliProductSearchTool
      */
     private function buildSeasonalQueryBoost(string $query, ?string $explicitSeason = null): ?array
     {
+        // Children's stores (toy shops) don't benefit from seasonal product boost —
+        // the hardcoded terms are for tactical/outdoor gear. Skip for children's stores.
+        if ($this->isChildrenStore()) {
+            Log::info('MeiliProductSearchTool: skipping seasonal boost for children store', [
+                'tenant_id' => $this->getCurrentTenantId(),
+                'query' => $query,
+            ]);
+
+            return null;
+        }
+
         // Split hyphens before detection so "весну-осінь" → "весну осінь" (both detected)
         $queryLower = mb_strtolower(str_replace('-', ' ', $query));
 
@@ -2462,6 +2473,30 @@ class MeiliProductSearchTool
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Check if the current tenant is a children's store (has age-based categories).
+     * Used to disable tactical-gear-specific seasonal boost for toy/children stores.
+     */
+    public function isChildrenStore(): bool
+    {
+        $tenantId = $this->getCurrentTenantId();
+        if (! $tenantId) {
+            return false;
+        }
+
+        return \Illuminate\Support\Facades\Cache::remember("tenant_{$tenantId}_is_children_store", 3600, function () use ($tenantId) {
+            return Product::withoutGlobalScope(\App\Scopes\TenantScope::class)
+                ->where('tenant_id', $tenantId)
+                ->where(function ($q) {
+                    $q->where('category_path', 'LIKE', '%МАЛЮКАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ТОДЛЕРАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ДОШКІЛЬНЯТАМ%')
+                        ->orWhere('category_path', 'LIKE', '%ШКОЛЯРАМ%');
+                })
+                ->exists();
+        });
     }
 
     /**

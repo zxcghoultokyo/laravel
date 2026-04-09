@@ -2450,8 +2450,23 @@ PROMPT;
         // For non-age stores, GPT often picks wrong categories for abstract queries
         // ("на весну" → "Футболки", "на вологу погоду" → "Level 7") which breaks search.
         // Meilisearch handles relevance fine without category filter.
+        //
+        // IMPORTANT: Validate GPT category against the CURRENT user message.
+        // GPT often carries over category from conversation history (e.g. user asked about
+        // "подарунок на 1 рік" → малюкам, then "а щось про космос" → GPT still sends малюкам).
+        // Only trust GPT category if the current message actually contains age markers.
         if (! empty($args['category']) && $this->hasAgeCategories()) {
-            $filters['category'] = $args['category'];
+            $messageHasAge = ! empty($this->currentMessage)
+                && $this->searchTool->detectAgeCategoryFromQuery($this->currentMessage) !== null;
+            if ($messageHasAge) {
+                $filters['category'] = $args['category'];
+            } else {
+                Log::info('BaseAgent: ignoring GPT category (no age markers in current message)', [
+                    'gpt_category' => $args['category'],
+                    'current_message' => mb_substr($this->currentMessage ?? '', 0, 100),
+                    'query' => $query,
+                ]);
+            }
         }
 
         // If GPT didn't pass category, detect age from original user message
@@ -2539,7 +2554,21 @@ PROMPT;
         // Filter by color
         if (! empty($args['color']) && ! empty($results)) {
             $color = mb_strtolower($args['color']);
-            $results = array_filter($results, fn ($p) => str_contains(mb_strtolower(($p['title'] ?? '').' '.($p['color'] ?? '')), $color));
+            // Normalize common color variants: мультикам/мультікам/multicam
+            $colorVariants = [$color];
+            if (str_contains($color, 'мультикам') || str_contains($color, 'мультікам') || str_contains($color, 'multicam')) {
+                $colorVariants = ['мультикам', 'мультікам', 'multicam'];
+            }
+            $results = array_filter($results, function ($p) use ($colorVariants) {
+                $haystack = mb_strtolower(($p['title'] ?? '').' '.($p['color'] ?? ''));
+                foreach ($colorVariants as $variant) {
+                    if (str_contains($haystack, $variant)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
             $results = array_values($results);
         }
 

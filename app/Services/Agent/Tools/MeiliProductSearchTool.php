@@ -340,16 +340,25 @@ class MeiliProductSearchTool
                 ]);
 
                 // Post-filter to keep only matching category (include adjacent upper for boundary ages)
+                // Allow cross-category items that already passed age filter (e.g., "НАВЧАЛЬНІ ПОСІБНИКИ"
+                // has products for all ages with proper age_min/max_months)
+                $crossAgeCategories = ['навчальні посібники', 'навчальні', 'посібники'];
                 if (count($hits) > 0) {
                     $catLower = mb_strtolower(trim($categoryFilter));
                     $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
-                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower) {
+                    $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower, $crossAgeCategories) {
                         $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
                         if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
                             return true;
                         }
                         if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
                             return true;
+                        }
+                        // Allow cross-age categories (products already passed Meili age filter)
+                        foreach ($crossAgeCategories as $crossCat) {
+                            if (str_contains($hitCat, $crossCat)) {
+                                return true;
+                            }
                         }
 
                         return false;
@@ -364,13 +373,18 @@ class MeiliProductSearchTool
                     // Post-filter
                     $catLower = mb_strtolower(trim($categoryFilter));
                     $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
-                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower, $adjUpperLower) {
+                    $catOnlyHits = array_values(array_filter($catOnlyHits, function ($hit) use ($catLower, $adjUpperLower, $crossAgeCategories) {
                         $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
                         if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
                             return true;
                         }
                         if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
                             return true;
+                        }
+                        foreach ($crossAgeCategories as $crossCat) {
+                            if (str_contains($hitCat, $crossCat)) {
+                                return true;
+                            }
                         }
 
                         return false;
@@ -898,11 +912,13 @@ class MeiliProductSearchTool
 
             // Final safety net: ensure category filter is respected after all retries
             // For boundary ages, also allow adjacent upper category (e.g., тодлерам for малюкам)
+            // Allow cross-age categories that have their own age_min/max_months (e.g., НАВЧАЛЬНІ ПОСІБНИКИ)
+            $crossAgeCategories = $crossAgeCategories ?? ['навчальні посібники', 'навчальні', 'посібники'];
             if ($categoryFilter && count($filtered) > 1) {
                 $beforeSafetyNet = count($filtered);
                 $catLower = mb_strtolower(trim($categoryFilter));
                 $safetyAdjUpper = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
-                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower, $safetyAdjUpper) {
+                $catFiltered = array_values(array_filter($filtered, function ($hit) use ($catLower, $safetyAdjUpper, $crossAgeCategories) {
                     $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
 
                     if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
@@ -910,6 +926,11 @@ class MeiliProductSearchTool
                     }
                     if ($safetyAdjUpper && str_contains($hitCat, $safetyAdjUpper)) {
                         return true;
+                    }
+                    foreach ($crossAgeCategories as $crossCat) {
+                        if (str_contains($hitCat, $crossCat)) {
+                            return true;
+                        }
                     }
 
                     return false;

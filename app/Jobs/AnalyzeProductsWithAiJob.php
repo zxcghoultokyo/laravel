@@ -7,6 +7,7 @@ use App\Models\ProductAiIndex;
 use App\Models\SyncLog;
 use App\Models\TenantOnboardingProgress;
 use App\Scopes\TenantScope;
+use App\Services\Usage\AiCostTrackingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -361,6 +362,24 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             ->post(rtrim($config['base_url'] ?? 'https://api.openai.com/v1', '/').'/chat/completions', $requestBody);
 
         $data = $response->json();
+
+        // Track AI usage for enrichment
+        try {
+            $usage = $data['usage'] ?? null;
+            if ($usage) {
+                app(AiCostTrackingService::class)->log(
+                    source: 'enrichment',
+                    model: $model,
+                    usage: $usage,
+                    tenantId: $this->tenantId,
+                    responseTimeMs: null,
+                    isError: isset($data['error']),
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::debug('AI usage tracking failed in enrichment', ['error' => $e->getMessage()]);
+        }
+
         $content = $data['choices'][0]['message']['content'] ?? null;
 
         if (! $content) {

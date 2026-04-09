@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Services\Search\MeiliClient;
+use App\Services\Usage\AiCostTrackingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -7763,5 +7764,30 @@ class DiagnosticController extends Controller
                 'trace' => mb_substr($e->getTraceAsString(), 0, 500),
             ], 500);
         }
+    }
+
+    /**
+     * GET /api/diagnostic/ai-costs
+     * AI usage and cost statistics.
+     */
+    public function aiCosts(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $tenantId = $request->query('tenant_id') ? (int) $request->query('tenant_id') : null;
+        $from = $request->query('from');
+        $to = $request->query('to');
+
+        $service = app(AiCostTrackingService::class);
+
+        $stats = $service->getStats($tenantId, $from, $to);
+        $byTenant = $service->getStatsByTenant($from, $to);
+
+        return response()->json([
+            'stats' => $stats,
+            'by_tenant' => $byTenant,
+        ]);
     }
 }

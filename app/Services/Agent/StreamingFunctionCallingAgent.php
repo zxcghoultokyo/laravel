@@ -721,6 +721,8 @@ CONTEXT;
     private function streamGptResponse(array $messages): Generator
     {
         try {
+            $startTime = microtime(true);
+
             $response = Http::withToken($this->apiKey)
                 ->withOptions(['stream' => true])
                 ->timeout(60)
@@ -728,11 +730,13 @@ CONTEXT;
                     'model' => $this->model,
                     'messages' => $messages,
                     'stream' => true,
+                    'stream_options' => ['include_usage' => true],
                     'temperature' => 0.1,
                 ]);
 
             $body = $response->getBody();
             $buffer = '';
+            $usageData = null;
 
             while (! $body->eof()) {
                 $buffer .= $body->read(1024);
@@ -748,6 +752,12 @@ CONTEXT;
 
                     $data = substr($line, 6);
                     if ($data === '[DONE]') {
+                        // Track usage from the last chunk
+                        if ($usageData) {
+                            $elapsed = (int) ((microtime(true) - $startTime) * 1000);
+                            $this->trackAiUsage('chat_stream', ['usage' => $usageData, 'model' => $this->model], null, $elapsed);
+                        }
+
                         return;
                     }
 
@@ -756,11 +766,22 @@ CONTEXT;
                         continue;
                     }
 
+                    // Capture usage data from final chunk (sent when stream_options.include_usage is true)
+                    if (isset($json['usage'])) {
+                        $usageData = $json['usage'];
+                    }
+
                     $delta = $json['choices'][0]['delta'] ?? [];
                     if (isset($delta['content'])) {
                         yield ['type' => 'content', 'text' => $delta['content']];
                     }
                 }
+            }
+
+            // Track usage if stream ended without [DONE]
+            if ($usageData) {
+                $elapsed = (int) ((microtime(true) - $startTime) * 1000);
+                $this->trackAiUsage('chat_stream', ['usage' => $usageData, 'model' => $this->model], null, $elapsed);
             }
         } catch (\Throwable $e) {
             Log::error('StreamingAgent: streaming error', ['error' => $e->getMessage()]);
@@ -777,6 +798,8 @@ CONTEXT;
         $maxRetries = 3; // Increased from 2 for better rate limit handling
 
         try {
+            $startTime = microtime(true);
+
             $response = Http::withToken($this->apiKey)
                 ->timeout(45)
                 ->connectTimeout(10)
@@ -789,6 +812,10 @@ CONTEXT;
                 ]);
 
             $data = $response->json();
+            $elapsed = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Track AI usage
+            $this->trackAiUsage('chat_stream', $data, null, $elapsed, isset($data['error']));
 
             if (isset($data['error'])) {
                 Log::error('StreamingAgent: OpenAI error', ['error' => $data['error']]);

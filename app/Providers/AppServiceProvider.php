@@ -180,6 +180,11 @@ class AppServiceProvider extends ServiceProvider
             return new \App\Services\Usage\UsageTrackingService;
         });
 
+        // AI Cost Tracking Service (OpenAI token/cost logging)
+        $this->app->singleton(\App\Services\Usage\AiCostTrackingService::class, function ($app) {
+            return new \App\Services\Usage\AiCostTrackingService;
+        });
+
         // === AGENT HANDLERS ===
 
         // FAQ Handler

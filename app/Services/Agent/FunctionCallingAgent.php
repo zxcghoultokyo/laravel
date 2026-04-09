@@ -495,12 +495,18 @@ CONTEXT;
                 'tools_count' => count($requestPayload['tools']),
             ]);
 
+            $startTime = microtime(true);
+
             $response = Http::withToken($this->apiKey)
                 ->timeout(45)
                 ->connectTimeout(10)
                 ->post($this->baseUrl.'/chat/completions', $requestPayload);
 
             $data = $response->json();
+            $elapsed = (int) ((microtime(true) - $startTime) * 1000);
+
+            // Track AI usage
+            $this->trackAiUsage('chat', $data, null, $elapsed, isset($data['error']));
 
             Log::info('FunctionCallingAgent: GPT response', [
                 'status' => $response->status(),

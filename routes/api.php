@@ -217,6 +217,9 @@ Route::prefix('diagnostic')->group(function () {
 
     // Health check: all services
     Route::get('/health', [\App\Http\Controllers\Api\DiagnosticController::class, 'healthCheck']);
+
+    // AI cost tracking
+    Route::get('/ai-costs', [\App\Http\Controllers\Api\DiagnosticController::class, 'aiCosts']);
 });
 
 // Cross-sell suggestions (async, called after main chat response)

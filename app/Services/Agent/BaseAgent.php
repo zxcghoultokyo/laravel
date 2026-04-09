@@ -18,6 +18,7 @@ use App\Services\Catalog\CategoryPatternService;
 use App\Services\Catalog\PriceStatsService;
 use App\Services\Chat\PipelineTracer;
 use App\Services\Horoshop\OrderSearchService;
+use App\Services\Usage\AiCostTrackingService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -46,6 +47,8 @@ abstract class BaseAgent
     protected PromptModulesService $promptModulesService;
 
     protected CategoryPatternService $categoryPatternService;
+
+    protected AiCostTrackingService $aiCostTracker;
 
     /**
      * Service/info pages that are NOT product categories.
@@ -116,6 +119,35 @@ abstract class BaseAgent
         $this->promptPresetService = app(PromptPresetService::class);
         $this->promptModulesService = app(PromptModulesService::class);
         $this->categoryPatternService = app(CategoryPatternService::class);
+        $this->aiCostTracker = app(AiCostTrackingService::class);
+    }
+
+    /**
+     * Track OpenAI API usage from response data.
+     */
+    protected function trackAiUsage(string $source, ?array $data, ?string $sessionId = null, ?int $responseTimeMs = null, bool $isError = false): void
+    {
+        if (! $data) {
+            return;
+        }
+
+        $usage = $data['usage'] ?? [];
+        if (empty($usage) && ! $isError) {
+            return;
+        }
+
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $model = $data['model'] ?? $this->model;
+
+        $this->aiCostTracker->log(
+            source: $source,
+            model: $model,
+            usage: $usage,
+            tenantId: $tenantId,
+            sessionId: $sessionId,
+            responseTimeMs: $responseTimeMs,
+            isError: $isError,
+        );
     }
 
     /**

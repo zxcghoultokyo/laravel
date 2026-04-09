@@ -2483,6 +2483,20 @@ PROMPT;
             $filters['season'] = $args['season'];
         }
 
+        // Fallback: detect season from original user message if GPT didn't pass it
+        // GPT sometimes ignores season param and sends non-seasonal query (e.g. "підсумок" for "що підійде навесні")
+        if (empty($filters['season']) && ! empty($this->currentMessage)) {
+            $detectedSeason = $this->detectSeasonFromMessage($this->currentMessage);
+            if ($detectedSeason) {
+                $filters['season'] = $detectedSeason;
+                Log::info('BaseAgent: injected season from original user message', [
+                    'season' => $detectedSeason,
+                    'current_message' => $this->currentMessage,
+                    'gpt_query' => $query,
+                ]);
+            }
+        }
+
         // Pass original user message so MeiliProductSearchTool can detect boundary ages
         // (GPT often strips age info from the query parameter)
         if (! empty($this->currentMessage)) {
@@ -3500,6 +3514,32 @@ PROMPT;
         }
 
         return false;
+    }
+
+    /**
+     * Detect season from user message text.
+     * Uses same keywords as MeiliProductSearchTool::buildSeasonalQueryBoost.
+     */
+    protected function detectSeasonFromMessage(string $message): ?string
+    {
+        $messageLower = mb_strtolower(str_replace('-', ' ', $message));
+
+        $seasonKeywords = [
+            'winter' => ['зимов', 'зиму', 'зимою', 'взимку', 'мороз', 'холод', 'winter'],
+            'spring' => ['весн', 'весною', 'навесні', 'spring'],
+            'summer' => ['літн', 'літо', 'влітку', 'спек', 'жарк', 'summer'],
+            'autumn' => ['осінн', 'осені', 'осінь', 'восени', 'autumn'],
+        ];
+
+        foreach ($seasonKeywords as $season => $keywords) {
+            foreach ($keywords as $kw) {
+                if (mb_strpos($messageLower, $kw) !== false) {
+                    return $season;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

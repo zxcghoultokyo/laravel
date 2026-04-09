@@ -2600,9 +2600,20 @@ PROMPT;
             ]);
         }
 
+        PipelineTracer::current()?->step('base_agent.before_accessory_filter', [
+            'results_count' => count($results),
+            'result_ids' => array_column(array_slice($results, 0, 5), 'id'),
+            'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 50), array_slice($results, 0, 5)),
+        ]);
+
         // Filter accessories when searching for main product types (шоломи, плитоноски, etc.)
         // This is a safety net in case MeiliProductSearchTool filters don't work
         $results = $this->filterAccessoriesFromResults($results, $query);
+
+        PipelineTracer::current()?->step('base_agent.after_accessory_filter', [
+            'results_count' => count($results),
+            'result_ids' => array_column(array_slice($results, 0, 5), 'id'),
+        ]);
 
         // Add variety: shuffle top results before final slice so repeated queries return different products
         if (count($results) > $limit) {

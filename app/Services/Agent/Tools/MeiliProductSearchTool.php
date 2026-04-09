@@ -2095,6 +2095,31 @@ class MeiliProductSearchTool
 
         // Build final query: cleaned original + boost terms
         $cleanedQuery = implode(' ', $cleanedParts);
+
+        // If season was detected from explicit param (user message fallback) and GPT sent
+        // a non-seasonal query (e.g. "підсумок" for "що підійде навесні"), the cleaned query
+        // is irrelevant noise. Drop it and use only seasonal boost terms.
+        if ($explicitSeason && ! empty($cleanedQuery)) {
+            // Check if the cleaned query contains any actual seasonal/product overlap
+            $cleanedLower = mb_strtolower($cleanedQuery);
+            $boostLower = mb_strtolower($boostTerms);
+            $hasOverlap = false;
+            foreach (explode(' ', $cleanedLower) as $cw) {
+                if (mb_strlen($cw) >= 4 && mb_strpos($boostLower, mb_substr($cw, 0, 4)) !== false) {
+                    $hasOverlap = true;
+                    break;
+                }
+            }
+            if (! $hasOverlap) {
+                Log::info('MeiliProductSearchTool: dropping GPT query for seasonal boost (no product overlap)', [
+                    'dropped_query' => $cleanedQuery,
+                    'season' => $explicitSeason,
+                    'boost_terms' => $boostTerms,
+                ]);
+                $cleanedQuery = '';
+            }
+        }
+
         $finalQuery = trim($cleanedQuery.' '.$boostTerms);
 
         // Primary season for post-ranking (first detected, or "demiseasonal" for spring+autumn)

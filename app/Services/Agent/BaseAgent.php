@@ -2446,6 +2446,9 @@ PROMPT;
         if (! empty($args['brand'])) {
             $filters['brand'] = $args['brand'];
         }
+        if (! empty($args['color'])) {
+            $filters['color'] = $args['color'];
+        }
         // Only pass GPT-supplied category for age-based stores (children's).
         // For non-age stores, GPT often picks wrong categories for abstract queries
         // ("на весну" → "Футболки", "на вологу погоду" → "Level 7") which breaks search.

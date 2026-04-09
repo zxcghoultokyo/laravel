@@ -2043,11 +2043,13 @@ class MeiliProductSearchTool
         }
 
         // Map season to product-relevant search terms
+        // Use CONCRETE product names (футболка, куртка) — NOT abstract adjectives (дихаючий, вентиляція)
+        // because filterByTitleRelevance checks stems against title/category
         $seasonBoostTerms = [
-            'winter' => 'зимовий теплий утеплений термо',
-            'spring' => 'демісезонний softshell софтшел весняний легкий',
-            'summer' => 'літній легкий дихаючий вентиляція',
-            'autumn' => 'демісезонний softshell водонепроникний вітрозахисний',
+            'winter' => 'куртка зимова термобілизна шапка рукавиці флісова балаклава',
+            'spring' => 'куртка softshell софтшел штани дощовик демісезонний',
+            'summer' => 'футболка панама шорти кепка легкий',
+            'autumn' => 'куртка softshell софтшел штани дощовик водонепроникний',
         ];
 
         // Merge boost terms from all detected seasons (deduped)

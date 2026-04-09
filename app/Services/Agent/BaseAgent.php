@@ -2554,8 +2554,10 @@ PROMPT;
         // valid results. Meilisearch relevance scoring handles this better.
         // MinimalAgent doesn't have this filter and works better.
 
-        // Filter by color
-        if (! empty($args['color']) && ! empty($results)) {
+        // Filter by color (only if not already passed to MeiliProductSearchTool via $filters)
+        // MeiliProductSearchTool has comprehensive color filtering with color_norm + postFilterByColor + synonyms.
+        // BaseAgent color filter is a fallback for when color was NOT passed to Meili.
+        if (! empty($args['color']) && empty($filters['color']) && ! empty($results)) {
             $color = mb_strtolower($args['color']);
             // Normalize common color variants: мультикам/мультікам/multicam
             $colorVariants = [$color];

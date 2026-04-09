@@ -365,6 +365,38 @@ class MeiliProductSearchTool
                     }));
                 }
 
+                // Step 1b: Also search WITHOUT category boost to find cross-category products
+                // The boosted query "весна ДОШКІЛЬНЯТАМ" penalizes products from other categories
+                // like НАВЧАЛЬНІ ПОСІБНИКИ, even though they match the actual query well.
+                if (trim($enhancedQuery) !== '' && ! empty($crossAgeCategories)) {
+                    $nonBoostedResult = $index->search($enhancedQuery, $searchParams);
+                    $nonBoostedHits = $nonBoostedResult->getHits();
+
+                    // Only keep cross-age category products (main category products already found in Step 1)
+                    $existingIds = array_column($hits, 'id');
+                    $crossCategoryAdded = 0;
+                    foreach ($nonBoostedHits as $hit) {
+                        if (in_array($hit['id'], $existingIds)) {
+                            continue;
+                        }
+                        $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                        foreach ($crossAgeCategories as $crossCat) {
+                            if (str_contains($hitCat, $crossCat)) {
+                                $hits[] = $hit;
+                                $existingIds[] = $hit['id'];
+                                $crossCategoryAdded++;
+                                break;
+                            }
+                        }
+                    }
+                    if ($crossCategoryAdded > 0) {
+                        Log::info('MeiliProductSearchTool: cross-category products added from non-boosted search', [
+                            'added' => $crossCategoryAdded,
+                            'total_hits' => count($hits),
+                        ]);
+                    }
+                }
+
                 // Step 2: If not enough results, search with JUST category keyword
                 if (count($hits) < 3) {
                     $catOnlyResult = $index->search($categoryQueryBoost, $searchParams);

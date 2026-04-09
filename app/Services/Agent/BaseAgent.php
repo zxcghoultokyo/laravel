@@ -707,6 +707,20 @@ abstract class BaseAgent
         $productQuery = preg_replace('/\b(для|дитин\w*|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якусь|якесь|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|запропонуй|скажи|скинь)\b/ui', '', $productQuery);
         $productQuery = preg_replace('/\s{2,}/u', ' ', trim($productQuery));
 
+        // Normalize Ukrainian seasonal word forms to nominative case for better Meili matching
+        // "весну/весною/весни" → "весна", "зиму/зимою/зими" → "зима" etc.
+        $seasonNormalization = [
+            '/\bвесн[уіиою]\b/ui' => 'весна',
+            '/\bзим[уіиою]\b/ui' => 'зима',
+            '/\bліт[уоаі]\b/ui' => 'літо',
+            '/\bосен[іию]\b/ui' => 'осінь',
+            '/\bосінн[юія]\b/ui' => 'осінь',
+        ];
+        foreach ($seasonNormalization as $pattern => $replacement) {
+            $productQuery = preg_replace($pattern, $replacement, $productQuery);
+        }
+        $productQuery = trim($productQuery);
+
         Log::info('BaseAgent: age query detected, bypassing GPT', [
             'message' => $originalMessage,
             'product_query' => $productQuery,

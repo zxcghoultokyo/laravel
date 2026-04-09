@@ -656,13 +656,22 @@ class MeiliProductSearchTool
                 $hitsBeforeCategory = count($hits);
                 $catLower = mb_strtolower(trim($categoryFilter));
                 $adjUpperLower = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
-                $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower) {
+                // Allow cross-age categories (e.g., НАВЧАЛЬНІ ПОСІБНИКИ) through this filter too
+                // These products were intentionally added by Step 1b non-boosted search
+                $crossAgeCatsForPostFilter = $crossAgeCategories ?? ['навчальні посібники', 'навчальні', 'посібники'];
+                $hits = array_values(array_filter($hits, function ($hit) use ($catLower, $adjUpperLower, $crossAgeCatsForPostFilter) {
                     $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
                     if (str_contains($hitCat, $catLower) || str_contains($catLower, $hitCat)) {
                         return true;
                     }
                     if ($adjUpperLower && (str_contains($hitCat, $adjUpperLower) || str_contains($adjUpperLower, $hitCat))) {
                         return true;
+                    }
+                    // Allow cross-age categories that already passed age filter
+                    foreach ($crossAgeCatsForPostFilter as $crossCat) {
+                        if (str_contains($hitCat, $crossCat)) {
+                            return true;
+                        }
                     }
 
                     return false;

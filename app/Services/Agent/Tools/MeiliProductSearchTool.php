@@ -796,6 +796,11 @@ class MeiliProductSearchTool
             // Apply contextual accessory filtering
             $filtered = $this->filterAccessories($hits, $query);
 
+            // For seasonal queries: remove products whose only match is the generic
+            // "весна літо осінь зима" AI enrichment tag (added to season-agnostic products)
+            // Products with зима in search_index/description are real matches and don't have all 4 seasons in ai_keywords
+            $filtered = $this->filterGenericSeasonalMatches($filtered, $enhancedQuery);
+
             // Filter products where search term only appears in description, not in title/category
             // This prevents "куртка" from appearing in "термобілизна" search results just because
             // the jacket description mentions "в комбінації з термобілизною"
@@ -1374,6 +1379,83 @@ class MeiliProductSearchTool
             if ($matched) {
                 $filtered[] = $hit;
             }
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Remove products whose only match for a seasonal query is the generic
+     * "весна літо осінь зима" tag in ai_keywords (added to all products by AI enrichment).
+     * Products where the seasonal word appears in title or search_index/description
+     * (ranked here by Meili) will NOT have all 4 seasons in their ai_keywords.
+     */
+    private function filterGenericSeasonalMatches(array $hits, string $query): array
+    {
+        if (empty($hits) || empty($query)) {
+            return $hits;
+        }
+
+        $queryLower = mb_strtolower(trim($query));
+        $seasonalRoots = ['весн', 'зима', 'зимо', 'зимі', 'зимов', 'літ', 'осін'];
+        $isSeasonal = false;
+        foreach ($seasonalRoots as $root) {
+            if (str_contains($queryLower, $root)) {
+                $isSeasonal = true;
+                break;
+            }
+        }
+
+        if (! $isSeasonal) {
+            return $hits;
+        }
+
+        $allSeasons = ['весна', 'літо', 'осінь', 'зима'];
+        $filtered = [];
+        $removed = [];
+
+        foreach ($hits as $hit) {
+            $aiKeywords = mb_strtolower($hit['ai_keywords'] ?? '');
+            $title = mb_strtolower($hit['title'] ?? '');
+
+            // Check if ai_keywords contains ALL 4 seasons (generic seasonal tag)
+            $hasAllSeasons = true;
+            foreach ($allSeasons as $season) {
+                if (! str_contains($aiKeywords, $season)) {
+                    $hasAllSeasons = false;
+                    break;
+                }
+            }
+
+            // If product has all 4 seasons in ai_keywords AND the seasonal word is NOT in title
+            // → it's a generic match from AI enrichment, not a real seasonal product
+            $hasStemInTitle = false;
+            foreach ($seasonalRoots as $root) {
+                if (str_contains($queryLower, $root) && str_contains($title, $root)) {
+                    $hasStemInTitle = true;
+                    break;
+                }
+            }
+
+            if ($hasAllSeasons && ! $hasStemInTitle) {
+                $removed[] = $hit['title'] ?? 'unknown';
+            } else {
+                $filtered[] = $hit;
+            }
+        }
+
+        // Safety: if ALL removed, keep originals (maybe all products have generic tag)
+        if (empty($filtered)) {
+            return $hits;
+        }
+
+        if (! empty($removed)) {
+            Log::info('MeiliProductSearchTool: filterGenericSeasonalMatches removed generic seasonal products', [
+                'query' => $query,
+                'removed_count' => count($removed),
+                'removed_titles' => array_slice($removed, 0, 5),
+                'kept_count' => count($filtered),
+            ]);
         }
 
         return $filtered;

@@ -704,7 +704,9 @@ abstract class BaseAgent
 
         // Extract product-related words from the query (strip age/filler phrases)
         $productQuery = preg_replace('/\d{1,2}\s*(?:рок\w*|рік|річ\w*|р\.|місяц\w*|міс\w*)/ui', '', $originalMessage);
-        $productQuery = preg_replace('/\b(для|дитин\w*|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якусь|якесь|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|запропонуй|скажи|скинь)\b/ui', '', $productQuery);
+        // Use relaxed pattern for "дитин*" to handle typos like "дитттинві" (triple т)
+        $productQuery = preg_replace('/\bди[тт]+ин\w*\b/ui', '', $productQuery);
+        $productQuery = preg_replace('/\b(для|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якусь|якесь|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|запропонуй|скажи|скинь|просто|зовсім|взагалі|нібито|будь-що|будь-який|будь-яке|будь-яка)\b/ui', '', $productQuery);
         $productQuery = preg_replace('/\s{2,}/u', ' ', trim($productQuery));
 
         // Normalize Ukrainian seasonal word forms to nominative case for better Meili matching

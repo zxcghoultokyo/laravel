@@ -1427,6 +1427,18 @@ class MeiliProductSearchTool
             return $hits;
         }
 
+        // Detect if query contains seasonal words — used to filter out generic seasonal tags
+        $seasonalWords = ['весн', 'зима', 'зимо', 'зимі', 'літо', 'літа', 'осін'];
+        $isSeasonalQuery = false;
+        foreach ($stems as $stem) {
+            foreach ($seasonalWords as $sw) {
+                if (mb_strpos($stem, mb_substr($sw, 0, 4)) === 0 || mb_strpos($sw, $stem) === 0) {
+                    $isSeasonalQuery = true;
+                    break 2;
+                }
+            }
+        }
+
         $filtered = [];
         $removed = [];
 
@@ -1442,8 +1454,27 @@ class MeiliProductSearchTool
                 }
             }
 
-            // For long queries: at least 1 significant stem must match
-            // For short queries: at least 1 stem must match (same as before)
+            // Also check ai_keywords for matches, but exclude generic seasonal tags
+            // Products with "весна літо осінь зима" in ai_keywords are season-agnostic
+            // and should NOT match a specific seasonal query like "зима"
+            if ($matchCount === 0) {
+                $aiKeywords = mb_strtolower($hit['ai_keywords'] ?? '');
+                if ($aiKeywords) {
+                    $isGenericSeasonal = str_contains($aiKeywords, 'весна') && str_contains($aiKeywords, 'літо')
+                        && str_contains($aiKeywords, 'осінь') && str_contains($aiKeywords, 'зима');
+
+                    foreach ($stems as $stem) {
+                        if (mb_strpos($aiKeywords, $stem) !== false) {
+                            // If seasonal query and product has ALL 4 seasons → generic, skip
+                            if ($isSeasonalQuery && $isGenericSeasonal) {
+                                continue;
+                            }
+                            $matchCount++;
+                        }
+                    }
+                }
+            }
+
             $foundMatch = $matchCount > 0;
 
             if ($foundMatch) {

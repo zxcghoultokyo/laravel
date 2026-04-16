@@ -74,6 +74,34 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertStringContainsString('малюкам', $result);
     }
 
+    public function test_detects_6_months_as_baby(): void
+    {
+        $result = $this->method->invoke($this->tool, 'щось для малюка від 6 місяців');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('малюкам', $result);
+    }
+
+    public function test_detects_8_months_as_baby(): void
+    {
+        $result = $this->method->invoke($this->tool, 'подарунок 8 міс');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('малюкам', $result);
+    }
+
+    public function test_detects_18_months_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'іграшки від 18 місяців');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
+    }
+
+    public function test_detects_14_months_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'для дитини 14 місяців');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
+    }
+
     public function test_search_products_tool_has_category_param(): void
     {
         $searchTool = $this->createMock(MeiliProductSearchTool::class);

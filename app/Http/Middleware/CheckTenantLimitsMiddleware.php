@@ -22,28 +22,45 @@ class CheckTenantLimitsMiddleware
     public function handle(Request $request, Closure $next): Response
     {
         // Skip if no tenant
-        if (!app()->bound('current_tenant')) {
+        if (! app()->bound('current_tenant')) {
             return $next($request);
         }
 
         $tenant = app('current_tenant');
 
+        // Block if trial expired, account suspended, or no active paid subscription.
+        // Tenant::canUseWidget() returns ['allowed' => bool, 'reason' => ?string, 'message' => ?string, ...]
+        if (method_exists($tenant, 'canUseWidget')) {
+            $widgetCheck = $tenant->canUseWidget();
+            if (is_array($widgetCheck) && empty($widgetCheck['allowed'])) {
+                return response()->json([
+                    'type' => 'error',
+                    'error' => 'subscription_required',
+                    'reason' => $widgetCheck['reason'] ?? 'subscription_required',
+                    'text' => $widgetCheck['message']
+                        ?? 'Пробний період завершено. Оберіть тарифний план, щоб продовжити користуватися чатом.',
+                    'details' => $widgetCheck['details'] ?? null,
+                    'upgrade_url' => config('app.url').'/billing',
+                ], 402);
+            }
+        }
+
         // Check message limit
         if ($this->usageService->hasReachedLimit($tenant)) {
             $stats = $this->usageService->getUsageStats($tenant);
-            
+
             return response()->json([
                 'type' => 'error',
                 'error' => 'limit_exceeded',
                 'text' => 'Вибачте, ліміт повідомлень на цей місяць вичерпано. Зверніться до власника магазину.',
                 'usage' => $stats['messages'],
-                'upgrade_url' => config('app.url') . '/billing',
+                'upgrade_url' => config('app.url').'/billing',
             ], 429);
         }
 
         // Add usage warning header if near limit
         $response = $next($request);
-        
+
         if ($this->usageService->isNearLimit($tenant)) {
             $remaining = $this->usageService->getRemainingMessages($tenant);
             $response->headers->set('X-Usage-Warning', "Near limit: {$remaining} messages remaining");
@@ -68,9 +85,9 @@ class CheckTenantLimitsMiddleware
         }
 
         $path = $request->path();
-        
-        return str_contains($path, '/chat') && 
-               !str_contains($path, '/chat/history') &&
-               !str_contains($path, '/chat/sessions');
+
+        return str_contains($path, '/chat') &&
+               ! str_contains($path, '/chat/history') &&
+               ! str_contains($path, '/chat/sessions');
     }
 }

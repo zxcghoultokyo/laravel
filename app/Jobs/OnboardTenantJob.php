@@ -30,9 +30,19 @@ class OnboardTenantJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public int $timeout = 7200; // 2 hours max for large catalogs
+
+    /**
+     * Exponential backoff between retries (in seconds): 1 min, 5 min, 15 min.
+     *
+     * @return array<int,int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300, 900];
+    }
 
     protected ?TenantOnboardingProgress $progress = null;
 
@@ -95,13 +105,29 @@ class OnboardTenantJob implements ShouldQueue
         } catch (\Throwable $e) {
             Log::error('OnboardTenantJob: Failed', [
                 'tenant_id' => $this->tenantId,
+                'attempt' => $this->attempts(),
+                'max_tries' => $this->tries,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            $this->progress->fail($e->getMessage());
+            // Only mark progress as failed on the final attempt so the UI
+            // doesn't flip to "failed" between retries.
+            if ($this->attempts() >= $this->tries) {
+                $this->progress->fail($e->getMessage());
+            }
+
             throw $e;
         }
+    }
+
+    /**
+     * Hook called by the queue when the job exhausts all retries.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        $progress = TenantOnboardingProgress::forTenant($this->tenantId);
+        $progress->fail($exception->getMessage());
     }
 
     /**

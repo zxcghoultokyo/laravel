@@ -61,6 +61,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.limits' => \App\Http\Middleware\CheckTenantLimitsMiddleware::class,
             'super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'trial.active' => \App\Http\Middleware\EnsureTrialNotExpired::class,
+            'diagnostic.guard' => \App\Http\Middleware\DiagnosticGuard::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

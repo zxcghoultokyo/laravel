@@ -28,14 +28,21 @@ class CheckTenantLimitsMiddleware
 
         $tenant = app('current_tenant');
 
-        // Block if trial expired and no active paid subscription.
-        if (method_exists($tenant, 'canUseWidget') && ! $tenant->canUseWidget()) {
-            return response()->json([
-                'type' => 'error',
-                'error' => 'subscription_required',
-                'text' => 'Пробний період завершено. Оберіть тарифний план, щоб продовжити користуватися чатом.',
-                'upgrade_url' => config('app.url').'/billing',
-            ], 402);
+        // Block if trial expired, account suspended, or no active paid subscription.
+        // Tenant::canUseWidget() returns ['allowed' => bool, 'reason' => ?string, 'message' => ?string, ...]
+        if (method_exists($tenant, 'canUseWidget')) {
+            $widgetCheck = $tenant->canUseWidget();
+            if (is_array($widgetCheck) && empty($widgetCheck['allowed'])) {
+                return response()->json([
+                    'type' => 'error',
+                    'error' => 'subscription_required',
+                    'reason' => $widgetCheck['reason'] ?? 'subscription_required',
+                    'text' => $widgetCheck['message']
+                        ?? 'Пробний період завершено. Оберіть тарифний план, щоб продовжити користуватися чатом.',
+                    'details' => $widgetCheck['details'] ?? null,
+                    'upgrade_url' => config('app.url').'/billing',
+                ], 402);
+            }
         }
 
         // Check message limit

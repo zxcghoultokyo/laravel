@@ -151,6 +151,17 @@ class ReasoningAndFilterTest extends TestCase
         $this->assertCount(1, $result);
     }
 
+    public function test_baby_filter_excludes_gift_package_without_gift_intent(): void
+    {
+        $products = [
+            ['title' => 'Подарунковий пакет bavka', 'category_path' => 'ІГРАШКИ/МАЛЮКАМ 0 – 1'],
+            ['title' => 'Пірамідка', 'category_path' => 'ІГРАШКИ/МАЛЮКАМ 0 – 1'],
+        ];
+        $result = $this->babyFilter->invoke($this->agent, $products, 'іграшка на 4 місяці', 20);
+        $this->assertCount(1, $result);
+        $this->assertSame('Пірамідка', $result[0]['title']);
+    }
+
     public function test_baby_filter_excludes_care_kit_without_intent(): void
     {
         $products = [

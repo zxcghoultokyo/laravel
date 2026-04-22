@@ -939,9 +939,11 @@ abstract class BaseAgent
                 }
             }
 
-            // Exclude certificates unless the user mentions gift.
-            if (! $hasGiftIntent && str_contains($titleLower, 'сертифікат')) {
-                continue;
+            // Exclude certificates / gift packaging unless the user mentions gift.
+            if (! $hasGiftIntent) {
+                if (str_contains($titleLower, 'сертифікат') || str_contains($titleLower, 'подарунковий пакет') || str_contains($titleLower, 'подарунковий набір')) {
+                    continue;
+                }
             }
 
             // Exclude parent tools/care kits unless explicitly requested.

@@ -16,6 +16,8 @@ class ProductRawExtractor
 
         // чистимо html
         $val = strip_tags($val);
+        // decode HTML entities (&nbsp; &mdash; &trade; &amp; etc.) — otherwise they leak into the widget UI
+        $val = html_entity_decode($val, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $val = preg_replace('/\s+/u', ' ', $val) ?: '';
 
         return trim($val);

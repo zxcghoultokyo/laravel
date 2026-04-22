@@ -2734,6 +2734,27 @@ PROMPT;
         if (! empty($args['color'])) {
             $filters['color'] = $args['color'];
         }
+
+        // Fallback: detect color from original user message if GPT didn't pass it.
+        // GPT sometimes omits `color` param even when user explicitly asks for e.g. "чорну плитоноску",
+        // which leads to irrelevant results (products with color=Мультикам returned for "чорний" query).
+        if (empty($filters['color']) && ! empty($this->currentMessage)) {
+            try {
+                $colorService = app(\App\Services\Search\ColorService::class);
+                $detectedColor = $colorService->detectColor($this->currentMessage);
+                if ($detectedColor) {
+                    $filters['color'] = $detectedColor;
+                    Log::info('BaseAgent: injected color from user message', [
+                        'color' => $detectedColor,
+                        'current_message' => mb_substr($this->currentMessage, 0, 100),
+                        'gpt_query' => $query,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('BaseAgent: color detection failed', ['error' => $e->getMessage()]);
+            }
+        }
+
         // Only pass GPT-supplied category for age-based stores (children's).
         // For non-age stores, GPT often picks wrong categories for abstract queries
         // ("на весну" → "Футболки", "на вологу погоду" → "Level 7") which breaks search.

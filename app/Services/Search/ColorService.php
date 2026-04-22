@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Log;
 class ColorService
 {
     private const CACHE_TTL_HOURS = 6;
+
     private const CACHE_KEY = 'color_synonyms_map';
 
     /**
@@ -31,6 +32,7 @@ class ColorService
                     'synonym' => $synonym,
                     'color_group' => $colorGroup,
                 ]);
+
                 return $colorGroup;
             }
         }
@@ -44,9 +46,9 @@ class ColorService
     public function getSynonymsForColor(string $colorGroup): array
     {
         $colorGroup = strtolower(trim($colorGroup));
-        
+
         return Cache::remember(
-            self::CACHE_KEY . '_' . $colorGroup,
+            self::CACHE_KEY.'_'.$colorGroup,
             now()->addHours(self::CACHE_TTL_HOURS),
             function () use ($colorGroup) {
                 try {
@@ -62,6 +64,7 @@ class ColorService
                         'color_group' => $colorGroup,
                         'error' => $e->getMessage(),
                     ]);
+
                     return [];
                 }
             }
@@ -74,7 +77,7 @@ class ColorService
     public function getColorGroups(): array
     {
         return Cache::remember(
-            self::CACHE_KEY . '_groups',
+            self::CACHE_KEY.'_groups',
             now()->addHours(self::CACHE_TTL_HOURS),
             function () {
                 try {
@@ -89,6 +92,7 @@ class ColorService
                     Log::warning('ColorService: failed to load color groups', [
                         'error' => $e->getMessage(),
                     ]);
+
                     return $this->getFallbackColorGroups();
                 }
             }
@@ -101,6 +105,7 @@ class ColorService
     public function isValidColorGroup(string $value): bool
     {
         $groups = $this->getColorGroups();
+
         return in_array(strtolower(trim($value)), array_map('strtolower', $groups), true);
     }
 
@@ -109,12 +114,12 @@ class ColorService
      */
     public function normalizeColor(?string $value): ?string
     {
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 
         $lower = strtolower(trim($value));
-        
+
         // If already a valid color group, return as is
         if ($this->isValidColorGroup($lower)) {
             return $lower;
@@ -122,6 +127,7 @@ class ColorService
 
         // Try to find in synonyms
         $synonyms = $this->getSynonymsMap();
+
         return $synonyms[$lower] ?? null;
     }
 
@@ -135,7 +141,7 @@ class ColorService
         $found = [];
 
         foreach ($synonyms as $synonym => $colorGroup) {
-            if (str_contains($lower, $synonym) && !in_array($colorGroup, $found)) {
+            if (str_contains($lower, $synonym) && ! in_array($colorGroup, $found)) {
                 $found[] = $colorGroup;
             }
         }
@@ -171,13 +177,14 @@ class ColorService
                     }
 
                     // Sort by synonym length descending (longer matches first)
-                    uksort($map, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
+                    uksort($map, fn ($a, $b) => mb_strlen($b) - mb_strlen($a));
 
                     return $map;
                 } catch (\Throwable $e) {
                     Log::warning('ColorService: failed to load synonyms map', [
                         'error' => $e->getMessage(),
                     ]);
+
                     return $this->getFallbackSynonymsMap();
                 }
             }
@@ -192,11 +199,18 @@ class ColorService
         return [
             // Ukrainian - sorted by length desc
             'мультикам' => 'multicam',
+            'мультікам' => 'multicam',
             'олівковий' => 'olive',
+            'оливковий' => 'olive',
             'пісочний' => 'sand',
+            'чорному' => 'black',
+            'чорного' => 'black',
+            'чорним' => 'black',
+            'чорній' => 'black',
             'чорний' => 'black',
             'зелена' => 'green',
             'зелене' => 'green',
+            'чорну' => 'black',
             'чорна' => 'black',
             'чорне' => 'black',
             'олива' => 'olive',
@@ -226,10 +240,10 @@ class ColorService
     public function clearCache(): void
     {
         Cache::forget(self::CACHE_KEY);
-        Cache::forget(self::CACHE_KEY . '_groups');
-        
+        Cache::forget(self::CACHE_KEY.'_groups');
+
         foreach ($this->getFallbackColorGroups() as $group) {
-            Cache::forget(self::CACHE_KEY . '_' . $group);
+            Cache::forget(self::CACHE_KEY.'_'.$group);
         }
     }
 }

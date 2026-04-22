@@ -1368,18 +1368,28 @@ class MeiliProductSearchTool
         foreach ($hits as $hit) {
             $title = mb_strtolower($hit['title'] ?? '');
             $colorField = mb_strtolower($hit['color'] ?? '');
-            $searchIndex = mb_strtolower($hit['search_index'] ?? '');
+            $productColorNorm = mb_strtolower((string) ($hit['color_norm'] ?? ''));
+
+            // STRICT: if product has an explicit color_norm and it doesn't match the
+            // requested color group, reject it. This prevents products with known
+            // different colors (e.g. color_norm='multicam') from leaking into results
+            // when the user asked for 'black'.
+            if ($productColorNorm !== '' && $productColorNorm !== $colorGroup) {
+                continue;
+            }
 
             $matched = false;
             foreach ($searchVariants as $variant) {
                 if (str_contains($title, $variant) ||
-                    str_contains($colorField, $variant) ||
-                    str_contains($searchIndex, $variant)) {
+                    str_contains($colorField, $variant)) {
                     $matched = true;
                     break;
                 }
             }
 
+            // If product has no color_norm and no title/color match, reject.
+            // (We intentionally do NOT check search_index here — it contains
+            // descriptive text mentioning many colors and yields false positives.)
             if ($matched) {
                 $filtered[] = $hit;
             }

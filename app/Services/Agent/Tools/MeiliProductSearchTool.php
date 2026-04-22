@@ -1040,6 +1040,22 @@ class MeiliProductSearchTool
                 ]);
             }
 
+            // FINAL STRICT COLOR ENFORCEMENT
+            // After all retries (exactTitleFallback, retryWithIndividualWords, semantic,
+            // dedupe, etc.) any of which can re-introduce products that don't match the
+            // requested color, enforce color filter one last time.
+            if (! empty($filters['color']) && count($filtered) > 0) {
+                $beforeFinalColor = count($filtered);
+                $filtered = $this->postFilterByColor($filtered, $filters['color']);
+                if (count($filtered) !== $beforeFinalColor) {
+                    Log::info('MeiliProductSearchTool: final color enforcement removed products', [
+                        'color' => $filters['color'],
+                        'before' => $beforeFinalColor,
+                        'after' => count($filtered),
+                    ]);
+                }
+            }
+
             // FINAL LOG: Full diagnostic output
             Log::info('MeiliProductSearchTool::search FINAL RETURN', [
                 'query' => $query,

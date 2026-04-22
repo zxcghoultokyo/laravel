@@ -441,6 +441,35 @@ abstract class BaseAgent
         if ($serviceCategory) {
             return $this->handleServiceCategoryQuery($message, $serviceCategory);
         }
+
+        // REASONING QUERIES: force GPT path. Do NOT intercept with fast-path search.
+        // Covers: "порівняй X і Y", "порадь 3 варіанти", "поясни чому", "який краще", "підбери за".
+        if ($this->isReasoningQuery($message)) {
+            PipelineTracer::current()?->step('agent.reasoning_query_detected', [
+                'handler' => 'handleImplicitQuery',
+                'decision' => 'skip_fast_path',
+            ]);
+            Log::info('BaseAgent: reasoning query detected, forcing GPT path', [
+                'message' => $message,
+            ]);
+
+            return null;
+        }
+
+        // NEGATIVE FEEDBACK: "X не підходить" / "не треба X" → also force GPT
+        // so it can re-plan instead of re-searching by the same keyword.
+        if ($this->isNegativeFeedbackQuery($message)) {
+            PipelineTracer::current()?->step('agent.negative_feedback_detected', [
+                'handler' => 'handleImplicitQuery',
+                'decision' => 'skip_fast_path',
+            ]);
+            Log::info('BaseAgent: negative feedback detected, forcing GPT path', [
+                'message' => $message,
+            ]);
+
+            return null;
+        }
+
         $lower = mb_strtolower(trim($message));
 
         // AGE/GIFT QUERY HANDLER — force search when user mentions age
@@ -766,7 +795,17 @@ abstract class BaseAgent
             $products = $cards;
         }
 
+        // TENANT-SPECIFIC cleanup: exclude non-toy/irrelevant products for T20 baby queries.
+        $products = $this->filterTenantBabyQueryProducts($products, $originalMessage, $tenantId);
+
+        // Dedup by parent_article — show max 1 variant per parent (prevents "2 Такане різного принту").
+        $products = $this->dedupByParentArticle($products);
+
         $products = array_slice($products, 0, 6);
+
+        if (empty($products)) {
+            return null; // Fall through to GPT when exclude filters removed everything
+        }
 
         $intro = $productQuery !== ''
             ? "Ось що я знайшов за запитом «{$productQuery}» для цього віку:"
@@ -785,6 +824,182 @@ abstract class BaseAgent
                 'source' => 'age_query_handler',
             ],
         ];
+    }
+
+    /**
+     * Detect reasoning/comparison queries that require GPT, not keyword search.
+     *
+     * Covers: "порівняй X і Y", "порадь N варіантів", "поясни чому", "який краще",
+     * "підбери за критеріями", "плюси/мінуси", "в чому різниця".
+     */
+    protected function isReasoningQuery(string $message): bool
+    {
+        $lower = mb_strtolower(trim($message));
+
+        $patterns = [
+            '/\bпорівняй\b/u',
+            '/\bпорівняйте\b/u',
+            '/\bпорівняти\b/u',
+            '/\bпорівнянн\w+\b/u',
+            '/\bvs\.?\b/u',
+            '/\bпротиставл/u',
+            '/\bв\s+чому\s+різниц/u',
+            '/\bяка\s+різниц/u',
+            '/\bякий\s+(?:краще|кращ|підходит|ліпше|виб)/u',
+            '/\bяка\s+(?:краще|кращ|підходит|ліпше)/u',
+            '/\bщо\s+краще\b/u',
+            '/\bкращий\s+(?:варіант|вибір)/u',
+            '/\b(?:розкажи|поясни|поясніть)\s+(?:чому|різницю|в\s+чому)/u',
+            '/\bчому\s+(?:саме|краще|варт|коштує)/u',
+            '/\bплюси\s+(?:і|та)\s+мінуси\b/u',
+            '/\bпереваг/u',
+            '/\bнедолік/u',
+            '/\bпорадь\s+(?:\d+|кілька|декілька|пару|трохи)\s+варіант/u',
+            '/\bпідбер\w+\s+(?:за|по|під)\s+(?:критер|критерія|потреб|бюджет)/u',
+            '/\bпоясни/u',
+        ];
+
+        foreach ($patterns as $p) {
+            if (preg_match($p, $lower)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Detect explicit negative feedback like "барабан не підходить", "не треба X".
+     *
+     * When present, skip fast-path search (which would just re-search by keyword)
+     * and let GPT re-plan with context awareness.
+     */
+    protected function isNegativeFeedbackQuery(string $message): bool
+    {
+        $lower = mb_strtolower(trim($message));
+
+        $patterns = [
+            '/\bне\s+підходит/u',
+            '/\bне\s+треба\b/u',
+            '/\bне\s+потрібн/u',
+            '/\bне\s+хоч/u',
+            '/\bне\s+той\b/u',
+            '/\bне\s+те\b/u',
+            '/\bне\s+такі/u',
+            '/\bжод(?:ен|на|ного|ним)\s+не\s+/u',
+            '/\bінш\w+\s+(?:варіант|порадь|покажи)/u',
+        ];
+
+        foreach ($patterns as $p) {
+            if (preg_match($p, $lower)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Tenant 20 (Bavkatoys) specific filter: remove non-toy/irrelevant products
+     * from age-based queries.
+     *
+     * Excludes:
+     *  - category "НАВЧАЛЬНІ ПОСІБНИКИ" (PDFs, workbooks) — not physical toys
+     *  - certificates (unless query has gift intent)
+     *  - parent tools ("набір по догляду", "інструмент")
+     *
+     * No-op for other tenants.
+     *
+     * @param  array<int, mixed>  $products
+     * @return array<int, mixed>
+     */
+    protected function filterTenantBabyQueryProducts(array $products, string $originalMessage, ?int $tenantId): array
+    {
+        if ($tenantId !== 20 || empty($products)) {
+            return $products;
+        }
+
+        $lower = mb_strtolower($originalMessage);
+        $hasGiftIntent = (bool) preg_match('/\bподарун|\bдарун|\bподаруват|\bна\s+подар|\bgift\b/u', $lower);
+        $hasPdfIntent = (bool) preg_match('/\bpdf\b|\bзошит\b|\bпосібник\b|\bкартк/u', $lower);
+        $hasCareIntent = (bool) preg_match('/\bдогляд/u', $lower);
+
+        $filtered = [];
+        foreach ($products as $product) {
+            $title = (string) ($this->getProductField($product, 'title') ?? '');
+            $categoryPath = (string) ($this->getProductField($product, 'category_path') ?? '');
+
+            $titleLower = mb_strtolower($title);
+            $catLower = mb_strtolower($categoryPath);
+
+            // Exclude PDFs/workbooks from age/baby queries unless explicitly requested.
+            if (! $hasPdfIntent) {
+                if (str_contains($catLower, 'навчальні посібники') || str_contains($titleLower, 'pdf') || str_contains($titleLower, 'зошит')) {
+                    continue;
+                }
+            }
+
+            // Exclude certificates unless the user mentions gift.
+            if (! $hasGiftIntent && str_contains($titleLower, 'сертифікат')) {
+                continue;
+            }
+
+            // Exclude parent tools/care kits unless explicitly requested.
+            if (! $hasCareIntent) {
+                if (preg_match('/\bнабір\s+(?:по\s+)?догляду\b|\bдля\s+догляду\s+за\b|\bінструмент(?:и|ів)?\s+для\s+батьк/u', $titleLower)) {
+                    continue;
+                }
+            }
+
+            $filtered[] = $product;
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Deduplicate products by parent_article / parent-article-like fields.
+     *
+     * Keeps first occurrence per parent. If a product has no parent_article,
+     * falls back to the product's own article.
+     *
+     * @param  array<int, mixed>  $products
+     * @return array<int, mixed>
+     */
+    protected function dedupByParentArticle(array $products): array
+    {
+        $seen = [];
+        $result = [];
+
+        foreach ($products as $product) {
+            $parent = $this->getProductField($product, 'parent_article');
+            $article = $this->getProductField($product, 'article');
+            $key = $parent ?: ($article ?: spl_object_hash((object) $product));
+            $key = (string) $key;
+
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $result[] = $product;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Read a field from a product regardless of whether it's array or object.
+     */
+    protected function getProductField(mixed $product, string $field): mixed
+    {
+        if (is_array($product)) {
+            return $product[$field] ?? null;
+        }
+        if (is_object($product)) {
+            return $product->{$field} ?? null;
+        }
+
+        return null;
     }
 
     /**

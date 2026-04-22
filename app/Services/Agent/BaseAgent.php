@@ -735,7 +735,7 @@ abstract class BaseAgent
         $productQuery = preg_replace('/\d{1,2}\s*(?:рок\w*|рік|річ\w*|р\.|місяц\w*|міс\w*)/ui', '', $originalMessage);
         // Use relaxed pattern for "дитин*" to handle typos like "дитттинві" (triple т)
         $productQuery = preg_replace('/\bди[тт]+ин\w*\b/ui', '', $productQuery);
-        $productQuery = preg_replace('/\b(для|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якийс\w*|якась|якусь|якесь|яке|який|яка|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|порекомендуй\w*|рекомендуй\w*|запропонуй\w*|підкажи\w*|підбер\w*|знайд\w*|скажи|скинь|просто|зовсім|взагалі|нібито|будь-що|будь-який|будь-яке|будь-яка|товар\w*|річ|речі|продукт\w*|вибер\w*|давай|дай)\b/ui', '', $productQuery);
+        $productQuery = preg_replace('/\b(для|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якийс\w*|якась|якусь|якесь|яке|який|яка|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|порекомендуй\w*|рекомендуй\w*|запропонуй\w*|підкажи\w*|підбер\w*|знайд\w*|скажи|скинь|просто|зовсім|взагалі|нібито|будь-що|будь-який|будь-яке|будь-яка|товар\w*|річ|речі|продукт\w*|вибер\w*|давай|дай|тепер|тепеp|зараз|розвиваюч\w*|розвивальн\w*|розвиваюч|розвиваючі|навчальн\w*|цікав\w*|гарн\w*|хорош\w*|корисн\w*|кращ\w*|крут\w*)\b/ui', '', $productQuery);
         // Remove standalone Ukrainian letters (e.g. "ь" left from split "якийс ь")
         $productQuery = preg_replace('/(?<=\s|^)[а-яіїєґь](?=\s|$)/ui', '', $productQuery);
         $productQuery = preg_replace('/\s{2,}/u', ' ', trim($productQuery));
@@ -769,8 +769,27 @@ abstract class BaseAgent
         // This ensures "пазли для 5 років" searches for "пазли" with age filter
         $products = $this->searchTool->search($productQuery, $filters, 30);
 
+        // If specific product query returned <3 results, also fetch age-only results
+        // and merge — narrow keywords ("розвиваючі") shouldn't collapse the list to 1 item.
+        if ($productQuery !== '' && count($products) < 3) {
+            $ageOnly = $this->searchTool->search('', $filters, 30);
+            if (! empty($ageOnly)) {
+                $existingIds = array_column($products, 'id');
+                foreach ($ageOnly as $p) {
+                    $pid = $p['id'] ?? null;
+                    if ($pid !== null && ! in_array($pid, $existingIds, true)) {
+                        $products[] = $p;
+                    }
+                }
+                Log::info('BaseAgent: age-only fallback merged', [
+                    'product_query' => $productQuery,
+                    'narrow_count' => count($existingIds),
+                    'merged_count' => count($products),
+                ]);
+            }
+        }
+
         if (empty($products)) {
-            // If specific product query returned nothing, try broader search (age-only)
             if ($productQuery !== '') {
                 $products = $this->searchTool->search('', $filters, 30);
             }

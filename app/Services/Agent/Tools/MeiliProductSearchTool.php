@@ -801,6 +801,10 @@ class MeiliProductSearchTool
             // Products with зима in search_index/description are real matches and don't have all 4 seasons in ai_keywords
             $filtered = $this->filterGenericSeasonalMatches($filtered, $enhancedQuery);
 
+            // Remove products bound to a holiday/season that is NOT currently active
+            // (e.g. "Ялинкова прикраса" / "Різдвяний набір" showing in April).
+            $filtered = $this->filterOutOfSeasonProducts($filtered, $enhancedQuery);
+
             // Filter products where search term only appears in description, not in title/category
             // This prevents "куртка" from appearing in "термобілизна" search results just because
             // the jacket description mentions "в комбінації з термобілизною"
@@ -1455,6 +1459,110 @@ class MeiliProductSearchTool
                 'removed_count' => count($removed),
                 'removed_titles' => array_slice($removed, 0, 5),
                 'kept_count' => count($filtered),
+            ]);
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Remove holiday/seasonal products that are not currently in season.
+     *
+     * Example: a "Ялинкова прикраса" (Christmas ornament) should not appear in
+     * April results unless the user explicitly asked for it.
+     *
+     * Each marker defines the months when the product is relevant (±1 month buffer).
+     * If the current month is outside the window AND the query doesn't mention the
+     * marker → the product is dropped.
+     */
+    private function filterOutOfSeasonProducts(array $hits, string $query): array
+    {
+        if (empty($hits)) {
+            return $hits;
+        }
+
+        $currentMonth = (int) date('n');
+        $queryLower = mb_strtolower($query);
+
+        // marker => [title stems, active months (1-12)]
+        $markers = [
+            'christmas' => [
+                'stems' => ['різдв', 'ялинк', 'новоріч', 'новий рік', 'christmas', 'xmas', 'санта'],
+                'months' => [11, 12, 1],
+            ],
+            'easter' => [
+                'stems' => ['великдень', 'великодн', 'пасх', 'easter', 'писанк'],
+                'months' => [3, 4, 5],
+            ],
+            'halloween' => [
+                'stems' => ['halloween', 'хеллоуін', 'хелловін', 'гарбуз на halloween'],
+                'months' => [10, 11],
+            ],
+            'valentine' => [
+                'stems' => ['валентин', 'valentine', 'день закоханих'],
+                'months' => [2],
+            ],
+            'womens_day' => [
+                'stems' => ['8 березня', '8березня', 'міжнародний жіночий'],
+                'months' => [2, 3],
+            ],
+        ];
+
+        $filtered = [];
+        $removed = [];
+
+        foreach ($hits as $hit) {
+            $title = mb_strtolower($hit['title'] ?? '');
+            $drop = false;
+
+            foreach ($markers as $marker => $def) {
+                $matchesMarker = false;
+                foreach ($def['stems'] as $stem) {
+                    if (str_contains($title, $stem)) {
+                        $matchesMarker = true;
+                        break;
+                    }
+                }
+                if (! $matchesMarker) {
+                    continue;
+                }
+
+                // If user explicitly asked for this marker — keep it.
+                $userAsked = false;
+                foreach ($def['stems'] as $stem) {
+                    if (str_contains($queryLower, $stem)) {
+                        $userAsked = true;
+                        break;
+                    }
+                }
+                if ($userAsked) {
+                    continue;
+                }
+
+                // Drop if current month is NOT within the marker's active window.
+                if (! in_array($currentMonth, $def['months'], true)) {
+                    $drop = true;
+                    $removed[] = [$marker, $hit['title'] ?? ''];
+                    break;
+                }
+            }
+
+            if (! $drop) {
+                $filtered[] = $hit;
+            }
+        }
+
+        // Safety: if everything was flagged, keep originals.
+        if (empty($filtered)) {
+            return $hits;
+        }
+
+        if (! empty($removed)) {
+            Log::info('MeiliProductSearchTool: filterOutOfSeasonProducts removed holiday items', [
+                'query' => $query,
+                'current_month' => $currentMonth,
+                'removed_count' => count($removed),
+                'removed' => array_slice($removed, 0, 5),
             ]);
         }
 

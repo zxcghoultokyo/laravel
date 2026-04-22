@@ -92,6 +92,11 @@ Route::middleware(['auth'])->prefix('onboarding')->name('onboarding.')->group(fu
     Route::get('/enrichment-progress', [OnboardingController::class, 'enrichmentProgress'])->name('enrichment.progress');
 });
 
+// Help / install guide (auth required)
+Route::view('/help', 'help')
+    ->middleware(['auth'])
+    ->name('help');
+
 // Widget embed route (public, no auth required)
 Route::get('/widget/{slug}.js', [\App\Http\Controllers\Api\TenantWidgetController::class, 'serveWidget'])
     ->name('widget.serve');

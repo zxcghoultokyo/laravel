@@ -75,6 +75,8 @@ return [
     // Diagnostic API
     'diagnostic' => [
         'secret_key' => env('DIAGNOSTIC_SECRET_KEY', 'diagnostic_secret_key_2025'),
+        'allowed_ips' => env('DIAGNOSTIC_ALLOWED_IPS', ''),
+        'rate_limit_per_minute' => (int) env('DIAGNOSTIC_RATE_LIMIT', 30),
     ],
 
     // Escalation settings

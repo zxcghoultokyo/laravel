@@ -280,6 +280,23 @@ class TenantOnboardingProgress extends Model
     }
 
     /**
+     * Reset status for a manual retry from the UI. Leaves previously completed
+     * step data in place so the user can see the last known progress, but
+     * clears the failure marker so the job can run again.
+     */
+    public function resetForRetry(): self
+    {
+        $this->update([
+            'status' => 'in_progress',
+            'error_message' => null,
+            'current_step_detail' => 'Перезапуск...',
+            'started_at' => $this->started_at ?? now(),
+        ]);
+
+        return $this;
+    }
+
+    /**
      * Get human-readable status
      */
     public function getStatusLabelAttribute(): string

@@ -26,19 +26,19 @@ Route::options('/widget/settings', function () {
 // AI-чат — БЕЗ use ChatController, прямо повний namespace
 // Rate limit: 30 requests per minute per IP
 Route::post('/chat', [\App\Http\Controllers\Api\ChatController::class, 'handle'])
-    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
+    ->middleware(['widget.cors', 'tenant', 'tenant.limits', 'throttle:30,1']);
 
 // Streaming chat via Server-Sent Events (SSE)
 // Usage: GET /api/chat/stream?message=плитоноска&session_id=xxx
 Route::get('/chat/stream', [\App\Http\Controllers\Api\StreamingChatController::class, 'stream'])
-    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
+    ->middleware(['widget.cors', 'tenant', 'tenant.limits', 'throttle:30,1']);
 
 // ============================================
 // EXPERIMENTAL: Chat V2 with MinimalAgent
 // A/B test endpoint - мінімальний промпт
 // ============================================
 Route::post('/chat/v2', [\App\Http\Controllers\Api\ChatV2Controller::class, 'handle'])
-    ->middleware(['widget.cors', 'tenant', 'throttle:30,1']);
+    ->middleware(['widget.cors', 'tenant', 'tenant.limits', 'throttle:30,1']);
 
 // Compare V1 vs V2 responses (for debugging)
 Route::post('/chat/compare', [\App\Http\Controllers\Api\ChatV2Controller::class, 'compare'])
@@ -90,7 +90,7 @@ Route::post('/onboarding/start/{tenantId}', [\App\Http\Controllers\Api\Onboardin
     ->middleware('auth:sanctum');
 
 // Diagnostic API (key protected)
-Route::prefix('diagnostic')->group(function () {
+Route::prefix('diagnostic')->middleware('diagnostic.guard')->group(function () {
     Route::get('/db-stats', [\App\Http\Controllers\Api\DiagnosticController::class, 'dbStats']);
     Route::get('/cart-events', [\App\Http\Controllers\Api\DiagnosticController::class, 'cartEvents']);
     Route::get('/tenant-context', [\App\Http\Controllers\Api\DiagnosticController::class, 'tenantContext']);

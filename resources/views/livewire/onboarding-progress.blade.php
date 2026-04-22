@@ -152,11 +152,14 @@
             @if($progress['error_message'])
                 <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
                     <p class="text-sm text-red-700">{{ $progress['error_message'] }}</p>
-                    <button 
-                        wire:click="startOnboarding"
-                        class="mt-2 text-sm text-red-600 hover:text-red-800 underline"
+                    <button
+                        wire:click="retryOnboarding"
+                        wire:loading.attr="disabled"
+                        wire:target="retryOnboarding"
+                        class="mt-2 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-800 underline disabled:opacity-50"
                     >
-                        Спробувати знову
+                        <span wire:loading.remove wire:target="retryOnboarding">Спробувати знову</span>
+                        <span wire:loading wire:target="retryOnboarding">Перезапуск...</span>
                     </button>
                 </div>
             @endif

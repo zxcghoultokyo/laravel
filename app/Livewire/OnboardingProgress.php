@@ -9,22 +9,24 @@ use Livewire\Component;
 
 /**
  * Onboarding progress bar component
- * 
+ *
  * Shows real-time progress of tenant onboarding:
  * - Horoshop sync
  * - Categories rebuild
  * - Brands sync
  * - AI enrichment
  * - Meilisearch indexing
- * 
+ *
  * Use: <livewire:onboarding-progress />
  */
 class OnboardingProgress extends Component
 {
     public ?array $progress = null;
+
     public bool $showStartButton = true;
+
     public bool $isCompact = false; // For dashboard view
-    
+
     protected $listeners = ['refreshProgress' => '$refresh'];
 
     public function mount(bool $compact = false): void
@@ -36,19 +38,19 @@ class OnboardingProgress extends Component
     public function loadProgress(): void
     {
         $tenant = Auth::user()?->tenant;
-        if (!$tenant) {
+        if (! $tenant) {
             return;
         }
 
         // CRITICAL: Use fresh() to bypass any caching and get latest data from DB
         $progressModel = TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
-        
+
         if ($progressModel) {
             // Force refresh from database to get latest values
             $progressModel->refresh();
             $this->progress = $progressModel->toProgressArray();
             $this->showStartButton = false;
-            
+
             // Debug log to track polling issues
             \Log::debug('OnboardingProgress::loadProgress', [
                 'tenant_id' => $tenant->id,
@@ -59,15 +61,15 @@ class OnboardingProgress extends Component
         } else {
             // Check if tenant has products OR onboarding already started
             $hasProducts = $tenant->products()->count() > 0;
-            $hasCredentials = !empty($tenant->platform_credentials);
-            
+            $hasCredentials = ! empty($tenant->platform_credentials);
+
             // Only show start button if credentials set but no progress yet
             // (normally OnboardTenantJob is dispatched right after saveStep2)
-            $this->showStartButton = $hasCredentials && !$hasProducts;
+            $this->showStartButton = $hasCredentials && ! $hasProducts;
             $this->progress = null;
-            
+
             // If credentials set but no progress record, job might be queued - show waiting state
-            if ($hasCredentials && !$hasProducts) {
+            if ($hasCredentials && ! $hasProducts) {
                 $this->progress = [
                     'status' => 'pending',
                     'overall_percent' => 0,
@@ -86,20 +88,43 @@ class OnboardingProgress extends Component
     public function startOnboarding(): void
     {
         $tenant = Auth::user()?->tenant;
-        if (!$tenant) {
+        if (! $tenant) {
             return;
         }
 
         // Initialize progress
         $progress = TenantOnboardingProgress::forTenant($tenant->id);
-        
+
         // Dispatch job
         OnboardTenantJob::dispatch($tenant->id)->onQueue('default');
-        
+
         $this->showStartButton = false;
         $this->loadProgress();
-        
+
         session()->flash('message', 'Онбординг запущено! Процес може тривати кілька хвилин.');
+    }
+
+    /**
+     * Retry after a failed onboarding run. Resets the failed step marker and
+     * dispatches the job again. The job itself is idempotent (syncs are
+     * incremental, AI/Meili re-runs on existing rows).
+     */
+    public function retryOnboarding(): void
+    {
+        $tenant = Auth::user()?->tenant;
+        if (! $tenant) {
+            return;
+        }
+
+        $progress = TenantOnboardingProgress::forTenant($tenant->id);
+        $progress->resetForRetry();
+
+        OnboardTenantJob::dispatch($tenant->id)->onQueue('default');
+
+        $this->loadProgress();
+        $this->dispatch('refreshProgress');
+
+        session()->flash('message', 'Онбординг перезапущено. Зачекайте кілька хвилин.');
     }
 
     /**
@@ -107,21 +132,21 @@ class OnboardingProgress extends Component
      */
     public function getPollingInterval(): ?int
     {
-        if (!$this->progress) {
+        if (! $this->progress) {
             return null;
         }
-        
+
         // Poll if status is in_progress or pending
         if (in_array($this->progress['status'], ['in_progress', 'pending'])) {
             return 3000; // 3 seconds
         }
-        
+
         // Also poll if onboarding completed but AI enrichment still in progress
         $aiStep = $this->progress['steps']['ai_enrichment'] ?? null;
         if ($aiStep && $aiStep['status'] === 'in_progress') {
             return 5000; // 5 seconds for background AI
         }
-        
+
         return null;
     }
 
@@ -130,11 +155,12 @@ class OnboardingProgress extends Component
      */
     public function isAiInProgress(): bool
     {
-        if (!$this->progress) {
+        if (! $this->progress) {
             return false;
         }
-        
+
         $aiStep = $this->progress['steps']['ai_enrichment'] ?? null;
+
         return $aiStep && $aiStep['status'] === 'in_progress';
     }
 
@@ -142,7 +168,7 @@ class OnboardingProgress extends Component
     {
         // Refresh progress on each render
         $this->loadProgress();
-        
+
         return view('livewire.onboarding-progress', [
             'pollingInterval' => $this->getPollingInterval(),
             'aiInProgress' => $this->isAiInProgress(),

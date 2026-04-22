@@ -9,6 +9,7 @@ use App\Models\ChatSession;
 use App\Models\Product;
 use App\Models\ProductSynonym;
 use App\Models\WidgetSettings;
+use App\Services\Agent\Tools\KnowledgeLookupTool;
 use App\Services\Agent\Tools\MeiliProductSearchTool;
 use App\Services\Agent\Tools\ProductDetailsTool;
 use App\Services\Ai\PromptModulesService;
@@ -49,6 +50,8 @@ abstract class BaseAgent
     protected CategoryPatternService $categoryPatternService;
 
     protected AiCostTrackingService $aiCostTracker;
+
+    protected KnowledgeLookupTool $knowledgeLookupTool;
 
     /**
      * Service/info pages that are NOT product categories.
@@ -120,6 +123,7 @@ abstract class BaseAgent
         $this->promptModulesService = app(PromptModulesService::class);
         $this->categoryPatternService = app(CategoryPatternService::class);
         $this->aiCostTracker = app(AiCostTrackingService::class);
+        $this->knowledgeLookupTool = app(KnowledgeLookupTool::class);
     }
 
     /**
@@ -2407,6 +2411,26 @@ PROMPT;
                     ],
                 ],
             ],
+            [
+                'type' => 'function',
+                'function' => [
+                    'name' => 'lookup_knowledge_base',
+                    'description' => 'Отримати готові відповіді магазину на питання клієнта з бази знань (FAQ, умови доставки/повернень, безпека, сертифікати, скрипти продажів). ВИКОРИСТОВУЙ КОЛИ: клієнт питає про доставку, оплату, повернення, гарантію, безпеку матеріалів, склад, догляд, дропшипінг, знижки для військових/освітніх центрів, оплату через "Пакунок малюка", або інші організаційні/довідкові питання. Не вигадуй відповіді сам — знайди в базі знань.',
+                    'parameters' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'query' => ['type' => 'string', 'description' => 'Питання або ключові слова клієнта (українською)'],
+                            'types' => [
+                                'type' => 'array',
+                                'items' => ['type' => 'string', 'enum' => ['faq', 'product_hint', 'script']],
+                                'description' => 'Типи знань. За замовчуванням — всі. faq = часті питання, product_hint = підказки по товару, script = скрипти продажів.',
+                            ],
+                            'limit' => ['type' => 'integer', 'description' => 'Макс. кількість результатів (1-5, за замовчуванням 3)'],
+                        ],
+                        'required' => ['query'],
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -2433,6 +2457,7 @@ PROMPT;
             'get_brands' => $this->toolGetBrands($args),
             'get_available_sizes' => $this->toolGetAvailableSizes($args),
             'recommend_size' => $this->toolRecommendSize($args),
+            'lookup_knowledge_base' => $this->toolLookupKnowledgeBase($args),
             default => ['error' => 'Unknown tool'],
         };
     }
@@ -3310,6 +3335,16 @@ PROMPT;
         ];
 
         return $result;
+    }
+
+    /**
+     * Tool: lookup tenant knowledge base (FAQ, scripts, product hints).
+     */
+    protected function toolLookupKnowledgeBase(array $args): array
+    {
+        $tenantId = $this->searchTool->getCurrentTenantId();
+
+        return $this->knowledgeLookupTool->lookup($args, $tenantId);
     }
 
     // ============================================================

@@ -16,6 +16,9 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         Dashboard
                     </x-nav-link>
+                    <x-nav-link :href="route('help')" :active="request()->routeIs('help')">
+                        Допомога
+                    </x-nav-link>
                     @if(Auth::user()?->is_superadmin)
                     <x-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.*')">
                         🔧 Admin
@@ -81,6 +84,9 @@
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('help')" :active="request()->routeIs('help')">
+                Допомога
             </x-responsive-nav-link>
         </div>
 

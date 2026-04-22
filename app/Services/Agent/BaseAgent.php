@@ -2920,6 +2920,25 @@ PROMPT;
             'result_titles' => array_map(fn ($p) => mb_substr($p['title'] ?? '', 0, 40), array_slice($results, 0, 3)),
         ]);
 
+        // TENANT-SPECIFIC final guard (applies to GPT tool-call path too).
+        // Strips PDFs / certificates / gift packaging / parent care tools from T20 results
+        // unless user's query explicitly requests them. No-op for other tenants.
+        $contextMessage = $args['_context_message'] ?? ($this->currentMessage ?? $query);
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $beforeTenantFilter = count($results);
+        $results = $this->filterTenantBabyQueryProducts($results, (string) $contextMessage, $tenantId);
+
+        // Deduplicate variants of the same parent (prevents showing "2 Такане різного принту").
+        $results = $this->dedupByParentArticle($results);
+
+        if ($beforeTenantFilter !== count($results)) {
+            Log::info('BaseAgent::toolSearchProducts tenant filter applied', [
+                'tenant_id' => $tenantId,
+                'before' => $beforeTenantFilter,
+                'after' => count($results),
+            ]);
+        }
+
         return ['products' => $results, 'count' => count($results), 'query' => $query];
     }
 

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\AnalyzeStoreContextJob;
-use App\Jobs\SyncHoroshopProductsJob;
 use App\Models\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -13,7 +12,7 @@ use Illuminate\View\View;
 
 /**
  * Onboarding wizard controller.
- * 
+ *
  * Steps:
  * 1. Welcome / Plan selection (skip for trial)
  * 2. Platform connection (Horoshop/Shopify/Manual)
@@ -37,22 +36,22 @@ class OnboardingController extends Controller
     protected function getCurrentStep(): int
     {
         $tenant = $this->tenant();
-        
+
         // Step 1: Platform not set
-        if (!$tenant->platform) {
+        if (! $tenant->platform) {
             return 1;
         }
-        
+
         // Step 2: Credentials not set (for non-manual)
         if ($tenant->platform !== 'manual' && empty($tenant->platform_credentials)) {
             return 2;
         }
-        
+
         // Step 3: No products synced
         if ($tenant->products()->count() === 0) {
             return 3;
         }
-        
+
         // Widget settings created automatically with good defaults
         // Skip directly to Step 5 (embed code)
         return 5;
@@ -65,19 +64,19 @@ class OnboardingController extends Controller
     {
         $tenant = $this->tenant();
         $step = $this->getCurrentStep();
-        
+
         // If onboarding complete, go to dashboard
         if ($step === 5 && $tenant->settings['onboarding_completed'] ?? false) {
             return redirect()->route('dashboard');
         }
-        
+
         // Base data for all steps
         $data = [
             'tenant' => $tenant,
             'currentStep' => $step,
             'totalSteps' => 5,
         ];
-        
+
         // Add step-specific data
         switch ($step) {
             case 3:
@@ -92,7 +91,7 @@ class OnboardingController extends Controller
                 $data['embedCode'] = $tenant->getEmbedCode();
                 break;
         }
-        
+
         return view('onboarding.index', $data);
     }
 
@@ -102,6 +101,7 @@ class OnboardingController extends Controller
     public function step1(): View
     {
         $tenant = $this->tenant();
+
         return view('onboarding.index', [
             'tenant' => $tenant,
             'currentStep' => 1,
@@ -136,6 +136,7 @@ class OnboardingController extends Controller
     public function step2(): View
     {
         $tenant = $this->tenant();
+
         return view('onboarding.index', [
             'tenant' => $tenant,
             'currentStep' => 2,
@@ -149,7 +150,7 @@ class OnboardingController extends Controller
     public function saveStep2(Request $request): RedirectResponse|JsonResponse
     {
         $tenant = $this->tenant();
-        
+
         if ($tenant->platform === 'horoshop') {
             $request->validate([
                 'api_domain' => 'required|string',
@@ -166,11 +167,11 @@ class OnboardingController extends Controller
             // Test connection
             try {
                 $testResult = $this->testHoroshopConnection($credentials);
-                if (!$testResult['success']) {
+                if (! $testResult['success']) {
                     return back()->withErrors(['connection' => $testResult['error']]);
                 }
             } catch (\Exception $e) {
-                return back()->withErrors(['connection' => 'Помилка підключення: ' . $e->getMessage()]);
+                return back()->withErrors(['connection' => 'Помилка підключення: '.$e->getMessage()]);
             }
 
             $tenant->update([
@@ -192,29 +193,31 @@ class OnboardingController extends Controller
     protected function testHoroshopConnection(array $credentials): array
     {
         $client = new \GuzzleHttp\Client(['timeout' => 10]);
-        
+
         try {
             // Horoshop API endpoint is /api/auth/ (with trailing slash)
-            $response = $client->post($credentials['domain'] . '/api/auth/', [
+            $response = $client->post($credentials['domain'].'/api/auth/', [
                 'json' => [
                     'login' => $credentials['login'],
                     'password' => $credentials['password'],
                 ],
             ]);
-            
+
             $data = json_decode($response->getBody(), true);
-            
+
             // Horoshop returns status: "OK" and response.token
             if (($data['status'] ?? '') === 'OK' && isset($data['response']['token'])) {
                 return ['success' => true, 'token' => $data['response']['token']];
             }
-            
+
             // Get error message from response
             $errorMessage = $data['response']['message'] ?? 'Невірні облікові дані';
+
             return ['success' => false, 'error' => $errorMessage];
         } catch (\GuzzleHttp\Exception\ClientException $e) {
             $body = json_decode($e->getResponse()->getBody(), true);
             $errorMessage = $body['response']['message'] ?? $e->getMessage();
+
             return ['success' => false, 'error' => $errorMessage];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -227,7 +230,7 @@ class OnboardingController extends Controller
     public function step3(): View
     {
         $tenant = $this->tenant();
-        
+
         return view('onboarding.index', [
             'tenant' => $tenant,
             'currentStep' => 3,
@@ -246,11 +249,11 @@ class OnboardingController extends Controller
     public function saveStep3(): RedirectResponse
     {
         $tenant = $this->tenant();
-        
+
         // Dispatch AI analysis job for store context
         if ($tenant->products()->count() > 0) {
             AnalyzeStoreContextJob::dispatch($tenant->id);
-            
+
             // 🧠 CRITICAL: Trigger AI enrichment for product search
             // This ensures all products have keywords, slang, categories in product_ai_index
             $productsCount = $tenant->products()->where('in_stock', true)->count();
@@ -260,20 +263,20 @@ class OnboardingController extends Controller
                 forceReanalyze: false,
                 tenantId: $tenant->id
             )->onQueue('default');
-            
+
             // 🔍 Trigger Meilisearch indexing
             \App\Jobs\IndexProductsToMeiliJob::dispatch($tenant->id)
                 ->delay(now()->addSeconds(10))
                 ->onQueue('default');
         }
-        
+
         // Create default widget settings automatically
         $this->createDefaultWidgetSettings($tenant);
-        
+
         // Skip widget customization step, go directly to embed code
         return redirect()->route('onboarding.step5');
     }
-    
+
     /**
      * Create default widget settings for tenant.
      */
@@ -304,7 +307,7 @@ class OnboardingController extends Controller
     {
         $tenant = $this->tenant();
         $settings = $tenant->widgetSettings;
-        
+
         return view('onboarding.index', [
             'tenant' => $tenant,
             'currentStep' => 4,
@@ -327,7 +330,7 @@ class OnboardingController extends Controller
         ]);
 
         $tenant = $this->tenant();
-        
+
         $tenant->widgetSettings()->updateOrCreate(
             ['tenant_id' => $tenant->id],
             [
@@ -347,7 +350,7 @@ class OnboardingController extends Controller
     public function step5(): View
     {
         $tenant = $this->tenant();
-        
+
         return view('onboarding.index', [
             'tenant' => $tenant,
             'currentStep' => 5,
@@ -362,7 +365,7 @@ class OnboardingController extends Controller
     public function complete(): RedirectResponse
     {
         $tenant = $this->tenant();
-        
+
         $tenant->update([
             'settings' => array_merge($tenant->settings ?? [], [
                 'onboarding_completed' => true,
@@ -380,43 +383,102 @@ class OnboardingController extends Controller
     public function enrichmentProgress(): JsonResponse
     {
         $tenant = $this->tenant();
-        
-        // Count total products in stock
+
+        // Count total products in stock (live)
         $totalProducts = $tenant->products()
             ->where('in_stock', true)
             ->count();
-        
-        // Count products with AI enrichment
-        $enrichedProducts = \App\Models\ProductAiIndex::where('tenant_id', $tenant->id)
+
+        // Prefer TenantOnboardingProgress as the source of truth — live DB counts
+        // can drift after Horoshop re-sync (new product IDs lose ProductAiIndex FK).
+        $progress = \App\Models\TenantOnboardingProgress::where('tenant_id', $tenant->id)->first();
+
+        if ($progress && in_array($progress->status, ['completed', 'in_progress'], true)) {
+            $steps = $progress->steps ?? [];
+            $aiStep = $steps['ai_enrichment'] ?? [];
+            $meiliStep = $steps['meili_indexing'] ?? [];
+
+            $aiPercent = (float) ($aiStep['percent'] ?? 0);
+            $meiliPercent = (float) ($meiliStep['percent'] ?? 0);
+
+            $aiStats = $aiStep['stats'] ?? [];
+            $meiliStats = $meiliStep['stats'] ?? [];
+
+            $aiCompletedCount = (int) ($aiStats['enriched'] ?? $aiStats['processed'] ?? round($totalProducts * $aiPercent / 100));
+            $meiliCompletedCount = (int) ($meiliStats['processed'] ?? $meiliStats['indexed'] ?? round($totalProducts * $meiliPercent / 100));
+
+            // If the onboarding record says "completed", mirror that in the endpoint
+            // so the UI can transition to the final state even if live counts lag.
+            $aiDone = ($aiStep['status'] ?? null) === 'completed';
+            $meiliDone = ($meiliStep['status'] ?? null) === 'completed';
+
+            if ($aiDone) {
+                $aiPercent = 100;
+                if ($aiCompletedCount === 0 && $totalProducts > 0) {
+                    $aiCompletedCount = $totalProducts;
+                }
+            }
+            if ($meiliDone) {
+                $meiliPercent = 100;
+                if ($meiliCompletedCount === 0 && $totalProducts > 0) {
+                    $meiliCompletedCount = $totalProducts;
+                }
+            }
+
+            $overallPercent = round(($aiPercent * 0.6) + ($meiliPercent * 0.4), 1);
+
+            $status = 'processing';
+            if ($progress->status === 'completed' || ($aiDone && $meiliDone)) {
+                $status = 'completed';
+            } elseif ($totalProducts === 0) {
+                $status = 'no_products';
+            }
+
+            return response()->json([
+                'status' => $status,
+                'total_products' => $totalProducts,
+                'ai_enrichment' => [
+                    'completed' => $aiCompletedCount,
+                    'percent' => $aiPercent,
+                ],
+                'meili_indexing' => [
+                    'completed' => $meiliCompletedCount,
+                    'percent' => $meiliPercent,
+                ],
+                'overall_percent' => $overallPercent,
+            ]);
+        }
+
+        // Fallback: live counts (legacy behaviour for tenants without progress row)
+        $enrichedProducts = \App\Models\ProductAiIndex::query()
             ->whereNotNull('keywords')
+            ->whereHas('product', function ($q) use ($tenant) {
+                $q->where('tenant_id', $tenant->id)->where('in_stock', true);
+            })
             ->count();
-        
-        // Count products indexed in Meilisearch (via search_index field)
+
         $meiliIndexed = $tenant->products()
             ->where('in_stock', true)
             ->whereNotNull('search_index')
             ->where('search_index', '!=', '')
             ->count();
-        
-        // Calculate percentages
-        $enrichmentPercent = $totalProducts > 0 
-            ? round(($enrichedProducts / $totalProducts) * 100, 1) 
+
+        $enrichmentPercent = $totalProducts > 0
+            ? round(($enrichedProducts / $totalProducts) * 100, 1)
             : 0;
-        $meiliPercent = $totalProducts > 0 
-            ? round(($meiliIndexed / $totalProducts) * 100, 1) 
+        $meiliPercent = $totalProducts > 0
+            ? round(($meiliIndexed / $totalProducts) * 100, 1)
             : 0;
-        
-        // Overall progress: AI enrichment (60%) + Meili indexing (40%)
+
         $overallPercent = round(($enrichmentPercent * 0.6) + ($meiliPercent * 0.4), 1);
-        
-        // Determine status
+
         $status = 'processing';
         if ($enrichmentPercent >= 100 && $meiliPercent >= 100) {
             $status = 'completed';
         } elseif ($totalProducts === 0) {
             $status = 'no_products';
         }
-        
+
         return response()->json([
             'status' => $status,
             'total_products' => $totalProducts,

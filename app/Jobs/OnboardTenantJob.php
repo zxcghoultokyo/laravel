@@ -355,8 +355,14 @@ class OnboardTenantJob implements ShouldQueue
         // Dispatch first batch to DIFFERENT queue (meili) so it runs in parallel
         // OnboardTenantJob runs on 'default', AnalyzeProductsWithAiJob on 'meili'
         // Worker processes both: --queue=default,meili
+        //
+        // Batch size kept conservative (15) so a single batch fits well inside
+        // AnalyzeProductsWithAiJob's 900s timeout even when OpenAI throttles us
+        // with 5s rate-limit pauses. Larger batches (50) caused TimeoutException
+        // that stalled the chain because auto-dispatch of the next batch only
+        // happens on successful completion of processAnalysis().
         AnalyzeProductsWithAiJob::dispatch(
-            batchSize: 50,
+            batchSize: 15,
             offset: 0,
             forceReanalyze: false,
             tenantId: $this->tenantId,

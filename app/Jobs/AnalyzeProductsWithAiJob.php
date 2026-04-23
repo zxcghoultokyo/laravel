@@ -32,9 +32,19 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $timeout = 600; // 10 minutes for batch with rate limiting delays
+    public int $timeout = 900; // 15 minutes (safety margin for large batches + OpenAI rate limits)
 
     public int $tries = 3;
+
+    /**
+     * Backoff between retries (seconds). Helps with transient OpenAI issues.
+     *
+     * @return array<int>
+     */
+    public function backoff(): array
+    {
+        return [30, 120, 300];
+    }
 
     /**
      * Constructor with optional tenant_id filter for tenant-specific enrichment.
@@ -76,6 +86,91 @@ class AnalyzeProductsWithAiJob implements ShouldQueue
             }
             throw $e;
         }
+    }
+
+    /**
+     * Called by the queue worker after all retries (tries=3) are exhausted.
+     *
+     * CRITICAL: when a batch permanently fails (e.g. TimeoutExceededException),
+     * we MUST still dispatch the next batch so enrichment does not silently
+     * stall at N/total forever. Without this handler, a single bad batch kills
+     * the entire chain because auto-dispatch happens at the tail of
+     * processAnalysis() which never returns on timeout.
+     */
+    public function failed(\Throwable $exception): void
+    {
+        Log::error('AnalyzeProductsWithAiJob: permanently failed, rescheduling chain', [
+            'tenant_id' => $this->tenantId,
+            'offset' => $this->offset,
+            'batch_size' => $this->batchSize,
+            'error' => $exception->getMessage(),
+            'type' => class_basename($exception),
+        ]);
+
+        if ($this->tenantId === null || $this->singleBatchOnly) {
+            return;
+        }
+
+        // Record the failure on the onboarding timeline so it's visible to the
+        // user instead of being silently swallowed by the failed_jobs table.
+        try {
+            $progress = TenantOnboardingProgress::where('tenant_id', $this->tenantId)->first();
+            if ($progress) {
+                $enrichedCount = ProductAiIndex::whereHas('product', function ($q) {
+                    $q->withoutGlobalScope(TenantScope::class)
+                        ->where('tenant_id', $this->tenantId)
+                        ->where('in_stock', true);
+                })->whereNotNull('keywords')->count();
+
+                $totalProducts = Product::withoutGlobalScope(TenantScope::class)
+                    ->where('tenant_id', $this->tenantId)
+                    ->where('in_stock', true)
+                    ->count();
+
+                $percent = $totalProducts > 0
+                    ? min(95, (int) round($enrichedCount / $totalProducts * 100))
+                    : 0;
+
+                $progress->updateStep('ai_enrichment', 'in_progress', $percent,
+                    "AI аналіз: {$enrichedCount} з {$totalProducts} (батч впав, продовжуємо далі)",
+                    [
+                        'total' => $totalProducts,
+                        'enriched' => $enrichedCount,
+                        'processed' => $enrichedCount,
+                        'last_batch_error' => class_basename($exception),
+                    ]
+                );
+            }
+        } catch (\Throwable $logErr) {
+            Log::warning('AnalyzeProductsWithAiJob::failed progress update failed', [
+                'error' => $logErr->getMessage(),
+            ]);
+        }
+
+        // Re-queue the next batch with a reduced batch size to avoid repeating
+        // the same timeout. We intentionally schedule a fresh offset=0 batch
+        // because forceReanalyze=false relies on whereNotIn to skip already
+        // processed products — so a smaller slice will pick up the remaining
+        // unprocessed ones without revisiting the failed ids.
+        $nextOffset = $this->forceReanalyze
+            ? $this->offset + $this->batchSize
+            : 0;
+
+        $nextBatchSize = max(5, (int) floor($this->batchSize / 2));
+
+        self::dispatch(
+            batchSize: $nextBatchSize,
+            offset: $nextOffset,
+            forceReanalyze: $this->forceReanalyze,
+            tenantId: $this->tenantId,
+            singleBatchOnly: false
+        )->onQueue('meili')->delay(now()->addSeconds(30));
+
+        Log::info('AnalyzeProductsWithAiJob::failed: chain resumed with smaller batch', [
+            'tenant_id' => $this->tenantId,
+            'next_batch_size' => $nextBatchSize,
+            'next_offset' => $nextOffset,
+        ]);
     }
 
     private function processAnalysis(?SyncLog $syncLog): void

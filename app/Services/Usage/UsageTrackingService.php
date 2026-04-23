@@ -24,19 +24,19 @@ class UsageTrackingService
     {
         // Use atomic increment in cache for speed
         $cacheKey = $this->getCacheKey($tenant->id, 'messages');
-        
+
         // Get current cached value or load from DB
-        if (!Cache::has($cacheKey)) {
+        if (! Cache::has($cacheKey)) {
             Cache::put($cacheKey, $tenant->messages_used, now()->endOfMonth());
         }
-        
+
         $newCount = Cache::increment($cacheKey, $count);
-        
+
         // Sync to DB periodically (every 10 messages or immediately if near limit)
         if ($newCount % 10 === 0 || $this->isNearLimit($tenant, $newCount)) {
             $this->syncToDatabase($tenant, 'messages_used', $newCount);
         }
-        
+
         return $newCount;
     }
 
@@ -46,7 +46,7 @@ class UsageTrackingService
     public function getMessageUsage(Tenant $tenant): int
     {
         $cacheKey = $this->getCacheKey($tenant->id, 'messages');
-        
+
         return Cache::remember($cacheKey, now()->endOfMonth(), function () use ($tenant) {
             return $tenant->messages_used;
         });
@@ -54,11 +54,19 @@ class UsageTrackingService
 
     /**
      * Check if tenant has reached message limit.
+     * Convention (matches Tenant::canSendMessage): messages_limit of 0 or null = unlimited.
      */
     public function hasReachedLimit(Tenant $tenant): bool
     {
+        $limit = $tenant->messages_limit;
+
+        if (empty($limit) || $limit <= 0) {
+            return false;
+        }
+
         $usage = $this->getMessageUsage($tenant);
-        return $usage >= $tenant->messages_limit;
+
+        return $usage >= $limit;
     }
 
     /**
@@ -68,11 +76,11 @@ class UsageTrackingService
     {
         $usage = $currentUsage ?? $this->getMessageUsage($tenant);
         $limit = $tenant->messages_limit;
-        
+
         if ($limit <= 0) {
             return false;
         }
-        
+
         return ($usage / $limit) >= 0.8;
     }
 
@@ -83,21 +91,29 @@ class UsageTrackingService
     {
         $usage = $this->getMessageUsage($tenant);
         $limit = $tenant->messages_limit;
-        
+
         if ($limit <= 0) {
             return 0;
         }
-        
+
         return min(100, round(($usage / $limit) * 100, 1));
     }
 
     /**
      * Get remaining messages for a tenant.
+     * messages_limit of 0 or null = unlimited (returns PHP_INT_MAX).
      */
     public function getRemainingMessages(Tenant $tenant): int
     {
+        $limit = $tenant->messages_limit;
+
+        if (empty($limit) || $limit <= 0) {
+            return PHP_INT_MAX;
+        }
+
         $usage = $this->getMessageUsage($tenant);
-        return max(0, $tenant->messages_limit - $usage);
+
+        return max(0, $limit - $usage);
     }
 
     /**
@@ -107,12 +123,12 @@ class UsageTrackingService
     {
         $cacheKey = $this->getCacheKey($tenant->id, 'messages');
         Cache::forget($cacheKey);
-        
+
         $tenant->update([
             'messages_used' => 0,
             'usage_reset_at' => now(),
         ]);
-        
+
         Log::info('Tenant usage reset', [
             'tenant_id' => $tenant->id,
             'tenant_slug' => $tenant->slug,
@@ -129,11 +145,11 @@ class UsageTrackingService
                 'messages_used' => 0,
                 'usage_reset_at' => now(),
             ]);
-        
+
         // Clear all usage caches
         // Note: In production, use Redis SCAN or tags
         Log::info('All tenant usage reset', ['count' => $count]);
-        
+
         return $count;
     }
 
@@ -145,7 +161,7 @@ class UsageTrackingService
         $messagesUsed = $this->getMessageUsage($tenant);
         $messagesLimit = $tenant->messages_limit;
         $percentage = $this->getUsagePercentage($tenant);
-        
+
         return [
             'messages' => [
                 'used' => $messagesUsed,
@@ -188,7 +204,7 @@ class UsageTrackingService
      */
     protected function getCacheKey(int $tenantId, string $type): string
     {
-        return self::CACHE_PREFIX . "{$tenantId}_{$type}_" . date('Y_m');
+        return self::CACHE_PREFIX."{$tenantId}_{$type}_".date('Y_m');
     }
 
     /**
@@ -197,16 +213,16 @@ class UsageTrackingService
     public function syncAllToDatabase(): void
     {
         $tenants = Tenant::where('status', Tenant::STATUS_ACTIVE)->get();
-        
+
         foreach ($tenants as $tenant) {
             $cacheKey = $this->getCacheKey($tenant->id, 'messages');
-            
+
             if (Cache::has($cacheKey)) {
                 $cachedValue = Cache::get($cacheKey);
                 $this->syncToDatabase($tenant, 'messages_used', $cachedValue);
             }
         }
-        
+
         Log::info('All tenant usage synced to database');
     }
 }

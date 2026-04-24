@@ -199,6 +199,29 @@
     <section class="timeline">
         <div class="container">
 
+            {{-- ===== v1.11.0 ===== --}}
+            <div class="version-block">
+                <div class="version-dot"></div>
+                <div class="version-header">
+                    <span class="version-tag">v1.11.0</span>
+                    <span class="version-date">24 квітня 2026</span>
+                </div>
+                <ul class="change-list">
+                    <li>
+                        <span class="tag tag-fix">🐛 Фікс</span>
+                        <span>Вік 7 років тепер коректно мапиться в категорію «дошкільнятам» (інклюзивна верхня межа 3–7), а не в «школярам» — для магазинів без категорії «школярам» запити на кшталт «щось для дівчинки 7 років» більше не повертають пусто</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-admin">🎛 Адмін</span>
+                        <span>RAG-аудит у діагностичному API — новий ендпоінт показує 3 шари роботи чату: запит користувача, що знайдено в каталозі, який системний промпт застосовано (джерело, довжина, хеш)</span>
+                    </li>
+                    <li>
+                        <span class="tag tag-admin">🎛 Адмін</span>
+                        <span>Розширений трейсинг pipeline — кожен виклик інструмента пошуку фіксує артикули, категорії, ціновий діапазон та розмір payload для швидкої діагностики галюцинацій і шуму в контексті</span>
+                    </li>
+                </ul>
+            </div>
+
             {{-- ===== v1.10.0 ===== --}}
             <div class="version-block">
                 <div class="version-dot"></div>

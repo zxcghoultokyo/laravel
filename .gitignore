@@ -22,3 +22,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+resp_G*.json
+response*.txt
+test-bavka*.ps1
+test-bavka-fix.py
+parse-bavka.ps1

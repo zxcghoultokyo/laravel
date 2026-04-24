@@ -787,18 +787,52 @@ abstract class BaseAgent
 
         // If specific product query returned <3 results, also fetch age-only results
         // and merge — narrow keywords ("розвиваючі") shouldn't collapse the list to 1 item.
-        if ($productQuery !== '' && count($products) < 3) {
+        // Merge age-only results when:
+        //  (a) narrow query returned <3 items (original case), OR
+        //  (b) none of the returned products belong to the target age category —
+        //      e.g., "іграшки" matches only ДОШКІЛЬНЯТАМ docs while target is ТОДЛЕРАМ;
+        //      age-only fetch brings back ТОДЛЕРАМ items so buckets re-sort correctly.
+        $targetCategory = $this->searchTool->detectAgeCategoryFromQuery($originalMessage);
+        $hasTargetCategory = false;
+        if ($targetCategory !== null) {
+            $catLower = mb_strtolower(trim($targetCategory));
+            foreach ($products as $p) {
+                $pc = mb_strtolower(trim($p['category_path'] ?? ''));
+                if ($pc !== '' && (str_contains($pc, $catLower) || str_contains($catLower, $pc))) {
+                    $hasTargetCategory = true;
+                    break;
+                }
+            }
+        }
+        $shouldMergeAgeOnly = $productQuery !== '' && (count($products) < 3 || ($targetCategory !== null && ! $hasTargetCategory));
+        if ($shouldMergeAgeOnly) {
             $ageOnly = $this->searchTool->search('', $filters, 30);
             if (! empty($ageOnly)) {
                 $existingIds = array_column($products, 'id');
-                foreach ($ageOnly as $p) {
-                    $pid = $p['id'] ?? null;
-                    if ($pid !== null && ! in_array($pid, $existingIds, true)) {
-                        $products[] = $p;
+                // When keyword search missed the target category entirely,
+                // age-only results take priority — prepend instead of append.
+                if ($targetCategory !== null && ! $hasTargetCategory && count($products) > 0) {
+                    $prepend = [];
+                    foreach ($ageOnly as $p) {
+                        $pid = $p['id'] ?? null;
+                        if ($pid !== null && ! in_array($pid, $existingIds, true)) {
+                            $prepend[] = $p;
+                            $existingIds[] = $pid;
+                        }
+                    }
+                    $products = array_merge($prepend, $products);
+                } else {
+                    foreach ($ageOnly as $p) {
+                        $pid = $p['id'] ?? null;
+                        if ($pid !== null && ! in_array($pid, $existingIds, true)) {
+                            $products[] = $p;
+                        }
                     }
                 }
                 Log::info('BaseAgent: age-only fallback merged', [
                     'product_query' => $productQuery,
+                    'target_category' => $targetCategory,
+                    'had_target_category' => $hasTargetCategory,
                     'narrow_count' => count($existingIds),
                     'merged_count' => count($products),
                 ]);
@@ -820,6 +854,26 @@ abstract class BaseAgent
             shuffle($pool);
             $products = array_merge($pool, array_slice($products, count($pool)));
         }
+
+        // Final category boost across the merged pool (narrow query + age-only fallback).
+        // Exact target category wins, then everything else. Keeps shuffle variety within each bucket.
+        if ($targetCategory !== null && count($products) > 1) {
+            $catLowerFinal = mb_strtolower(trim($targetCategory));
+            $exactB = [];
+            $otherB = [];
+            foreach ($products as $p) {
+                $pc = mb_strtolower(trim($p['category_path'] ?? ''));
+                if ($pc !== '' && (str_contains($pc, $catLowerFinal) || str_contains($catLowerFinal, $pc))) {
+                    $exactB[] = $p;
+                } else {
+                    $otherB[] = $p;
+                }
+            }
+            if (count($exactB) > 0) {
+                $products = array_merge($exactB, $otherB);
+            }
+        }
+
         $products = array_slice($products, 0, 6);
 
         // Get full product cards with images

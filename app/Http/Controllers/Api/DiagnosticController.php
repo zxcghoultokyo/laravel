@@ -2762,6 +2762,122 @@ class DiagnosticController extends Controller
     }
 
     /**
+     * GET /api/diagnostic/rag-audit?q=...&tenant_id=2
+     *
+     * Runs a single chat query through FunctionCallingAgent and returns the
+     * three-tier RAG audit view:
+     *   1. user query
+     *   2. retrieved context (what the LLM actually saw as "knowledge")
+     *   3. system prompt (how the LLM was told to behave)
+     *
+     * Use this to diagnose whether a bad response is caused by:
+     *   - retrieval error (wrong / missing products in step 2)
+     *   - noise (too many products / too much payload)
+     *   - format (are products shown as readable text?)
+     *   - weak prompt (does system prompt actually constrain behaviour?)
+     */
+    public function ragAudit(Request $request): JsonResponse
+    {
+        if (! $this->checkKey($request)) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $query = trim((string) $request->query('q', ''));
+        $tenantId = (int) $request->query('tenant_id', 0);
+
+        if ($query === '' || $tenantId <= 0) {
+            return response()->json([
+                'error' => 'q and tenant_id are required',
+                'example' => '/api/diagnostic/rag-audit?key=...&q=iграшки для малюка на рік&tenant_id=20',
+            ], 422);
+        }
+
+        $tenant = \App\Models\Tenant::find($tenantId);
+        if (! $tenant) {
+            return response()->json(['error' => 'Tenant not found', 'tenant_id' => $tenantId], 404);
+        }
+
+        // Bind tenant so BelongsToTenant-scoped services see the correct data.
+        app()->instance(\App\Models\Tenant::class, $tenant);
+        config(['app.current_tenant_id' => $tenantId]);
+
+        $sessionId = 'rag-audit-'.uniqid('', true);
+        $tracer = \App\Services\Chat\PipelineTracer::start($sessionId, $query);
+
+        $started = microtime(true);
+        try {
+            $agent = app(\App\Services\Agent\FunctionCallingAgent::class);
+            $response = $agent->handle($query, [
+                'session_id' => $sessionId,
+                'history' => [],
+                'tenant_id' => $tenantId,
+            ]);
+        } catch (\Throwable $e) {
+            $tracer->step('rag_audit.exception', ['error' => $e->getMessage()]);
+            $trace = $tracer->finish();
+
+            return response()->json([
+                'error' => 'Agent failed',
+                'message' => $e->getMessage(),
+                'trace' => $trace,
+            ], 500);
+        }
+
+        $trace = $tracer->finish();
+
+        // Extract the three tiers from the trace
+        $systemPromptStep = null;
+        $toolResultSteps = [];
+        foreach ($trace['steps'] as $step) {
+            if ($step['step'] === 'agent.system_prompt' && $systemPromptStep === null) {
+                $systemPromptStep = $step['data'];
+            }
+            if ($step['step'] === 'agent.tool_result') {
+                $toolResultSteps[] = $step['data'];
+            }
+        }
+
+        $products = $response['products'] ?? [];
+        $responseText = $response['message'] ?? ($response['text'] ?? '');
+
+        return response()->json([
+            'ok' => true,
+            'session_id' => $sessionId,
+            'tenant_id' => $tenantId,
+            'elapsed_ms' => (int) ((microtime(true) - $started) * 1000),
+
+            // Tier 1: what the user asked
+            'user_query' => $query,
+
+            // Tier 2: what the retrieval pipeline returned to the LLM
+            'retrieved_context' => [
+                'tool_calls_count' => count($toolResultSteps),
+                'tool_calls' => $toolResultSteps,
+                'final_products_shown' => count($products),
+                'final_articles' => array_slice(array_map(fn ($p) => $p['article'] ?? null, $products), 0, 10),
+                'final_titles' => array_slice(array_map(fn ($p) => $p['title'] ?? null, $products), 0, 10),
+            ],
+
+            // Tier 3: how the LLM was configured to behave
+            'system_prompt' => $systemPromptStep ?? [
+                'source' => 'not_captured',
+                'note' => 'The agent did not reach GPT (intercepted by preprocessor or handler).',
+            ],
+
+            // Final answer that went to the user
+            'response' => [
+                'text' => mb_substr($responseText, 0, 2000),
+                'text_length' => mb_strlen($responseText),
+                'products_count' => count($products),
+                'meta' => $response['meta'] ?? null,
+            ],
+
+            // Full trace for deep debugging (includes Meili/agent steps)
+            'full_trace' => $trace,
+        ]);
+    }
+
+    /**
      * POST /api/diagnostic/sync-faq
      * Sync FAQ content from URLs
      */

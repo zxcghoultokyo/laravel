@@ -131,6 +131,7 @@ Route::prefix('diagnostic')->middleware('diagnostic.guard')->group(function () {
     Route::get('/chat-sessions', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatSessions']);
     Route::get('/chat-history/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'chatHistory']);
     Route::get('/pipeline-trace/{sessionId}', [\App\Http\Controllers\Api\DiagnosticController::class, 'pipelineTrace']);
+    Route::get('/rag-audit', [\App\Http\Controllers\Api\DiagnosticController::class, 'ragAudit']);
     Route::post('/sync-faq', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncFaq']);
     Route::get('/widget-settings', [\App\Http\Controllers\Api\DiagnosticController::class, 'widgetSettings']);
     Route::post('/sync-orders', [\App\Http\Controllers\Api\DiagnosticController::class, 'syncOrders']);

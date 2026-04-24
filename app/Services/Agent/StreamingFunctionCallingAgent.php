@@ -400,6 +400,9 @@ CONTEXT;
 
                 $result = $this->executeTool($functionName, $args);
 
+                // RAG audit: record the retrieved context for this tool call
+                $this->traceToolResult($functionName, $args, $result);
+
                 // Track search results
                 if ($functionName === 'search_products') {
                     $searchWasCalled = true;

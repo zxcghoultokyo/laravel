@@ -1815,16 +1815,99 @@ abstract class BaseAgent
 
             // Wrap preset with critical system rules (before AND after)
             // GPT sees critical prefix first, then tenant preset, then critical suffix
-            return $this->getCriticalPrefix()."\n\n".$customPrompt."\n\n".$this->getCriticalSuffix();
+            $full = $this->getCriticalPrefix()."\n\n".$customPrompt."\n\n".$this->getCriticalSuffix();
+            $this->tracePrompt($full, 'custom_preset');
+
+            return $full;
         }
 
         // Use modular prompt if enabled (default: true)
         if (config('services.openai.modular_prompt', true)) {
-            return $this->getModularSystemPrompt();
+            $full = $this->getModularSystemPrompt();
+            $this->tracePrompt($full, 'modular');
+
+            return $full;
         }
 
         // Legacy fallback - full prompt (~14K tokens)
-        return $this->getDefaultSystemPrompt();
+        $full = $this->getDefaultSystemPrompt();
+        $this->tracePrompt($full, 'default_legacy');
+
+        return $full;
+    }
+
+    /**
+     * Record system prompt details for RAG audit (query / context / prompt triad).
+     */
+    protected function tracePrompt(string $prompt, string $source): void
+    {
+        PipelineTracer::current()?->step('agent.system_prompt', [
+            'source' => $source,
+            'tenant_id' => $this->searchTool->getCurrentTenantId(),
+            'length_chars' => mb_strlen($prompt),
+            'length_bytes' => strlen($prompt),
+            'approx_tokens' => (int) ceil(mb_strlen($prompt) / 4),
+            'hash' => substr(md5($prompt), 0, 12),
+            'preview' => mb_substr($prompt, 0, 1500),
+            'tail' => mb_substr($prompt, -400),
+            'context' => $this->currentContext,
+        ]);
+    }
+
+    /**
+     * Record a tool-call result summary for RAG audit (the "retrieved context").
+     *
+     * @param  array<string, mixed>  $args  GPT's tool arguments (the "query")
+     * @param  array<string, mixed>  $result  Tool result before being sent back to GPT
+     */
+    protected function traceToolResult(string $functionName, array $args, array $result): void
+    {
+        $products = $result['products'] ?? [];
+        $articles = [];
+        $categories = [];
+        $priceRange = null;
+
+        if (! empty($products)) {
+            $prices = [];
+            foreach ($products as $p) {
+                if (isset($p['article'])) {
+                    $articles[] = $p['article'];
+                }
+                if (! empty($p['category_path'])) {
+                    $categories[] = is_array($p['category_path']) ? implode(' / ', $p['category_path']) : (string) $p['category_path'];
+                }
+                if (isset($p['price'])) {
+                    $prices[] = (float) $p['price'];
+                }
+            }
+            if ($prices !== []) {
+                $priceRange = ['min' => min($prices), 'max' => max($prices)];
+            }
+        }
+
+        $encoded = json_encode($result, JSON_UNESCAPED_UNICODE);
+
+        PipelineTracer::current()?->step('agent.tool_result', [
+            'tool' => $functionName,
+            'args' => [
+                'query' => $args['query'] ?? null,
+                'category' => $args['category'] ?? null,
+                'brand' => $args['brand'] ?? null,
+                'price_min' => $args['price_min'] ?? null,
+                'price_max' => $args['price_max'] ?? null,
+                'min_age_months' => $args['min_age_months'] ?? null,
+                'max_age_months' => $args['max_age_months'] ?? null,
+                'exclude_shown' => $args['exclude_shown'] ?? null,
+            ],
+            'products_count' => count($products),
+            'articles' => array_slice(array_values(array_unique($articles)), 0, 15),
+            'categories' => array_slice(array_values(array_unique($categories)), 0, 8),
+            'price_range' => $priceRange,
+            'payload_bytes' => $encoded === false ? 0 : strlen($encoded),
+            'payload_chars' => $encoded === false ? 0 : mb_strlen($encoded),
+            'blocked' => ! empty($result['blocked']),
+            'first_titles' => array_slice(array_map(fn ($p) => $p['title'] ?? null, $products), 0, 5),
+        ]);
     }
 
     /**

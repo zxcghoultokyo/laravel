@@ -314,4 +314,149 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertFalse($requestedAgeMonths < $catMinMonths2,
             'Requested age 12mo should NOT be less than category min 12mo');
     }
+
+    // ───────────────────────────────────────────────
+    // No-digit age references: "на рік", "рочок", "годик"
+    // ───────────────────────────────────────────────
+
+    public function test_detects_na_rik_without_digit_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'подарунок на рік');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
+    }
+
+    public function test_detects_rochok_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'подарунок на рочок для дівчинки');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
+    }
+
+    public function test_detects_godyk_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'що подарувати на годик');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
+    }
+
+    public function test_extract_age_months_na_rik(): void
+    {
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('подарунок на рік'));
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('на рочок'));
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('що купити на годик'));
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('рочок синові'));
+    }
+
+    public function test_boundary_age_no_digit_year(): void
+    {
+        $this->assertTrue($this->tool->isBoundaryAge('подарунок на рік'));
+        $this->assertTrue($this->tool->isBoundaryAge('подарунок на рочок'));
+        $this->assertTrue($this->tool->isBoundaryAge('годик'));
+    }
+
+    // ───────────────────────────────────────────────
+    // search_products schema exposes age_months params
+    // ───────────────────────────────────────────────
+
+    public function test_search_products_schema_has_age_months_params(): void
+    {
+        $searchTool = $this->createMock(MeiliProductSearchTool::class);
+        $detailsTool = $this->createMock(\App\Services\Agent\Tools\ProductDetailsTool::class);
+        $orderSearch = $this->createMock(\App\Services\Horoshop\OrderSearchService::class);
+
+        $agent = new \Tests\Feature\TestableBaseAgent($searchTool, $detailsTool, $orderSearch);
+        $tools = $agent->exposeGetTools();
+
+        $searchFunc = collect($tools)->first(fn ($t) => $t['function']['name'] === 'search_products');
+        $props = $searchFunc['function']['parameters']['properties'];
+
+        $this->assertArrayHasKey('min_age_months', $props);
+        $this->assertArrayHasKey('max_age_months', $props);
+        $this->assertSame('integer', $props['min_age_months']['type']);
+        $this->assertSame('integer', $props['max_age_months']['type']);
+    }
+
+    // ───────────────────────────────────────────────
+    // filterTenantBabyQueryProducts — tenant 20 (bavkatoys) gift+рік rules
+    // ───────────────────────────────────────────────
+
+    public function test_filter_excludes_certificate_from_gift_set_query(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Подарунковий сертифікат на 500 грн', 'category_path' => 'СЕРТИФІКАТИ'],
+            ['title' => 'Сортер дерев\'яний', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts(
+            $products,
+            'подарунковий набір для малюка на рік',
+            20
+        );
+
+        $titles = array_column($result, 'title');
+        $this->assertNotContains('Подарунковий сертифікат на 500 грн', $titles);
+        $this->assertContains('Сортер дерев\'яний', $titles);
+    }
+
+    public function test_filter_keeps_certificate_when_user_asks_for_it(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Подарунковий сертифікат на 500 грн', 'category_path' => 'СЕРТИФІКАТИ'],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts(
+            $products,
+            'хочу купити сертифікат',
+            20
+        );
+
+        $this->assertCount(1, $result);
+    }
+
+    public function test_filter_excludes_newborn_products_when_gift_for_1_year(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Набір Рання Пташка для немовляти', 'category_path' => 'ІГРАШКИ/МАЛЮКАМ 0 – 1'],
+            ['title' => 'Дерев\'яна пірамідка', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+            ['title' => 'Підвіска на ліжечко', 'category_path' => 'ІГРАШКИ/МАЛЮКАМ 0 – 1'],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts(
+            $products,
+            'подарунок на рік хлопчику',
+            20
+        );
+
+        $titles = array_column($result, 'title');
+        $this->assertNotContains('Набір Рання Пташка для немовляти', $titles);
+        $this->assertContains('Дерев\'яна пірамідка', $titles);
+    }
+
+    public function test_filter_noop_for_other_tenants(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Подарунковий сертифікат', 'category_path' => ''],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts($products, 'подарунок на рік', 5);
+        $this->assertCount(1, $result, 'Tenant 5 should not be affected by bavkatoys filter');
+    }
+
+    private function makeTestableAgent(): \Tests\Feature\TestableBaseAgent
+    {
+        $searchTool = $this->createMock(MeiliProductSearchTool::class);
+        $detailsTool = $this->createMock(\App\Services\Agent\Tools\ProductDetailsTool::class);
+        $orderSearch = $this->createMock(\App\Services\Horoshop\OrderSearchService::class);
+
+        return new \Tests\Feature\TestableBaseAgent($searchTool, $detailsTool, $orderSearch);
+    }
 }

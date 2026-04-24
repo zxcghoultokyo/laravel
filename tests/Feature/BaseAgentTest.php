@@ -464,4 +464,9 @@ class TestableBaseAgent extends BaseAgent
     {
         return $this->getTools();
     }
+
+    public function exposeFilterTenantBabyQueryProducts(array $products, string $message, ?int $tenantId, ?string $sessionId = null): array
+    {
+        return $this->filterTenantBabyQueryProducts($products, $message, $tenantId, $sessionId);
+    }
 }

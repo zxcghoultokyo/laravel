@@ -731,15 +731,21 @@ abstract class BaseAgent
         }
 
         // Detect age in years: "1 рік", "3 роки", "7 років", "на 2 роки"
-        if (! preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $m)) {
-            // Also check months: "6 місяців"
-            if (! preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower)) {
-                return null;
-            }
+        $hasDigitYear = (bool) preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower);
+        $hasDigitMonth = (bool) preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower);
+        // No-digit year references: "на рік", "на рочок", "на годик", "один рочок" → treat as 1 year
+        $hasNoDigitYear = (bool) preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
+            || (bool) preg_match('/\b(?:рочок|годик)\b/ui', $lower);
+
+        if (! $hasDigitYear && ! $hasDigitMonth && ! $hasNoDigitYear) {
+            return null;
         }
 
         // Extract product-related words from the query (strip age/filler phrases)
         $productQuery = preg_replace('/\d{1,2}\s*(?:рок\w*|рік|річ\w*|р\.|місяц\w*|міс\w*)/ui', '', $originalMessage);
+        // Strip no-digit year phrases: "на рік", "на рочок", "на годик", "один рочок"
+        $productQuery = preg_replace('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', '', $productQuery);
+        $productQuery = preg_replace('/\b(?:рочок|годик)\b/ui', '', $productQuery);
         // Use relaxed pattern for "дитин*" to handle typos like "дитттинві" (triple т)
         $productQuery = preg_replace('/\bди[тт]+ин\w*\b/ui', '', $productQuery);
         $productQuery = preg_replace('/\b(для|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якийс\w*|якась|якусь|якесь|яке|який|яка|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|порекомендуй\w*|рекомендуй\w*|запропонуй\w*|підкажи\w*|підбер\w*|знайд\w*|скажи|скинь|просто|зовсім|взагалі|нібито|будь-що|будь-який|будь-яке|будь-яка|товар\w*|річ|речі|продукт\w*|вибер\w*|давай|дай|тепер|тепеp|зараз|розвиваюч\w*|розвивальн\w*|розвиваюч|розвиваючі|навчальн\w*|цікав\w*|гарн\w*|хорош\w*|корисн\w*|кращ\w*|крут\w*)\b/ui', '', $productQuery);
@@ -950,16 +956,36 @@ abstract class BaseAgent
         $hasGiftIntent = (bool) preg_match($giftRegex, $lower);
         $hasPdfIntent = (bool) preg_match('/\bpdf\b|\bзошит\b|\bпосібник\b|\bкартк/u', $lower);
         $hasCareIntent = (bool) preg_match('/\bдогляд/u', $lower);
+        // User explicitly asked for a certificate — then we keep certificates.
+        $hasCertificateIntent = (bool) preg_match('/\bсертифікат|\bgift\s*card\b|\bподарунков(?:ий|у)\s+сертифікат/u', $lower);
+        // Detect "~1 year" / toddler context. Both digit and no-digit forms are accepted.
+        $hasOneYearContext = (bool) preg_match('/\b(?:на\s+)?(?:один\s+)?(?:1\s*(?:рік|рочок|р\.|річ)|рочок|годик)\b/u', $lower)
+            || (bool) preg_match('/\bна\s+(?:рік|рочок|годик|рочка)\b/u', $lower)
+            || (bool) preg_match('/\b1\s*-?\s*3\s*(?:рок|рік|річ)/u', $lower)
+            || (bool) preg_match('/\bтодлер/u', $lower);
 
         // For follow-up messages ("покажи ще", "ще варіанти", "більше"), check conversation
         // history for gift intent — the user may have started with "подарунок на рік" and now
         // just says "покажи ще", but context is still gift-related.
-        if (! $hasGiftIntent && $sessionId) {
+        if ($sessionId) {
             try {
                 $history = $this->loadConversationHistory($sessionId);
                 foreach (array_reverse($history) as $msg) {
-                    if (($msg['role'] ?? '') === 'user' && preg_match($giftRegex, mb_strtolower($msg['content'] ?? ''))) {
+                    if (($msg['role'] ?? '') !== 'user') {
+                        continue;
+                    }
+                    $histLower = mb_strtolower($msg['content'] ?? '');
+                    if (! $hasGiftIntent && preg_match($giftRegex, $histLower)) {
                         $hasGiftIntent = true;
+                    }
+                    if (! $hasOneYearContext
+                        && (preg_match('/\b(?:на\s+)?(?:один\s+)?(?:1\s*(?:рік|рочок|р\.|річ)|рочок|годик)\b/u', $histLower)
+                            || preg_match('/\bна\s+(?:рік|рочок|годик|рочка)\b/u', $histLower)
+                            || preg_match('/\bтодлер/u', $histLower))
+                    ) {
+                        $hasOneYearContext = true;
+                    }
+                    if ($hasGiftIntent && $hasOneYearContext) {
                         break;
                     }
                 }
@@ -996,9 +1022,32 @@ abstract class BaseAgent
                 }
             }
 
-            // Exclude certificates / gift packaging unless the user mentions gift.
+            // Exclude certificates / gift packaging UNLESS the user explicitly asks for a certificate.
+            // Previously this only excluded when no gift intent, which caused certificates to leak
+            // into "подарунковий набір для малюка" queries (user wanted an actual kit, not a card).
+            if (! $hasCertificateIntent) {
+                if (str_contains($titleLower, 'сертифікат') || str_contains($titleLower, 'gift card')) {
+                    continue;
+                }
+            }
+
+            // Exclude empty gift packaging (bags/boxes) when no gift intent — these are not
+            // standalone presents, only add-ons at checkout.
             if (! $hasGiftIntent) {
-                if (str_contains($titleLower, 'сертифікат') || str_contains($titleLower, 'подарунковий пакет') || str_contains($titleLower, 'подарунковий набір')) {
+                if (str_contains($titleLower, 'подарунковий пакет') || str_contains($titleLower, 'подарункова упаковка')) {
+                    continue;
+                }
+            }
+
+            // Exclude newborn-only products when the user clearly asks for a ~1-year gift.
+            // Titles like "Рання Пташка" / "новонародж" / "0-6 міс" belong to МАЛЮКАМ 0-1 and
+            // are inappropriate for a toddler birthday gift.
+            if ($hasOneYearContext && $hasGiftIntent) {
+                if (preg_match('/\bранн[яьоiі]\s+пташ|\bновонародж|\bнемовлят|\b0\s*[\x{2013}\-]\s*6\s*міс|\bдо\s*6\s*місяц|\b0\s*[\x{2013}\-]\s*1\s*(?:рік|року)/u', $titleLower)) {
+                    continue;
+                }
+                // Category-path level: "малюкам 0 – 1" is newborn-only.
+                if (preg_match('/малюкам\s+0\s*[\x{2013}\-]\s*1/u', $catLower)) {
                     continue;
                 }
             }
@@ -2587,6 +2636,8 @@ PROMPT;
                             'brand' => ['type' => 'string', 'description' => 'Бренд товару'],
                             'price_min' => ['type' => 'number', 'description' => 'Мін. ціна (для преміум)'],
                             'price_max' => ['type' => 'number', 'description' => 'Макс. ціна (для бюджетних)'],
+                            'min_age_months' => ['type' => 'integer', 'description' => 'Мінімальний вік дитини у місяцях (для вікової фільтрації). Приклади: "1 рік / на рік / рочок / годик" → 12, "2 роки" → 24, "6 місяців" → 6. Використовуй разом з max_age_months.'],
+                            'max_age_months' => ['type' => 'integer', 'description' => 'Максимальний вік дитини у місяцях. Приклади: "1 рік" → 36 (розширюємо до тодлерів), "2-3 роки" → 36, "до року" → 12.'],
                             'color' => ['type' => 'string', 'description' => 'Колір'],
                             'exclude' => ['type' => 'string', 'description' => 'Виключити слово з назви'],
                             'exclude_shown' => ['type' => 'boolean', 'description' => 'true = виключити вже показані товари (для "покажи ще"). false = показати всі включаючи раніше показані'],
@@ -2775,6 +2826,12 @@ PROMPT;
         }
         if (! empty($args['price_max'])) {
             $filters['price_max'] = (float) $args['price_max'];
+        }
+        if (isset($args['min_age_months']) && is_numeric($args['min_age_months'])) {
+            $filters['min_age_months'] = (int) $args['min_age_months'];
+        }
+        if (isset($args['max_age_months']) && is_numeric($args['max_age_months'])) {
+            $filters['max_age_months'] = (int) $args['max_age_months'];
         }
         if (! empty($args['brand'])) {
             $filters['brand'] = $args['brand'];

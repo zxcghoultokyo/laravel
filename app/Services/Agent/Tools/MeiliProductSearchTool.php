@@ -230,8 +230,32 @@ class MeiliProductSearchTool
             // so only products appropriate for that age are returned.
             // Products WITHOUT age data (NULL) should still pass — only exclude products
             // that explicitly have age data outside the requested range.
+            //
+            // Priority: GPT-supplied min_age_months/max_age_months → query text → null
+            $gptMinAge = isset($filters['min_age_months']) ? (int) $filters['min_age_months'] : null;
+            $gptMaxAge = isset($filters['max_age_months']) ? (int) $filters['max_age_months'] : null;
             $requestedAgeMonths = $this->extractAgeMonthsFromQuery($query.' '.($filters['_user_message'] ?? ''));
-            if ($requestedAgeMonths !== null) {
+
+            if ($gptMinAge !== null || $gptMaxAge !== null) {
+                // GPT explicitly said the range — use it as the "requested" window.
+                if ($gptMaxAge !== null) {
+                    // Products must have min_age_months <= gptMaxAge (or NULL).
+                    $filterParts[] = "(age_min_months IS NULL OR age_min_months <= {$gptMaxAge})";
+                }
+                if ($gptMinAge !== null) {
+                    // Products must have max_age_months >= gptMinAge (or NULL).
+                    $filterParts[] = "(age_max_months IS NULL OR age_max_months >= {$gptMinAge})";
+                }
+                // Use midpoint-ish anchor for downstream logic (post-filtering).
+                if ($requestedAgeMonths === null) {
+                    $requestedAgeMonths = $gptMinAge ?? $gptMaxAge;
+                }
+                Log::info('MeiliProductSearchTool: age filter applied (GPT-supplied)', [
+                    'gpt_min_age_months' => $gptMinAge,
+                    'gpt_max_age_months' => $gptMaxAge,
+                    'anchor_months' => $requestedAgeMonths,
+                ]);
+            } elseif ($requestedAgeMonths !== null) {
                 // Include: products with no age data OR products where min_months <= requested age
                 $filterParts[] = "(age_min_months IS NULL OR age_min_months <= {$requestedAgeMonths})";
                 // Include: products with no max, or max >= requested age
@@ -2901,6 +2925,10 @@ class MeiliProductSearchTool
             }
         } elseif (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
+        } elseif (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
+            // "на рік", "на рочок", "на годик", "один рочок" without digit → 1 year
+            $age = 1;
         } else {
             $age = null;
         }
@@ -2996,6 +3024,12 @@ class MeiliProductSearchTool
             return (int) $m[1] * 12;
         }
 
+        // No-digit year references: "на рік", "на рочок", "на годик", "рочок" → 1 year = 12 months
+        if (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
+            return 12;
+        }
+
         return null;
     }
 
@@ -3011,6 +3045,12 @@ class MeiliProductSearchTool
             $age = (int) $m[1];
 
             return in_array($age, [1, 3, 7]);
+        }
+
+        // No-digit year references ("на рік", "рочок", "годик") → boundary age 1
+        if (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
+            return true;
         }
 
         return false;

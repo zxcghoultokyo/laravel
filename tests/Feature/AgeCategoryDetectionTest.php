@@ -67,6 +67,22 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertEquals('школярам', $result);
     }
 
+    public function test_age_7_maps_to_preschool_boundary(): void
+    {
+        // Age 7 is the upper boundary of ДОШКІЛЬНЯТАМ 3-7 (inclusive).
+        // Should prefer дошкільнятам over школярам so tenants without
+        // ШКОЛЯРАМ category (e.g. bavkatoys) still return matching products.
+        $result = $this->method->invoke($this->tool, 'щось для дівчинки 7 років');
+        $this->assertEquals('дошкільнятам', $result);
+    }
+
+    public function test_age_8_maps_to_school(): void
+    {
+        // Above the 7-year boundary → школярам.
+        $result = $this->method->invoke($this->tool, 'подарунок на 8 років');
+        $this->assertEquals('школярам', $result);
+    }
+
     public function test_detects_malyuk_keyword(): void
     {
         $result = $this->method->invoke($this->tool, 'іграшки для малюка');

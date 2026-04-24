@@ -2989,12 +2989,17 @@ class MeiliProductSearchTool
             return null;
         }
 
-        // Map age to category keywords (common patterns in toy stores)
+        // Map age to category keywords (common patterns in toy stores).
+        // Boundary years belong to the LOWER category because category labels are inclusive:
+        //   МАЛЮКАМ 0-1, ТОДЛЕРАМ 1-3, ДОШКІЛЬНЯТАМ 3-7, ШКОЛЯРАМ 7+.
+        // So age=7 → дошкільнятам (adjacent-upper fallback will still pull школярам
+        // when needed). This prevents returning 0 results for tenants whose catalog
+        // ends at дошкільнятам (e.g. bavkatoys has no ШКОЛЯРАМ category).
         if ($age < 1) {
             $category = 'малюкам';
         } elseif ($age < 3) {
             $category = 'тодлерам';
-        } elseif ($age < 7) {
+        } elseif ($age <= 7) {
             $category = 'дошкільнятам';
         } else {
             $category = 'школярам';

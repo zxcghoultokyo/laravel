@@ -2926,8 +2926,9 @@ class MeiliProductSearchTool
         } elseif (preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower, $matches)) {
             $age = (int) $matches[1];
         } elseif (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
-            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
-            // "на рік", "на рочок", "на годик", "один рочок" without digit → 1 year
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)
+            || preg_match('/(?<!\d)(?<!\d\s)\b(?:рік|року)\b/ui', $lower)) {
+            // "на рік", "рочок", "годик", standalone "рік"/"року" without digit → 1 year
             $age = 1;
         } else {
             $age = null;
@@ -3024,9 +3025,10 @@ class MeiliProductSearchTool
             return (int) $m[1] * 12;
         }
 
-        // No-digit year references: "на рік", "на рочок", "на годик", "рочок" → 1 year = 12 months
+        // No-digit year references: "на рік", "на рочок", "на годик", "рочок", standalone "рік"/"року" → 1 year = 12 months
         if (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
-            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)
+            || preg_match('/(?<!\d)(?<!\d\s)\b(?:рік|року)\b/ui', $lower)) {
             return 12;
         }
 
@@ -3047,9 +3049,10 @@ class MeiliProductSearchTool
             return in_array($age, [1, 3, 7]);
         }
 
-        // No-digit year references ("на рік", "рочок", "годик") → boundary age 1
+        // No-digit year references ("на рік", "рочок", "годик", standalone "рік"/"року") → boundary age 1
         if (preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
-            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)) {
+            || preg_match('/\b(?:рочок|годик)\b/ui', $lower)
+            || preg_match('/(?<!\d)(?<!\d\s)\b(?:рік|року)\b/ui', $lower)) {
             return true;
         }
 

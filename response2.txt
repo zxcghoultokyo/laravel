@@ -1,0 +1,204 @@
+data: {"text":"Обробляю...","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"status"}
+
+data: {"text":"Аналізую запит...","phase":"thinking","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"status"}
+
+data: {"text":"Шукаю товари...","phase":"searching","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"status"}
+
+data: {"text":"Готую відповідь...","phase":"generating","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"status"}
+
+data: {"text":"Ось","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" по","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"дар","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"унк","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ови","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"й н","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"абі","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"р д","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ля ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"мал","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"юка","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" ві","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"д р","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"оку","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":":\n\n","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"- *","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"*Бл","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"аго","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"дій","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"на ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ігр","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ашк","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"а “","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"Ран","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ня ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"Пта","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"шка","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"”**","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":": Ц","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ей ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"наб","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ір ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"вкл","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"юча","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"є к","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"омф","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"орт","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ер ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"та ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"дер","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ев’","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"яни","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"й п","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"рор","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ізу","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"вач","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":", в","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"иго","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"тов","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"лен","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ий ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"з н","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ату","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"рал","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ьни","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"х м","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ате","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ріа","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"лів","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":". І","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"гра","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"шка","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" ст","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"вор","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ена","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" з ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"люб","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ов’","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ю д","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ля ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"най","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"мен","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ших","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" і ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"най","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"сил","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ьні","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ших","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" ма","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"люк","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ів.","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" Ви","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"руч","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ені","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" ко","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"шти","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" з ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"про","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"даж","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"у п","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"ере","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"даю","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"тьс","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"я у","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":" фо","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"нди","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":", я","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+
+data: {"text":"кі ","session_id":"test_1777047303_b","request_id":"925c79c2-1213-4033-bf4e-be23fd9eefc5","type":"chunk"}
+

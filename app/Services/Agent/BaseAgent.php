@@ -733,9 +733,10 @@ abstract class BaseAgent
         // Detect age in years: "1 рік", "3 роки", "7 років", "на 2 роки"
         $hasDigitYear = (bool) preg_match('/(\d{1,2})\s*(?:рок|рік|річ|р\.)/ui', $lower);
         $hasDigitMonth = (bool) preg_match('/(\d{1,2})\s*(?:місяц|міс)/ui', $lower);
-        // No-digit year references: "на рік", "на рочок", "на годик", "один рочок" → treat as 1 year
+        // No-digit year references: "на рік", "на рочок", "на годик", "один рочок", standalone "рік"/"року" → treat as 1 year
         $hasNoDigitYear = (bool) preg_match('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', $lower)
-            || (bool) preg_match('/\b(?:рочок|годик)\b/ui', $lower);
+            || (bool) preg_match('/\b(?:рочок|годик)\b/ui', $lower)
+            || (bool) preg_match('/(?<!\d)(?<!\d\s)\b(?:рік|року)\b/ui', $lower);
 
         if (! $hasDigitYear && ! $hasDigitMonth && ! $hasNoDigitYear) {
             return null;
@@ -746,6 +747,8 @@ abstract class BaseAgent
         // Strip no-digit year phrases: "на рік", "на рочок", "на годик", "один рочок"
         $productQuery = preg_replace('/\b(?:на|у|в)\s+(?:один\s+)?(?:рік|рочок|годик|рочка)\b/ui', '', $productQuery);
         $productQuery = preg_replace('/\b(?:рочок|годик)\b/ui', '', $productQuery);
+        // Strip standalone "рік"/"року" when no digit precedes (already handled as 1 year above)
+        $productQuery = preg_replace('/(?<!\d)(?<!\d\s)\b(?:рік|року)\b/ui', '', $productQuery);
         // Use relaxed pattern for "дитин*" to handle typos like "дитттинві" (triple т)
         $productQuery = preg_replace('/\bди[тт]+ин\w*\b/ui', '', $productQuery);
         $productQuery = preg_replace('/\b(для|дитяч\w*|малюк\w*|на|від|до|підлітк\w*|хлопчик\w*|дівчинк\w*|покажи|мені|будь\s+ласка|подарунок|подарунки|а|і|й|та|що|як|ну|от|ось|це|той|ці|ті|щось|якщо|може|якийсь|якийс\w*|якась|якусь|якесь|яке|який|яка|про|ще|дуже|трохи|потрібн\w*|хоч\w*|порадь\w*|порекомендуй\w*|рекомендуй\w*|запропонуй\w*|підкажи\w*|підбер\w*|знайд\w*|скажи|скинь|просто|зовсім|взагалі|нібито|будь-що|будь-який|будь-яке|будь-яка|товар\w*|річ|речі|продукт\w*|вибер\w*|давай|дай|тепер|тепеp|зараз|розвиваюч\w*|розвивальн\w*|розвиваюч|розвиваючі|навчальн\w*|цікав\w*|гарн\w*|хорош\w*|корисн\w*|кращ\w*|крут\w*)\b/ui', '', $productQuery);

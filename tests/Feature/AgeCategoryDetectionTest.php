@@ -346,6 +346,19 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('на рочок'));
         $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('що купити на годик'));
         $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('рочок синові'));
+        // Standalone "рік"/"року" without "на/у/в" prefix (no digit before)
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('подарунковий набір для малюка рік'));
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('малюкові виповнюється рік'));
+        $this->assertEquals(12, $this->tool->extractAgeMonthsFromQuery('іграшка для дитини року'));
+        // Digit-prefixed must NOT trigger the standalone branch alone; still resolves via digit path
+        $this->assertEquals(24, $this->tool->extractAgeMonthsFromQuery('на 2 рік'));
+    }
+
+    public function test_detects_standalone_rik_as_toddler(): void
+    {
+        $result = $this->method->invoke($this->tool, 'подарунковий набір для малюка рік');
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('тодлерам', $result);
     }
 
     public function test_boundary_age_no_digit_year(): void

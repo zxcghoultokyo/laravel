@@ -1064,6 +1064,42 @@ class MeiliProductSearchTool
                 ]);
             }
 
+            // Category boost: prioritize EXACT target age category over adjacent.
+            // Applied AFTER randomization so shuffle can't mix buckets.
+            // Within each bucket, original (randomized) order is preserved → stable relevance + variety,
+            // but ТОДЛЕРАМ always surface above ДОШКІЛЬНЯТАМ for a 1-year-old query.
+            if ($categoryFilter && count($filtered) > 1) {
+                $catLowerBoost = mb_strtolower(trim($categoryFilter));
+                $adjUpperBoost = $adjacentUpperCat ? mb_strtolower(trim($adjacentUpperCat)) : null;
+                $exactBucket = [];
+                $adjBucket = [];
+                $otherBucket = [];
+                foreach ($filtered as $hit) {
+                    $hitCat = mb_strtolower(trim($hit['category_path'] ?? ''));
+                    if ($hitCat !== '' && (str_contains($hitCat, $catLowerBoost) || str_contains($catLowerBoost, $hitCat))) {
+                        $exactBucket[] = $hit;
+                    } elseif ($adjUpperBoost && $hitCat !== '' && str_contains($hitCat, $adjUpperBoost)) {
+                        $adjBucket[] = $hit;
+                    } else {
+                        $otherBucket[] = $hit;
+                    }
+                }
+                $filtered = array_merge($exactBucket, $adjBucket, $otherBucket);
+                PipelineTracer::current()?->step('meili.category_boost', [
+                    'category' => $categoryFilter,
+                    'exact_count' => count($exactBucket),
+                    'adjacent_count' => count($adjBucket),
+                    'other_count' => count($otherBucket),
+                ]);
+                Log::info('MeiliProductSearchTool: category boost applied', [
+                    'category' => $categoryFilter,
+                    'adjacent' => $adjacentUpperCat,
+                    'exact' => count($exactBucket),
+                    'adj' => count($adjBucket),
+                    'other' => count($otherBucket),
+                ]);
+            }
+
             // FINAL STRICT COLOR ENFORCEMENT
             // After all retries (exactTitleFallback, retryWithIndividualWords, semantic,
             // dedupe, etc.) any of which can re-introduce products that don't match the

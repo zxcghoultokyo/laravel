@@ -4,21 +4,19 @@ Purpose: make agents productive fast in this Laravel 12 multi-tenant AI‑commer
 
 ## 🚨 Git Workflow (ОБОВ'ЯЗКОВО!)
 
-- **Завжди працюй на `dev` гілці** — ніколи не пуш напряму в `main`
-- Після змін: запусти тести, перевір що все працює як очікується
-- Тільки після підтвердження що працює на dev: запитай користувача **"Пушимо на прод?"** перед мержем в main
-- **Production** = `main` branch → `aintento.laravel.cloud`
-- **Staging** = `dev` branch → `aintento-dev.laravel.cloud`
+- **Працюємо напряму на `main`** — гілка `dev` / staging (`aintento-dev.laravel.cloud`) наразі **не активна**, не використовуй її.
+- **Production** = `main` branch → `aintento.laravel.cloud`.
+- Перед пушем: запустити відповідні тести (`php artisan test --compact --filter=...`), і якщо потрібно `vendor/bin/pint --dirty --format agent`.
+- Деплой на прод ~90–120 сек після `git push origin main`.
+- Якщо зміна ризикова — спитай користувача підтвердження перед пушем.
 
 ```bash
-# Правильний порядок роботи:
-git checkout dev
+# Стандартний порядок:
+git checkout main
+git pull origin main
 # ... робиш зміни ...
-php artisan test --compact
-git add -A && git commit -m "..." && git push origin dev
-# ... чекаєш деплой на staging, перевіряєш ...
-# ... питаєш користувача "Пушимо на прод?" ...
-git checkout main && git merge dev && git push origin main
+php artisan test --compact --filter=RelevantTest
+git add -A && git commit -m "..." && git push origin main
 ```
 
 ## 🏗️ Multi-Tenant Architecture
@@ -237,7 +235,31 @@ curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_
 
 # DB stats
 curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+
+# RAG audit — 3-tier debug (user_query / retrieved_context / system_prompt)
+# Use for diagnosing: retrieval errors, context noise, bad formatting, weak prompts
+curl "https://aintento.laravel.cloud/api/diagnostic/rag-audit?key=diagnostic_secret_key_2025&tenant_id=20&q=іграшки%20для%20малюка%20на%20рік"
+
+# Pipeline trace for a session (last 5 requests, TTL 2h)
+curl "https://aintento.laravel.cloud/api/diagnostic/pipeline-trace/{sessionId}?key=diagnostic_secret_key_2025"
 ```
+
+### 🔍 RAG Audit — дебаг чому бот видає дичину
+
+`GET /api/diagnostic/rag-audit?q=...&tenant_id=...` запускає один запит через `FunctionCallingAgent` і повертає 3 шари:
+
+| Поле | Що показує | Діагностика |
+|------|-----------|-------------|
+| `user_query` | запит користувача | — |
+| `retrieved_context.tool_calls[]` | що Meili/DB реально повернув GPT-у (articles, categories, price_range, payload_bytes) | `products_count=0` → **retrieval error**; `payload_bytes > 20k` → **noise** |
+| `system_prompt` | source (modular/custom_preset/default_legacy), length_chars, preview, hash | `default_legacy` + 14K → **слабкий промпт**, треба preset |
+| `response` | фінальна відповідь користувачу | articles у response ≠ articles у retrieved → **hallucination/format** |
+
+Ключові трейс-кроки (у `pipeline-trace` і в `full_trace`):
+- `pipeline.start` — запит
+- `agent.system_prompt` — snapshot промпту
+- `agent.tool_result` — retrieved context з кожного tool call
+- `meili.category_boost`, `meili.safety_net` — ранжування у Meili
 
 Full docs: [docs/DIAGNOSTIC_API.md](docs/DIAGNOSTIC_API.md)
 

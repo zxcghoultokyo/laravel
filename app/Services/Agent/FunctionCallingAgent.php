@@ -40,6 +40,7 @@ class FunctionCallingAgent extends BaseAgent
         // Set tenant context for tone service
         $tenantId = $this->searchTool->getCurrentTenantId();
         $this->toneService->setTenantId($tenantId);
+        $this->activeSessionId = $sessionId;
 
         Log::info('FunctionCallingAgent: processing', ['message' => $message, 'session_id' => $sessionId, 'tenant_id' => $tenantId]);
 

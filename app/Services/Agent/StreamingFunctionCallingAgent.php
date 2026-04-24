@@ -49,6 +49,7 @@ class StreamingFunctionCallingAgent extends BaseAgent
         // Set tenant context for tone service
         $tenantId = $this->searchTool->getCurrentTenantId();
         $this->toneService->setTenantId($tenantId);
+        $this->activeSessionId = $sessionId;
 
         // Log user message to DB
         $this->logUserMessage($sessionId, $message);

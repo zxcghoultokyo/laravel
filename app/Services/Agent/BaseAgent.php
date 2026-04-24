@@ -106,6 +106,9 @@ abstract class BaseAgent
     // Current user message (for modular prompt building)
     protected string $currentMessage = '';
 
+    // Current session ID (set at stream/processMessage entry)
+    protected ?string $activeSessionId = null;
+
     public function __construct(
         MeiliProductSearchTool $searchTool,
         ProductDetailsTool $detailsTool,
@@ -936,16 +939,34 @@ abstract class BaseAgent
      * @param  array<int, mixed>  $products
      * @return array<int, mixed>
      */
-    protected function filterTenantBabyQueryProducts(array $products, string $originalMessage, ?int $tenantId): array
+    protected function filterTenantBabyQueryProducts(array $products, string $originalMessage, ?int $tenantId, ?string $sessionId = null): array
     {
         if ($tenantId !== 20 || empty($products)) {
             return $products;
         }
 
         $lower = mb_strtolower($originalMessage);
-        $hasGiftIntent = (bool) preg_match('/\bподарун|\bдарун|\bподаруват|\bна\s+подар|\bна\s+р(?:ік|очок|очка)\b|\bна\s+день\s+народж|\bgift\b/u', $lower);
+        $giftRegex = '/\bподарун|\bдарун|\bподаруват|\bна\s+подар|\bна\s+р(?:ік|очок|очка)\b|\bна\s+день\s+народж|\bgift\b/u';
+        $hasGiftIntent = (bool) preg_match($giftRegex, $lower);
         $hasPdfIntent = (bool) preg_match('/\bpdf\b|\bзошит\b|\bпосібник\b|\bкартк/u', $lower);
         $hasCareIntent = (bool) preg_match('/\bдогляд/u', $lower);
+
+        // For follow-up messages ("покажи ще", "ще варіанти", "більше"), check conversation
+        // history for gift intent — the user may have started with "подарунок на рік" and now
+        // just says "покажи ще", but context is still gift-related.
+        if (! $hasGiftIntent && $sessionId) {
+            try {
+                $history = $this->loadConversationHistory($sessionId);
+                foreach (array_reverse($history) as $msg) {
+                    if (($msg['role'] ?? '') === 'user' && preg_match($giftRegex, mb_strtolower($msg['content'] ?? ''))) {
+                        $hasGiftIntent = true;
+                        break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Silently ignore — filter still works without history.
+            }
+        }
 
         // Products that are NEVER appropriate as a gift (tester feedback from т20 / Аліна):
         // - фартух / нарукавники (утилітарний одяг, не дарують)
@@ -3024,7 +3045,7 @@ PROMPT;
         $contextMessage = $args['_context_message'] ?? ($this->currentMessage ?? $query);
         $tenantId = $this->searchTool->getCurrentTenantId();
         $beforeTenantFilter = count($results);
-        $results = $this->filterTenantBabyQueryProducts($results, (string) $contextMessage, $tenantId);
+        $results = $this->filterTenantBabyQueryProducts($results, (string) $contextMessage, $tenantId, $this->activeSessionId);
 
         // Deduplicate variants of the same parent (prevents showing "2 Такане різного принту").
         $results = $this->dedupByParentArticle($results);

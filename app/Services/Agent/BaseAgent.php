@@ -943,9 +943,22 @@ abstract class BaseAgent
         }
 
         $lower = mb_strtolower($originalMessage);
-        $hasGiftIntent = (bool) preg_match('/\bподарун|\bдарун|\bподаруват|\bна\s+подар|\bgift\b/u', $lower);
+        $hasGiftIntent = (bool) preg_match('/\bподарун|\bдарун|\bподаруват|\bна\s+подар|\bна\s+р(?:ік|очок|очка)\b|\bна\s+день\s+народж|\bgift\b/u', $lower);
         $hasPdfIntent = (bool) preg_match('/\bpdf\b|\bзошит\b|\bпосібник\b|\bкартк/u', $lower);
         $hasCareIntent = (bool) preg_match('/\bдогляд/u', $lower);
+
+        // Products that are NEVER appropriate as a gift (tester feedback from т20 / Аліна):
+        // - фартух / нарукавники (утилітарний одяг, не дарують)
+        // - підвіски на ліжечко/тренажер (ранній вік 0-6м, не універсальний подарунок)
+        // - тренажер-перекладина (габаритний, вибирають батьки, не гість)
+        // - коробочка постійності (актуальна лише до ~12м, хоч і в каталозі 1-3)
+        $nonGiftPatterns = [
+            '/\bфартух/u',
+            '/\bнарукавник/u',
+            '/\bпідвіск(?:и|а|у|ою|ам)\b/u',
+            '/\bтренажер-перекладин/u',
+            '/\bкоробочка\s+постійност/u',
+        ];
 
         $filtered = [];
         foreach ($products as $product) {
@@ -972,6 +985,20 @@ abstract class BaseAgent
             // Exclude parent tools/care kits unless explicitly requested.
             if (! $hasCareIntent) {
                 if (preg_match('/\bнабір\s+(?:по\s+)?догляду\b|\bдля\s+догляду\s+за\b|\bінструмент(?:и|ів)?\s+для\s+батьк/u', $titleLower)) {
+                    continue;
+                }
+            }
+
+            // GIFT-CONTEXT: exclude non-gift products (tester feedback).
+            if ($hasGiftIntent) {
+                $skip = false;
+                foreach ($nonGiftPatterns as $pattern) {
+                    if (preg_match($pattern, $titleLower)) {
+                        $skip = true;
+                        break;
+                    }
+                }
+                if ($skip) {
                     continue;
                 }
             }

@@ -311,16 +311,41 @@ abstract class BaseAgent
             return null;
         }
 
+        // Inject age context from current message + history so we don't return
+        // off-target products (e.g., gift cards / newborn kits) when the user
+        // earlier specified the child's age.
+        $ageArgs = $this->injectAgeContextFromHistory([], $this->activeSessionId, $originalMessage);
+        $filters = [];
+        if (! empty($ageArgs['category'])) {
+            $filters['category'] = $ageArgs['category'];
+        }
+        if (isset($ageArgs['min_age_months'])) {
+            $filters['min_age_months'] = $ageArgs['min_age_months'];
+        }
+        if (isset($ageArgs['max_age_months'])) {
+            $filters['max_age_months'] = $ageArgs['max_age_months'];
+        }
+
         Log::info('BaseAgent: force search on age clarification', [
             'gpt_wanted_to_say' => mb_substr($gptResponse, 0, 100),
             'original_message' => $originalMessage,
             'search_query' => $searchQuery,
+            'age_filters' => $filters,
         ]);
 
-        $products = $this->searchTool->search($searchQuery, [], 9);
+        $products = $this->searchTool->search($searchQuery, $filters, 9);
 
         if (empty($products)) {
             return null; // Let GPT response through
+        }
+
+        // Apply tenant-specific baby-query post-filter so newborn-only / gift-card
+        // products don't leak into toddler/preschool gift requests.
+        $tenantId = $this->searchTool->getCurrentTenantId();
+        $products = $this->filterTenantBabyQueryProducts($products, $originalMessage, $tenantId, $this->activeSessionId);
+
+        if (empty($products)) {
+            return null;
         }
 
         // Shuffle for variety
@@ -1193,12 +1218,11 @@ abstract class BaseAgent
                 }
             }
 
-            // Exclude empty gift packaging (bags/boxes) when no gift intent — these are not
-            // standalone presents, only add-ons at checkout.
-            if (! $hasGiftIntent) {
-                if (str_contains($titleLower, 'подарунковий пакет') || str_contains($titleLower, 'подарункова упаковка')) {
-                    continue;
-                }
+            // Always exclude empty gift packaging (bags/boxes) — packaging is never the
+            // gift itself, only an add-on at checkout. Previously gated on !$hasGiftIntent
+            // which let "Подарунковий пакет" leak into "комплект на подарунок" queries.
+            if (str_contains($titleLower, 'подарунковий пакет') || str_contains($titleLower, 'подарункова упаковка')) {
+                continue;
             }
 
             // Exclude newborn-only products when the user clearly asks for a ~1-year gift.

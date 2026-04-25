@@ -383,6 +383,12 @@ CONTEXT;
                     }
                 }
 
+                // Carry age context (months + category) from earlier history when the
+                // current follow-up message no longer mentions it.
+                if ($functionName === 'search_products') {
+                    $args = $this->injectAgeContextFromHistory($args, $sessionId, $normalizedMessage);
+                }
+
                 Log::info('StreamingAgent: executing tool', [
                     'function' => $functionName,
                     'args' => $args,

@@ -644,6 +644,13 @@ CONTEXT;
                 }
             }
 
+            // Carry age context (months + category) from earlier history when the
+            // current follow-up message no longer mentions it (e.g. "а є комплекти
+            // на подарунок?" after "щось дитинці на рочок").
+            if ($functionName === 'search_products') {
+                $args = $this->injectAgeContextFromHistory($args, $sessionId, $originalMessage);
+            }
+
             Log::info('FunctionCallingAgent: executing tool', [
                 'function' => $functionName,
                 'args' => $args,

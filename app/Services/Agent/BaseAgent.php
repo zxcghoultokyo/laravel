@@ -1002,6 +1002,111 @@ abstract class BaseAgent
      * @param  array<int, mixed>  $products
      * @return array<int, mixed>
      */
+    /**
+     * Detect a child's age (months + category) from conversation history when the
+     * current user message no longer mentions it. This keeps GPT-driven follow-ups
+     * (e.g. "а є якісь комплекти на подарунок?") inside the original toddler/baby
+     * context after the user once said "на рочок".
+     *
+     * Returns ['months' => ?int, 'category' => ?string, 'source_message' => ?string].
+     */
+    protected function detectAgeContextFromHistory(?string $sessionId): array
+    {
+        $result = ['months' => null, 'category' => null, 'source_message' => null];
+
+        if (! $sessionId) {
+            return $result;
+        }
+
+        try {
+            $history = $this->loadConversationHistory($sessionId);
+        } catch (\Throwable $e) {
+            return $result;
+        }
+
+        foreach (array_reverse($history) as $msg) {
+            if (($msg['role'] ?? '') !== 'user') {
+                continue;
+            }
+            $content = (string) ($msg['content'] ?? '');
+            if ($content === '') {
+                continue;
+            }
+
+            $months = $this->searchTool->extractAgeMonthsFromQuery($content);
+            $category = $this->searchTool->detectAgeCategoryFromQuery($content);
+
+            if ($months !== null || $category !== null) {
+                $result['months'] = $months;
+                $result['category'] = $category;
+                $result['source_message'] = $content;
+
+                return $result;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Inject category + age params (min/max months) into search_products args when
+     * the user previously stated a child's age but the current GPT call dropped it.
+     * Idempotent — never overrides values already supplied by GPT.
+     *
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
+     */
+    protected function injectAgeContextFromHistory(array $args, ?string $sessionId, string $currentMessage): array
+    {
+        // If GPT already provided full age context, do nothing.
+        if (! empty($args['category']) && isset($args['min_age_months'])) {
+            return $args;
+        }
+
+        // First try the current message — cheap & avoids loading history.
+        $months = $this->searchTool->extractAgeMonthsFromQuery($currentMessage);
+        $category = $this->searchTool->detectAgeCategoryFromQuery($currentMessage);
+        $source = 'current_message';
+
+        if ($months === null && $category === null) {
+            $hist = $this->detectAgeContextFromHistory($sessionId);
+            $months = $hist['months'];
+            $category = $hist['category'];
+            if ($months !== null || $category !== null) {
+                $source = 'history';
+            }
+        }
+
+        if ($months === null && $category === null) {
+            return $args;
+        }
+
+        if (empty($args['category']) && $category) {
+            $args['category'] = $category;
+        }
+
+        if (! isset($args['min_age_months']) && $months !== null) {
+            // Treat declared age as the lower bound but allow ±12 months tolerance
+            // so toddler queries also surface upper-boundary toys (e.g. age=12 →
+            // 0..36 mo, covering МАЛЮКАМ + ТОДЛЕРАМ overlap for gift requests).
+            $args['min_age_months'] = max(0, $months - 12);
+            if (! isset($args['max_age_months'])) {
+                $args['max_age_months'] = $months + 24;
+            }
+        }
+
+        Log::info('BaseAgent: injected age context', [
+            'source' => $source,
+            'months' => $months,
+            'category' => $category,
+            'min_age_months' => $args['min_age_months'] ?? null,
+            'max_age_months' => $args['max_age_months'] ?? null,
+            'current_message' => mb_substr($currentMessage, 0, 80),
+        ]);
+
+        return $args;
+    }
+
     protected function filterTenantBabyQueryProducts(array $products, string $originalMessage, ?int $tenantId, ?string $sessionId = null): array
     {
         if ($tenantId !== 20 || empty($products)) {

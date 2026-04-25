@@ -28,3 +28,15 @@ response*.txt
 test-bavka*.ps1
 test-bavka-fix.py
 parse-bavka.ps1
+*.json
+!composer.json
+!package.json
+!package-lock.json
+!composer.lock
+!boost.json
+!phpunit.xml
+!tsconfig.json
+!resources/**/*.json
+test_results.txt
+v2_results.txt
+dev_root.html

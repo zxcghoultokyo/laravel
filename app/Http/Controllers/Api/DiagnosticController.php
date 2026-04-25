@@ -2801,7 +2801,11 @@ class DiagnosticController extends Controller
         app()->instance(\App\Models\Tenant::class, $tenant);
         config(['app.current_tenant_id' => $tenantId]);
 
-        $sessionId = 'rag-audit-'.uniqid('', true);
+        // Allow replaying against an existing session's history. The agent will
+        // load its own ChatMessage records via loadConversationHistory($sessionId),
+        // which is required to test follow-up flows where context comes from prior turns.
+        $replaySessionId = trim((string) $request->query('session_id', ''));
+        $sessionId = $replaySessionId !== '' ? $replaySessionId : 'rag-audit-'.uniqid('', true);
         $tracer = \App\Services\Chat\PipelineTracer::start($sessionId, $query);
 
         $started = microtime(true);

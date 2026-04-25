@@ -480,6 +480,48 @@ class AgeCategoryDetectionTest extends TestCase
         $this->assertCount(1, $result, 'Tenant 5 should not be affected by bavkatoys filter');
     }
 
+    public function test_filter_drops_set_components_when_set_is_present(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Набір дерев\'яних музичних інструментів', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+            ['title' => 'Клавеси (ритмічні палички)', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+            ['title' => 'Дитячий музичний інструмент рубель', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+            ['title' => 'Дерев\'яна пірамідка', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts(
+            $products,
+            'подарунок на рік',
+            20
+        );
+
+        $titles = array_column($result, 'title');
+        $this->assertContains('Набір дерев\'яних музичних інструментів', $titles);
+        $this->assertContains('Дерев\'яна пірамідка', $titles);
+        $this->assertNotContains('Клавеси (ритмічні палички)', $titles);
+        $this->assertNotContains('Дитячий музичний інструмент рубель', $titles);
+    }
+
+    public function test_filter_keeps_components_when_no_set_present(): void
+    {
+        $agent = $this->makeTestableAgent();
+
+        $products = [
+            ['title' => 'Клавеси (ритмічні палички)', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+            ['title' => 'Дитячий музичний інструмент рубель', 'category_path' => 'ІГРАШКИ/ТОДЛЕРАМ 1 – 3'],
+        ];
+
+        $result = $agent->exposeFilterTenantBabyQueryProducts(
+            $products,
+            'подарунок на рік',
+            20
+        );
+
+        $this->assertCount(2, $result, 'Without a Set in the result list, components must remain.');
+    }
+
     private function makeTestableAgent(): \Tests\Feature\TestableBaseAgent
     {
         $searchTool = $this->createMock(MeiliProductSearchTool::class);

@@ -1262,7 +1262,84 @@ abstract class BaseAgent
             $filtered[] = $product;
         }
 
+        // Gift-context: if the result set contains a ready-made SET / KIT, suppress
+        // the individual components of that set (clavesy, rubel', maracas, etc.).
+        // Customers asking for "подарунок" expect the boxed set, not its parts.
+        if ($hasGiftIntent) {
+            $filtered = $this->preferSetsOverComponents($filtered);
+        }
+
         return $filtered;
+    }
+
+    /**
+     * When a gift query returns both a "Набір/Комплект" product and its loose
+     * components, drop the components and keep only the set(s).
+     *
+     * Components are detected by title keywords typical for set members in the
+     * tenant 20 catalog (musical instruments, Montessori card singles, etc.).
+     *
+     * @param  array<int, mixed>  $products
+     * @return array<int, mixed>
+     */
+    protected function preferSetsOverComponents(array $products): array
+    {
+        if (count($products) < 2) {
+            return $products;
+        }
+
+        $hasSet = false;
+        foreach ($products as $product) {
+            $title = mb_strtolower((string) ($this->getProductField($product, 'title') ?? ''));
+            if (preg_match('/\bнабір\b|\bкомплект\b|\bпакунок\b|\bсет\b|\bbox\b/u', $title)) {
+                $hasSet = true;
+                break;
+            }
+        }
+
+        if (! $hasSet) {
+            return $products;
+        }
+
+        // Components that should be hidden whenever a Set/Kit is present in
+        // the same result list. Conservative: only well-known set members.
+        $componentPatterns = [
+            '/\bклавес/u',          // claves
+            '/\bрубель\b|\bрубел/u', // rubel
+            '/\bмаракас/u',         // maracas
+            '/\bритмічн[аіоу]+\s+паличк/u', // rhythm sticks
+            '/\bбубонц/u',          // small bells
+            '/\bтріскачк/u',        // ratchet
+            '/\bкастаньєт/u',       // castanets
+            '/\bтрикутник\s+муз/u', // musical triangle
+        ];
+
+        $kept = [];
+        foreach ($products as $product) {
+            $title = mb_strtolower((string) ($this->getProductField($product, 'title') ?? ''));
+
+            // Always keep the Set itself.
+            if (preg_match('/\bнабір\b|\bкомплект\b|\bпакунок\b|\bсет\b|\bbox\b/u', $title)) {
+                $kept[] = $product;
+
+                continue;
+            }
+
+            $isComponent = false;
+            foreach ($componentPatterns as $pattern) {
+                if (preg_match($pattern, $title)) {
+                    $isComponent = true;
+                    break;
+                }
+            }
+
+            if (! $isComponent) {
+                $kept[] = $product;
+            }
+        }
+
+        // Safety net: if filtering wiped everything, return the original list.
+        return empty($kept) ? $products : $kept;
     }
 
     /**

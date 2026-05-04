@@ -63,7 +63,7 @@ php artisan meili:index --tenant=2
 
 ### Крок 3: Перевірити результат
 ```bash
-curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=шолом&tenant_id=2&limit=10"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=<DIAGNOSTIC_KEY>&q=шолом&tenant_id=2&limit=10"
 ```
 
 Очікуваний результат:

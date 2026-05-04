@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Diagnostic API for debugging production issues
- * All endpoints require ?key=diagnostic_secret_key_2025
+ * All endpoints require ?key=<DIAGNOSTIC_KEY>
  */
 class DiagnosticController extends Controller
 {
@@ -21,7 +21,7 @@ class DiagnosticController extends Controller
 
     public function __construct()
     {
-        $this->secretKey = config('services.diagnostic.secret_key', 'diagnostic_secret_key_2025');
+        $this->secretKey = config('services.diagnostic.secret_key', '<DIAGNOSTIC_KEY>');
     }
 
     /**
@@ -7451,7 +7451,7 @@ class DiagnosticController extends Controller
      * Basic SSE connectivity test — sends 5 numbered events then done.
      * Use this to verify SSE works through the infrastructure (proxy, CDN, etc).
      *
-     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-sse?key=diagnostic_secret_key_2025"
+     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-sse?key=<DIAGNOSTIC_KEY>"
      */
     public function testSse(Request $request): StreamedResponse|JsonResponse
     {
@@ -7496,7 +7496,7 @@ class DiagnosticController extends Controller
      * Required: key + (token OR tenant_id)
      * Optional: message (default: "шоломи"), session_id (auto-generated if omitted)
      *
-     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-chat-sse?key=diagnostic_secret_key_2025&token=zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj&message=покажи+берці"
+     * curl -N "https://aintento-dev.laravel.cloud/api/diagnostic/test-chat-sse?key=<DIAGNOSTIC_KEY>&token=<WIDGET_TOKEN>&message=покажи+берці"
      */
     public function testChatSse(Request $request): StreamedResponse|JsonResponse
     {
@@ -7608,7 +7608,7 @@ class DiagnosticController extends Controller
      * GET /api/diagnostic/health?key=...
      * Quick health check of all services: DB, Redis/Cache, OpenAI, Meilisearch, Queue.
      *
-     * curl "https://aintento-dev.laravel.cloud/api/diagnostic/health?key=diagnostic_secret_key_2025"
+     * curl "https://aintento-dev.laravel.cloud/api/diagnostic/health?key=<DIAGNOSTIC_KEY>"
      */
     public function healthCheck(Request $request): JsonResponse
     {

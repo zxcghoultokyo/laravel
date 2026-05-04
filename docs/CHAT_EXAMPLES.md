@@ -225,7 +225,7 @@ Total: ~1.5-3s (streaming)
 # Тест будь-якого запиту (T2 attack.kiev.ua)
 curl -s "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
-  -d '{"message": "шоломи", "session_id": "test_'$(date +%s)'", "token": "zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+  -d '{"message": "шоломи", "session_id": "test_'$(date +%s)'", "token": "<WIDGET_TOKEN>"}' | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 print('source:', d.get('meta',{}).get('source','GPT'))

@@ -116,7 +116,7 @@ $this->abTesting->track($sessionId, 'add_to_cart', [
 ### Статистика A/B тесту
 
 ```bash
-GET /api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025
+GET /api/diagnostic/ab-test-stats?key=<DIAGNOSTIC_KEY>
 
 # Response:
 {
@@ -154,7 +154,7 @@ GET /api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025
 ### Перевірка варіанту сесії
 
 ```bash
-GET /api/diagnostic/ab-test-variant?key=diagnostic_secret_key_2025&session_id=abc123
+GET /api/diagnostic/ab-test-variant?key=<DIAGNOSTIC_KEY>&session_id=abc123
 
 # Response:
 {
@@ -172,7 +172,7 @@ GET /api/diagnostic/ab-test-variant?key=diagnostic_secret_key_2025&session_id=ab
 ### Форсування варіанту (для тестування)
 
 ```bash
-POST /api/diagnostic/ab-test-force?key=diagnostic_secret_key_2025
+POST /api/diagnostic/ab-test-force?key=<DIAGNOSTIC_KEY>
 Content-Type: application/json
 
 {
@@ -184,7 +184,7 @@ Content-Type: application/json
 ### Скидання даних експерименту
 
 ```bash
-POST /api/diagnostic/ab-test-reset?key=diagnostic_secret_key_2025
+POST /api/diagnostic/ab-test-reset?key=<DIAGNOSTIC_KEY>
 # Очищає всі events для поточного експерименту
 ```
 

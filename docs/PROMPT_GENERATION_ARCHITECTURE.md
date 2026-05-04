@@ -171,13 +171,13 @@ horoshop_sync (25%) → categories_rebuild (10%) → brands_sync (5%)
 
 ```bash
 # Dry run (превью без збереження)
-curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=diagnostic_secret_key_2025&dry_run=1"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=<DIAGNOSTIC_KEY>&dry_run=1"
 
 # Генерація зі збереженням
-curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=diagnostic_secret_key_2025"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/2?key=<DIAGNOSTIC_KEY>"
 
 # Перегляд presets тенанта
-curl "https://aintento.laravel.cloud/api/diagnostic/prompt-presets?key=diagnostic_secret_key_2025&tenant_id=2"
+curl "https://aintento.laravel.cloud/api/diagnostic/prompt-presets?key=<DIAGNOSTIC_KEY>&tenant_id=2"
 ```
 
 **Відповідь:**

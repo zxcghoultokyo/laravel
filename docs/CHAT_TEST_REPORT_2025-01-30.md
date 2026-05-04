@@ -1,7 +1,7 @@
 # 📊 Chat Test Report - 30 січня 2025
 
 **Tenant:** 2 (attack.kiev.ua - тактичний магазин)  
-**Token:** `zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj`  
+**Token:** `<WIDGET_TOKEN>`  
 **Tested by:** AI Agent  
 **Build:** після commit 700c588 (seasonal queries fix)
 
@@ -180,7 +180,7 @@ Greetings and farewell handled correctly:
 # Quick test any query
 curl -s "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
-  -d '{"message": "YOUR_QUERY", "session_id": "test_'$(date +%s)'", "token": "zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+  -d '{"message": "YOUR_QUERY", "session_id": "test_'$(date +%s)'", "token": "<WIDGET_TOKEN>"}' | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 print('source:', d.get('meta',{}).get('source','GPT'))
@@ -188,7 +188,7 @@ print('products:', len(d.get('products',[])))
 print('text:', d.get('text','')[:100])"
 
 # Check chat history
-curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/{SESSION_ID}?key=diagnostic_secret_key_2025"
+curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/{SESSION_ID}?key=<DIAGNOSTIC_KEY>"
 ```
 
 ---

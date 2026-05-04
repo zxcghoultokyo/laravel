@@ -51,14 +51,14 @@ php artisan meili:setup-products
 php artisan meili:reindex-products
 
 # 6. Генерація промпта
-curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=diagnostic_secret_key_2025"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=<DIAGNOSTIC_KEY>"
 ```
 
 ## 🔍 Перевірка після індексації:
 
 ```bash
 # Через diagnostic API
-curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=<DIAGNOSTIC_KEY>"
 
 # Через tinker
 php artisan tinker --execute="

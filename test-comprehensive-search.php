@@ -8,11 +8,11 @@
  */
 
 $baseUrl = 'https://aintento.laravel.cloud/api';
-$diagnosticKey = 'diagnostic_secret_key_2025';
+$diagnosticKey = '<DIAGNOSTIC_KEY>';
 
 // Widget tokens by tenant
 $widgetTokens = [
-    2 => 'zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj', // Attack tactical store
+    2 => '<WIDGET_TOKEN>', // Attack tactical store
     // Add tenant 10 token when available
 ];
 

@@ -1,8 +1,9 @@
 *.log
 .DS_Store
+# All env files except the example template
 .env
-.env.backup
-.env.production
+.env.*
+!.env.example
 .phpactor.json
 .phpunit.result.cache
 /.fleet

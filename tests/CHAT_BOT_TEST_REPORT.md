@@ -186,7 +186,7 @@ curl -s -X POST "https://aintento.laravel.cloud/api/chat" \
   -d '{"message": "А є дешевше?", "session_id": "test_manual_1"}' | jq
 
 # Перевірка історії
-curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/test_manual_1?key=diagnostic_secret_key_2025" | jq
+curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/test_manual_1?key=<DIAGNOSTIC_KEY>" | jq
 ```
 
 ---

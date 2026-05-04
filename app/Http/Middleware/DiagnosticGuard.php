@@ -22,14 +22,13 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class DiagnosticGuard
 {
-    private const LEGACY_DEFAULT_KEY = 'diagnostic_secret_key_2025';
-
     public function handle(Request $request, Closure $next): Response
     {
         $secret = (string) config('services.diagnostic.secret_key', '');
 
-        // 1) Refuse to run with the legacy default secret on non-local envs.
-        if ($secret === '' || ($secret === self::LEGACY_DEFAULT_KEY && ! app()->environment('local', 'testing'))) {
+        // 1) Refuse to run when the secret is not configured. The shared key
+        //    MUST be provided explicitly via DIAGNOSTIC_SECRET_KEY env var.
+        if ($secret === '') {
             Log::warning('Diagnostic endpoint blocked: secret not rotated', [
                 'path' => $request->path(),
                 'ip' => $request->ip(),

@@ -3,7 +3,7 @@
 # Comprehensive Chat Testing Script
 # Tests SSE streaming endpoint with various use cases
 
-TOKEN="zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"
+TOKEN="<WIDGET_TOKEN>"
 BASE_URL="https://aintento.laravel.cloud/api/chat/stream"
 REPORT_FILE="/workspaces/laravel/tests/CHAT_TEST_REPORT_$(date +%Y-%m-%d_%H%M).md"
 SESSION_ID="test_comprehensive_$(date +%s)_$$"

@@ -51,7 +51,8 @@ class StreamingChatController extends Controller
         $message = $this->sanitizeMessage($request->input('message', ''));
         $sessionId = $this->validateSessionId($request->input('session_id'));
         $requestId = (string) Str::uuid();
-        $debugMode = $request->input('debug_key') === config('app.diagnostic_key', 'diagnostic_secret_key_2025');
+        $configuredKey = (string) config('services.diagnostic.secret_key', '');
+        $debugMode = $configuredKey !== '' && hash_equals($configuredKey, (string) $request->input('debug_key', ''));
 
         Log::info('StreamingChatController: starting stream', [
             'request_id' => $requestId,

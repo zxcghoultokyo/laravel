@@ -75,7 +75,7 @@ php artisan queue:restart
 ```bash
 curl -s "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
-  -d '{"message":"шоломи","session_id":"deploy-test","token":"zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+  -d '{"message":"шоломи","session_id":"deploy-test","token":"<WIDGET_TOKEN>"}' | python3 -c "
 import sys,json;d=json.load(sys.stdin)
 print('source:', d.get('meta',{}).get('source','GPT'))
 print('products:', len(d.get('products',[])))
@@ -84,7 +84,7 @@ print('products:', len(d.get('products',[])))
 
 2. **Diagnostic DB stats:**
 ```bash
-curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=<DIAGNOSTIC_KEY>"
 ```
 
 3. **Widget на сайті:**
@@ -116,7 +116,7 @@ git push origin main --force  # ⚠️ тільки якщо критично
 ```bash
 # OnboardTenantJob автоматично запускається при створенні тенанта
 # Або ручний запуск:
-curl -X POST "https://aintento.laravel.cloud/api/diagnostic/onboard-tenant?key=diagnostic_secret_key_2025&tenant_id=X"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/onboard-tenant?key=<DIAGNOSTIC_KEY>&tenant_id=X"
 ```
 
 ---

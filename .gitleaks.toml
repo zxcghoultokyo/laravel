@@ -1,0 +1,27 @@
+title = "Gitleaks config for stovburtm-web/laravel"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and placeholders that are not real secrets"
+regexes = [
+    '''sk-test-key-for-unit-tests''',
+    '''test-diagnostic-key''',
+    '''test_pdf_password''',
+    '''YOUR_KEY_HERE''',
+    '''YOUR_MEILI_KEY''',
+    '''default_api_key_change_me_in_production''',
+    '''<DIAGNOSTIC_KEY>''',
+    '''<WIDGET_TOKEN>''',
+    '''<OPENAI_API_KEY>''',
+    '''sk-proj-\.\.\.''',
+    '''sk-ant-\.\.\.''',
+]
+paths = [
+    '''(.*?)\.lock$''',
+    '''package-lock\.json$''',
+    '''^public/build/''',
+    '''^vendor/''',
+    '''^node_modules/''',
+]

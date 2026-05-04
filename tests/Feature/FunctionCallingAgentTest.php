@@ -31,6 +31,8 @@ class FunctionCallingAgentTest extends TestCase
     {
         parent::setUp();
 
+        config(['services.diagnostic.secret_key' => 'test-diagnostic-key']);
+
         // Create test tenant so system prompt building doesn't crash
         Tenant::create([
             'id' => 2,
@@ -330,7 +332,7 @@ class FunctionCallingAgentTest extends TestCase
             ], 200),
         ]);
 
-        $response = $this->get('/api/diagnostic/openai-check?key=diagnostic_secret_key_2025');
+        $response = $this->get('/api/diagnostic/openai-check?key=test-diagnostic-key');
 
         $response->assertStatus(200);
         $data = $response->json();
@@ -357,7 +359,7 @@ class FunctionCallingAgentTest extends TestCase
             ], 429),
         ]);
 
-        $response = $this->get('/api/diagnostic/openai-check?key=diagnostic_secret_key_2025');
+        $response = $this->get('/api/diagnostic/openai-check?key=test-diagnostic-key');
 
         $response->assertStatus(200);
         $data = $response->json();

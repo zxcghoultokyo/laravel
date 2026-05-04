@@ -87,7 +87,7 @@ History stored in DB, NOT in session/cache:
 - Load: `loadConversationHistory($sessionId)` in both agents
 - Assistant messages include `[Показані товари: ...]` marker for context
 
-Diagnostic endpoint: `GET /api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025`
+Diagnostic endpoint: `GET /api/diagnostic/chat-history/{sessionId}?key=<DIAGNOSTIC_KEY>`
 
 ## ⚠️ Session Identifiers (ВАЖЛИВО!)
 
@@ -220,28 +220,28 @@ Config & Env
 ## 🔧 Diagnostic API (Production Debugging)
 
 **Base URL:** `https://aintento.laravel.cloud/api/diagnostic`
-**Key:** `?key=diagnostic_secret_key_2025`
+**Key:** `?key=<DIAGNOSTIC_KEY>`
 
 Quick debug commands:
 ```bash
 # Check chat history for a session
-curl "https://aintento.laravel.cloud/api/diagnostic/chat-history/{sessionId}?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/chat-history/{sessionId}?key=<DIAGNOSTIC_KEY>"
 
 # Search products in DB
-curl "https://aintento.laravel.cloud/api/diagnostic/search-db?key=diagnostic_secret_key_2025&q=футболка"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-db?key=<DIAGNOSTIC_KEY>&q=футболка"
 
 # Search in Meilisearch
-curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=diagnostic_secret_key_2025&q=футболка"
+curl "https://aintento.laravel.cloud/api/diagnostic/search-meili?key=<DIAGNOSTIC_KEY>&q=футболка"
 
 # DB stats
-curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/db-stats?key=<DIAGNOSTIC_KEY>"
 
 # RAG audit — 3-tier debug (user_query / retrieved_context / system_prompt)
 # Use for diagnosing: retrieval errors, context noise, bad formatting, weak prompts
-curl "https://aintento.laravel.cloud/api/diagnostic/rag-audit?key=diagnostic_secret_key_2025&tenant_id=20&q=іграшки%20для%20малюка%20на%20рік"
+curl "https://aintento.laravel.cloud/api/diagnostic/rag-audit?key=<DIAGNOSTIC_KEY>&tenant_id=20&q=іграшки%20для%20малюка%20на%20рік"
 
 # Pipeline trace for a session (last 5 requests, TTL 2h)
-curl "https://aintento.laravel.cloud/api/diagnostic/pipeline-trace/{sessionId}?key=diagnostic_secret_key_2025"
+curl "https://aintento.laravel.cloud/api/diagnostic/pipeline-trace/{sessionId}?key=<DIAGNOSTIC_KEY>"
 ```
 
 ### 🔍 RAG Audit — дебаг чому бот видає дичину
@@ -267,14 +267,14 @@ Full docs: [docs/DIAGNOSTIC_API.md](docs/DIAGNOSTIC_API.md)
 
 **IMPORTANT: Always test via Chat API first, not diagnostic endpoints!**
 
-**Tenant 2 (attack.kiev.ua) token:** `zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj`
+**Tenant 2 (attack.kiev.ua) token:** `<WIDGET_TOKEN>`
 
 ### Quick test command (USE THIS FIRST):
 ```bash
 # Test any query - this is the ONLY command you need to start with
 curl -s "https://aintento.laravel.cloud/api/chat" \
   -H "Content-Type: application/json" \
-  -d '{"message": "YOUR_QUERY_HERE", "session_id": "test_'$(date +%s)'", "token": "zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"}' | python3 -c "
+  -d '{"message": "YOUR_QUERY_HERE", "session_id": "test_'$(date +%s)'", "token": "<WIDGET_TOKEN>"}' | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 print('source:', d.get('meta',{}).get('source','GPT'))
@@ -307,7 +307,7 @@ for p in d.get('products',[])[:3]:
 ### Check chat history by session_id:
 ```bash
 # Session ID from widget looks like: session_1769774712506_ppwhomvek
-curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/session_1769774712506_ppwhomvek?key=diagnostic_secret_key_2025" | python3 -c "
+curl -s "https://aintento.laravel.cloud/api/diagnostic/chat-history/session_1769774712506_ppwhomvek?key=<DIAGNOSTIC_KEY>" | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
 print('messages:', d.get('message_count', 0))
@@ -403,7 +403,7 @@ Variables use `{{variable_name}}` syntax, replaced at runtime.
 **Diagnostic:**
 ```bash
 # Generate prompt for tenant (supports ?dry_run=1)
-curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=diagnostic_secret_key_2025"
+curl -X POST "https://aintento.laravel.cloud/api/diagnostic/generate-prompt/{tenantId}?key=<DIAGNOSTIC_KEY>"
 ```
 
 Meili Documents (example)

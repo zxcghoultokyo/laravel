@@ -154,7 +154,7 @@
         <div class="bg-white rounded-lg shadow p-4 mb-6">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="text-sm font-semibold text-gray-500">🤖 Якість AI-пошуку</h3>
-                <a href="{{ url('/api/diagnostic/ai-index-problems?key=diagnostic_secret_key_2025') }}" 
+                <a href="{{ url('/api/diagnostic/ai-index-problems?key='.urlencode((string) config('services.diagnostic.secret_key'))) }}" 
                    target="_blank" 
                    class="text-xs text-blue-600 hover:underline">Детальніше →</a>
             </div>
@@ -222,7 +222,7 @@
                     <span class="text-xs px-2 py-1 rounded {{ $abTestStats['enabled'] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500' }}">
                         {{ $abTestStats['enabled'] ? '✓ Активний' : '○ Неактивний' }}
                     </span>
-                    <a href="{{ url('/api/diagnostic/ab-test-stats?key=diagnostic_secret_key_2025') }}" 
+                    <a href="{{ url('/api/diagnostic/ab-test-stats?key='.urlencode((string) config('services.diagnostic.secret_key'))) }}" 
                        target="_blank" 
                        class="text-xs text-blue-600 hover:underline">JSON →</a>
                 </div>

@@ -72,9 +72,10 @@ return [
         'password_hash' => env('CONTRACTOR_PASSWORD_HASH'),
     ],
 
-    // Diagnostic API
+    // Diagnostic API. SECRET MUST be provided via DIAGNOSTIC_SECRET_KEY env var.
+    // If unset, DiagnosticGuard fails closed (503).
     'diagnostic' => [
-        'secret_key' => env('DIAGNOSTIC_SECRET_KEY', 'diagnostic_secret_key_2025'),
+        'secret_key' => env('DIAGNOSTIC_SECRET_KEY'),
         'allowed_ips' => env('DIAGNOSTIC_ALLOWED_IPS', ''),
         'rate_limit_per_minute' => (int) env('DIAGNOSTIC_RATE_LIMIT', 30),
     ],

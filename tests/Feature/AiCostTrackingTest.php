@@ -16,6 +16,7 @@ class AiCostTrackingTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['services.diagnostic.secret_key' => 'test-diagnostic-key']);
         $this->service = app(AiCostTrackingService::class);
     }
 
@@ -151,7 +152,7 @@ class AiCostTrackingTest extends TestCase
     {
         $this->service->log(source: 'chat', model: 'gpt-4o', usage: ['prompt_tokens' => 100, 'completion_tokens' => 50], tenantId: 1);
 
-        $response = $this->getJson('/api/diagnostic/ai-costs?key=diagnostic_secret_key_2025');
+        $response = $this->getJson('/api/diagnostic/ai-costs?key=test-diagnostic-key');
 
         $response->assertStatus(200);
         $response->assertJsonStructure([

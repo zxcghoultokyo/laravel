@@ -1,0 +1,17 @@
+# Replacements for `git filter-repo --replace-text replacements.txt`
+# Format: literal==>replacement   (one per line)
+# Run from repo root AFTER backing up:
+#   pip install git-filter-repo
+#   git filter-repo --replace-text replacements.txt
+#   git push --force --all
+#   git push --force --tags
+#
+# IMPORTANT: this rewrites history. All collaborators must re-clone.
+# Rotate the underlying secrets BEFORE making the repo public — assume any
+# value that ever appeared in history is compromised.
+
+5VzvEWz1uhaN7aGUhMuv==>***REMOVED-DB-PASSWORD***
+tjqz74bgt2t1eexm==>***REMOVED-DB-USER***
+db-a08f0371-6315-4eef-aa26-4b6585b1936f.eu-central-1.public.db.laravel.cloud==>***REMOVED-DB-HOST***
+diagnostic_secret_key_2025==>***REMOVED-DIAGNOSTIC-KEY***
+zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj==>***REMOVED-WIDGET-TOKEN***

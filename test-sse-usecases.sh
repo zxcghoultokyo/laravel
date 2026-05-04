@@ -2,7 +2,7 @@
 # SSE Use Case Tests for AIntento Chat
 # Tests streaming endpoint: GET /api/chat/stream
 
-TOKEN="zIzYKx8o2RVdT1KYmJAv25FJO5GIbxZj"
+TOKEN="<WIDGET_TOKEN>"
 BASE="https://aintento.laravel.cloud/api/chat/stream"
 PASS=0
 FAIL=0

@@ -4801,7 +4801,11 @@
             // This prevents exit-intent from firing when user clicks a link to another page
             document.addEventListener('click', (e) => {
                 const link = e.target.closest('a[href]');
-                if (link && link.href && !link.href.startsWith('javascript:') && !link.href.startsWith('#')) {
+                if (link && link.href &&
+                    !link.href.startsWith('javascript:') &&
+                    !link.href.startsWith('data:') &&
+                    !link.href.startsWith('vbscript:') &&
+                    !link.href.startsWith('#')) {
                     // User clicked a navigation link
                     isNavigatingAway = true;
                     log('ProactiveTriggers: Navigation detected, disabling exit intent');

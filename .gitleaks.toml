@@ -17,6 +17,8 @@ regexes = [
     '''<OPENAI_API_KEY>''',
     '''sk-proj-\.\.\.''',
     '''sk-ant-\.\.\.''',
+    # Historical hardcoded value — removed from codebase, allow in git history only
+    '''Y6wR4j''',
 ]
 paths = [
     '''(.*?)\.lock$''',
@@ -24,4 +26,5 @@ paths = [
     '''^public/build/''',
     '''^vendor/''',
     '''^node_modules/''',
+    '''^secrets/''',
 ]

@@ -41,3 +41,13 @@ parse-bavka.ps1
 test_results.txt
 v2_results.txt
 dev_root.html
+
+# Secrets folder — local credentials only, never commit
+/secrets/*.sh
+/secrets/*.env
+/secrets/*.key
+/secrets/*.pem
+/secrets/*.txt
+# Keep README and examples
+!/secrets/README.md
+!/secrets/*.example.*

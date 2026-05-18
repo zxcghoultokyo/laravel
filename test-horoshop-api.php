@@ -2,11 +2,21 @@
 /**
  * Direct Horoshop API test
  * Usage: php test-horoshop-api.php [domain] [login] [password]
+ *
+ * Credentials can also be set via env / secrets/secrets.sh:
+ *   HOROSHOP_DOMAIN, HOROSHOP_LOGIN, HOROSHOP_PASSWORD
  */
 
-$domain = $argv[1] ?? 'https://contractor.kiev.ua';
-$login = $argv[2] ?? 'owner';
-$password = $argv[3] ?? 'Y6wR4j';
+$domain   = $argv[1] ?? getenv('HOROSHOP_DOMAIN') ?: 'https://contractor.kiev.ua';
+$login    = $argv[2] ?? getenv('HOROSHOP_LOGIN')  ?: 'owner';
+$password = $argv[3] ?? getenv('HOROSHOP_PASSWORD') ?: null;
+
+if (!$password) {
+    fwrite(STDERR, "ERROR: Horoshop password is required.\n");
+    fwrite(STDERR, "Usage: php test-horoshop-api.php [domain] [login] <password>\n");
+    fwrite(STDERR, "       or set HOROSHOP_PASSWORD env var (source secrets/secrets.sh)\n");
+    exit(1);
+}
 
 echo "Testing Horoshop API: $domain\n";
 echo "Login: $login\n\n";

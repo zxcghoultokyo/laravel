@@ -35,6 +35,7 @@ class Tenant extends Model
         'suspension_reason',
         'settings',
         'products_limit',
+        'widget_paused',
     ];
 
     protected $casts = [
@@ -44,6 +45,7 @@ class Tenant extends Model
         'plan_expires_at' => 'datetime',
         'usage_reset_at' => 'datetime',
         'last_sync_at' => 'datetime',
+        'widget_paused' => 'boolean',
     ];
 
     protected $hidden = [
@@ -436,6 +438,16 @@ class Tenant extends Model
      */
     public function canUseWidget(): array
     {
+        // Manually paused by admin - widget blocked regardless of subscription
+        if ($this->widget_paused) {
+            return [
+                'allowed' => false,
+                'reason' => 'paused',
+                'message' => 'Віджет призупинено',
+                'details' => 'Зверніться до підтримки для відновлення',
+            ];
+        }
+
         // Suspended tenant - widget blocked
         if ($this->status === self::STATUS_SUSPENDED) {
             return [

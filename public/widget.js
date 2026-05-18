@@ -3574,7 +3574,10 @@
     function getOrCreateSessionId() {
         let sessionId = localStorage.getItem('aintento_session_id') || localStorage.getItem('ailure_session_id');
         if (!sessionId) {
-            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const randomBytes = new Uint8Array(16);
+            window.crypto.getRandomValues(randomBytes);
+            const randomPart = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('');
+            sessionId = 'session_' + Date.now() + '_' + randomPart;
         }
         localStorage.setItem('aintento_session_id', sessionId);
         return sessionId;

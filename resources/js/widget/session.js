@@ -5,13 +5,19 @@
 
 import { log, logError } from './utils.js';
 
+function secureRandomToken(byteLength = 16) {
+    const bytes = new Uint8Array(byteLength);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Get or create session ID
  */
 export function getOrCreateSessionId() {
     let sessionId = localStorage.getItem('aintento_session_id') || localStorage.getItem('ailure_session_id');
     if (!sessionId) {
-        sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        sessionId = 'session_' + Date.now() + '_' + secureRandomToken(8);
     }
     localStorage.setItem('aintento_session_id', sessionId);
     return sessionId;
@@ -31,7 +37,7 @@ export function getOrCreateClientId() {
     const cookieName = 'aintento_client_id';
     let clientId = document.cookie.match(new RegExp('(^| )' + cookieName + '=([^;]+)'))?.[2];
     if (!clientId) {
-        clientId = 'cli_' + Date.now() + '_' + Math.random().toString(36).substr(2, 12);
+        clientId = 'cli_' + Date.now() + '_' + secureRandomToken(10);
         const expires = new Date(Date.now() + 72 * 60 * 60 * 1000).toUTCString();
         document.cookie = `${cookieName}=${clientId}; expires=${expires}; path=/; SameSite=Lax`;
     }
